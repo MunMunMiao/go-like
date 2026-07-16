@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "files": [
+    "scripts/verify-workspace.ts",
+    "scripts/verify-workspace.cli.ts"
+  ],
+  "references": []
+}

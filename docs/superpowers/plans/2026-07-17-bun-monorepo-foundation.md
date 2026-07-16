@@ -80,7 +80,6 @@ exact = true
 
 [test]
 timeout = 10000
-coverage = false
 coverageSkipTestFiles = true
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
@@ -116,7 +115,16 @@ Create `tsconfig.json`:
 
 ```json
 {
-  "files": [],
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "files": [
+    "scripts/verify-workspace.ts",
+    "scripts/verify-workspace.cli.ts"
+  ],
   "references": []
 }
 ```
@@ -149,7 +157,7 @@ Create `deno.json`:
 }
 ```
 
-Append `.artifacts/` and `reports/` to `.gitignore`. Create a short `README.md` that states the project purpose, Bun `1.3.14` prerequisite, and the commands `bun ci` and `bun run verify`; do not claim any package is implemented.
+Append `*.tsbuildinfo`, `.artifacts/`, and `reports/` to `.gitignore`. Create a short `README.md` that states the project purpose, Bun `1.3.14` prerequisite, and the commands `bun ci` and `bun run verify`; do not claim any package is implemented.
 
 - [ ] **Step 2: Install with Bun and prove the frozen lockfile works**
 
@@ -328,7 +336,7 @@ Expected: three tests pass, verifier emits exactly one `LIKEGO_WORKSPACE_RESULT`
 
 - [ ] **Step 7: Verify lock drift fails and restore it**
 
-Temporarily change `typescript` in `package.json` from `7.0.2` to `7.0.1`, run:
+Temporarily change `typescript` in `package.json` from `7.0.2` to `5.9.3`, run:
 
 ```bash
 bun ci
