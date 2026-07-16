@@ -5,9 +5,7 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "files": [
-    "scripts/verify-workspace.ts",
-    "scripts/verify-workspace.cli.ts"
-  ],
+  "include": ["scripts/**/*.ts", "tools/**/*.ts"],
+  "exclude": ["**/*.test.ts", "tools/**/fixtures/**", "test/**"],
   "references": []
 }

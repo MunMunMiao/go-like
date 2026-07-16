@@ -5,5 +5,6 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "tools/**/*.ts", "test/**/*.ts"],
+  "exclude": ["tools/**/fixtures/**"]
 }
