@@ -20,6 +20,37 @@ Health 二参顺序都不能成为兼容包袱。
   `WithCancelCause`、`WithDeadline`、`WithDeadlineCause`、`WithTimeout`、`WithTimeoutCause`、
   `WithValue`、`WithoutCancel`、`Cause`、`AfterFunc`。
 
+#### Context timing 与 `AfterFunc` 最终契约
+
+机器可审计 contract marker：`LIKEGO_CONTEXT_TIMING_AFTERFUNC_V1`。
+
+1. 任何时间读取或资源分配前，先拒绝 nullish parent，并验证 parent 的 structural shape：`Deadline`、
+   `Done`、`Err`、`Value` 都必须可调用。
+2. 参数验证后最多调用一次 `parent.Deadline()`。若 parent 报告 deadline，必须验证 tuple 与 `Date`，并且只调用
+   一次 `Date.prototype.getTime.call(parentDeadline)`；effective epoch 是 requested snapshot 与 parent snapshot 的
+   最小值，之后禁止再次读取 parent deadline。
+3. `WithDeadline*` 只调用一次 `Date.prototype.getTime.call(deadline)`，应用 parent snapshot 后只调用一次
+   `Date.now()` 并保存为 `wallNow`。非 `Date` 抛 `TypeError`；deadline 或 wall sample 非有限/无效时抛
+   `RangeError`；Context 内只保存 numeric deadline snapshot。
+4. `WithTimeout*` 先验证 `timeoutMs` 有限，再取得 parent deadline snapshot，然后只调用一次 `Date.now()`，
+   同一个 `wallNow` 供之后全部构造逻辑使用。原始 `wallNow + timeoutMs` 必须有限且位于 inclusive TimeClip
+   范围；requested epoch 是 `Math.trunc(wallNow + timeoutMs)`，stored effective epoch 是它与 parent snapshot 的
+   最小值；`Deadline()` 每次为该 epoch 返回新的 `Date`。
+5. shared timer constructor 接收 `effectiveEpoch` 和捕获的 `wallNow`，内部禁止读取 `Date.now()`。若
+   `effectiveEpoch <= wallNow`，同步返回已经是 `DeadlineExceeded` 的 Context，不读取 `performance.now()`，
+   也不创建 timer。
+6. future effective deadline 只在 wall sample 之后读取一次 `performance.now()`，计算
+   `monotonicTarget = monotonicNow + (effectiveEpoch - wallNow)`。每次 arm 不超过 `2_147_483_647ms`；wake
+   只用 fresh `performance.now()` 与 target 比较，过早则 re-arm。构造后的 wall-clock jump 不改变 expiry；
+   cancel 清除当前 arm，stale callback 为 no-op。contract tests 必须 instrument 两种 clock getter，断言调用
+   次数与顺序，并在构造后跳变 wall time。
+7. optional custom `AfterFunc` property/method 只读取一次，并以 `this === ctx` 调用。delegate 同步尝试的
+   callback 先缓冲；只有 delegate 返回 callable `StopFunc` 后，缓冲 admission 才能进入 shared once-state。
+   delegate 抛错或返回非函数时丢弃缓冲，user callback 永不运行。
+8. public stop 与 callback admission 只有一个 winner：successful stop 只成功一次、抑制 callback 并返回
+   `true`；callback 已 admitted 后 stop 返回 `false`。user callback 以 microtask 排队且最多运行一次；该 private
+   capability 不增加 public export。
+
 ### `@likego/core`
 
 ```ts

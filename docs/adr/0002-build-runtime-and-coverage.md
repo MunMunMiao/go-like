@@ -19,11 +19,14 @@ Bun `1.3.14` 的 coverage 只输出 line/function counters，且未加载文件�
 5. production source 内部相对 import 使用 `.js` specifier并由 TypeScript NodeNext 解析回 `.ts`。
 6. Bun unit coverage 按 package 强制 100% lines/functions，并生成 LCOV；source inventory 将每个
    `packages/*/src/**/*.ts` 与 LCOV `SF` 对照，未加载文件直接失败。
-7. Bun `1.3.14` 不生成 branch counters，`branches=1.0` 也不能作为有效 gate。kernel 完成前必须建立
-   exact-pinned supplemental branch instrumenter，对与 Bun runner 共用的 runner-neutral case definitions
-   计算 100% branch coverage；该门失败时不得宣称“100% coverage”。
+7. Bun `1.3.14` 不生成 branch counters，`branches=1.0` 也不能作为有效 gate；Bun evidence 固定记录
+   `branches:{supported:false,percent:null,reason:"BUN_1_3_14_NO_BRANCH_COUNTER"}`。published-JS numeric
+   branch authority 是 Node `24.18.0`、Node `26.5.0` 与 Deno `2.9.3` 的 native coverage，不使用 `c8` 或
+   其他 supplemental branch instrumenter。该 native branch gate 失败时不得宣称“100% coverage”。
 8. shared behavior cases 对 build output 运行于 Node LTS/current、Deno exact、Bun exact；runner adapter
    使用各自 native test API，production code不得出现 runtime conditionals。
+
+机器可审计 coverage contract marker：`LIKEGO_PUBLISHED_JS_BRANCH_AUTHORITY_V1`。
 
 ## Coverage exclusions
 
@@ -33,6 +36,6 @@ root barrel。每一条排除必须出现在 coverage policy allowlist并由 sou
 
 ## Consequences
 
-- `bun test --coverage` 通过本身不足以证明 100%；必须同时通过 source inventory 和 supplemental branch gate。
+- `bun test --coverage` 通过本身不足以证明 100%；必须同时通过 source inventory 和 published-JS native branch gate。
 - 单元覆盖、跨 runtime behavior、type exports、fault/recovery 和 E2E 是并列门，不能互相替代。
 - 构建和 smoke tests 必须从 package name 的 dist exports 加载，不能只测试相对 src import。
