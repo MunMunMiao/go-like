@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Ajv2020 } from "ajv/dist/2020.js"
-import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -335,6 +335,147 @@ describe("RunGate", () => {
     }
   })
 
+  test("turns every invalid protocol combination into one fixed emittable failure contract", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const invalidOptions = [
+      Options(root, { readinessPolicy: "package-admission" }),
+      Options(root, {
+        gate: "runtime-probe",
+        mode: "runtime-probe",
+        readinessPolicy: "package-admission"
+      }),
+      Options(root, { gate: "fixture-without-required-suffix" })
+    ]
+
+    for (const options of invalidOptions) {
+      const stdout: string[] = []
+      const result = await RunGate(options, async () => PassingEvaluation())
+
+      expect({
+        gate: result.gate,
+        mode: result.mode,
+        releaseReadiness: result.releaseReadiness,
+        inputsSha256: result.inputsSha256,
+        checked: result.subjects.checked,
+        artifacts: result.artifacts,
+        checks: result.checks.map((check) => check.id)
+      }).toEqual({
+        gate: "gate-protocol-error",
+        mode: "repository",
+        releaseReadiness: "not-evaluated",
+        inputsSha256: null,
+        checked: 0,
+        artifacts: [],
+        checks: ["GATE_PROTOCOL_ERROR"]
+      })
+      const canonicalPath = await EmitGateResultWithDependencies(root, result, {
+        AtomicWriterOperations: NodeAtomicWriterOperations(),
+        WriteStdout: (value: string) => { stdout.push(value) }
+      })
+      expect(JSON.parse(await readFile(canonicalPath, "utf8"))).toEqual(result)
+      expect(stdout).toHaveLength(1)
+    }
+  })
+
+  test("validates unknown options before access and treats explicit null runId as invalid", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    let evaluated = false
+
+    for (const options of [null, Options(root, { runId: null })]) {
+      const result = await RunGate(options as never, async () => {
+        evaluated = true
+        return PassingEvaluation()
+      })
+      expect(result.runId).toMatch(/^[a-z0-9][a-z0-9_-]{0,95}$/)
+      expect(result.checks.map((check) => check.id)).toEqual(["GATE_PROTOCOL_ERROR"])
+      await expect(EmitGateResultWithDependencies(root, result, {
+        AtomicWriterOperations: NodeAtomicWriterOperations(),
+        WriteStdout: (_value: string) => {}
+      })).resolves.toEndWith("gate-protocol-error.json")
+    }
+    expect(evaluated).toBe(false)
+  })
+
+  test("does not coerce hostile invalid option values while building a protocol failure", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const result = await RunGate(Options(root, {
+      runId: { toString: () => { throw new Error("hostile toString invoked") } }
+    }), async () => PassingEvaluation())
+
+    expect(result.checks.map((check) => check.id)).toEqual(["GATE_PROTOCOL_ERROR"])
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("gate-protocol-error.json")
+  })
+
+  test("catches hostile option getters as a fixed emittable protocol failure", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const options = { ...Options(root) }
+    Object.defineProperty(options, "runId", {
+      enumerable: true,
+      get: () => { throw new Error("hostile runId getter invoked") }
+    })
+    const result = await RunGate(options, async () => PassingEvaluation())
+
+    expect(result.checks.map((check) => check.id)).toEqual(["GATE_PROTOCOL_ERROR"])
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("gate-protocol-error.json")
+  })
+
+  test("returns a fresh protocol failure contract that prior callers cannot poison", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const first = await RunGate(null, async () => PassingEvaluation())
+    ;(first.toolchain as Record<string, unknown>).poison = 42
+    const second = await RunGate(null, async () => PassingEvaluation())
+
+    expect(second.toolchain).toEqual({})
+    expect(second.toolchain).not.toBe(first.toolchain)
+    await expect(EmitGateResultWithDependencies(root, second, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("gate-protocol-error.json")
+  })
+
+  test("keeps stage-reserved checks internal and returns an emittable internal failure for forgeries", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const result = await RunGate(Options(root), async () => PassingEvaluation({
+      Checks: [{ id: "GATE_PROTOCOL_ERROR", status: "fail" }]
+    }))
+
+    expect(result.inputsSha256).not.toBeNull()
+    expect(result.subjects.checked).toBe(0)
+    expect(result.checks.map((check) => check.id)).toEqual(["GATE_INTERNAL_ERROR"])
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("unit-fixtures.json")
+  })
+
+  test("persists evaluator exceptions even when the thrown value cannot be coerced", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const result = await RunGate(Options(root), async () => {
+      throw { toString: () => { throw new Error("hostile evaluator error coercion") } }
+    })
+
+    expect(result.inputsSha256).not.toBeNull()
+    expect(result.subjects.checked).toBe(0)
+    expect(result.checks.map((check) => check.id)).toEqual(["GATE_INTERNAL_ERROR"])
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("unit-fixtures.json")
+  })
+
   test("converts every malformed evaluator shape into one schema-valid internal error", async () => {
     const root = await Fixture()
     const { RunGate } = await LoadResult()
@@ -550,6 +691,56 @@ describe("canonical atomic result emission", () => {
     expect(await Bun.file(join(root, ".artifacts", "gates", "unit-fixtures.json")).exists()).toBe(false)
   })
 
+  test("binds null input hashes bidirectionally to protocol or input-stage failures", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const dependencies = {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    }
+    const invalidResults = [
+      ValidResult({ inputsSha256: null }),
+      ValidResult({
+        status: "fail",
+        inputsSha256: null,
+        subjects: { expected: 1, checked: 0 },
+        checks: [{ id: "UNIT_FAIL", status: "fail" }]
+      }),
+      ValidResult({
+        status: "fail",
+        subjects: { expected: 1, checked: 0 },
+        checks: [{ id: "GATE_PROTOCOL_ERROR", status: "fail" }]
+      }),
+      ValidResult({
+        status: "fail",
+        inputsSha256: null,
+        subjects: { expected: 1, checked: 1 },
+        checks: [{ id: "GATE_INPUT_ERROR", status: "fail" }]
+      }),
+      ValidResult({
+        status: "fail",
+        inputsSha256: null,
+        subjects: { expected: 1, checked: 0 },
+        checks: [{ id: "GATE_INPUT_ERROR", status: "fail" }],
+        artifacts: [{ kind: "log", path: "input.txt", sha256: "0".repeat(64) }]
+      }),
+      ValidResult({
+        status: "fail",
+        inputsSha256: null,
+        subjects: { expected: 1, checked: 0 },
+        checks: [{ id: "GATE_INTERNAL_ERROR", status: "fail" }]
+      }),
+      ValidResult({
+        checks: [{ id: "GATE_PROTOCOL_ERROR", status: "pass" }]
+      })
+    ]
+
+    for (const result of invalidResults) {
+      await expect(EmitGateResultWithDependencies(root, result as never, dependencies))
+        .rejects.toThrow("GATE_RESULT_SEMANTIC_ERROR")
+    }
+  })
+
   test("rejects symlinked result parents and targets without writing outside the real root", async () => {
     const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
 
@@ -577,6 +768,63 @@ describe("canonical atomic result emission", () => {
     })).rejects.toThrow("GATE_RESULT_PATH_ERROR")
     expect(targetStdout).toEqual([])
     expect(await readFile(outsideTarget, "utf8")).toBe("outside-prior\n")
+  })
+
+  test("revalidates the prepared gates directory across every injected atomic boundary", async () => {
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+
+    for (const stage of ["make-directory", "open", "rename-before", "rename-after"] as const) {
+      const root = await Fixture()
+      const outside = await Fixture()
+      await mkdir(join(outside, "gates"))
+      const artifacts = join(root, ".artifacts")
+      const preservedArtifacts = join(root, `.artifacts-preserved-${stage}`)
+      const outsideCanonical = join(outside, "gates", "unit-fixtures.json")
+      const stdout: string[] = []
+      const base = NodeAtomicWriterOperations()
+      let swapped = false
+      const swapParent = async () => {
+        if (swapped) return
+        await rename(artifacts, preservedArtifacts)
+        await symlink(outside, artifacts)
+        swapped = true
+      }
+      const operations = {
+        ...base,
+        MakeDirectory: async (path: string, identity: Parameters<typeof base.MakeDirectory>[1]) => {
+          await base.MakeDirectory(path, identity)
+          if (stage === "make-directory") await swapParent()
+        },
+        Open: async (path: string, identity: Parameters<typeof base.Open>[1]) => {
+          if (stage === "open") await swapParent()
+          return base.Open(path, identity)
+        },
+        Rename: async (from: string, to: string, identity: Parameters<typeof base.Rename>[2]) => {
+          if (stage === "rename-before") await swapParent()
+          await base.Rename(from, to, identity)
+          if (stage === "rename-after") await swapParent()
+        }
+      }
+      let error: unknown = null
+
+      try {
+        await EmitGateResultWithDependencies(root, ValidResult(), {
+          AtomicWriterOperations: operations,
+          WriteStdout: (value: string) => { stdout.push(value) }
+        })
+      } catch (caught) {
+        error = caught
+      } finally {
+        if (swapped) {
+          await rm(artifacts, { force: true })
+          await rename(preservedArtifacts, artifacts)
+        }
+      }
+
+      expect(String(error)).toContain("GATE_RESULT_PATH_ERROR")
+      expect(stdout).toEqual([])
+      expect(await Bun.file(outsideCanonical).exists()).toBe(false)
+    }
   })
 
   test("rejects non-directory roots and parent permission failures as confined path errors", async () => {
@@ -616,11 +864,11 @@ describe("canonical atomic result emission", () => {
       const stdout: string[] = []
       const operations = {
         ...base,
-        Open: async (path: string) => {
+        Open: async (path: string, identity: Parameters<typeof base.Open>[1]) => {
           if (stage === "open") {
             throw new Error("injected open failure")
           }
-          const handle = await base.Open(path)
+          const handle = await base.Open(path, identity)
           return {
             Write: async (value: string) => {
               if (stage === "write") {
@@ -642,11 +890,11 @@ describe("canonical atomic result emission", () => {
             }
           }
         },
-        Rename: async (from: string, to: string) => {
+        Rename: async (from: string, to: string, identity: Parameters<typeof base.Rename>[2]) => {
           if (stage === "rename") {
             throw new Error("injected rename failure")
           }
-          await base.Rename(from, to)
+          await base.Rename(from, to, identity)
         }
       }
 
@@ -667,9 +915,9 @@ describe("canonical atomic result emission", () => {
     const opened: string[] = []
     const operations = {
       ...base,
-      Open: async (path: string) => {
+      Open: async (path: string, identity: Parameters<typeof base.Open>[1]) => {
         opened.push(path)
-        return base.Open(path)
+        return base.Open(path, identity)
       }
     }
     const dependencies = {
@@ -691,6 +939,27 @@ describe("canonical atomic result emission", () => {
     expect((await readdir(join(root, ".artifacts", "gates"))).filter((name) => name.endsWith(".tmp"))).toEqual([])
   })
 
+  test("does not remove a preexisting colliding temp when exclusive open fails", async () => {
+    const root = await Fixture()
+    const canonicalPath = join(root, ".artifacts", "gates", "unit-fixtures.json")
+    await mkdir(dirname(canonicalPath), { recursive: true })
+    const tempPath = `${canonicalPath}.unit-fixtures.unit-run.4242.collision.tmp`
+    await Bun.write(tempPath, "belongs-to-another-writer\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+
+    await expect(EmitGateResultWithDependencies(root, ValidResult(), {
+      AtomicWriterOperations: {
+        ...base,
+        Pid: 4242,
+        RandomSuffix: () => "collision"
+      },
+      WriteStdout: (_value: string) => {}
+    })).rejects.toThrow()
+    expect(await readFile(tempPath, "utf8")).toBe("belongs-to-another-writer\n")
+    expect(await Bun.file(canonicalPath).exists()).toBe(false)
+  })
+
   test("aggregates a primary write failure with an independently attempted temp-cleanup failure", async () => {
     const root = await Fixture()
     const canonicalPath = join(root, ".artifacts", "gates", "unit-fixtures.json")
@@ -701,15 +970,15 @@ describe("canonical atomic result emission", () => {
     const stdout: string[] = []
     const operations = {
       ...base,
-      Open: async (path: string) => {
-        const handle = await base.Open(path)
+      Open: async (path: string, identity: Parameters<typeof base.Open>[1]) => {
+        const handle = await base.Open(path, identity)
         return {
           ...handle,
           Write: async (_value: string) => { throw new Error("injected write failure") }
         }
       },
-      Remove: async (path: string) => {
-        await base.Remove(path)
+      Remove: async (path: string, identity: Parameters<typeof base.Remove>[1]) => {
+        await base.Remove(path, identity)
         throw new Error("injected cleanup failure")
       }
     }
@@ -742,9 +1011,9 @@ describe("canonical atomic result emission", () => {
     const canonicalPath = await EmitGateResultWithDependencies(root, ValidResult(), {
       AtomicWriterOperations: {
         ...base,
-        Remove: async (path: string) => {
+        Remove: async (path: string, identity: Parameters<typeof base.Remove>[1]) => {
           removeCalled = true
-          await base.Remove(path)
+          await base.Remove(path, identity)
           throw new Error("cleanup must not run after rename")
         }
       },
@@ -760,8 +1029,37 @@ describe("canonical atomic result emission", () => {
     const root = await Fixture()
     const { NodeAtomicWriterOperations } = await LoadResult()
 
-    await expect(NodeAtomicWriterOperations().MakeDirectory(join(root, "input.txt")))
+    const path = join(root, "input.txt")
+    await expect(NodeAtomicWriterOperations().MakeDirectory(path, {
+      Path: path,
+      RealPath: path,
+      Device: 0,
+      Inode: 0
+    }))
       .rejects.toThrow("GATE_RESULT_PATH_ERROR")
+  })
+
+  test("the production atomic operations reject mismatched identities and escaped child paths", async () => {
+    const root = await Fixture()
+    const gates = join(root, ".artifacts", "gates")
+    await mkdir(gates, { recursive: true })
+    const gatesInformation = await stat(gates)
+    const { NodeAtomicWriterOperations } = await LoadResult()
+    const operations = NodeAtomicWriterOperations()
+    const identity = {
+      Path: gates,
+      RealPath: await realpath(gates),
+      Device: gatesInformation.dev,
+      Inode: gatesInformation.ino
+    }
+
+    await expect(operations.MakeDirectory(gates, {
+      ...identity,
+      Path: join(root, "different-gates")
+    })).rejects.toThrow("GATE_RESULT_PATH_ERROR")
+    await expect(operations.Open(join(root, "escaped.tmp"), identity))
+      .rejects.toThrow("GATE_RESULT_PATH_ERROR")
+    expect(await Bun.file(join(root, "escaped.tmp")).exists()).toBe(false)
   })
 })
 

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto"
-import { lstat, open, rename, rm } from "node:fs/promises"
+import { lstat, open, realpath, rename, rm, stat } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
 
 export interface AtomicFileHandle {
@@ -11,32 +11,76 @@ export interface AtomicFileHandle {
 export interface AtomicWriterOperations {
   readonly Pid: number
   readonly RandomSuffix: () => string
-  readonly MakeDirectory: (path: string) => Promise<void>
-  readonly Open: (path: string) => Promise<AtomicFileHandle>
-  readonly Rename: (from: string, to: string) => Promise<void>
-  readonly Remove: (path: string) => Promise<void>
+  readonly MakeDirectory: (path: string, identity: AtomicDirectoryIdentity) => Promise<void>
+  readonly Open: (path: string, identity: AtomicDirectoryIdentity) => Promise<AtomicFileHandle>
+  readonly Rename: (from: string, to: string, identity: AtomicDirectoryIdentity) => Promise<void>
+  readonly Remove: (path: string, identity: AtomicDirectoryIdentity) => Promise<void>
+}
+
+export interface AtomicDirectoryIdentity {
+  readonly Path: string
+  readonly RealPath: string
+  readonly Device: number
+  readonly Inode: number
 }
 
 export interface AtomicWriteIdentity {
   readonly Gate: string
   readonly RunId: string
+  readonly Directory: AtomicDirectoryIdentity
 }
 
 function ErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function PathError(message: string): Error {
+  return new Error(`GATE_RESULT_PATH_ERROR ${message}`)
+}
+
+async function VerifyDirectoryIdentity(
+  path: string,
+  expected: AtomicDirectoryIdentity
+): Promise<void> {
+  try {
+    if (path !== expected.Path) {
+      throw new Error("atomic result directory path changed")
+    }
+    const lexicalInformation = await lstat(path)
+    if (lexicalInformation.isSymbolicLink() || !lexicalInformation.isDirectory()) {
+      throw new Error("atomic result directory must be a real directory")
+    }
+    const currentRealPath = await realpath(path)
+    const information = await stat(path)
+    if (
+      !information.isDirectory()
+      || currentRealPath !== expected.RealPath
+      || information.dev !== expected.Device
+      || information.ino !== expected.Inode
+    ) {
+      throw new Error("atomic result directory identity changed")
+    }
+  } catch (error) {
+    throw PathError(ErrorMessage(error))
+  }
+}
+
+function AssertChildPath(path: string, expected: AtomicDirectoryIdentity): void {
+  if (dirname(path) !== expected.Path) {
+    throw PathError("atomic result path escaped the prepared directory")
+  }
+}
+
 export function NodeAtomicWriterOperations(): AtomicWriterOperations {
   return {
     Pid: process.pid,
     RandomSuffix: () => randomBytes(12).toString("hex"),
-    MakeDirectory: async (path) => {
-      const information = await lstat(path)
-      if (information.isSymbolicLink() || !information.isDirectory()) {
-        throw new Error("GATE_RESULT_PATH_ERROR atomic result directory must be a real directory")
-      }
+    MakeDirectory: async (path, identity) => {
+      await VerifyDirectoryIdentity(path, identity)
     },
-    Open: async (path) => {
+    Open: async (path, identity) => {
+      AssertChildPath(path, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
       const handle = await open(path, "wx", 0o600)
       return {
         Write: async (value) => {
@@ -50,10 +94,15 @@ export function NodeAtomicWriterOperations(): AtomicWriterOperations {
         }
       }
     },
-    Rename: async (from, to) => {
+    Rename: async (from, to, identity) => {
+      AssertChildPath(from, identity)
+      AssertChildPath(to, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
       await rename(from, to)
     },
-    Remove: async (path) => {
+    Remove: async (path, identity) => {
+      AssertChildPath(path, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
       await rm(path, { force: true })
     }
   }
@@ -66,24 +115,27 @@ export async function WriteCanonicalFile(
   operations: AtomicWriterOperations
 ): Promise<void> {
   const directory = dirname(canonicalPath)
-  await operations.MakeDirectory(directory)
+  await operations.MakeDirectory(directory, identity.Directory)
   const tempPath = join(
     directory,
     `${basename(canonicalPath)}.${identity.Gate}.${identity.RunId}.${operations.Pid}.${operations.RandomSuffix()}.tmp`
   )
   let handle: AtomicFileHandle | null = null
+  let ownedTemp = false
   let closed = false
   let renamed = false
   let primaryError: unknown = null
 
   try {
-    handle = await operations.Open(tempPath)
+    handle = await operations.Open(tempPath, identity.Directory)
+    ownedTemp = true
     await handle.Write(contents)
     await handle.Sync()
     await handle.Close()
     closed = true
-    await operations.Rename(tempPath, canonicalPath)
+    await operations.Rename(tempPath, canonicalPath, identity.Directory)
     renamed = true
+    await VerifyDirectoryIdentity(directory, identity.Directory)
   } catch (error) {
     primaryError = error
   } finally {
@@ -95,9 +147,9 @@ export async function WriteCanonicalFile(
         cleanupErrors.push(error)
       }
     }
-    if (!renamed) {
+    if (ownedTemp && !renamed) {
       try {
-        await operations.Remove(tempPath)
+        await operations.Remove(tempPath, identity.Directory)
       } catch (error) {
         cleanupErrors.push(error)
       }

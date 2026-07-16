@@ -6,12 +6,14 @@ import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path"
 import {
   NodeAtomicWriterOperations,
   WriteCanonicalFile,
+  type AtomicDirectoryIdentity,
   type AtomicWriterOperations
 } from "./atomic-writer.ts"
 
 export {
   NodeAtomicWriterOperations,
   WriteCanonicalFile,
+  type AtomicDirectoryIdentity,
   type AtomicFileHandle,
   type AtomicWriterOperations
 } from "./atomic-writer.ts"
@@ -93,10 +95,50 @@ interface InternalSnapshotResult {
   readonly RootRealPath: string | null
 }
 
+interface PreparedCanonicalResult {
+  readonly CanonicalPath: string
+  readonly Directory: AtomicDirectoryIdentity
+}
+
+interface RunGateAdmission {
+  readonly Options: RunGateOptions | null
+  readonly RunId: string
+  readonly Error: string | null
+}
+
 const GatePattern = /^[a-z][a-z0-9-]{0,63}$/
 const RunIdPattern = /^[a-z0-9][a-z0-9_-]{0,95}$/
 const GateModes = new Set<string>(["fixture", "repository", "runtime-probe"])
 const ReadinessPolicies = new Set<string>(["evaluation-only", "package-admission"])
+const RunGateOptionKeys = new Set([
+  "root",
+  "gate",
+  "mode",
+  "readinessPolicy",
+  "expectedSubjects",
+  "inputPaths",
+  "toolchain",
+  "runId"
+])
+const ReservedGateCheckIds = new Set([
+  "GATE_PROTOCOL_ERROR",
+  "GATE_INPUT_ERROR",
+  "GATE_INTERNAL_ERROR",
+  "GATE_ARTIFACT_ERROR",
+  "GATE_SUBJECTS_ZERO",
+  "GATE_NO_PASS_CHECK",
+  "GATE_SUBJECT_COUNT_MISMATCH"
+])
+const NullInputStageCheckIds = new Set(["GATE_PROTOCOL_ERROR", "GATE_INPUT_ERROR"])
+const ProtocolFailureOptions: RunGateOptions = {
+  root: ".",
+  gate: "gate-protocol-error",
+  mode: "repository",
+  readinessPolicy: "evaluation-only",
+  expectedSubjects: null,
+  inputPaths: [],
+  toolchain: {}
+}
 const GateResultSchemaUrl = new URL("../../schemas/gate-result.schema.json", import.meta.url)
 const GateResultSchema = JSON.parse(readFileSync(GateResultSchemaUrl, "utf8")) as AnySchema
 const GateResultAjv = new Ajv2020({ strict: true })
@@ -107,7 +149,15 @@ function Sha256(value: string | Uint8Array): string {
 }
 
 function ErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) {
+      const message: unknown = error.message
+      return typeof message === "string" ? message : "unprintable error"
+    }
+    return String(error)
+  } catch {
+    return "unprintable error"
+  }
 }
 
 function FailedCheck(id: string, detail: string): GateCheck {
@@ -243,6 +293,9 @@ function NormalizeCheck(value: unknown): GateCheck {
   if (typeof value.id !== "string" || value.id.length === 0) {
     throw new Error("evaluator check id must be a non-empty string")
   }
+  if (ReservedGateCheckIds.has(value.id)) {
+    throw new Error(`evaluator check id is reserved: ${value.id}`)
+  }
   if (value.status !== "pass" && value.status !== "fail" && value.status !== "skip") {
     throw new Error("evaluator check status is invalid")
   }
@@ -302,65 +355,91 @@ function NormalizeEvaluation(value: unknown): GateEvaluation {
   return { SubjectsChecked: value.SubjectsChecked as number, Checks, ArtifactPaths }
 }
 
-function ProtocolError(options: RunGateOptions, runId: string): string | null {
-  if (typeof options.gate !== "string" || !GatePattern.test(options.gate)) {
-    return `invalid gate id: ${String(options.gate)}`
+function AdmitRunGateOptions(value: unknown): RunGateAdmission {
+  const generatedRunId = randomUUID()
+  if (!IsObjectRecord(value) || !HasOnlyKeys(value, RunGateOptionKeys)) {
+    return {
+      Options: null,
+      RunId: generatedRunId,
+      Error: "gate options must be a fixed-shape object"
+    }
   }
-  if (typeof runId !== "string" || !RunIdPattern.test(runId)) {
-    return `invalid run id: ${String(runId)}`
+
+  const requestedRunId = value.runId
+  const invalidRequestedRunId = requestedRunId !== undefined
+    && (typeof requestedRunId !== "string" || !RunIdPattern.test(requestedRunId))
+  const runId = requestedRunId === undefined
+    ? generatedRunId
+    : typeof requestedRunId === "string" && RunIdPattern.test(requestedRunId)
+      ? requestedRunId
+      : generatedRunId
+  if (invalidRequestedRunId) {
+    return { Options: null, RunId: runId, Error: "invalid run id" }
   }
-  if (!IsGateMode(options.mode)) {
-    return `invalid gate mode: ${String(options.mode)}`
+  if (typeof value.gate !== "string" || !GatePattern.test(value.gate)) {
+    return { Options: null, RunId: runId, Error: "invalid gate id" }
   }
-  if (!IsReadinessPolicy(options.readinessPolicy)) {
-    return `invalid readiness policy: ${String(options.readinessPolicy)}`
+  if (!IsGateMode(value.mode)) {
+    return { Options: null, RunId: runId, Error: "invalid gate mode" }
+  }
+  if (!IsReadinessPolicy(value.readinessPolicy)) {
+    return {
+      Options: null,
+      RunId: runId,
+      Error: "invalid readiness policy"
+    }
   }
   if (
-    options.expectedSubjects !== null
-    && (!Number.isInteger(options.expectedSubjects) || options.expectedSubjects < 0)
+    value.expectedSubjects !== null
+    && (!Number.isInteger(value.expectedSubjects) || (value.expectedSubjects as number) < 0)
   ) {
-    return "expectedSubjects must be null or a non-negative integer"
+    return {
+      Options: null,
+      RunId: runId,
+      Error: "expectedSubjects must be null or a non-negative integer"
+    }
   }
-  if (typeof options.root !== "string" || options.root.length === 0) {
-    return "root must be a non-empty string"
+  if (typeof value.root !== "string" || value.root.length === 0) {
+    return { Options: null, RunId: runId, Error: "root must be a non-empty string" }
   }
-  if (!Array.isArray(options.inputPaths) || !options.inputPaths.every((path) => typeof path === "string")) {
-    return "inputPaths must be an array of strings"
+  if (!Array.isArray(value.inputPaths) || !value.inputPaths.every((path) => typeof path === "string")) {
+    return { Options: null, RunId: runId, Error: "inputPaths must be an array of strings" }
   }
-  if (!IsStringRecord(options.toolchain)) {
-    return "toolchain must be a string map"
+  if (!IsStringRecord(value.toolchain)) {
+    return { Options: null, RunId: runId, Error: "toolchain must be a string map" }
   }
-  if (options.readinessPolicy === "package-admission" && options.mode !== "repository") {
-    return "package-admission requires repository mode"
+  if (value.readinessPolicy === "package-admission" && value.mode !== "repository") {
+    return { Options: null, RunId: runId, Error: "package-admission requires repository mode" }
   }
-  if (options.mode === "fixture" && !options.gate.endsWith("-fixtures")) {
-    return "fixture gate ids must end in -fixtures"
+  if (value.mode === "fixture" && !value.gate.endsWith("-fixtures")) {
+    return { Options: null, RunId: runId, Error: "fixture gate ids must end in -fixtures" }
   }
-  return null
+
+  return {
+    Options: {
+      root: value.root,
+      gate: value.gate,
+      mode: value.mode,
+      readinessPolicy: value.readinessPolicy,
+      expectedSubjects: value.expectedSubjects as number | null,
+      inputPaths: [...value.inputPaths] as string[],
+      toolchain: { ...value.toolchain },
+      ...(requestedRunId === undefined ? {} : { runId })
+    },
+    RunId: runId,
+    Error: null
+  }
 }
 
-function SafeProtocolResultOptions(options: RunGateOptions): RunGateOptions {
-  const expectedSubjects = options.expectedSubjects === null
-    || (Number.isInteger(options.expectedSubjects) && options.expectedSubjects >= 0)
-    ? options.expectedSubjects
-    : null
-  const mode: GateMode = IsGateMode(options.mode) ? options.mode : "repository"
-  const gate = typeof options.gate === "string" && GatePattern.test(options.gate)
-    ? options.gate
-    : mode === "fixture" ? "gate-protocol-error-fixtures" : "gate-protocol-error"
-  return {
-    ...options,
-    root: typeof options.root === "string" && options.root.length > 0 ? options.root : ".",
-    gate,
-    mode,
-    readinessPolicy: IsReadinessPolicy(options.readinessPolicy)
-      ? options.readinessPolicy
-      : "evaluation-only",
-    expectedSubjects,
-    inputPaths: Array.isArray(options.inputPaths)
-      ? options.inputPaths.filter((path): path is string => typeof path === "string")
-      : [],
-    toolchain: IsStringRecord(options.toolchain) ? { ...options.toolchain } : {}
+function SafelyAdmitRunGateOptions(value: unknown): RunGateAdmission {
+  try {
+    return AdmitRunGateOptions(value)
+  } catch {
+    return {
+      Options: null,
+      RunId: randomUUID(),
+      Error: "gate options could not be safely inspected"
+    }
   }
 }
 
@@ -391,7 +470,7 @@ function BuildResult(
     releaseReadiness: ReleaseReadinessFor(options.readinessPolicy, status),
     startedAt,
     completedAt: observedCompletedAt < startedAt ? startedAt : observedCompletedAt,
-    toolchain: options.toolchain,
+    toolchain: { ...options.toolchain },
     inputsSha256,
     subjects: { expected: options.expectedSubjects, checked },
     checks,
@@ -427,27 +506,25 @@ async function HashArtifacts(
 }
 
 export async function RunGate(
-  options: RunGateOptions,
+  options: unknown,
   evaluate: (snapshot: InputSnapshot) => Promise<GateEvaluation>
 ): Promise<GateResult> {
   const startedAt = new Date().toISOString()
-  const runId = options.runId ?? randomUUID()
-  const protocolError = ProtocolError(options, runId)
-  if (protocolError !== null) {
-    const safeOptions = SafeProtocolResultOptions(options)
-    const safeRunId = typeof runId === "string" && RunIdPattern.test(runId) ? runId : randomUUID()
+  const admission = SafelyAdmitRunGateOptions(options)
+  if (admission.Error !== null || admission.Options === null) {
     return BuildResult(
-      safeOptions,
-      safeRunId,
+      ProtocolFailureOptions,
+      admission.RunId,
       startedAt,
       null,
       0,
-      [FailedCheck("GATE_PROTOCOL_ERROR", protocolError)],
+      [FailedCheck("GATE_PROTOCOL_ERROR", admission.Error ?? "invalid gate options")],
       []
     )
   }
 
-  const gateOptions = SafeProtocolResultOptions(options)
+  const gateOptions = admission.Options
+  const runId = admission.RunId
   const snapshotResult = await SnapshotInputsWithRoot(gateOptions.root, gateOptions.inputPaths)
   if (snapshotResult.Snapshot === null) {
     return BuildResult(gateOptions, runId, startedAt, null, 0, snapshotResult.Checks, [])
@@ -520,6 +597,28 @@ function SemanticResultError(result: GateResult): string | null {
     return "completedAt must not precede startedAt"
   }
 
+  const nonFailureReservedCheck = result.checks.find(
+    (check) => ReservedGateCheckIds.has(check.id) && check.status !== "fail"
+  )
+  if (nonFailureReservedCheck !== undefined) {
+    return `reserved check ${nonFailureReservedCheck.id} must fail`
+  }
+  const nullInputStageChecks = result.checks.filter((check) => NullInputStageCheckIds.has(check.id))
+  if (result.inputsSha256 === null) {
+    if (
+      result.status !== "fail"
+      || result.subjects.checked !== 0
+      || result.artifacts.length !== 0
+      || result.checks.length !== 1
+      || nullInputStageChecks.length !== 1
+      || nullInputStageChecks[0]?.status !== "fail"
+    ) {
+      return "null inputsSha256 requires one protocol/input failure with zero checked subjects and no artifacts"
+    }
+  } else if (nullInputStageChecks.length > 0) {
+    return "protocol/input failure checks require null inputsSha256"
+  }
+
   const derivedPass = result.subjects.checked > 0
     && result.checks.some((check) => check.status === "pass")
     && !result.checks.some((check) => check.status === "fail")
@@ -573,7 +672,7 @@ async function EnsureResultDirectory(path: string): Promise<void> {
   }
 }
 
-async function PrepareCanonicalResultPath(root: string, gate: string): Promise<string> {
+async function PrepareCanonicalResultPath(root: string, gate: string): Promise<PreparedCanonicalResult> {
   try {
     const rootRealPath = await realpath(root)
     const rootInformation = await stat(rootRealPath)
@@ -584,6 +683,8 @@ async function PrepareCanonicalResultPath(root: string, gate: string): Promise<s
     const gatesDirectory = join(artifactsDirectory, "gates")
     await EnsureResultDirectory(artifactsDirectory)
     await EnsureResultDirectory(gatesDirectory)
+    const gatesRealPath = await realpath(gatesDirectory)
+    const gatesInformation = await stat(gatesDirectory)
     const canonicalPath = join(gatesDirectory, `${gate}.json`)
     try {
       const targetInformation = await lstat(canonicalPath)
@@ -595,7 +696,15 @@ async function PrepareCanonicalResultPath(root: string, gate: string): Promise<s
         throw error
       }
     }
-    return canonicalPath
+    return {
+      CanonicalPath: canonicalPath,
+      Directory: {
+        Path: gatesDirectory,
+        RealPath: gatesRealPath,
+        Device: gatesInformation.dev,
+        Inode: gatesInformation.ino
+      }
+    }
   } catch (error) {
     throw new Error(`GATE_RESULT_PATH_ERROR ${ErrorMessage(error)}`)
   }
@@ -613,16 +722,16 @@ export async function EmitGateResultWithDependencies(
   if (semanticError !== null) {
     throw new Error(`GATE_RESULT_SEMANTIC_ERROR ${semanticError}`)
   }
-  const canonicalPath = await PrepareCanonicalResultPath(root, result.gate)
+  const prepared = await PrepareCanonicalResultPath(root, result.gate)
   const compact = JSON.stringify(result)
   await WriteCanonicalFile(
-    canonicalPath,
+    prepared.CanonicalPath,
     `${compact}\n`,
-    { Gate: result.gate, RunId: result.runId },
+    { Gate: result.gate, RunId: result.runId, Directory: prepared.Directory },
     dependencies.AtomicWriterOperations
   )
   dependencies.WriteStdout(`LIKEGO_GATE_RESULT=${compact}\n`)
-  return canonicalPath
+  return prepared.CanonicalPath
 }
 
 export async function EmitGateResult(root: string, result: GateResult): Promise<string> {
