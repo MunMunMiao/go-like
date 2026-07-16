@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
 import { dirname, join, relative } from "node:path"
 import { tmpdir } from "node:os"
+import { pathToFileURL } from "node:url"
 import type { InputSnapshot, SnapshotFile } from "./result.ts"
 
 interface TestIssue {
@@ -14,6 +15,7 @@ interface TestIssue {
 const RepositoryRoot = join(import.meta.dir, "../..")
 const FamilyRoot = "tools/manifests/fixtures"
 const CasesPath = `${FamilyRoot}/cases.json`
+const StructuralServerRoot = `${FamilyRoot}/application-owned/structural-server/examples/custom-server`
 const TemporaryRoots: string[] = []
 
 afterEach(async () => {
@@ -89,6 +91,83 @@ describe("committed fixture assets", () => {
     for (const item of cases) {
       expect(payloads.some((payload) => payload.startsWith(`${item.path}/`))).toBe(true)
     }
+    expect(payloads).toContain(
+      "application-owned/structural-server/examples/custom-server/contract-consumer.ts"
+    )
+  })
+
+  test("binds the application-owned Server fixture to the frozen structural contract with TypeScript 7", async () => {
+    const compiler = join(RepositoryRoot, "node_modules/.bin/tsc")
+    const version = Bun.spawn([compiler, "--version"], { stdout: "pipe", stderr: "pipe" })
+    const [versionExit, versionStdout, versionStderr] = await Promise.all([
+      version.exited,
+      new Response(version.stdout).text(),
+      new Response(version.stderr).text()
+    ])
+    expect({ exitCode: versionExit, stdout: versionStdout.trim(), stderr: versionStderr }).toEqual({
+      exitCode: 0,
+      stdout: "Version 7.0.2",
+      stderr: ""
+    })
+
+    const root = await mkdtemp(join(tmpdir(), "likego-structural-server-tsc-"))
+    TemporaryRoots.push(root)
+    const consumer = join(RepositoryRoot, StructuralServerRoot, "contract-consumer.ts")
+    const config = join(root, "tsconfig.json")
+    await Bun.write(config, `${JSON.stringify({
+      compilerOptions: {
+        target: "ES2023",
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        lib: ["ES2023", "DOM", "DOM.Iterable"],
+        types: [],
+        strict: true,
+        exactOptionalPropertyTypes: true,
+        noUncheckedIndexedAccess: true,
+        noImplicitOverride: true,
+        noFallthroughCasesInSwitch: true,
+        useUnknownInCatchVariables: true,
+        verbatimModuleSyntax: true,
+        isolatedModules: true,
+        forceConsistentCasingInFileNames: true,
+        skipLibCheck: false,
+        allowImportingTsExtensions: true,
+        noEmit: true
+      },
+      files: [consumer]
+    }, null, 2)}\n`)
+
+    const compilation = Bun.spawn([compiler, "-p", config, "--pretty", "false"], {
+      stdout: "pipe",
+      stderr: "pipe"
+    })
+    const [exitCode, stdout, stderr] = await Promise.all([
+      compilation.exited,
+      new Response(compilation.stdout).text(),
+      new Response(compilation.stderr).text()
+    ])
+    expect({ exitCode, stdout, stderr }).toEqual({ exitCode: 0, stdout: "", stderr: "" })
+  })
+
+  test("runs the application-owned ServerHandle lifecycle through its Context-first methods", async () => {
+    const module = await import(pathToFileURL(join(RepositoryRoot, StructuralServerRoot, "server.ts")).href)
+    const context = {
+      Deadline: (): readonly [Date, boolean] => [new Date(0), false],
+      Done: (): AbortSignal | null => null,
+      Err: (): Error | null => null,
+      Value: (_key: unknown): unknown => undefined
+    }
+    const handle = await module.Server.Start(context)
+    const done = handle.Done()
+    let settled = false
+    void done.then(() => { settled = true })
+
+    expect(handle.Done()).toBe(done)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    await handle.Stop(context)
+    await done
+    expect(settled).toBe(true)
   })
 })
 

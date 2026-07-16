@@ -158,7 +158,15 @@ function ContractFor(mode: "fixture" | "repository"): GateContract {
 }
 
 function ErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) {
+      const message: unknown = error.message
+      return typeof message === "string" ? message : "unprintable error"
+    }
+    return String(error)
+  } catch {
+    return "unprintable error"
+  }
 }
 
 export async function Main(

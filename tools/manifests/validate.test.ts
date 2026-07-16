@@ -493,6 +493,27 @@ describe("manifest CLI modes", () => {
     expect(stderr.some((value) => value.startsWith("MANIFEST_EMIT_ERROR "))).toBe(true)
   })
 
+  test("resolves with a stable emission diagnostic for a non-coercible thrown value", async () => {
+    const { Main } = await LoadCli()
+    const root = await NewRoot([
+      "schemas/capability-manifest.schema.json",
+      "schemas/owner-manifest.schema.json",
+      "config/runtime-matrix.json"
+    ])
+    const hostile = {
+      [Symbol.toPrimitive](): never {
+        throw new Error("coercion escaped")
+      }
+    }
+    const stderr: string[] = []
+
+    await expect(Main(["--root", root, "--mode", "repository", "--run-id", "manifest-hostile-emission"], {
+      WriteStdout: () => { throw hostile },
+      WriteStderr: (value: string) => { stderr.push(value) }
+    })).resolves.toBe(1)
+    expect(stderr).toEqual(["MANIFEST_EMIT_ERROR unprintable error\n"])
+  })
+
   test("uses default process IO for generated-run repository output and usage errors", async () => {
     const { Main } = await LoadCli()
     const root = await NewRoot([
