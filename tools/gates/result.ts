@@ -433,7 +433,7 @@ function AdmitRunGateOptions(value: unknown): RunGateAdmission {
 
 function SafelyAdmitRunGateOptions(value: unknown): RunGateAdmission {
   try {
-    return AdmitRunGateOptions(value)
+    return AdmitRunGateOptions(structuredClone(value))
   } catch {
     return {
       Options: null,
@@ -532,7 +532,7 @@ export async function RunGate(
 
   let evaluation: GateEvaluation
   try {
-    evaluation = NormalizeEvaluation(await evaluate(snapshotResult.Snapshot))
+    evaluation = NormalizeEvaluation(structuredClone(await evaluate(snapshotResult.Snapshot)))
   } catch (error) {
     return BuildResult(
       gateOptions,

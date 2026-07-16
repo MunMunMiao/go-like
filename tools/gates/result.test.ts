@@ -398,6 +398,57 @@ describe("RunGate", () => {
     expect(evaluated).toBe(false)
   })
 
+  test("snapshots the complete options graph once before validation and construction", async () => {
+    const root = await Fixture()
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const inputPaths: string[] = []
+    const toolchain: Record<string, unknown> = {}
+    const options = Options(root, {
+      gate: "repository-gate",
+      mode: "repository",
+      inputPaths,
+      toolchain
+    })
+    let gateReads = 0
+    let inputReads = 0
+    let toolchainReads = 0
+    Object.defineProperty(options, "gate", {
+      enumerable: true,
+      get: () => ++gateReads === 1 ? "repository-gate" : "Invalid"
+    })
+    Object.defineProperty(inputPaths, "0", {
+      enumerable: true,
+      get: () => ++inputReads === 1 ? "input.txt" : "../outside.txt"
+    })
+    inputPaths.length = 1
+    Object.defineProperty(toolchain, "bun", {
+      enumerable: true,
+      get: () => ++toolchainReads === 1 ? "1.3.14" : 1
+    })
+    let evaluated = false
+
+    const result = await RunGate(options, async () => {
+      evaluated = true
+      return PassingEvaluation()
+    })
+
+    expect(evaluated).toBe(true)
+    expect({ gate: result.gate, status: result.status, toolchain: result.toolchain }).toEqual({
+      gate: "repository-gate",
+      status: "pass",
+      toolchain: { bun: "1.3.14" }
+    })
+    expect({ gateReads, inputReads, toolchainReads }).toEqual({
+      gateReads: 1,
+      inputReads: 1,
+      toolchainReads: 1
+    })
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("repository-gate.json")
+  })
+
   test("does not coerce hostile invalid option values while building a protocol failure", async () => {
     const root = await Fixture()
     const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
@@ -454,6 +505,51 @@ describe("RunGate", () => {
     expect(result.inputsSha256).not.toBeNull()
     expect(result.subjects.checked).toBe(0)
     expect(result.checks.map((check) => check.id)).toEqual(["GATE_INTERNAL_ERROR"])
+    await expect(EmitGateResultWithDependencies(root, result, {
+      AtomicWriterOperations: NodeAtomicWriterOperations(),
+      WriteStdout: (_value: string) => {}
+    })).resolves.toEndWith("unit-fixtures.json")
+  })
+
+  test("snapshots the complete evaluator graph once before reserved-id and artifact admission", async () => {
+    const root = await Fixture()
+    await Bun.write(join(root, "artifact.log"), "artifact\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations, RunGate } = await LoadResult()
+    const check: Record<string, unknown> = { status: "pass" }
+    const artifact: Record<string, unknown> = { kind: "log" }
+    const evaluation: Record<string, unknown> = {
+      Checks: [check],
+      ArtifactPaths: [artifact]
+    }
+    let subjectReads = 0
+    let checkIdReads = 0
+    let artifactPathReads = 0
+    Object.defineProperty(evaluation, "SubjectsChecked", {
+      enumerable: true,
+      get: () => ++subjectReads === 1 ? 1 : 0
+    })
+    Object.defineProperty(check, "id", {
+      enumerable: true,
+      get: () => ++checkIdReads === 1 ? "USER_PASS" : "GATE_PROTOCOL_ERROR"
+    })
+    Object.defineProperty(artifact, "path", {
+      enumerable: true,
+      get: () => ++artifactPathReads === 1 ? "artifact.log" : "../outside.log"
+    })
+
+    const result = await RunGate(Options(root), async () => evaluation as never)
+
+    expect(result.status).toBe("pass")
+    expect(result.subjects.checked).toBe(1)
+    expect(result.checks).toEqual([{ id: "USER_PASS", status: "pass" }])
+    expect(result.artifacts).toEqual([
+      { kind: "log", path: "artifact.log", sha256: Sha256("artifact\n") }
+    ])
+    expect({ subjectReads, checkIdReads, artifactPathReads }).toEqual({
+      subjectReads: 1,
+      checkIdReads: 1,
+      artifactPathReads: 1
+    })
     await expect(EmitGateResultWithDependencies(root, result, {
       AtomicWriterOperations: NodeAtomicWriterOperations(),
       WriteStdout: (_value: string) => {}
@@ -770,6 +866,28 @@ describe("canonical atomic result emission", () => {
     expect(await readFile(outsideTarget, "utf8")).toBe("outside-prior\n")
   })
 
+  test("rejects a non-file canonical target introduced after prepare", async () => {
+    const root = await Fixture()
+    const canonicalPath = join(root, ".artifacts", "gates", "unit-fixtures.json")
+    await mkdir(dirname(canonicalPath), { recursive: true })
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+
+    await expect(EmitGateResultWithDependencies(root, ValidResult(), {
+      AtomicWriterOperations: {
+        ...base,
+        MakeDirectory: async (path: string, identity: Parameters<typeof base.MakeDirectory>[1]) => {
+          await base.MakeDirectory(path, identity)
+          await mkdir(canonicalPath)
+        }
+      },
+      WriteStdout: (value: string) => { stdout.push(value) }
+    })).rejects.toThrow("GATE_RESULT_PATH_ERROR")
+    expect(stdout).toEqual([])
+    expect((await stat(canonicalPath)).isDirectory()).toBe(true)
+  })
+
   test("revalidates the prepared gates directory across every injected atomic boundary", async () => {
     const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
 
@@ -825,6 +943,319 @@ describe("canonical atomic result emission", () => {
       expect(stdout).toEqual([])
       expect(await Bun.file(outsideCanonical).exists()).toBe(false)
     }
+  })
+
+  test("cleans owned temps through a real-directory replacement after open and before rename", async () => {
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+
+    const results = await Promise.all((["after-open", "before-rename"] as const).map(async (stage) => {
+      const root = await Fixture()
+      const artifacts = join(root, ".artifacts")
+      const gates = join(artifacts, "gates")
+      const preservedArtifacts = join(root, `.artifacts-preserved-${stage}`)
+      const canonicalPath = join(gates, "unit-fixtures.json")
+      await mkdir(gates, { recursive: true })
+      await Bun.write(canonicalPath, "prior-pass\n")
+      const base = NodeAtomicWriterOperations()
+      const stdout: string[] = []
+      let swapped = false
+      const swapParent = async () => {
+        if (swapped) return
+        await rename(artifacts, preservedArtifacts)
+        await mkdir(gates, { recursive: true })
+        swapped = true
+      }
+      const operations = {
+        ...base,
+        Open: async (path: string, identity: Parameters<typeof base.Open>[1]) => {
+          const handle = await base.Open(path, identity)
+          if (stage === "after-open") await swapParent()
+          return handle
+        },
+        Rename: async (from: string, to: string, identity: Parameters<typeof base.Rename>[2]) => {
+          if (stage === "before-rename") await swapParent()
+          await base.Rename(from, to, identity)
+        }
+      }
+      let error: unknown = null
+
+      try {
+        await EmitGateResultWithDependencies(root, ValidResult(), {
+          AtomicWriterOperations: operations,
+          WriteStdout: (value: string) => { stdout.push(value) }
+        })
+      } catch (caught) {
+        error = caught
+      }
+      const replacementHasCanonical = await Bun.file(canonicalPath).exists()
+      await rm(artifacts, { recursive: true, force: true })
+      await rename(preservedArtifacts, artifacts)
+      return {
+        stage,
+        error: String(error),
+        stdout,
+        replacementHasCanonical,
+        prior: await readFile(canonicalPath, "utf8"),
+        temps: (await readdir(gates)).filter((name) => name.endsWith(".tmp"))
+      }
+    }))
+
+    for (const result of results) {
+      expect(result.error).toContain("GATE_RESULT_PATH_ERROR")
+      expect(result.stdout).toEqual([])
+      expect(result.replacementHasCanonical).toBe(false)
+      expect(result.prior).toBe("prior-pass\n")
+      expect(result.temps).toEqual([])
+    }
+  })
+
+  test("rolls back seeded and absent canonicals when the real directory changes after rename", async () => {
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+
+    for (const seededPrior of [true, false]) {
+      const root = await Fixture()
+      const artifacts = join(root, ".artifacts")
+      const gates = join(artifacts, "gates")
+      const preservedArtifacts = join(root, `.artifacts-preserved-${seededPrior ? "prior" : "empty"}`)
+      const canonicalPath = join(gates, "unit-fixtures.json")
+      await mkdir(gates, { recursive: true })
+      if (seededPrior) await Bun.write(canonicalPath, "prior-pass\n")
+      const base = NodeAtomicWriterOperations()
+      const stdout: string[] = []
+      const operations = {
+        ...base,
+        Rename: async (from: string, to: string, identity: Parameters<typeof base.Rename>[2]) => {
+          await base.Rename(from, to, identity)
+          await rename(artifacts, preservedArtifacts)
+          await mkdir(gates, { recursive: true })
+        }
+      }
+      let error: unknown = null
+
+      try {
+        await EmitGateResultWithDependencies(root, ValidResult(), {
+          AtomicWriterOperations: operations,
+          WriteStdout: (value: string) => { stdout.push(value) }
+        })
+      } catch (caught) {
+        error = caught
+      }
+      const replacementHasCanonical = await Bun.file(canonicalPath).exists()
+      await rm(artifacts, { recursive: true, force: true })
+      await rename(preservedArtifacts, artifacts)
+
+      expect(String(error)).toContain("GATE_RESULT_PATH_ERROR")
+      expect(stdout).toEqual([])
+      expect(replacementHasCanonical).toBe(false)
+      if (seededPrior) {
+        expect(await readFile(canonicalPath, "utf8")).toBe("prior-pass\n")
+      } else {
+        expect(await Bun.file(canonicalPath).exists()).toBe(false)
+      }
+      expect((await readdir(gates)).filter((name) => name.endsWith(".tmp"))).toEqual([])
+    }
+  })
+
+  test("rolls back the prior canonical before reporting a directory lease close failure", async () => {
+    const root = await Fixture()
+    const artifacts = join(root, ".artifacts")
+    const gates = join(artifacts, "gates")
+    const preservedArtifacts = join(root, ".artifacts-preserved-close")
+    const canonicalPath = join(gates, "unit-fixtures.json")
+    await mkdir(dirname(canonicalPath), { recursive: true })
+    await Bun.write(canonicalPath, "prior-pass\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+    let resolveCalls = 0
+
+    await expect(EmitGateResultWithDependencies(root, ValidResult(), {
+      AtomicWriterOperations: {
+        ...base,
+        LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+          const lease = await base.LeaseDirectory(identity)
+          return {
+            Resolve: async () => {
+              resolveCalls += 1
+              await rename(artifacts, preservedArtifacts)
+              await mkdir(gates, { recursive: true })
+              return lease.Resolve()
+            },
+            Close: async () => {
+              await lease.Close()
+              throw new Error("injected directory lease close failure")
+            }
+          }
+        }
+      },
+      WriteStdout: (value: string) => { stdout.push(value) }
+    })).rejects.toThrow("injected directory lease close failure")
+    expect(resolveCalls).toBe(1)
+    expect(await Bun.file(canonicalPath).exists()).toBe(false)
+    await rm(artifacts, { recursive: true, force: true })
+    await rename(preservedArtifacts, artifacts)
+    expect(await readFile(canonicalPath, "utf8")).toBe("prior-pass\n")
+    expect(stdout).toEqual([])
+    expect((await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+  })
+
+  test("rolls back the prior canonical and closes the lease when pre-close resolution fails", async () => {
+    const root = await Fixture()
+    const canonicalPath = join(root, ".artifacts", "gates", "unit-fixtures.json")
+    await mkdir(dirname(canonicalPath), { recursive: true })
+    await Bun.write(canonicalPath, "prior-pass\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+    let closed = false
+
+    await expect(EmitGateResultWithDependencies(root, ValidResult(), {
+      AtomicWriterOperations: {
+        ...base,
+        LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+          const lease = await base.LeaseDirectory(identity)
+          return {
+            Resolve: async () => { throw new Error("injected directory lease resolution failure") },
+            Close: async () => {
+              await lease.Close()
+              closed = true
+            }
+          }
+        }
+      },
+      WriteStdout: (value: string) => { stdout.push(value) }
+    })).rejects.toThrow("injected directory lease resolution failure")
+    expect(closed).toBe(true)
+    expect(await readFile(canonicalPath, "utf8")).toBe("prior-pass\n")
+    expect(stdout).toEqual([])
+    expect((await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+  })
+
+  test("reports both lease close and rollback failures when recovery becomes unwritable", async () => {
+    const root = await Fixture()
+    const gates = join(root, ".artifacts", "gates")
+    const canonicalPath = join(gates, "unit-fixtures.json")
+    await mkdir(gates, { recursive: true })
+    await Bun.write(canonicalPath, "prior-pass\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+    let error: unknown = null
+
+    try {
+      await EmitGateResultWithDependencies(root, ValidResult(), {
+        AtomicWriterOperations: {
+          ...base,
+          LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+            const lease = await base.LeaseDirectory(identity)
+            return {
+              Resolve: lease.Resolve,
+              Close: async () => {
+                await lease.Close()
+                await chmod(gates, 0o500)
+                throw new Error("injected directory lease close failure")
+              }
+            }
+          }
+        },
+        WriteStdout: (value: string) => { stdout.push(value) }
+      })
+    } catch (caught) {
+      error = caught
+    } finally {
+      await chmod(gates, 0o700)
+    }
+
+    expect(error).toBeInstanceOf(AggregateError)
+    const errors = (error as AggregateError).errors
+    expect((errors[0] as Error).message).toBe("injected directory lease close failure")
+    expect((errors[1] as NodeJS.ErrnoException).code).toBe("EACCES")
+    expect(stdout).toEqual([])
+    expect(await readFile(canonicalPath, "utf8")).not.toBe("prior-pass\n")
+  })
+
+  test("reports a lease close failure after a primary write failure without touching the prior", async () => {
+    const root = await Fixture()
+    const canonicalPath = join(root, ".artifacts", "gates", "unit-fixtures.json")
+    await mkdir(dirname(canonicalPath), { recursive: true })
+    await Bun.write(canonicalPath, "prior-pass\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+    let error: unknown = null
+
+    try {
+      await EmitGateResultWithDependencies(root, ValidResult(), {
+        AtomicWriterOperations: {
+          ...base,
+          LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+            const lease = await base.LeaseDirectory(identity)
+            return {
+              Resolve: lease.Resolve,
+              Close: async () => {
+                await lease.Close()
+                throw new Error("injected directory lease close failure")
+              }
+            }
+          },
+          Open: async () => { throw new Error("injected primary open failure") }
+        },
+        WriteStdout: (value: string) => { stdout.push(value) }
+      })
+    } catch (caught) {
+      error = caught
+    }
+
+    expect(error).toBeInstanceOf(AggregateError)
+    expect((error as AggregateError).errors.map((item) => (item as Error).message)).toEqual([
+      "injected primary open failure",
+      "injected directory lease close failure"
+    ])
+    expect(await readFile(canonicalPath, "utf8")).toBe("prior-pass\n")
+    expect(stdout).toEqual([])
+    expect((await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+  })
+
+  test("reports identity and rollback errors together when the relocated directory becomes unwritable", async () => {
+    const root = await Fixture()
+    const artifacts = join(root, ".artifacts")
+    const gates = join(artifacts, "gates")
+    const preservedArtifacts = join(root, ".artifacts-preserved-unwritable")
+    const canonicalPath = join(gates, "unit-fixtures.json")
+    await mkdir(gates, { recursive: true })
+    await Bun.write(canonicalPath, "prior-pass\n")
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+    const base = NodeAtomicWriterOperations()
+    const stdout: string[] = []
+    let error: unknown = null
+
+    try {
+      await EmitGateResultWithDependencies(root, ValidResult(), {
+        AtomicWriterOperations: {
+          ...base,
+          Rename: async (from: string, to: string, identity: Parameters<typeof base.Rename>[2]) => {
+            await base.Rename(from, to, identity)
+            await rename(artifacts, preservedArtifacts)
+            await mkdir(gates, { recursive: true })
+            await chmod(join(preservedArtifacts, "gates"), 0o500)
+          }
+        },
+        WriteStdout: (value: string) => { stdout.push(value) }
+      })
+    } catch (caught) {
+      error = caught
+    } finally {
+      await chmod(join(preservedArtifacts, "gates"), 0o700)
+    }
+    expect(error).toBeInstanceOf(AggregateError)
+    const errors = (error as AggregateError).errors
+    expect(String(errors[0])).toContain("GATE_RESULT_PATH_ERROR")
+    expect((errors[1] as NodeJS.ErrnoException).code).toBe("EACCES")
+    expect(stdout).toEqual([])
+    expect(await Bun.file(canonicalPath).exists()).toBe(false)
+    await rm(artifacts, { recursive: true, force: true })
+    await rename(preservedArtifacts, artifacts)
+    expect(await readFile(canonicalPath, "utf8")).not.toBe("prior-pass\n")
   })
 
   test("rejects non-directory roots and parent permission failures as confined path errors", async () => {
@@ -1060,6 +1491,61 @@ describe("canonical atomic result emission", () => {
     await expect(operations.Open(join(root, "escaped.tmp"), identity))
       .rejects.toThrow("GATE_RESULT_PATH_ERROR")
     expect(await Bun.file(join(root, "escaped.tmp")).exists()).toBe(false)
+  })
+
+  test("a directory lease rejects identity mutation after acquisition", async () => {
+    const root = await Fixture()
+    const gates = join(root, ".artifacts", "gates")
+    await mkdir(gates, { recursive: true })
+    const gatesInformation = await stat(gates)
+    const { NodeAtomicWriterOperations } = await LoadResult()
+    const operations = NodeAtomicWriterOperations()
+    const identity = {
+      Path: gates,
+      RealPath: await realpath(gates),
+      Device: gatesInformation.dev,
+      Inode: gatesInformation.ino
+    }
+    const lease = await operations.LeaseDirectory(identity)
+    identity.Inode += 1
+
+    await expect(lease.Resolve()).rejects.toThrow("GATE_RESULT_PATH_ERROR")
+    await lease.Close()
+  })
+
+  test("uses an original-path logical lease when directory descriptors are disabled", async () => {
+    const root = await Fixture()
+    const artifacts = join(root, ".artifacts")
+    const gates = join(artifacts, "gates")
+    const preservedArtifacts = join(root, ".artifacts-preserved-logical-lease")
+    await mkdir(gates, { recursive: true })
+    const gatesInformation = await stat(gates)
+    const { NodeAtomicWriterOperations } = await LoadResult()
+    const operations = NodeAtomicWriterOperations(null)
+    const identity = {
+      Path: gates,
+      RealPath: await realpath(gates),
+      Device: gatesInformation.dev,
+      Inode: gatesInformation.ino
+    }
+    const lease = await operations.LeaseDirectory(identity)
+
+    expect(await lease.Resolve()).toEqual(identity)
+    await rename(artifacts, preservedArtifacts)
+    await mkdir(gates, { recursive: true })
+    let relocatedError: unknown = null
+    try {
+      await lease.Resolve()
+    } catch (error) {
+      relocatedError = error
+    }
+    await rm(artifacts, { recursive: true, force: true })
+    await rename(preservedArtifacts, artifacts)
+    await lease.Close()
+    await lease.Close()
+
+    expect(String(relocatedError)).toContain("GATE_RESULT_PATH_ERROR")
+    await expect(lease.Resolve()).rejects.toThrow("GATE_RESULT_PATH_ERROR")
   })
 })
 
