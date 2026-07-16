@@ -84,4 +84,46 @@ describe("VerifyWorkspace", () => {
       "DEPENDENCY_SPECIFIER"
     ])
   })
+
+  test("rejects dependency specifiers that contradict workspace ownership", async () => {
+    const root = await Fixture({
+      name: "likego",
+      private: true,
+      type: "module",
+      packageManager: "bun@1.3.14",
+      workspaces: ["packages/*", "adapters/*", "examples/*"],
+      devDependencies: {
+        "@types/bun": "1.3.14",
+        typescript: "7.0.2"
+      }
+    })
+    await Bun.write(join(root, "bun.lock"), "lockfileVersion = 1\n")
+    await mkdir(join(root, "packages", "app"), { recursive: true })
+    await mkdir(join(root, "packages", "library"), { recursive: true })
+    await Bun.write(join(root, "packages", "app", "package.json"), JSON.stringify({
+      name: "@likego/app",
+      version: "0.1.0",
+      type: "module",
+      exports: {
+        ".": "./dist/index.js"
+      },
+      dependencies: {
+        "@likego/library": "1.2.3",
+        external: "workspace:*"
+      }
+    }))
+    await Bun.write(join(root, "packages", "library", "package.json"), JSON.stringify({
+      name: "@likego/library",
+      version: "0.1.0",
+      type: "module",
+      exports: {
+        ".": "./dist/index.js"
+      }
+    }))
+
+    expect((await VerifyWorkspace(root)).map((issue) => issue.Code)).toEqual([
+      "DEPENDENCY_SPECIFIER",
+      "DEPENDENCY_SPECIFIER"
+    ])
+  })
 })

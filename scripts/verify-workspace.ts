@@ -8,6 +8,11 @@ export interface WorkspaceIssue {
 
 type JsonObject = Readonly<Record<string, unknown>>
 
+interface WorkspaceManifestSnapshot {
+  readonly Path: string
+  readonly Manifest: JsonObject
+}
+
 const ExpectedWorkspaces = ["packages/*", "adapters/*", "examples/*"] as const
 const ExpectedDevDependencies = [
   ["@types/bun", "1.3.14"],
@@ -29,6 +34,17 @@ function NewIssue(Code: string, Path: string, Message: string): WorkspaceIssue {
 
 export function ExactDependencySpecifier(specifier: string): boolean {
   return specifier === "workspace:*" || ExactSemver.test(specifier)
+}
+
+function DependencySpecifierMatchesOwnership(
+  name: string,
+  specifier: string,
+  workspaceNames: ReadonlySet<string>
+): boolean {
+  if (!ExactDependencySpecifier(specifier)) {
+    return false
+  }
+  return workspaceNames.has(name) === (specifier === "workspace:*")
 }
 
 export async function VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]> {
@@ -75,8 +91,22 @@ export async function VerifyWorkspace(root: string): Promise<readonly WorkspaceI
   }
   workspaceManifests.sort()
 
-  for (const manifestPath of workspaceManifests) {
-    const manifest = JsonObjectFrom(await Bun.file(join(root, manifestPath)).json())
+  const workspaceManifestSnapshots: WorkspaceManifestSnapshot[] = []
+  for (const Path of workspaceManifests) {
+    workspaceManifestSnapshots.push({
+      Path,
+      Manifest: JsonObjectFrom(await Bun.file(join(root, Path)).json())
+    })
+  }
+
+  const workspaceNames = new Set<string>()
+  for (const { Manifest } of workspaceManifestSnapshots) {
+    if (typeof Manifest.name === "string") {
+      workspaceNames.add(Manifest.name)
+    }
+  }
+
+  for (const { Path: manifestPath, Manifest: manifest } of workspaceManifestSnapshots) {
 
     if (typeof manifest.name !== "string" || !manifest.name.startsWith("@likego/")) {
       issues.push(NewIssue("WORKSPACE_NAME", manifestPath, "name must start with @likego/"))
@@ -95,11 +125,15 @@ export async function VerifyWorkspace(root: string): Promise<readonly WorkspaceI
       const dependencies = JsonObjectFrom(manifest[field])
       for (const name of Object.keys(dependencies).sort()) {
         const specifier = dependencies[name]
-        if (typeof specifier !== "string" || !ExactDependencySpecifier(specifier)) {
+        if (
+          typeof specifier !== "string"
+          || !DependencySpecifierMatchesOwnership(name, specifier, workspaceNames)
+        ) {
+          const expectedSpecifier = workspaceNames.has(name) ? "workspace:*" : "an exact semver"
           issues.push(NewIssue(
             "DEPENDENCY_SPECIFIER",
             manifestPath,
-            `${field}.${name} must use an exact semver or workspace:*`
+            `${field}.${name} must use ${expectedSpecifier}`
           ))
         }
       }
