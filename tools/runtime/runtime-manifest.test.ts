@@ -250,6 +250,57 @@ describe("ValidateRuntimeMatrix", () => {
       .toContain("RUNTIME_PACKAGE_MANAGER_EXACT")
   })
 
+  test("returns deterministic domain failures for legal JSON wrong-type diagnostics", async () => {
+    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const cases = [
+      { Value: { toString: null, valueOf: null }, Diagnostic: "<object>" },
+      { Value: [{ toString: null, valueOf: null }], Diagnostic: "<array>" },
+      { Value: null, Diagnostic: "<null>" },
+      { Value: 7, Diagnostic: "<number>" }
+    ] as const
+
+    for (const { Value, Diagnostic } of cases) {
+      const typeScriptFiles = FilesWithJson("package.json", (packageJson) => {
+        packageJson.devDependencies.typescript = Value
+      })
+      const packageManagerFiles = FilesWithJson("package.json", (packageJson) => {
+        packageJson.packageManager = Value
+      })
+      let typeScriptEvaluation: GateEvaluation | undefined
+      let packageManagerEvaluation: GateEvaluation | undefined
+
+      expect(() => {
+        typeScriptEvaluation = ValidateRuntimeMatrix(Snapshot(typeScriptFiles))
+      }).not.toThrow()
+      expect(() => {
+        packageManagerEvaluation = ValidateRuntimeMatrix(Snapshot(packageManagerFiles))
+      }).not.toThrow()
+      expect(typeScriptEvaluation).toBeDefined()
+      expect(packageManagerEvaluation).toBeDefined()
+      if (typeScriptEvaluation === undefined || packageManagerEvaluation === undefined) {
+        throw new Error("runtime diagnostics did not return an evaluation")
+      }
+
+      expect(typeScriptEvaluation.SubjectsChecked).toBe(4)
+      expect(FailedIds(typeScriptEvaluation)).toEqual(["RUNTIME_TYPESCRIPT_EXACT"])
+      expect(typeScriptEvaluation.Checks).toContainEqual(expect.objectContaining({
+        id: "RUNTIME_TYPESCRIPT_EXACT",
+        status: "fail",
+        actual: `7.0.2 / ${Diagnostic}`
+      }))
+      expect(FailedIds(typeScriptEvaluation)).not.toContain("GATE_INTERNAL_ERROR")
+
+      expect(packageManagerEvaluation.SubjectsChecked).toBe(4)
+      expect(FailedIds(packageManagerEvaluation)).toEqual(["RUNTIME_PACKAGE_MANAGER_EXACT"])
+      expect(packageManagerEvaluation.Checks).toContainEqual(expect.objectContaining({
+        id: "RUNTIME_PACKAGE_MANAGER_EXACT",
+        status: "fail",
+        actual: Diagnostic
+      }))
+      expect(FailedIds(packageManagerEvaluation)).not.toContain("GATE_INTERNAL_ERROR")
+    }
+  })
+
   test("requires both frozen ADR contract markers", async () => {
     const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
     const missingContext = ExactFiles()

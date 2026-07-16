@@ -139,6 +139,12 @@ function ParsePackage(file: SnapshotFile): PackageContract | null {
   }
 }
 
+function RenderDiagnosticValue(value: unknown): string {
+  if (typeof value === "string") return value
+  if (value === null) return "<null>"
+  return Array.isArray(value) ? "<array>" : `<${typeof value}>`
+}
+
 function Inventory(snapshot: InputSnapshot): ReadonlyMap<string, SnapshotFile> | null {
   const expected = new Set<string>(InputPaths)
   const files = new Map<string, SnapshotFile>()
@@ -207,7 +213,7 @@ export function ValidateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation {
     return { SubjectsChecked: matrix.Lanes.length, Checks: checks }
   }
 
-  const typeScriptActual = `${String(matrix.TypeScript)} / ${String(packageContract.TypeScript)}`
+  const typeScriptActual = `${RenderDiagnosticValue(matrix.TypeScript)} / ${RenderDiagnosticValue(packageContract.TypeScript)}`
   const typeScriptExact = matrix.TypeScript === ExpectedTypeScript
     && packageContract.TypeScript === ExpectedTypeScript
   checks.push(typeScriptExact
@@ -226,7 +232,7 @@ export function ValidateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation {
         "RUNTIME_PACKAGE_MANAGER_EXACT",
         "root packageManager must pin the exact Bun version",
         ExpectedPackageManager,
-        String(packageContract.PackageManager)
+        RenderDiagnosticValue(packageContract.PackageManager)
       ))
 
   const contextAdr = Decode(files.get("docs/adr/0001-kernel-public-api.md") as SnapshotFile)
