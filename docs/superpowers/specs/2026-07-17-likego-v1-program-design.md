@@ -213,8 +213,11 @@ provisional gate，v1.0 都不发布空壳或虚假支持声明。
 
 ## 9. 测试与覆盖率
 
-1. 单元测试使用 `bun test`，所有 production source 的 line、function、branch/statements 覆盖率达到
-   100%；generated files、类型声明和纯 re-export 只能以明确、审查过的规则排除。
+1. 单元测试使用 `bun test`。Bun `1.3.14` 原生可证明的 line/function coverage 必须逐 package 达到
+   100%，source inventory 必须证明所有 production file 都进入分母。Bun 当前不产生 branch counters；
+   kernel 完成前必须以 exact-pinned supplemental instrumenter 对同一 runner-neutral cases 证明 branch
+   100%，不能把显式分支用例或空 LCOV 字段冒充 numeric branch coverage。generated files、类型声明和
+   纯 re-export 只能以明确、审查过的规则排除。
 2. portable behavior 必须在 Bun、Node current/LTS、Deno 最新固定版本上运行；使用 Bun 编排，不能把
    “Bun 单测通过”外推为跨 runtime 通过。
 3. external protocol 使用 Docker：NATS、Redis、Consul、OTel Collector，以及最终能力差距补充所需服务。
