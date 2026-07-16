@@ -1056,6 +1056,65 @@ describe("canonical atomic result emission", () => {
     }
   })
 
+  test("rejects a committed result when the descriptor lease resolves to a relocated directory before close", async () => {
+    const { EmitGateResultWithDependencies, NodeAtomicWriterOperations } = await LoadResult()
+
+    for (const seededPrior of [true, false]) {
+      const root = await Fixture()
+      const artifacts = join(root, ".artifacts")
+      const gates = join(artifacts, "gates")
+      const preservedArtifacts = join(root, `.artifacts-preserved-confirm-${seededPrior ? "prior" : "empty"}`)
+      const canonicalPath = join(gates, "unit-fixtures.json")
+      await mkdir(gates, { recursive: true })
+      if (seededPrior) await Bun.write(canonicalPath, "prior-pass\n")
+      const base = NodeAtomicWriterOperations()
+      const stdout: string[] = []
+      let resolveCalls = 0
+      let closed = false
+      let error: unknown = null
+
+      try {
+        await EmitGateResultWithDependencies(root, ValidResult(), {
+          AtomicWriterOperations: {
+            ...base,
+            LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+              const lease = await base.LeaseDirectory(identity)
+              return {
+                Resolve: async () => {
+                  resolveCalls += 1
+                  await rename(artifacts, preservedArtifacts)
+                  await mkdir(gates, { recursive: true })
+                  return lease.Resolve()
+                },
+                Close: async () => {
+                  await lease.Close()
+                  closed = true
+                }
+              }
+            }
+          },
+          WriteStdout: (value: string) => { stdout.push(value) }
+        })
+      } catch (caught) {
+        error = caught
+      }
+
+      expect(String(error)).toContain("GATE_RESULT_PATH_ERROR")
+      expect(resolveCalls).toBe(1)
+      expect(closed).toBe(true)
+      expect(stdout).toEqual([])
+      expect(await Bun.file(canonicalPath).exists()).toBe(false)
+      await rm(artifacts, { recursive: true, force: true })
+      await rename(preservedArtifacts, artifacts)
+      if (seededPrior) {
+        expect(await readFile(canonicalPath, "utf8")).toBe("prior-pass\n")
+      } else {
+        expect(await Bun.file(canonicalPath).exists()).toBe(false)
+      }
+      expect((await readdir(gates)).filter((name) => name.endsWith(".tmp"))).toEqual([])
+    }
+  })
+
   test("rolls back the prior canonical before reporting a directory lease close failure", async () => {
     const root = await Fixture()
     const artifacts = join(root, ".artifacts")
@@ -1069,27 +1128,37 @@ describe("canonical atomic result emission", () => {
     const stdout: string[] = []
     let resolveCalls = 0
 
-    await expect(EmitGateResultWithDependencies(root, ValidResult(), {
-      AtomicWriterOperations: {
-        ...base,
-        LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
-          const lease = await base.LeaseDirectory(identity)
-          return {
-            Resolve: async () => {
-              resolveCalls += 1
-              await rename(artifacts, preservedArtifacts)
-              await mkdir(gates, { recursive: true })
-              return lease.Resolve()
-            },
-            Close: async () => {
-              await lease.Close()
-              throw new Error("injected directory lease close failure")
+    let error: unknown = null
+    try {
+      await EmitGateResultWithDependencies(root, ValidResult(), {
+        AtomicWriterOperations: {
+          ...base,
+          LeaseDirectory: async (identity: Parameters<typeof base.LeaseDirectory>[0]) => {
+            const lease = await base.LeaseDirectory(identity)
+            return {
+              Resolve: async () => {
+                resolveCalls += 1
+                await rename(artifacts, preservedArtifacts)
+                await mkdir(gates, { recursive: true })
+                return lease.Resolve()
+              },
+              Close: async () => {
+                await lease.Close()
+                throw new Error("injected directory lease close failure")
+              }
             }
           }
-        }
-      },
-      WriteStdout: (value: string) => { stdout.push(value) }
-    })).rejects.toThrow("injected directory lease close failure")
+        },
+        WriteStdout: (value: string) => { stdout.push(value) }
+      })
+    } catch (caught) {
+      error = caught
+    }
+    expect(error).toBeInstanceOf(AggregateError)
+    expect((error as AggregateError).errors.map((item) => (item as Error).message)).toEqual([
+      "GATE_RESULT_PATH_ERROR atomic result directory moved before commit confirmation",
+      "injected directory lease close failure"
+    ])
     expect(resolveCalls).toBe(1)
     expect(await Bun.file(canonicalPath).exists()).toBe(false)
     await rm(artifacts, { recursive: true, force: true })

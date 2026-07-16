@@ -347,6 +347,12 @@ export async function WriteCanonicalFile(
     if (primaryError === null && committed) {
       try {
         closeRollbackIdentity = await lease.Resolve()
+        if (
+          closeRollbackIdentity.Path !== identity.Directory.Path
+          || closeRollbackIdentity.RealPath !== identity.Directory.RealPath
+        ) {
+          postCommitLeaseErrors.push(PathError("atomic result directory moved before commit confirmation"))
+        }
       } catch (error) {
         postCommitLeaseErrors.push(error)
       }
