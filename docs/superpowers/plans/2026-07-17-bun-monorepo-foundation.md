@@ -16,7 +16,7 @@
 - Production package source 后续只发布 `dist/*.js + dist/*.d.ts`；本任务不创建空壳 production exports。
 - `tsconfig.base.json` 默认 `types: []`，避免 Bun/Node ambient globals 泄漏到 portable source。
 - 配置文件是为执行用户明确指定的 Bun 工具链所必需的 bootstrap；production behavior 仍严格 test-first。
-- 每个提交前运行 covering tests、typecheck、workspace verifier 与 `git diff --check`。
+- 每个提交前运行 covering tests、typecheck、workspace verifier、`git diff --check` 与 `git diff --cached --check`；提交后运行 `git diff --check 0a42ad1..HEAD` 覆盖整个实现范围。
 
 ---
 
@@ -35,10 +35,12 @@
 - Create: `scripts/verify-workspace.cli.ts`
 - Create: `bun.lock` via `bun install --linker isolated`
 - Modify: `.gitignore`
+- Modify: `docs/adr/0001-kernel-public-api.md`（只移除 EOF 多余空行）
+- Modify: `docs/adr/0002-build-runtime-and-coverage.md`（只移除 EOF 多余空行）
 
 **Interfaces:**
 - Consumes: ADR 0001 and ADR 0002.
-- Produces: `VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>`; stable root scripts `build`, `typecheck`, `test`, `test:coverage`, `verify:workspace`, `verify`.
+- Produces: `VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>`; `VerifyBunRuntime(observedVersion: string): WorkspaceIssue | null`; stable root scripts `build`, `typecheck`, `test`, `test:coverage`, `verify:workspace`, `verify`.
 
 - [ ] **Step 1: Add exact Bun and TypeScript bootstrap configuration**
 
@@ -168,11 +170,11 @@ bun install --linker isolated
 bun ci
 ```
 
-Expected: both exit `0`; `bun.lock` exists; no `package-lock.json`, `pnpm-lock.yaml` or `yarn.lock` exists.
+Expected: both exit `0`; `bun.lock` exists; no `bun.lockb`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock` or `npm-shrinkwrap.json` exists.
 
-- [ ] **Step 3: Write the failing workspace verifier tests**
+- [ ] **Step 3: Write the failing workspace verifier and CLI tests**
 
-Create `scripts/verify-workspace.test.ts` with three focused tests. The tests must use a temporary directory and real JSON/lock files, not mocks:
+Start `scripts/verify-workspace.test.ts` with the three bootstrap tests below. Tests must use temporary directories and real JSON/lock files, not mocks. Before enabling `ROOT_SCRIPTS`, add the exact six-script object from Step 1 to every root fixture that is not intentionally testing script drift.
 
 ```ts
 import { afterEach, describe, expect, test } from "bun:test"
@@ -264,6 +266,20 @@ describe("VerifyWorkspace", () => {
 })
 ```
 
+Extend the final suite to nine focused tests covering:
+
+1. `VerifyBunRuntime` rejects an observed version other than `1.3.14` and accepts `1.3.14`; pass the version directly rather than faking the process runtime.
+2. The real repository root passes.
+3. Root toolchain/lock drift emits the deterministic baseline issue order without duplicate dependency issues for the two required dev dependencies.
+4. Invalid workspace manifests and floating dependency specifiers fail.
+5. Actual workspace package ownership requires `workspace:*` internally and exact semver externally; determine ownership from discovered manifest names, never from the `@likego/` prefix alone.
+6. Missing, unknown, boolean-valued, Node-runner, or otherwise drifted root scripts produce one `ROOT_SCRIPTS` issue.
+7. A real Bun subprocess runs the absolute CLI path from an invalid temporary fixture cwd, exits non-zero, and emits a stable stderr code/path; do not mock `process.exitCode` or subprocess APIs.
+8. Extra root dependencies reject floating ranges and `workspace:*` while accepting exact semver; required `@types/bun` and `typescript` continue to use only `DEV_DEPENDENCY`.
+9. Root `bun.lockb` and any lockfile nested directly beside an actually discovered workspace manifest produce deterministic `FOREIGN_LOCKFILE` code/path issues.
+
+The CLI integration process must fully exit before fixture cleanup. A fresh valid CLI run must emit exactly one `LIKEGO_WORKSPACE_RESULT={"valid":true}` line.
+
 - [ ] **Step 4: Run RED and confirm the expected missing-module failure**
 
 Run:
@@ -273,6 +289,18 @@ bun test ./scripts/verify-workspace.test.ts
 ```
 
 Expected: non-zero exit because `./verify-workspace.ts` does not exist. A syntax, permission, or fixture error is not an acceptable RED; fix the test until the missing implementation is the reason.
+
+Then run each review case focused before its implementation:
+
+```bash
+bun test ./scripts/verify-workspace.test.ts -t "rejects Bun runtime version drift"
+bun test ./scripts/verify-workspace.test.ts -t "rejects missing, unknown, and drifted root scripts"
+bun test ./scripts/verify-workspace.test.ts -t "CLI exits non-zero with a stable issue for an invalid fixture cwd"
+bun test ./scripts/verify-workspace.test.ts -t "rejects floating and workspace root dependencies"
+bun test ./scripts/verify-workspace.test.ts -t "rejects legacy root and nested workspace lockfiles"
+```
+
+Expected: each exits non-zero for the missing behavior under test. The runtime test may initially fail because the new export is absent; the remaining tests must fail by receiving no required issue or by the CLI incorrectly exiting zero, not because of fixture, syntax, or process-launch errors.
 
 - [ ] **Step 5: Implement the minimal verifier**
 
@@ -286,29 +314,34 @@ export interface WorkspaceIssue {
 }
 
 export function ExactDependencySpecifier(specifier: string): boolean
+export function VerifyBunRuntime(observedVersion: string): WorkspaceIssue | null
 export async function VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>
 ```
 
 Implementation rules:
 
-1. Parse root `package.json` with `Bun.file(...).json()`.
-2. Emit issues in the deterministic order asserted above.
+1. `VerifyBunRuntime` returns `null` only for observed `1.3.14`; otherwise return a stable `BUN_RUNTIME` issue at `Bun.version`. The CLI calls it with the real `Bun.version` at entry.
+2. Parse root `package.json` with `Bun.file(...).json()` and emit all issues in deterministic order.
 3. Compare the workspace array exactly with `packages/*`, `adapters/*`, `examples/*`.
-4. Require exact root `@types/bun` and `typescript` versions.
-5. Require `bun.lock`; reject `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `npm-shrinkwrap.json`.
-6. Discover `{packages,adapters,examples}/*/package.json` with `new Bun.Glob(...)`, sorted lexically.
-7. Workspace name must start `@likego/`, version must be `0.1.0`, type must be `module`, and `exports` must exist.
-8. For `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`, accept only exact semver strings matching `^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$` or exactly `workspace:*`. Reject `latest`, `next`, `*`, `^`, `~`, URL/Git specifiers, build-metadata variants, and other workspace ranges.
-9. The verifier reports all issues; it does not stop after the first.
+4. Compare the complete root `scripts` object by exact key/value equality against the six commands in Step 1. Unknown, missing, boolean-valued, Node-runner, or otherwise drifted values produce one `ROOT_SCRIPTS` issue.
+5. Require exact root `@types/bun` and `typescript` versions through `DEV_DEPENDENCY` issues. For every other entry across root `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`, accept only the exact semver regex `^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`; root never accepts `workspace:*`.
+6. Require root `bun.lock`; reject root `bun.lockb`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `npm-shrinkwrap.json`.
+7. Discover `{packages,adapters,examples}/*/package.json` with `new Bun.Glob(...)`, sort paths lexically, and read each manifest exactly once into a snapshot. Build the actual workspace name set from string `name` values in these snapshots.
+8. Workspace name must start `@likego/`, version must be `0.1.0`, type must be `module`, and `exports` must exist.
+9. For workspace `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`, an actual discovered workspace name accepts only exactly `workspace:*`; any other dependency name accepts only the exact semver regex. Do not infer ownership from a package-name prefix.
+10. Beside each actually discovered workspace manifest, deterministically reject `bun.lock`, `bun.lockb`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `npm-shrinkwrap.json`. Do not recursively scan `node_modules`.
+11. Reject `latest`, `next`, `*`, `^`, `~`, URL/Git specifiers, build-metadata variants, and all non-exact workspace ranges. Report every issue rather than stopping after the first.
 
 Use small private helpers for JSON object narrowing and deterministic issue creation. Do not add behavior not listed above.
 
 Create `scripts/verify-workspace.cli.ts`:
 
 ```ts
-import { VerifyWorkspace } from "./verify-workspace.ts"
+import { VerifyBunRuntime, VerifyWorkspace } from "./verify-workspace.ts"
 
-const issues = await VerifyWorkspace(process.cwd())
+const runtimeIssue = VerifyBunRuntime(Bun.version)
+const workspaceIssues = await VerifyWorkspace(process.cwd())
+const issues = runtimeIssue === null ? workspaceIssues : [runtimeIssue, ...workspaceIssues]
 
 if (issues.length > 0) {
   for (const issue of issues) {
@@ -325,14 +358,16 @@ if (issues.length > 0) {
 Run:
 
 ```bash
+bun ci
 bun test ./scripts/verify-workspace.test.ts
 bun run verify:workspace
 bun run typecheck
 bun run test:coverage
+bun run verify
 git diff --check
 ```
 
-Expected: three tests pass, verifier emits exactly one `LIKEGO_WORKSPACE_RESULT` line, typecheck exits `0`, coverage reports 100% lines/functions for loaded implementation, and whitespace check exits `0`.
+Expected: nine tests pass, the real CLI observes Bun `1.3.14` and emits exactly one `LIKEGO_WORKSPACE_RESULT` line, typecheck exits `0`, coverage reports 100% lines/functions for loaded implementation, frozen install and aggregate verify exit `0`, and whitespace check exits `0`.
 
 - [ ] **Step 7: Verify lock drift fails and restore it**
 
@@ -346,9 +381,14 @@ Expected: non-zero exit because `package.json` and `bun.lock` disagree. Restore 
 
 - [ ] **Step 8: Self-review and commit**
 
-Confirm no package manager other than Bun appears in executable scripts, no production package shell was created, and no test is skipped/todo/only. Then run the Step 6 commands once more and commit:
+Confirm no package manager other than Bun appears in executable scripts, no production package shell was created, no test is skipped/todo/only, and both ADRs end in exactly one newline. Then run the Step 6 commands once more, stage the exact scope, check staged whitespace, and commit:
 
 ```bash
-git add package.json bun.lock bunfig.toml tsconfig.base.json tsconfig.json tsconfig.test.json deno.json README.md .gitignore scripts
+git add package.json bun.lock bunfig.toml tsconfig.base.json tsconfig.json tsconfig.test.json deno.json README.md .gitignore scripts docs/adr/0001-kernel-public-api.md docs/adr/0002-build-runtime-and-coverage.md docs/superpowers/plans/2026-07-17-bun-monorepo-foundation.md
+git diff --cached --check
 git commit -m "build: establish Bun monorepo foundation"
+git diff --check 0a42ad1..HEAD
+git status --short
 ```
+
+Expected: staged whitespace check exits `0`; after commit the whole implementation range `0a42ad1..HEAD` exits `0`, and worktree status is empty.

@@ -65,4 +65,3 @@ Root 只导出 runner-neutral case/harness types；Server conformance 从 `@like
 - 临时 spike 只能复用测试意图，不能直接复制 public shape。
 - public API allowlist、positive/negative type fixtures 和 tarball exports smoke 是 release gate。
 - 任何新增 root export 必须先更新本 ADR、type fixture 与 package export test。
-

@@ -1,6 +1,8 @@
-import { VerifyWorkspace } from "./verify-workspace.ts"
+import { VerifyBunRuntime, VerifyWorkspace } from "./verify-workspace.ts"
 
-const issues = await VerifyWorkspace(process.cwd())
+const runtimeIssue = VerifyBunRuntime(Bun.version)
+const workspaceIssues = await VerifyWorkspace(process.cwd())
+const issues = runtimeIssue === null ? workspaceIssues : [runtimeIssue, ...workspaceIssues]
 
 if (issues.length > 0) {
   for (const issue of issues) {

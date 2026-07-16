@@ -36,4 +36,3 @@ root barrel。每一条排除必须出现在 coverage policy allowlist并由 sou
 - `bun test --coverage` 通过本身不足以证明 100%；必须同时通过 source inventory 和 supplemental branch gate。
 - 单元覆盖、跨 runtime behavior、type exports、fault/recovery 和 E2E 是并列门，不能互相替代。
 - 构建和 smoke tests 必须从 package name 的 dist exports 加载，不能只测试相对 src import。
-
