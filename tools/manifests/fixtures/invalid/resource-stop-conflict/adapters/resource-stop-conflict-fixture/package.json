@@ -1,0 +1,6 @@
+{
+  "name": "@likego/resource-stop-conflict-fixture",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module"
+}

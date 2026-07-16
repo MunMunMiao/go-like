@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/residency-conflict-fixture",
+  "resources": [
+    {
+      "id": "server",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

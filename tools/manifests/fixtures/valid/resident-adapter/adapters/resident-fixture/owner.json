@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/resident-fixture",
+  "resources": [
+    {
+      "id": "server",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "native-client",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "application-owned"
+    }
+  ]
+}

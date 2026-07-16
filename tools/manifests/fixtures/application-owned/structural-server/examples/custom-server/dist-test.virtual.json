@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "target": "dist/application-owned-server.test.js",
+  "utf8": "export const stagedApplicationServer = true\n"
+}

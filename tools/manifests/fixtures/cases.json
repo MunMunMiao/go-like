@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+  {
+    "id": "valid-portable",
+    "path": "valid/portable",
+    "expectedCodes": []
+  },
+  {
+    "id": "valid-resident-adapter",
+    "path": "valid/resident-adapter",
+    "expectedCodes": []
+  },
+  {
+    "id": "invalid-schema",
+    "path": "invalid/schema",
+    "expectedCodes": [
+      "MANIFEST_SCHEMA"
+    ]
+  },
+  {
+    "id": "invalid-package-mismatch",
+    "path": "invalid/package-mismatch",
+    "expectedCodes": [
+      "MANIFEST_PACKAGE_MISMATCH"
+    ]
+  },
+  {
+    "id": "invalid-runtime-set",
+    "path": "invalid/runtime-set",
+    "expectedCodes": [
+      "MANIFEST_RUNTIME_SET"
+    ]
+  },
+  {
+    "id": "invalid-runtime-version",
+    "path": "invalid/runtime-version",
+    "expectedCodes": [
+      "MANIFEST_RUNTIME_VERSION"
+    ]
+  },
+  {
+    "id": "invalid-node-lanes",
+    "path": "invalid/node-lanes",
+    "expectedCodes": [
+      "MANIFEST_NODE_LANES"
+    ]
+  },
+  {
+    "id": "invalid-terminal-observability",
+    "path": "invalid/terminal-observability",
+    "expectedCodes": [
+      "MANIFEST_TERMINAL_OBSERVABILITY"
+    ]
+  },
+  {
+    "id": "invalid-resource-missing",
+    "path": "invalid/resource-missing",
+    "expectedCodes": [
+      "MANIFEST_RESOURCE_MISSING"
+    ]
+  },
+  {
+    "id": "invalid-resource-duplicate",
+    "path": "invalid/resource-duplicate",
+    "expectedCodes": [
+      "MANIFEST_RESOURCE_DUPLICATE"
+    ]
+  },
+  {
+    "id": "invalid-resource-native-conflict",
+    "path": "invalid/resource-native-conflict",
+    "expectedCodes": [
+      "MANIFEST_RESOURCE_CONFLICT"
+    ]
+  },
+  {
+    "id": "invalid-resource-stop-conflict",
+    "path": "invalid/resource-stop-conflict",
+    "expectedCodes": [
+      "MANIFEST_RESOURCE_CONFLICT"
+    ]
+  },
+  {
+    "id": "invalid-residency-conflict",
+    "path": "invalid/residency-conflict",
+    "expectedCodes": [
+      "MANIFEST_RESIDENCY_CONFLICT"
+    ]
+  },
+  {
+    "id": "application-owned-structural-server",
+    "path": "application-owned/structural-server",
+    "expectedCodes": []
+  }
+  ]
+}
