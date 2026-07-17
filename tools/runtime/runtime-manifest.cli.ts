@@ -1,13 +1,15 @@
 import {
   EmitGateResultWithDependencies,
   NodeAtomicWriterOperations,
-  RunGate
+  RunGate,
+  WriteProcessStderr,
+  WriteProcessStdout
 } from "../gates/result.ts"
 import { ValidateRuntimeMatrix } from "./runtime-manifest.ts"
 
 export interface RuntimeManifestIO {
-  readonly WriteStdout: (value: string) => void
-  readonly WriteStderr: (value: string) => void
+  readonly WriteStdout: (value: string) => void | Promise<void>
+  readonly WriteStderr: (value: string) => void | Promise<void>
 }
 
 interface ParsedArguments {
@@ -24,8 +26,8 @@ const InputPaths = [
   "deno.json"
 ] as const
 const DefaultIO: RuntimeManifestIO = {
-  WriteStdout: (value) => { process.stdout.write(value) },
-  WriteStderr: (value) => { process.stderr.write(value) }
+  WriteStdout: WriteProcessStdout,
+  WriteStderr: WriteProcessStderr
 }
 
 function ParseArguments(args: readonly string[]): ParsedArguments | null {
@@ -49,7 +51,15 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
 }
 
 function ErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) {
+      const message: unknown = error.message
+      return typeof message === "string" ? message : "unprintable error"
+    }
+    return String(error)
+  } catch {
+    return "unprintable error"
+  }
 }
 
 export async function Main(
@@ -58,7 +68,7 @@ export async function Main(
 ): Promise<number> {
   const parsed = ParseArguments(args)
   if (parsed === null) {
-    io.WriteStderr("RUNTIME_MANIFEST_USAGE invalid arguments\n")
+    await io.WriteStderr("RUNTIME_MANIFEST_USAGE invalid arguments\n")
     return 1
   }
 
@@ -79,7 +89,7 @@ export async function Main(
       WriteStdout: io.WriteStdout
     })
   } catch (error) {
-    io.WriteStderr(`RUNTIME_MANIFEST_EMIT_ERROR ${ErrorMessage(error)}\n`)
+    await io.WriteStderr(`RUNTIME_MANIFEST_EMIT_ERROR ${ErrorMessage(error)}\n`)
     return 1
   }
   return result.status === "pass" ? 0 : 1

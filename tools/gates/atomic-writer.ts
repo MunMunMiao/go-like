@@ -18,14 +18,45 @@ export interface AtomicFileHandle {
   readonly Close: () => Promise<void>
 }
 
+export interface AtomicRollbackFileHandle {
+  readonly Write: (value: Uint8Array) => Promise<void>
+  readonly Sync: () => Promise<void>
+  readonly Close: () => Promise<void>
+}
+
+export interface AtomicWriteLock {
+  /** Releases only the retained exclusive lock inode; stale or replaced lock paths fail closed. */
+  readonly Release: () => Promise<void>
+}
+
+/**
+ * Rejection must not hide ownership: AcquireLock/Open/OpenRollback implementations either return
+ * the owned resource or clean it before rejecting. Rename implementations retain rename semantics;
+ * the writer verifies the staged inode on either resolution or rejection.
+ */
 export interface AtomicWriterOperations {
   readonly Pid: number
   readonly RandomSuffix: () => string
   readonly LeaseDirectory: (identity: AtomicDirectoryIdentity) => Promise<AtomicDirectoryLease>
+  readonly AcquireLock: (
+    canonicalPath: string,
+    identity: AtomicDirectoryIdentity,
+    lease: AtomicDirectoryLease
+  ) => Promise<AtomicWriteLock>
   readonly MakeDirectory: (path: string, identity: AtomicDirectoryIdentity) => Promise<void>
   readonly Open: (path: string, identity: AtomicDirectoryIdentity) => Promise<AtomicFileHandle>
   readonly Rename: (from: string, to: string, identity: AtomicDirectoryIdentity) => Promise<void>
   readonly Remove: (path: string, identity: AtomicDirectoryIdentity) => Promise<void>
+  readonly OpenRollback: (
+    path: string,
+    identity: AtomicDirectoryIdentity
+  ) => Promise<AtomicRollbackFileHandle>
+  readonly RenameRollback: (
+    from: string,
+    to: string,
+    identity: AtomicDirectoryIdentity
+  ) => Promise<void>
+  readonly RemoveRollback: (path: string, identity: AtomicDirectoryIdentity) => Promise<void>
 }
 
 export interface AtomicDirectoryIdentity {
@@ -35,10 +66,29 @@ export interface AtomicDirectoryIdentity {
   readonly Inode: number
 }
 
+export interface AtomicFileIdentity {
+  readonly Device: number
+  readonly Inode: number
+}
+
+export interface AtomicLockFileHandle {
+  readonly Stat: () => Promise<AtomicFileIdentity>
+  readonly Close: () => Promise<void>
+}
+
+export interface AtomicLockFileOperations {
+  readonly Open: (path: string) => Promise<AtomicLockFileHandle>
+}
+
 export interface AtomicWriteIdentity {
   readonly Gate: string
   readonly RunId: string
   readonly Directory: AtomicDirectoryIdentity
+}
+
+export interface AtomicWriteReceipt {
+  readonly Commit: () => Promise<void>
+  readonly Rollback: () => Promise<void>
 }
 
 export interface AtomicDirectoryLease {
@@ -52,11 +102,30 @@ interface PriorCanonical {
 }
 
 function ErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) {
+      const message: unknown = error.message
+      return typeof message === "string" ? message : "unprintable error"
+    }
+    return String(error)
+  } catch {
+    return "unprintable error"
+  }
 }
 
 function PathError(message: string): Error {
   return new Error(`GATE_RESULT_PATH_ERROR ${message}`)
+}
+
+function ThrowFailures(primaryThrown: boolean, primary: unknown, cleanup: readonly unknown[]): void {
+  if (primaryThrown) {
+    if (cleanup.length > 0) {
+      throw new AggregateError([primary, ...cleanup], ErrorMessage(primary))
+    }
+    throw primary
+  }
+  if (cleanup.length === 1) throw cleanup[0]
+  if (cleanup.length > 1) throw new AggregateError(cleanup, ErrorMessage(cleanup[0]))
 }
 
 async function VerifyDirectoryIdentity(
@@ -175,6 +244,76 @@ async function OpenDirectoryLease(
   }
 }
 
+async function Wait(milliseconds: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
+}
+
+async function AcquireCanonicalLock(
+  canonicalPath: string,
+  identity: AtomicDirectoryIdentity,
+  lease: AtomicDirectoryLease,
+  timeoutMilliseconds: number,
+  retryMilliseconds: number,
+  lockFiles: AtomicLockFileOperations
+): Promise<AtomicWriteLock> {
+  const lockName = `${basename(canonicalPath)}.write.lock`
+  const deadline = Date.now() + timeoutMilliseconds
+  let lockHandle: AtomicLockFileHandle | null = null
+
+  while (lockHandle === null) {
+    const current = await lease.Resolve()
+    await VerifyDirectoryIdentity(current.Path, current)
+    const lockPath = join(current.Path, lockName)
+    try {
+      lockHandle = await lockFiles.Open(lockPath)
+    } catch (error) {
+      if (IsFileSystemError(error, "EEXIST")) {
+        if (Date.now() >= deadline) throw PathError("atomic result writer lock acquisition timed out")
+        await Wait(retryMilliseconds)
+        continue
+      }
+      throw error
+    }
+  }
+
+  const ownedHandle = lockHandle
+  let released = false
+  return {
+    Release: async () => {
+      if (released) throw new Error("atomic result writer lock is already released")
+      released = true
+      let primaryThrown = false
+      let primary: unknown
+      try {
+        const ownedInformation = await ownedHandle.Stat()
+        const current = await lease.Resolve()
+        await VerifyDirectoryIdentity(current.Path, current)
+        const lockPath = join(current.Path, lockName)
+        const information = await lstat(lockPath)
+        if (
+          information.isSymbolicLink()
+          || !information.isFile()
+          || information.dev !== ownedInformation.Device
+          || information.ino !== ownedInformation.Inode
+        ) {
+          throw new Error("atomic result writer lock identity changed")
+        }
+        await rm(lockPath)
+      } catch (error) {
+        primaryThrown = true
+        primary = IsPathError(error) ? error : PathError(ErrorMessage(error))
+      }
+      const cleanup: unknown[] = []
+      try {
+        await ownedHandle.Close()
+      } catch (error) {
+        cleanup.push(error)
+      }
+      ThrowFailures(primaryThrown, primary, cleanup)
+    }
+  }
+}
+
 async function SnapshotPriorCanonical(
   canonicalPath: string,
   identity: AtomicDirectoryIdentity
@@ -212,40 +351,220 @@ async function RollbackCanonical(
   canonicalPath: string,
   prior: PriorCanonical,
   current: AtomicDirectoryIdentity,
-  rollbackSuffix: string
+  rollbackSuffix: string,
+  operations: AtomicWriterOperations
 ): Promise<void> {
   await VerifyDirectoryIdentity(current.Path, current)
   const currentCanonical = join(current.Path, basename(canonicalPath))
   if (!prior.Exists) {
-    await rm(currentCanonical, { force: true })
+    await operations.RemoveRollback(currentCanonical, current)
     return
   }
 
   const rollbackPath = join(current.Path, `${basename(canonicalPath)}.${rollbackSuffix}.rollback.tmp`)
-  let rollbackHandle: FileHandle | null = null
+  let rollbackHandle: AtomicRollbackFileHandle | null = null
   let rollbackOwned = false
+  let rollbackConsumed = false
+  let handleClosed = false
+  let primaryThrown = false
+  let primary: unknown
   try {
-    rollbackHandle = await open(rollbackPath, "wx", 0o600)
+    rollbackHandle = await operations.OpenRollback(rollbackPath, current)
     rollbackOwned = true
-    await rollbackHandle.writeFile(prior.Bytes)
-    await rollbackHandle.sync()
-    await rollbackHandle.close()
-    rollbackHandle = null
+    await rollbackHandle.Write(prior.Bytes)
+    await rollbackHandle.Sync()
+    await rollbackHandle.Close()
+    handleClosed = true
     await VerifyDirectoryIdentity(current.Path, current)
-    await rename(rollbackPath, currentCanonical)
-  } finally {
-    try { await rollbackHandle?.close() } catch {}
-    if (rollbackOwned) await rm(rollbackPath, { force: true })
+    await operations.RenameRollback(rollbackPath, currentCanonical, current)
+    rollbackConsumed = true
+  } catch (error) {
+    primaryThrown = true
+    primary = error
+  }
+
+  const cleanup: unknown[] = []
+  if (rollbackHandle !== null && !handleClosed) {
+    try {
+      await rollbackHandle.Close()
+    } catch (error) {
+      cleanup.push(error)
+    }
+  }
+  if (rollbackOwned && !rollbackConsumed) {
+    try {
+      await operations.RemoveRollback(rollbackPath, current)
+    } catch (error) {
+      cleanup.push(error)
+    }
+  }
+  ThrowFailures(primaryThrown, primary, cleanup)
+}
+
+async function CaptureCommittedCanonical(
+  canonicalPath: string,
+  expectedContents: Uint8Array,
+  identity: AtomicDirectoryIdentity
+): Promise<AtomicFileIdentity> {
+  try {
+    await VerifyDirectoryIdentity(identity.Path, identity)
+    const information = await lstat(canonicalPath)
+    if (information.isSymbolicLink() || !information.isFile()) {
+      throw new Error("canonical result changed before commit confirmation")
+    }
+    const actual = new Uint8Array(await readFile(canonicalPath))
+    if (
+      actual.length !== expectedContents.length
+      || actual.some((value, index) => value !== expectedContents[index])
+    ) throw new Error("canonical result changed before commit confirmation")
+    return { Device: information.dev, Inode: information.ino }
+  } catch (error) {
+    if (IsPathError(error)) throw error
+    throw PathError(ErrorMessage(error))
+  }
+}
+
+async function RequireCommittedCanonical(
+  canonicalPath: string,
+  expectedContents: Uint8Array,
+  expectedFile: AtomicFileIdentity,
+  identity: AtomicDirectoryIdentity
+): Promise<void> {
+  try {
+    await VerifyDirectoryIdentity(identity.Path, identity)
+    const information = await lstat(canonicalPath)
+    if (
+      information.isSymbolicLink()
+      || !information.isFile()
+      || information.dev !== expectedFile.Device
+      || information.ino !== expectedFile.Inode
+    ) {
+      throw new Error("canonical result changed before output rollback")
+    }
+    const actual = new Uint8Array(await readFile(canonicalPath))
+    if (
+      actual.length !== expectedContents.length
+      || actual.some((value, index) => value !== expectedContents[index])
+    ) throw new Error("canonical result changed before output rollback")
+  } catch (error) {
+    if (IsPathError(error)) throw error
+    throw PathError(ErrorMessage(error))
+  }
+}
+
+async function RollbackCommittedCanonicalIfOwned(
+  canonicalPath: string,
+  committedContents: Uint8Array,
+  committedFile: AtomicFileIdentity,
+  prior: PriorCanonical,
+  rollbackSuffix: string,
+  lease: AtomicDirectoryLease,
+  operations: AtomicWriterOperations
+): Promise<boolean> {
+  const current = await lease.Resolve()
+  const currentCanonical = join(current.Path, basename(canonicalPath))
+  try {
+    await RequireCommittedCanonical(currentCanonical, committedContents, committedFile, current)
+  } catch {
+    return false
+  }
+  await RollbackCanonical(canonicalPath, prior, current, rollbackSuffix, operations)
+  return true
+}
+
+async function CloseReceiptResources(
+  lock: AtomicWriteLock,
+  lease: AtomicDirectoryLease,
+  primaryThrown: boolean,
+  primary: unknown
+): Promise<void> {
+  const cleanup: unknown[] = []
+  try {
+    await lock.Release()
+  } catch (error) {
+    cleanup.push(error)
+  }
+  try {
+    await lease.Close()
+  } catch (error) {
+    cleanup.push(error)
+  }
+  ThrowFailures(primaryThrown, primary, cleanup)
+}
+
+function CreateReceipt(
+  canonicalPath: string,
+  committedContents: Uint8Array,
+  committedFile: AtomicFileIdentity,
+  prior: PriorCanonical,
+  identity: AtomicWriteIdentity,
+  rollbackSuffix: string,
+  lock: AtomicWriteLock,
+  lease: AtomicDirectoryLease,
+  operations: AtomicWriterOperations
+): AtomicWriteReceipt {
+  let consumed = false
+
+  async function Finalize(rollback: boolean): Promise<void> {
+    if (consumed) throw new Error("canonical write receipt is already consumed")
+    consumed = true
+    let primaryThrown = false
+    let primary: unknown
+    try {
+      const current = await lease.Resolve()
+      if (
+        !rollback
+        && (current.Path !== identity.Directory.Path || current.RealPath !== identity.Directory.RealPath)
+      ) {
+        throw PathError("atomic result directory moved before commit confirmation")
+      }
+      const currentCanonical = join(current.Path, basename(canonicalPath))
+      await RequireCommittedCanonical(currentCanonical, committedContents, committedFile, current)
+      if (rollback) {
+        await RollbackCanonical(canonicalPath, prior, current, rollbackSuffix, operations)
+      }
+    } catch (error) {
+      primaryThrown = true
+      primary = error
+    }
+    await CloseReceiptResources(lock, lease, primaryThrown, primary)
+  }
+
+  return {
+    Commit: async () => Finalize(false),
+    Rollback: async () => Finalize(true)
   }
 }
 
 export function NodeAtomicWriterOperations(
-  directoryDescriptorRoot: string | null = PlatformDirectoryDescriptorRoot()
+  directoryDescriptorRoot: string | null = PlatformDirectoryDescriptorRoot(),
+  lockTimeoutMilliseconds = 5_000,
+  lockRetryMilliseconds = 5,
+  lockFiles: AtomicLockFileOperations = {
+    Open: async (path) => {
+      const handle = await open(path, "wx", 0o600)
+      return {
+        Stat: async () => {
+          const information = await handle.stat()
+          return { Device: information.dev, Inode: information.ino }
+        },
+        Close: async () => { await handle.close() }
+      }
+    }
+  }
 ): AtomicWriterOperations {
   return {
     Pid: process.pid,
     RandomSuffix: () => randomBytes(12).toString("hex"),
     LeaseDirectory: (identity) => OpenDirectoryLease(identity, directoryDescriptorRoot),
+    AcquireLock: (canonicalPath, identity, lease) => AcquireCanonicalLock(
+      canonicalPath,
+      identity,
+      lease,
+      lockTimeoutMilliseconds,
+      lockRetryMilliseconds,
+      lockFiles
+    ),
     MakeDirectory: async (path, identity) => {
       await VerifyDirectoryIdentity(path, identity)
     },
@@ -275,6 +594,33 @@ export function NodeAtomicWriterOperations(
       AssertChildPath(path, identity)
       await VerifyDirectoryIdentity(identity.Path, identity)
       await rm(path, { force: true })
+    },
+    OpenRollback: async (path, identity) => {
+      AssertChildPath(path, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
+      const handle = await open(path, "wx", 0o600)
+      return {
+        Write: async (value) => {
+          await handle.writeFile(value)
+        },
+        Sync: async () => {
+          await handle.sync()
+        },
+        Close: async () => {
+          await handle.close()
+        }
+      }
+    },
+    RenameRollback: async (from, to, identity) => {
+      AssertChildPath(from, identity)
+      AssertChildPath(to, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
+      await rename(from, to)
+    },
+    RemoveRollback: async (path, identity) => {
+      AssertChildPath(path, identity)
+      await VerifyDirectoryIdentity(identity.Path, identity)
+      await rm(path, { force: true })
     }
   }
 }
@@ -284,22 +630,41 @@ export async function WriteCanonicalFile(
   contents: string,
   identity: AtomicWriteIdentity,
   operations: AtomicWriterOperations
-): Promise<void> {
+): Promise<AtomicWriteReceipt> {
   const directory = dirname(canonicalPath)
-  await operations.MakeDirectory(directory, identity.Directory)
-  const lease = await operations.LeaseDirectory(identity.Directory)
+  const pid = operations.Pid
+  const tempSuffix = operations.RandomSuffix()
+  const rollbackSuffix = `${identity.Gate}.${identity.RunId}.${pid}.${operations.RandomSuffix()}`
   const tempPath = join(
     directory,
-    `${basename(canonicalPath)}.${identity.Gate}.${identity.RunId}.${operations.Pid}.${operations.RandomSuffix()}.tmp`
+    `${basename(canonicalPath)}.${identity.Gate}.${identity.RunId}.${pid}.${tempSuffix}.tmp`
   )
-  const rollbackSuffix = `${identity.Gate}.${identity.RunId}.${operations.Pid}.${operations.RandomSuffix()}`
+  const committedContents = new TextEncoder().encode(contents)
+  await operations.MakeDirectory(directory, identity.Directory)
+  const lease = await operations.LeaseDirectory(identity.Directory)
+  let lock: AtomicWriteLock
+  try {
+    lock = await operations.AcquireLock(canonicalPath, identity.Directory, lease)
+  } catch (error) {
+    const cleanup: unknown[] = []
+    try {
+      await lease.Close()
+    } catch (closeError) {
+      cleanup.push(closeError)
+    }
+    ThrowFailures(true, error, cleanup)
+    throw new Error("unreachable atomic lock admission")
+  }
+
   let handle: AtomicFileHandle | null = null
   let ownedTemp = false
   let closed = false
   let tempConsumed = false
-  let committed = false
-  let primaryError: unknown = null
+  let primaryThrown = false
+  let primary: unknown
   let prior: PriorCanonical = { Exists: false, Bytes: new Uint8Array() }
+  let stagedFile: AtomicFileIdentity | null = null
+  let committedFile: AtomicFileIdentity | null = null
 
   try {
     prior = await SnapshotPriorCanonical(canonicalPath, identity.Directory)
@@ -309,83 +674,99 @@ export async function WriteCanonicalFile(
     await handle.Sync()
     await handle.Close()
     closed = true
-    await operations.Rename(tempPath, canonicalPath, identity.Directory)
-    tempConsumed = true
-    committed = true
+    stagedFile = await CaptureCommittedCanonical(tempPath, committedContents, identity.Directory)
     try {
-      await VerifyDirectoryIdentity(directory, identity.Directory)
+      await operations.Rename(tempPath, canonicalPath, identity.Directory)
     } catch (error) {
       try {
-        await RollbackCanonical(canonicalPath, prior, await lease.Resolve(), rollbackSuffix)
-        committed = false
+        tempConsumed = await RollbackCommittedCanonicalIfOwned(
+          canonicalPath,
+          committedContents,
+          stagedFile,
+          prior,
+          rollbackSuffix,
+          lease,
+          operations
+        )
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], ErrorMessage(error))
+      }
+      throw error
+    }
+    tempConsumed = true
+    try {
+      const current = await lease.Resolve()
+      if (current.Path !== identity.Directory.Path || current.RealPath !== identity.Directory.RealPath) {
+        throw PathError("atomic result directory moved before commit confirmation")
+      }
+      committedFile = await CaptureCommittedCanonical(canonicalPath, committedContents, identity.Directory)
+      if (
+        committedFile.Device !== stagedFile.Device
+        || committedFile.Inode !== stagedFile.Inode
+      ) {
+        throw PathError("canonical result changed before commit confirmation")
+      }
+    } catch (error) {
+      try {
+        await RollbackCommittedCanonicalIfOwned(
+          canonicalPath,
+          committedContents,
+          stagedFile,
+          prior,
+          rollbackSuffix,
+          lease,
+          operations
+        )
       } catch (rollbackError) {
         throw new AggregateError([error, rollbackError], ErrorMessage(error))
       }
       throw error
     }
   } catch (error) {
-    primaryError = error
-  } finally {
-    const cleanupErrors: unknown[] = []
-    if (handle !== null && !closed) {
-      try {
-        await handle.Close()
-      } catch (error) {
-        cleanupErrors.push(error)
-      }
-    }
-    if (ownedTemp && !tempConsumed) {
-      try {
-        await RemoveOwnedTemp(tempPath, identity.Directory, lease, operations)
-      } catch (error) {
-        cleanupErrors.push(error)
-      }
-    }
+    primaryThrown = true
+    primary = error
+  }
 
-    let closeRollbackIdentity = identity.Directory
-    const postCommitLeaseErrors: unknown[] = []
-    if (primaryError === null && committed) {
-      try {
-        closeRollbackIdentity = await lease.Resolve()
-        if (
-          closeRollbackIdentity.Path !== identity.Directory.Path
-          || closeRollbackIdentity.RealPath !== identity.Directory.RealPath
-        ) {
-          postCommitLeaseErrors.push(PathError("atomic result directory moved before commit confirmation"))
-        }
-      } catch (error) {
-        postCommitLeaseErrors.push(error)
-      }
+  const cleanup: unknown[] = []
+  if (handle !== null && !closed) {
+    try {
+      await handle.Close()
+    } catch (error) {
+      cleanup.push(error)
+    }
+  }
+  if (ownedTemp && !tempConsumed) {
+    try {
+      await RemoveOwnedTemp(tempPath, identity.Directory, lease, operations)
+    } catch (error) {
+      cleanup.push(error)
+    }
+  }
+
+  if (primaryThrown || cleanup.length > 0) {
+    try {
+      await lock.Release()
+    } catch (error) {
+      cleanup.push(error)
     }
     try {
       await lease.Close()
     } catch (error) {
-      if (primaryError === null && committed) {
-        postCommitLeaseErrors.push(error)
-      } else {
-        cleanupErrors.push(error)
-      }
+      cleanup.push(error)
     }
-    if (primaryError === null && committed && postCommitLeaseErrors.length > 0) {
-      cleanupErrors.push(...postCommitLeaseErrors)
-      try {
-        await RollbackCanonical(canonicalPath, prior, closeRollbackIdentity, rollbackSuffix)
-        committed = false
-      } catch (rollbackError) {
-        cleanupErrors.push(rollbackError)
-      }
-    }
-
-    if (primaryError !== null) {
-      if (cleanupErrors.length > 0) {
-        throw new AggregateError([primaryError, ...cleanupErrors], ErrorMessage(primaryError))
-      }
-      throw primaryError
-    }
-    if (cleanupErrors.length > 0) {
-      throw cleanupErrors.length === 1
-        ? cleanupErrors[0]
-        : new AggregateError(cleanupErrors, ErrorMessage(cleanupErrors[0]))
-    }
+    ThrowFailures(primaryThrown, primary, cleanup)
+    throw new Error("unreachable atomic write failure")
   }
+
+  return CreateReceipt(
+    canonicalPath,
+    committedContents,
+    committedFile as AtomicFileIdentity,
+    prior,
+    identity,
+    rollbackSuffix,
+    lock,
+    lease,
+    operations
+  )
 }

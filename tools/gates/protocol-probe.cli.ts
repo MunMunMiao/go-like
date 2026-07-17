@@ -2,14 +2,16 @@ import {
   EmitGateResultWithDependencies,
   NodeAtomicWriterOperations,
   RunGate,
+  WriteProcessStderr,
+  WriteProcessStdout,
   type GateEmissionDependencies
 } from "./result.ts"
 
 type Scenario = "pass" | "evaluator-throw" | "input-error" | "emission-error"
 
 export interface ProtocolProbeIO {
-  readonly WriteStdout: (value: string) => void
-  readonly WriteStderr: (value: string) => void
+  readonly WriteStdout: (value: string) => void | Promise<void>
+  readonly WriteStderr: (value: string) => void | Promise<void>
 }
 
 interface ParsedArguments {
@@ -20,8 +22,8 @@ interface ParsedArguments {
 
 const Scenarios = new Set<string>(["pass", "evaluator-throw", "input-error", "emission-error"])
 const DefaultIO: ProtocolProbeIO = {
-  WriteStdout: (value) => { process.stdout.write(value) },
-  WriteStderr: (value) => { process.stderr.write(value) }
+  WriteStdout: WriteProcessStdout,
+  WriteStderr: WriteProcessStderr
 }
 
 function ParseArguments(args: readonly string[]): ParsedArguments | null {
@@ -51,7 +53,15 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
 }
 
 function ErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  try {
+    if (error instanceof Error) {
+      const message: unknown = error.message
+      return typeof message === "string" ? message : "unprintable error"
+    }
+    return String(error)
+  } catch {
+    return "unprintable error"
+  }
 }
 
 export async function Main(
@@ -60,7 +70,7 @@ export async function Main(
 ): Promise<number> {
   const parsed = ParseArguments(args)
   if (parsed === null) {
-    io.WriteStderr("GATE_CLI_USAGE invalid protocol probe arguments\n")
+    await io.WriteStderr("GATE_CLI_USAGE invalid protocol probe arguments\n")
     return 1
   }
 
@@ -96,7 +106,7 @@ export async function Main(
   try {
     await EmitGateResultWithDependencies(parsed.Root, result, emissionDependencies)
   } catch (error) {
-    io.WriteStderr(`GATE_EMIT_ERROR ${ErrorMessage(error)}\n`)
+    await io.WriteStderr(`GATE_EMIT_ERROR ${ErrorMessage(error)}\n`)
     return 1
   }
   return result.status === "pass" ? 0 : 1

@@ -430,6 +430,41 @@ describe("runtime-manifest CLI", () => {
     expect(stderr[2]).toStartWith("RUNTIME_MANIFEST_EMIT_ERROR ")
   })
 
+  test("renders a hostile runtime-manifest output failure without escaping Main", async () => {
+    const root = await Fixture()
+    const gates = join(root, ".artifacts", "gates")
+    const canonicalPath = join(gates, "runtime-contract.json")
+    await mkdir(gates, { recursive: true })
+    await Bun.write(canonicalPath, "prior-result\n")
+    const { Main } = await LoadRuntimeManifestCli()
+    const hostile = new Error("replaceable message")
+    let messageReads = 0
+    Object.defineProperty(hostile, "message", {
+      get: () => {
+        messageReads += 1
+        return messageReads === 1
+          ? "first message"
+          : { toString: () => { throw new Error("hostile message coercion") } }
+      }
+    })
+    const stderr: string[] = []
+
+    await expect(Main(["--root", root, "--run-id", "hostile-output"], {
+      WriteStdout: () => { throw hostile },
+      WriteStderr: (value) => { stderr.push(value) }
+    })).resolves.toBe(1)
+    expect(stderr).toEqual(["RUNTIME_MANIFEST_EMIT_ERROR first message\n"])
+    expect(messageReads).toBe(1)
+    expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
+
+    const unprintable = { toString: () => { throw new Error("hostile runtime stringify") } }
+    await expect(Main(["--root", root, "--run-id", "unprintable-output"], {
+      WriteStdout: () => { throw unprintable },
+      WriteStderr: (value) => { stderr.push(value) }
+    })).resolves.toBe(1)
+    expect(stderr.at(-1)).toBe("RUNTIME_MANIFEST_EMIT_ERROR unprintable error\n")
+  })
+
   test("uses default process IO and generates a run id when omitted", async () => {
     const root = await Fixture()
     const { Main } = await LoadRuntimeManifestCli()
@@ -437,12 +472,14 @@ describe("runtime-manifest CLI", () => {
     const stderr: string[] = []
     const originalStdout = process.stdout.write
     const originalStderr = process.stderr.write
-    process.stdout.write = ((value: string | Uint8Array) => {
+    process.stdout.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
       stdout.push(String(value))
+      callback?.()
       return true
     }) as typeof process.stdout.write
-    process.stderr.write = ((value: string | Uint8Array) => {
+    process.stderr.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
       stderr.push(String(value))
+      callback?.()
       return true
     }) as typeof process.stderr.write
 

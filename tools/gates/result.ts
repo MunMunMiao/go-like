@@ -80,7 +80,17 @@ export interface RunGateOptions {
 
 export interface GateEmissionDependencies {
   readonly AtomicWriterOperations: AtomicWriterOperations
-  readonly WriteStdout: (value: string) => void
+  /**
+   * An injected implementation must acknowledge output atomically: resolve only after accepting the
+   * complete line, or reject before exposing any of it. External stdout bytes cannot be retracted.
+   */
+  readonly WriteStdout: (value: string) => void | Promise<void>
+}
+
+interface ProcessWritable {
+  readonly once: (event: "error", listener: (error: unknown) => void) => unknown
+  readonly removeListener: (event: "error", listener: (error: unknown) => void) => unknown
+  readonly write: (value: string, callback: (error?: Error | null) => void) => boolean
 }
 
 interface ArtifactResult {
@@ -724,19 +734,63 @@ export async function EmitGateResultWithDependencies(
   }
   const prepared = await PrepareCanonicalResultPath(root, result.gate)
   const compact = JSON.stringify(result)
-  await WriteCanonicalFile(
+  const receipt = await WriteCanonicalFile(
     prepared.CanonicalPath,
     `${compact}\n`,
     { Gate: result.gate, RunId: result.runId, Directory: prepared.Directory },
     dependencies.AtomicWriterOperations
   )
-  dependencies.WriteStdout(`LIKEGO_GATE_RESULT=${compact}\n`)
+  try {
+    await dependencies.WriteStdout(`LIKEGO_GATE_RESULT=${compact}\n`)
+  } catch (error) {
+    try {
+      await receipt.Rollback()
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [error, rollbackError],
+        "gate result output confirmation and rollback failed"
+      )
+    }
+    throw error
+  }
+  await receipt.Commit()
   return prepared.CanonicalPath
+}
+
+async function WriteProcessStream(stream: ProcessWritable, value: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const Finish = (errorThrown: boolean, error?: unknown) => {
+      if (settled) return
+      settled = true
+      stream.removeListener("error", OnError)
+      if (errorThrown) reject(error)
+      else resolve()
+    }
+    const OnError = (error: unknown) => { Finish(true, error) }
+    stream.once("error", OnError)
+    try {
+      stream.write(value, (error) => {
+        if (error === undefined || error === null) Finish(false)
+        else Finish(true, error)
+      })
+    } catch (error) {
+      Finish(true, error)
+    }
+  })
+}
+
+export async function WriteProcessStdout(value: string): Promise<void> {
+  await WriteProcessStream(process.stdout as unknown as ProcessWritable, value)
+}
+
+export async function WriteProcessStderr(value: string): Promise<void> {
+  await WriteProcessStream(process.stderr as unknown as ProcessWritable, value)
 }
 
 export async function EmitGateResult(root: string, result: GateResult): Promise<string> {
   return EmitGateResultWithDependencies(root, result, {
     AtomicWriterOperations: NodeAtomicWriterOperations(),
-    WriteStdout: (value) => { process.stdout.write(value) }
+    WriteStdout: WriteProcessStdout
   })
 }

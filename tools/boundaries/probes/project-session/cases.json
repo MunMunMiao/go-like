@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    { "scenario": "success", "path": "success.json" },
+    { "scenario": "primary-error", "path": "primary-error.json" },
+    { "scenario": "primary-undefined", "path": "primary-undefined.json" },
+    { "scenario": "materialization-failure", "path": "materialization-failure.json" },
+    { "scenario": "update-before-snapshot", "path": "update-before-snapshot.json" },
+    { "scenario": "update-after-snapshot", "path": "update-after-snapshot.json" },
+    { "scenario": "admission-failure", "path": "admission-failure.json" },
+    { "scenario": "snapshot-cleanup", "path": "snapshot-cleanup.json" },
+    { "scenario": "api-cleanup", "path": "api-cleanup.json" },
+    { "scenario": "remove-before", "path": "remove-before.json" },
+    { "scenario": "remove-after", "path": "remove-after.json" },
+    { "scenario": "primary-plus-all-cleanups", "path": "primary-plus-all-cleanups.json" },
+    { "scenario": "value-plus-all-cleanups", "path": "value-plus-all-cleanups.json" },
+    { "scenario": "project-count-zero", "path": "project-count-zero.json" },
+    { "scenario": "project-count-multiple", "path": "project-count-multiple.json" },
+    { "scenario": "project-identity", "path": "project-identity.json" },
+    { "scenario": "input-invalid-prefix", "path": "input-invalid-prefix.json" },
+    { "scenario": "input-invalid-path", "path": "input-invalid-path.json" },
+    { "scenario": "source-realpath-escape", "path": "source-realpath-escape.json" },
+    { "scenario": "external-source", "path": "external-source.json" }
+  ]
+}

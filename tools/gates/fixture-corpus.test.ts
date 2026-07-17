@@ -17,6 +17,7 @@ const FamilyRoot = "tools/manifests/fixtures"
 const CasesPath = `${FamilyRoot}/cases.json`
 const StructuralServerRoot = `${FamilyRoot}/application-owned/structural-server/examples/custom-server`
 const TemporaryRoots: string[] = []
+const Utf8 = new TextDecoder()
 
 afterEach(async () => {
   await Promise.all(TemporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -56,6 +57,16 @@ function Case(id: string, path: string, expectedCodes: readonly string[] = []) {
 
 function FailureIds(checks: readonly { readonly id: string; readonly status: string }[]): string[] {
   return checks.filter((check) => check.status === "fail").map((check) => check.id)
+}
+
+function Issue(Code: string): TestIssue {
+  return { Code, Path: "payload.json", Message: Code }
+}
+
+function PayloadText(files: readonly SnapshotFile[]): string {
+  const payload = files.find((file) => file.Path === "payload.json")
+  if (payload === undefined) throw new Error("missing rebased payload.json")
+  return Utf8.decode(payload.Bytes)
 }
 
 async function FilesBelow(root: string): Promise<readonly string[]> {
@@ -352,6 +363,113 @@ describe("EvaluateFixtureCorpus", () => {
     expect(FailureIds(collision.Checks)).toEqual(["FIXTURE_INVENTORY_MISMATCH"])
   })
 
+  test("fails closed when an async validator is passed to the synchronous API", async () => {
+    const { EvaluateFixtureCorpus } = await LoadCorpus()
+    const evaluation = EvaluateFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([Case("sync-only", "valid/sync-only")]),
+      [`${FamilyRoot}/valid/sync-only/payload.json`]: "sync-only"
+    }), FamilyRoot, (async () => []) as unknown as () => readonly TestIssue[])
+
+    expect(evaluation.SubjectsChecked).toBe(1)
+    expect(evaluation.Checks).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        status: "fail",
+        path: "valid/sync-only",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      })
+    ])
+  })
+
+  test("observes a rejected async validator so an isolated Bun process exits naturally", async () => {
+    const moduleUrl = pathToFileURL(join(RepositoryRoot, "tools/gates/fixture-corpus.ts")).href
+    const source = `
+const { EvaluateFixtureCorpus } = await import(${JSON.stringify(moduleUrl)})
+const encoder = new TextEncoder()
+const familyRoot = ${JSON.stringify(FamilyRoot)}
+const casesPath = familyRoot + "/cases.json"
+const makeFile = (Path, text) => {
+  const Bytes = encoder.encode(text)
+  return { Path, RealPath: "/virtual/" + Path, Sha256: "0".repeat(64), Bytes }
+}
+const snapshot = {
+  Sha256: "1".repeat(64),
+  Files: [
+    makeFile(casesPath, ${JSON.stringify(Cases([Case("rejecting", "valid/rejecting")]))}),
+    makeFile(familyRoot + "/valid/rejecting/payload.json", "rejecting")
+  ]
+}
+const evaluation = EvaluateFixtureCorpus(snapshot, familyRoot, async () => {
+  throw new Error("late validator rejection")
+})
+if (
+  evaluation.SubjectsChecked !== 1
+  || evaluation.Checks[0]?.id !== "FIXTURE_INVENTORY_MISMATCH"
+  || evaluation.Checks[0]?.actual !== "[\\\"FIXTURE_VALIDATOR_INVALID\\\"]"
+) {
+  throw new Error("sync evaluation contract changed")
+}
+await Bun.sleep(20)
+process.stdout.write("SYNC_VALIDATOR_REJECTION_OBSERVED\\n")
+`
+    const child = Bun.spawn([process.execPath, "--eval", source], {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    })
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text()
+    ])
+
+    expect({ exitCode, stdout, stderr }).toEqual({
+      exitCode: 0,
+      stdout: "SYNC_VALIDATOR_REJECTION_OBSERVED\n",
+      stderr: ""
+    })
+  })
+
+  test("keeps hostile thenables invalid while observing getter and call failures", async () => {
+    const { EvaluateFixtureCorpus } = await LoadCorpus()
+    const snapshot = Snapshot({
+      [CasesPath]: Cases([Case("thenable", "valid/thenable")]),
+      [`${FamilyRoot}/valid/thenable/payload.json`]: "thenable"
+    })
+    let getterReads = 0
+    const hostileGetter = Object.defineProperty({}, "then", {
+      get(): never {
+        getterReads += 1
+        throw new Error("hostile then getter")
+      }
+    })
+    let thenCalls = 0
+    const hostileCall = {
+      then(): never {
+        thenCalls += 1
+        throw new Error("hostile then call")
+      }
+    }
+    const evaluations = [hostileGetter, hostileCall].map((value) => EvaluateFixtureCorpus(
+      snapshot,
+      FamilyRoot,
+      (() => value) as unknown as () => readonly TestIssue[]
+    ))
+
+    expect(evaluations.map((evaluation) => evaluation.Checks[0])).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      }),
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      })
+    ])
+    await Bun.sleep(0)
+    expect({ getterReads, thenCalls }).toEqual({ getterReads: 1, thenCalls: 1 })
+  })
+
   test("traverses the exact committed positive and negative corpus from listed snapshot bytes only", async () => {
     const { EvaluateFixtureCorpus } = await LoadCorpus()
     const { ValidateOfficialPackage } = await LoadManifestValidator()
@@ -370,5 +488,247 @@ describe("EvaluateFixtureCorpus", () => {
     expect(expected).toBeGreaterThan(0)
     expect(evaluation.Checks).toHaveLength(expected)
     expect(evaluation.Checks.every((check) => check.id === "FIXTURE_CASE_MATCH" && check.status === "pass")).toBe(true)
+  })
+})
+
+describe("EvaluateAsyncFixtureCorpus", () => {
+  test("awaits delayed validators strictly in listed case order", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    const events: string[] = []
+    const evaluation = await EvaluateAsyncFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([
+        Case("first", "z-first"),
+        Case("second", "a-second")
+      ]),
+      [`${FamilyRoot}/z-first/payload.json`]: "first",
+      [`${FamilyRoot}/a-second/payload.json`]: "second"
+    }), FamilyRoot, async (files: readonly SnapshotFile[]) => {
+      const label = PayloadText(files)
+      events.push(`start-${label}`)
+      if (label === "first") await Bun.sleep(20)
+      events.push(`end-${label}`)
+      return []
+    })
+
+    expect(events).toEqual(["start-first", "end-first", "start-second", "end-second"])
+    expect(evaluation.SubjectsChecked).toBe(2)
+    expect(evaluation.Checks.map((check) => [check.path, check.status])).toEqual([
+      ["z-first", "pass"],
+      ["a-second", "pass"]
+    ])
+  })
+
+  test("continues after a rejected validator and cannot whitelist its fatal sentinel", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    const calls: string[] = []
+    const evaluation = await EvaluateAsyncFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([
+        Case("throwing", "z-throwing", ["FIXTURE_VALIDATOR_THROW"]),
+        Case("later", "a-later")
+      ]),
+      [`${FamilyRoot}/z-throwing/payload.json`]: "throwing",
+      [`${FamilyRoot}/a-later/payload.json`]: "later"
+    }), FamilyRoot, async (files: readonly SnapshotFile[]) => {
+      const label = PayloadText(files)
+      calls.push(label)
+      if (label === "throwing") throw new Error("validator rejected")
+      return []
+    })
+
+    expect(calls).toEqual(["throwing", "later"])
+    expect(evaluation.SubjectsChecked).toBe(2)
+    expect(evaluation.Checks).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        path: "z-throwing",
+        expected: "[\"FIXTURE_VALIDATOR_THROW\"]",
+        actual: "[\"FIXTURE_VALIDATOR_THROW\"]"
+      }),
+      expect.objectContaining({ id: "FIXTURE_CASE_MATCH", path: "a-later" })
+    ])
+  })
+
+  test("continues after non-array and malformed results and cannot whitelist the invalid sentinel", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    const calls: string[] = []
+    const validate = async (files: readonly SnapshotFile[]): Promise<readonly TestIssue[] | null | readonly unknown[]> => {
+      const label = PayloadText(files)
+      calls.push(label)
+      if (label === "non-array") return null
+      if (label === "malformed") return [{}]
+      return []
+    }
+    const evaluation = await EvaluateAsyncFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([
+        Case("non-array", "z-non-array", ["FIXTURE_VALIDATOR_INVALID"]),
+        Case("malformed", "m-malformed", ["FIXTURE_VALIDATOR_INVALID"]),
+        Case("later", "a-later")
+      ]),
+      [`${FamilyRoot}/z-non-array/payload.json`]: "non-array",
+      [`${FamilyRoot}/m-malformed/payload.json`]: "malformed",
+      [`${FamilyRoot}/a-later/payload.json`]: "later"
+    }), FamilyRoot, validate as unknown as (
+      files: readonly SnapshotFile[]
+    ) => Promise<readonly TestIssue[]>)
+
+    expect(calls).toEqual(["non-array", "malformed", "later"])
+    expect(evaluation.SubjectsChecked).toBe(3)
+    expect(evaluation.Checks).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        path: "z-non-array",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      }),
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        path: "m-malformed",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      }),
+      expect.objectContaining({ id: "FIXTURE_CASE_MATCH", path: "a-later" })
+    ])
+  })
+
+  test("classifies a throwing issue getter from a resolved async validator as invalid", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    let getterReads = 0
+    const malformed = Object.defineProperty({}, "Code", {
+      get(): never {
+        getterReads += 1
+        throw new Error("resolved issue Code getter failed")
+      }
+    })
+    const evaluation = await EvaluateAsyncFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([Case("malformed-getter", "valid/malformed-getter")]),
+      [`${FamilyRoot}/valid/malformed-getter/payload.json`]: "malformed-getter"
+    }), FamilyRoot, async () => [malformed] as unknown as readonly TestIssue[])
+
+    expect(getterReads).toBe(1)
+    expect(evaluation).toEqual({
+      SubjectsExpected: 1,
+      SubjectsChecked: 1,
+      Checks: [expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        status: "fail",
+        path: "valid/malformed-getter",
+        expected: "[]",
+        actual: "[\"FIXTURE_VALIDATOR_INVALID\"]"
+      })]
+    })
+  })
+
+  test("compares duplicate async issue codes as an exact sorted multiset", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    const evaluation = await EvaluateAsyncFixtureCorpus(Snapshot({
+      [CasesPath]: Cases([
+        Case("exact", "z-exact", ["Z_CODE", "A_CODE", "A_CODE"]),
+        Case("missing", "a-missing", ["Z_CODE", "A_CODE", "A_CODE"])
+      ]),
+      [`${FamilyRoot}/z-exact/payload.json`]: "exact",
+      [`${FamilyRoot}/a-missing/payload.json`]: "missing"
+    }), FamilyRoot, async (files: readonly SnapshotFile[]) => (
+      PayloadText(files) === "exact"
+        ? [Issue("Z_CODE"), Issue("A_CODE"), Issue("A_CODE")]
+        : [Issue("Z_CODE"), Issue("A_CODE")]
+    ))
+
+    expect(evaluation.SubjectsChecked).toBe(2)
+    expect(evaluation.Checks).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_CASE_MATCH",
+        path: "z-exact",
+        actual: "[\"A_CODE\",\"A_CODE\",\"Z_CODE\"]"
+      }),
+      expect.objectContaining({
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        path: "a-missing",
+        actual: "[\"A_CODE\",\"Z_CODE\"]"
+      })
+    ])
+  })
+
+  test("keeps every global admission failure at checked zero without invoking a validator", async () => {
+    const { EvaluateAsyncFixtureCorpus } = await LoadCorpus()
+    const valid = Snapshot({
+      [CasesPath]: Cases([Case("valid", "valid/one")]),
+      [`${FamilyRoot}/valid/one/payload.json`]: "valid"
+    })
+    const admissions = [
+      { snapshot: valid, root: "" },
+      { snapshot: Snapshot({ [CasesPath]: "{\n" }), root: FamilyRoot },
+      {
+        snapshot: Snapshot({
+          [CasesPath]: Cases([Case("same", "valid/one"), Case("same", "valid/two")]),
+          [`${FamilyRoot}/valid/one/payload.json`]: "one",
+          [`${FamilyRoot}/valid/two/payload.json`]: "two"
+        }),
+        root: FamilyRoot
+      },
+      {
+        snapshot: Snapshot({
+          [CasesPath]: Cases([Case("one", "valid/same"), Case("two", "valid/same")]),
+          [`${FamilyRoot}/valid/same/payload.json`]: "same"
+        }),
+        root: FamilyRoot
+      },
+      {
+        snapshot: Snapshot({
+          [CasesPath]: Cases([Case("one", "valid/one")]),
+          [`${FamilyRoot}/valid/one/payload.json`]: "one",
+          [`${FamilyRoot}/unlisted/payload.json`]: "extra"
+        }),
+        root: FamilyRoot
+      },
+      {
+        snapshot: Snapshot({ [CasesPath]: Cases([Case("missing", "valid/missing")]) }),
+        root: FamilyRoot
+      }
+    ]
+    let calls = 0
+
+    for (const admission of admissions) {
+      const evaluation = await EvaluateAsyncFixtureCorpus(admission.snapshot, admission.root, async () => {
+        calls += 1
+        return []
+      })
+      expect(evaluation.SubjectsChecked).toBe(0)
+      expect(FailureIds(evaluation.Checks)).toEqual(["FIXTURE_INVENTORY_MISMATCH"])
+    }
+    expect(calls).toBe(0)
+  })
+
+  test("keeps rebased collisions case-local and continues both sync and async evaluation", async () => {
+    const { EvaluateAsyncFixtureCorpus, EvaluateFixtureCorpus } = await LoadCorpus()
+    const snapshot = Snapshot({
+      [CasesPath]: Cases([
+        Case("collision", "z-collision"),
+        Case("later", "a-later")
+      ]),
+      [`${FamilyRoot}/z-collision/shared.json`]: "case shared",
+      [`${FamilyRoot}/a-later/payload.json`]: "later",
+      "shared.json": "global shared"
+    })
+    const syncCalls: string[] = []
+    const asyncCalls: string[] = []
+    const syncEvaluation = EvaluateFixtureCorpus(snapshot, FamilyRoot, (files: readonly SnapshotFile[]) => {
+      syncCalls.push(PayloadText(files))
+      return []
+    })
+    const asyncEvaluation = await EvaluateAsyncFixtureCorpus(
+      snapshot,
+      FamilyRoot,
+      async (files: readonly SnapshotFile[]) => {
+        asyncCalls.push(PayloadText(files))
+        return []
+      }
+    )
+
+    expect(syncCalls).toEqual(["later"])
+    expect(asyncCalls).toEqual(["later"])
+    expect(syncEvaluation.SubjectsChecked).toBe(2)
+    expect(asyncEvaluation).toEqual(syncEvaluation)
+    expect(syncEvaluation.Checks.map((check) => ({ id: check.id, status: check.status, path: check.path }))).toEqual([
+      { id: "FIXTURE_INVENTORY_MISMATCH", status: "fail", path: "z-collision" },
+      { id: "FIXTURE_CASE_MATCH", status: "pass", path: "a-later" }
+    ])
   })
 })

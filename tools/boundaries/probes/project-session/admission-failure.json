@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "scenario": "admission-failure",
+  "projectPrefix": "project",
+  "virtualFiles": [
+    { "path": "project/tsconfig.json", "utf8": "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true },\n  \"include\": [\"src/**/*.ts\"]\n}\n" },
+    { "path": "project/src/README.md", "utf8": "No TypeScript source is present.\n" }
+  ],
+  "actions": {
+    "stage": { "kind": "normal", "path": "", "targetPath": "" },
+    "update": { "kind": "normal", "path": "" },
+    "callback": { "kind": "return-value" },
+    "cleanup": { "snapshot": "delegate", "api": "delegate", "remove": "delegate" }
+  },
+  "expected": {
+    "lifecycle": { "exitCode": 7, "outcome": "primary-error", "cleanupOrder": ["snapshot.dispose", "api.close", "remove-staging"], "errorOrder": ["primary"], "stageReadback": "absent" },
+    "gate": { "exitCode": 1, "status": "fail", "checkIds": ["GATE_INTERNAL_ERROR"] }
+  }
+}

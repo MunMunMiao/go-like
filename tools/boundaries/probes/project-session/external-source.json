@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "scenario": "external-source",
+  "projectPrefix": "project",
+  "virtualFiles": [
+    { "path": "project/tsconfig.json", "utf8": "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"target\": \"ES2022\", \"module\": \"NodeNext\", \"moduleResolution\": \"NodeNext\", \"types\": [] },\n  \"include\": [\"src/**/*.ts\"]\n}\n" },
+    { "path": "project/src/index.ts", "utf8": "import type { ExternalValue } from \"package-dependency\"\nexport const value: ExternalValue = { enabled: true }\n" },
+    { "path": "project/node_modules/package-dependency/package.json", "utf8": "{\n  \"name\": \"package-dependency\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"types\": \"index.d.ts\"\n}\n" },
+    { "path": "project/node_modules/package-dependency/index.d.ts", "utf8": "export interface ExternalValue { readonly enabled: boolean }\n" }
+  ],
+  "actions": {
+    "stage": { "kind": "normal", "path": "", "targetPath": "" },
+    "update": { "kind": "normal", "path": "" },
+    "callback": { "kind": "return-value" },
+    "cleanup": { "snapshot": "delegate", "api": "delegate", "remove": "delegate" }
+  },
+  "expected": {
+    "lifecycle": { "exitCode": 7, "outcome": "primary-error", "cleanupOrder": ["snapshot.dispose", "api.close", "remove-staging"], "errorOrder": ["primary"], "stageReadback": "absent" },
+    "gate": { "exitCode": 1, "status": "fail", "checkIds": ["GATE_INTERNAL_ERROR"] }
+  }
+}

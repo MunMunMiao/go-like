@@ -525,12 +525,14 @@ describe("manifest CLI modes", () => {
     const stderr: string[] = []
     const originalStdout = process.stdout.write
     const originalStderr = process.stderr.write
-    process.stdout.write = ((value: string | Uint8Array) => {
+    process.stdout.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
       stdout.push(String(value))
+      callback?.()
       return true
     }) as typeof process.stdout.write
-    process.stderr.write = ((value: string | Uint8Array) => {
+    process.stderr.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
       stderr.push(String(value))
+      callback?.()
       return true
     }) as typeof process.stderr.write
 

@@ -2,6 +2,8 @@ import {
   EmitGateResultWithDependencies,
   NodeAtomicWriterOperations,
   RunGate,
+  WriteProcessStderr,
+  WriteProcessStdout,
   type GateMode,
   type ReadinessPolicy
 } from "../gates/result.ts"
@@ -11,8 +13,8 @@ import { lstat, readFile, readdir } from "node:fs/promises"
 import { join, relative, resolve, sep } from "node:path"
 
 export interface ManifestCheckIO {
-  readonly WriteStdout: (value: string) => void
-  readonly WriteStderr: (value: string) => void
+  readonly WriteStdout: (value: string) => void | Promise<void>
+  readonly WriteStderr: (value: string) => void | Promise<void>
 }
 
 interface ParsedArguments {
@@ -41,8 +43,8 @@ const SharedPaths = [
 ] as const
 const ManifestNames = ["package.json", "capability.json", "owner.json"] as const
 const DefaultIO: ManifestCheckIO = {
-  WriteStdout: (value) => { process.stdout.write(value) },
-  WriteStderr: (value) => { process.stderr.write(value) }
+  WriteStdout: WriteProcessStdout,
+  WriteStderr: WriteProcessStderr
 }
 
 function CompareCodeUnits(left: string, right: string): number {
@@ -175,7 +177,7 @@ export async function Main(
 ): Promise<number> {
   const parsed = ParseArguments(args)
   if (parsed === null) {
-    io.WriteStderr("MANIFEST_USAGE invalid arguments\n")
+    await io.WriteStderr("MANIFEST_USAGE invalid arguments\n")
     return 1
   }
 
@@ -185,7 +187,7 @@ export async function Main(
       ? await FixtureInventory(parsed.Root)
       : await RepositoryInventory(parsed.Root)
   } catch (error) {
-    io.WriteStderr(`MANIFEST_DISCOVERY_ERROR ${ErrorMessage(error)}\n`)
+    await io.WriteStderr(`MANIFEST_DISCOVERY_ERROR ${ErrorMessage(error)}\n`)
     return 1
   }
   const contract = ContractFor(parsed.Mode)
@@ -210,7 +212,7 @@ export async function Main(
       WriteStdout: io.WriteStdout
     })
   } catch (error) {
-    io.WriteStderr(`MANIFEST_EMIT_ERROR ${ErrorMessage(error)}\n`)
+    await io.WriteStderr(`MANIFEST_EMIT_ERROR ${ErrorMessage(error)}\n`)
     return 1
   }
   return result.status === "pass" ? 0 : 1

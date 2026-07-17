@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "scenario": "source-realpath-escape",
+  "projectPrefix": "project",
+  "virtualFiles": [
+    { "path": "project/tsconfig.json", "utf8": "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true },\n  \"include\": [\"src/**/*.ts\"]\n}\n" },
+    { "path": "project/src/index.ts", "utf8": "export const value = 1\n" },
+    { "path": "project/escape-target.ts", "utf8": "export const escapedValue = 2\n" }
+  ],
+  "actions": {
+    "stage": { "kind": "source-realpath-escape", "path": "project/src/index.ts", "targetPath": "project/escape-target.ts" },
+    "update": { "kind": "normal", "path": "" },
+    "callback": { "kind": "return-value" },
+    "cleanup": { "snapshot": "delegate", "api": "delegate", "remove": "delegate" }
+  },
+  "expected": {
+    "lifecycle": { "exitCode": 7, "outcome": "primary-error", "cleanupOrder": ["snapshot.dispose", "api.close", "remove-staging"], "errorOrder": ["primary"], "stageReadback": "absent" },
+    "gate": { "exitCode": 1, "status": "fail", "checkIds": ["GATE_INTERNAL_ERROR"] }
+  }
+}

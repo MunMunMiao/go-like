@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "scenario": "value-plus-all-cleanups",
+  "projectPrefix": "project",
+  "virtualFiles": [
+    { "path": "project/tsconfig.json", "utf8": "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"target\": \"ES2022\" },\n  \"include\": [\"src/**/*.ts\"]\n}\n" },
+    { "path": "project/src/index.ts", "utf8": "export const value = 1\n" }
+  ],
+  "actions": {
+    "stage": { "kind": "normal", "path": "", "targetPath": "" },
+    "update": { "kind": "normal", "path": "" },
+    "callback": { "kind": "return-value" },
+    "cleanup": { "snapshot": "delegate-then-throw", "api": "delegate-then-throw", "remove": "delegate-then-throw" }
+  },
+  "expected": {
+    "lifecycle": { "exitCode": 7, "outcome": "aggregate-error", "cleanupOrder": ["snapshot.dispose", "api.close", "remove-staging"], "errorOrder": ["snapshot.dispose", "api.close", "remove-staging"], "stageReadback": "absent" },
+    "gate": { "exitCode": 1, "status": "fail", "checkIds": ["GATE_INTERNAL_ERROR"] }
+  }
+}

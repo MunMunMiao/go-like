@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "valid-project",
+      "path": "valid/project",
+      "expectedCodes": []
+    },
+    {
+      "id": "missing-exact-config",
+      "path": "invalid/missing-exact-config",
+      "expectedCodes": [
+        "PROJECT_SESSION_CONFIG_MISSING"
+      ]
+    },
+    {
+      "id": "zero-package-source",
+      "path": "invalid/zero-package-source",
+      "expectedCodes": [
+        "PROJECT_SESSION_SOURCE_ZERO"
+      ]
+    },
+    {
+      "id": "diagnostic-config-file-parsing",
+      "path": "diagnostic/config-file-parsing",
+      "expectedCodes": [
+        "TYPESCRIPT_CONFIG_FILE_PARSING_5023"
+      ]
+    },
+    {
+      "id": "diagnostic-program",
+      "path": "diagnostic/program",
+      "expectedCodes": [
+        "TYPESCRIPT_PROGRAM_5069"
+      ]
+    },
+    {
+      "id": "diagnostic-global",
+      "path": "diagnostic/global",
+      "expectedCodes": [
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318",
+        "TYPESCRIPT_GLOBAL_2318"
+      ]
+    },
+    {
+      "id": "diagnostic-syntactic",
+      "path": "diagnostic/syntactic",
+      "expectedCodes": [
+        "TYPESCRIPT_SYNTACTIC_1134",
+        "TYPESCRIPT_SYNTACTIC_1134"
+      ]
+    },
+    {
+      "id": "diagnostic-bind-and-semantic",
+      "path": "diagnostic/bind-and-semantic",
+      "expectedCodes": [
+        "TYPESCRIPT_BIND_2528",
+        "TYPESCRIPT_BIND_2528",
+        "TYPESCRIPT_SEMANTIC_2528",
+        "TYPESCRIPT_SEMANTIC_2528"
+      ]
+    },
+    {
+      "id": "diagnostic-semantic",
+      "path": "diagnostic/semantic",
+      "expectedCodes": [
+        "TYPESCRIPT_SEMANTIC_2322"
+      ]
+    }
+  ]
+}
