@@ -1,0 +1,8 @@
+import "node:fs"
+import "bun:test"
+import "deno:land"
+import "npm:vendor"
+import "jsr:@scope/value"
+import "http://example.test/value.js"
+import "https://example.test/value.js"
+import "data:text/javascript,export default 1"

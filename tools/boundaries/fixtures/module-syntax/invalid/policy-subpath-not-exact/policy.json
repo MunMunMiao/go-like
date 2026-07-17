@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "allowedWorkspaceDependencies": [
+    "@likego/context"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    { "id": "valid-static-internal", "path": "valid/static-internal", "expectedCodes": [] },
+    { "id": "valid-export-from-internal", "path": "valid/export-from-internal", "expectedCodes": [] },
+    { "id": "valid-dynamic-literal-internal", "path": "valid/dynamic-literal-internal", "expectedCodes": [] },
+    { "id": "valid-allowed-workspace-exact", "path": "valid/allowed-workspace-exact", "expectedCodes": [] },
+    { "id": "invalid-dynamic-nonliteral", "path": "invalid/dynamic-nonliteral", "expectedCodes": ["MODULE_DYNAMIC_IMPORT_NON_LITERAL"] },
+    { "id": "invalid-import-equals", "path": "invalid/import-equals", "expectedCodes": ["MODULE_IMPORT_EQUALS_FORBIDDEN"] },
+    { "id": "invalid-direct-require", "path": "invalid/direct-require", "expectedCodes": ["MODULE_REQUIRE_FORBIDDEN"] },
+    { "id": "invalid-parenthesized-require", "path": "invalid/parenthesized-require", "expectedCodes": ["MODULE_REQUIRE_FORBIDDEN"] },
+    { "id": "invalid-module-require", "path": "invalid/module-require", "expectedCodes": ["MODULE_MODULE_REQUIRE_FORBIDDEN"] },
+    {
+      "id": "invalid-schemes",
+      "path": "invalid/schemes",
+      "expectedCodes": [
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN",
+        "MODULE_SPECIFIER_SCHEME_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-absolute-and-hash",
+      "path": "invalid/absolute-and-hash",
+      "expectedCodes": [
+        "MODULE_SPECIFIER_ABSOLUTE_FORBIDDEN",
+        "MODULE_SPECIFIER_ABSOLUTE_FORBIDDEN",
+        "MODULE_SPECIFIER_ABSOLUTE_FORBIDDEN",
+        "MODULE_SPECIFIER_HASH_FORBIDDEN"
+      ]
+    },
+    { "id": "invalid-relative-missing-js", "path": "invalid/relative-missing-js", "expectedCodes": ["MODULE_RELATIVE_JS_EXTENSION_REQUIRED"] },
+    { "id": "invalid-relative-package-escape", "path": "invalid/relative-package-escape", "expectedCodes": ["MODULE_RELATIVE_PACKAGE_ESCAPE"] },
+    { "id": "invalid-relative-target-missing", "path": "invalid/relative-target-missing", "expectedCodes": ["MODULE_RELATIVE_TARGET_MISSING"] },
+    { "id": "invalid-disallowed-workspace", "path": "invalid/disallowed-workspace", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] },
+    { "id": "invalid-disallowed-vendor", "path": "invalid/disallowed-vendor", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] },
+    { "id": "invalid-disallowed-framework", "path": "invalid/disallowed-framework", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] },
+    { "id": "invalid-policy-subpath-not-exact", "path": "invalid/policy-subpath-not-exact", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] },
+    {
+      "id": "invalid-type-only-policy",
+      "path": "invalid/type-only-policy",
+      "expectedCodes": [
+        "MODULE_BARE_DEPENDENCY_DISALLOWED",
+        "MODULE_BARE_DEPENDENCY_DISALLOWED"
+      ]
+    },
+    { "id": "invalid-import-type-policy", "path": "invalid/import-type-policy", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] }
+  ]
+}
