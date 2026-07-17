@@ -534,36 +534,43 @@ Gate id `boundary-semantic-global-fixtures`, evaluation-only, exact cases invent
 - Create: `tools/boundaries/check.ts`
 - Create: `tools/boundaries/check.test.ts`
 - Create: `tools/boundaries/check.cli.ts`
+- Modify: `tools/boundaries/project-session.ts`
+- Modify: `tools/boundaries/project-session.test.ts`
+- Modify: `tools/gates/result.ts`
+- Modify: `tools/gates/result.test.ts`
 
 **Interfaces:**
 
 ```ts
-export interface BoundaryEvaluation {
-  readonly PackagesChecked: number
-  readonly SourceFilesChecked: number
-  readonly Checks: readonly GateCheck[]
-}
-export function EvaluateBoundaryFixtures(snapshot: InputSnapshot): CorpusEvaluation
-export async function EvaluateRepositoryBoundaries(snapshot: InputSnapshot): Promise<GateEvaluation>
+export async function EvaluateBoundaryFixtures(
+  snapshot: InputSnapshot,
+  repositoryRoot: string,
+): Promise<CorpusEvaluation>
+export async function EvaluateRepositoryBoundaries(
+  snapshot: InputSnapshot,
+  repositoryRoot: string,
+): Promise<GateEvaluation>
 ```
 
 - [ ] **Step 1: Write CLI/policy RED tests**
 
-Policy has exact rows for context/core/fetch/health/testing, dependency allowlists and per-package free-global allowlists. Test missing/extra policy row, empty repository, policy/package mismatch, fixture family missing/extra, wrong mode/gate id, stale runId and evaluator re-read attempts. Expected RED is missing `check.ts`.
+Policy has exact rows for context/core/fetch/health/testing, maximum dependency allowlists and per-package free-global allowlists. Test missing/extra policy row, empty repository, policy/package mismatch, fixture family missing/extra, wrong mode/gate id, stale runId and evaluator re-read attempts. Manifest runtime workspace dependencies must be a subset of the policy maximum; Task 5 receives the manifest's actual direct dependency set, and TS staging receives its actual transitive closure. Expected RED is the missing Task 7 implementation plus the missing workspace-session extension.
 
 - [ ] **Step 2: Implement one-snapshot fixture aggregation**
 
-Fixture mode input inventory is policy plus all three family `cases.json` and every listed/discovered payload. Aggregate each family’s meta-checks; expected and checked are total case counts and greater than zero. Gate `portable-boundary-fixtures`, evaluation-only.
+Fixture mode input inventory is policy plus all three family `cases.json` and every listed/discovered payload. Aggregate each family’s meta-checks serially; expected subjects are fixed at 64 (9 + 20 + 35), never derived from mutable case bytes. Gate `portable-boundary-fixtures`, evaluation-only.
 
 - [ ] **Step 3: Implement one-snapshot repository admission**
 
-Discovery builds an input path list containing policy, every discovered portable package `package.json`, tsconfig and all `src/**/*.ts`; `RunGate` snapshots it once. Evaluator materializes only those bytes for Task 4 and uses Tasks 5-6 without another glob/read.
+Discovery builds an input path list containing policy, every discovered portable package `package.json`, self-contained tsconfig and every entry below `src`; non-regular entries and regular non-`.ts` payloads fail instead of being silently skipped. `RunGate` snapshots the discovered file set once. Harden snapshot input admission to reject stable lexical or parent symlinks. Evaluator materializes only those bytes and uses explicit-root workspace project sessions without another glob/read.
+
+The Task 4 extension stages the target plus its exact dependency closure, validates all program source authority, but returns/counts only target `src`. It preserves every old isolated-session API. Package configs forbid external config/type/plugin authority and have exact non-wildcard `paths` mappings from every closure package name to that package's snapshotted `src/index.ts`. Reject undeclared/third-party/self/unknown/duplicate/cyclic dependencies and misdirected paths before TS analysis.
 
 Zero source/package produces `BOUNDARY_SOURCE_ZERO`. Repository gate is `portable-boundary`, package-admission. There is no fixture fallback or empty override.
 
 - [ ] **Step 4: Verify process lifecycle, modes, and commit**
 
-Run `--fixtures` expecting exit `0/not-evaluated`; run current repository mode expecting exit `1/not-ready/checked 0`. Both result files must match current runId. Spawn both with timeout and require natural exit. Run global/cached gates, commit `build: compose portable boundary admission`, then range whitespace.
+Require `--run-id`. Run `--fixtures` expecting exit `0/not-evaluated`; run current repository mode expecting exit `1/not-ready/checked 0` plus the protocol's zero-subject check. Both result files must match current runId. Spawn both with timeout and require natural exit. Run global/cached gates, commit `build: compose portable boundary admission`, then range whitespace.
 
 ---
 
