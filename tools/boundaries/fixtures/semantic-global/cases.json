@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "valid-property-keys",
+      "path": "valid/property-keys",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-labels",
+      "path": "valid/labels",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-type-positions",
+      "path": "valid/type-positions",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-local-declarations",
+      "path": "valid/local-declarations",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-imported-declarations",
+      "path": "valid/imported-declarations",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-allowlisted-console",
+      "path": "valid/allowlisted-console",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-global-this-console-dot",
+      "path": "valid/global-this-console-dot",
+      "expectedCodes": []
+    },
+    {
+      "id": "valid-global-this-console-element",
+      "path": "valid/global-this-console-element",
+      "expectedCodes": []
+    },
+    {
+      "id": "invalid-free-bun",
+      "path": "invalid/free-bun",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-deno",
+      "path": "invalid/free-deno",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-process",
+      "path": "invalid/free-process",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-buffer",
+      "path": "invalid/free-buffer",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-global",
+      "path": "invalid/free-global",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-require",
+      "path": "invalid/free-require",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-module",
+      "path": "invalid/free-module",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-exports",
+      "path": "invalid/free-exports",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-filename",
+      "path": "invalid/free-filename",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-free-dirname",
+      "path": "invalid/free-dirname",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-unknown-global",
+      "path": "invalid/unknown-global",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-allowlisted-unresolved",
+      "path": "invalid/allowlisted-unresolved",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-unallowlisted-math",
+      "path": "invalid/unallowlisted-math",
+      "expectedCodes": [
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-property",
+      "path": "invalid/global-this-property",
+      "expectedCodes": [
+        "GLOBAL_THIS_PROPERTY_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-computed",
+      "path": "invalid/global-this-computed",
+      "expectedCodes": [
+        "GLOBAL_THIS_COMPUTED_ACCESS_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-direct-alias",
+      "path": "invalid/global-this-direct-alias",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-chained-alias",
+      "path": "invalid/global-this-chained-alias",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-destructure",
+      "path": "invalid/global-this-destructure",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-reassignment",
+      "path": "invalid/global-this-reassignment",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-call-escape",
+      "path": "invalid/global-this-call-escape",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-global-this-return-escape",
+      "path": "invalid/global-this-return-escape",
+      "expectedCodes": [
+        "GLOBAL_THIS_ESCAPE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-eval",
+      "path": "invalid/eval",
+      "expectedCodes": [
+        "GLOBAL_DYNAMIC_CODE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-function-constructor",
+      "path": "invalid/function-constructor",
+      "expectedCodes": [
+        "GLOBAL_DYNAMIC_CODE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-ambient-declaration",
+      "path": "invalid/ambient-declaration",
+      "expectedCodes": [
+        "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-triple-slash-types",
+      "path": "invalid/triple-slash-types",
+      "expectedCodes": [
+        "GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-ts-ignore",
+      "path": "invalid/ts-ignore",
+      "expectedCodes": [
+        "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"
+      ]
+    },
+    {
+      "id": "invalid-ts-nocheck",
+      "path": "invalid/ts-nocheck",
+      "expectedCodes": [
+        "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"
+      ]
+    }
+  ]
+}
