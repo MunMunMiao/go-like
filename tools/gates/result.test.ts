@@ -184,6 +184,38 @@ describe("SnapshotInputs", () => {
     }
   })
 
+  test("rejects an in-root symlink when it is the only requested input", async () => {
+    const root = await Fixture()
+    await symlink("input.txt", join(root, "only-alias.txt"))
+    const { SnapshotInputs } = await LoadResult()
+
+    const result = await SnapshotInputs(root, ["only-alias.txt"])
+
+    expect(result.Snapshot).toBeNull()
+    expect(result.Checks).toEqual([{
+      id: "GATE_INPUT_ERROR",
+      status: "fail",
+      detail: expect.stringContaining("resolved input path differs from its canonical lexical path")
+    }])
+  })
+
+  test("rejects an input reached through an in-root symlinked parent", async () => {
+    const root = await Fixture()
+    await mkdir(join(root, "real-parent"))
+    await Bun.write(join(root, "real-parent", "nested.txt"), "nested\n")
+    await symlink("real-parent", join(root, "linked-parent"))
+    const { SnapshotInputs } = await LoadResult()
+
+    const result = await SnapshotInputs(root, ["linked-parent/nested.txt"])
+
+    expect(result.Snapshot).toBeNull()
+    expect(result.Checks).toEqual([{
+      id: "GATE_INPUT_ERROR",
+      status: "fail",
+      detail: expect.stringContaining("resolved input path differs from its canonical lexical path")
+    }])
+  })
+
   test("sorts paths by deterministic code units rather than host locale", async () => {
     const root = await Fixture()
     await Bun.write(join(root, "Z.txt"), "upper\n")

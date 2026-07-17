@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { lstatSync, realpathSync, type Stats } from "node:fs"
-import { lstat, mkdir, realpath, rm, rmdir, writeFile } from "node:fs/promises"
+import { lstatSync, realpathSync, type BigIntStats, type Stats } from "node:fs"
+import { lstat, mkdir, readFile, realpath, rm, rmdir, writeFile } from "node:fs/promises"
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path"
 import { API, type Diagnostic, type Project, type Snapshot } from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
@@ -26,10 +26,23 @@ export interface ProjectSessionOperations {
   readonly RemoveStaging: (path: string) => Promise<void>
 }
 
+export interface WorkspaceProjectAuthority {
+  readonly ProjectPrefix: string
+  readonly DependencyPrefixes: readonly string[]
+}
+
 interface SelectedProjectInput {
   readonly ProjectPrefix: string
+  readonly DependencyPrefixes: readonly string[]
+  readonly SelectedPrefixes: readonly string[]
   readonly ConfigPath: string
   readonly Files: readonly SnapshotFile[]
+  readonly SourceFilesByPath: ReadonlyMap<string, SnapshotFile> | null
+}
+
+interface IndexedProjectInput {
+  readonly FilesByPath: ReadonlyMap<string, SnapshotFile>
+  readonly Paths: readonly string[]
 }
 
 interface DirectoryIdentity {
@@ -52,6 +65,24 @@ interface StagingAcquisition {
 interface StagedProject {
   readonly StagedRoot: string
   readonly CanonicalConfig: string
+  readonly SelectedFileSeals: readonly SelectedFileSeal[] | null
+}
+
+interface SelectedFileSeal {
+  readonly Path: string
+  readonly Target: string
+  readonly Source: boolean
+  readonly Dev: bigint
+  readonly Ino: bigint
+  readonly Size: bigint
+  readonly CtimeNs: bigint
+  readonly MtimeNs: bigint
+  readonly Bytes: Uint8Array
+}
+
+interface SelectedFileEvidence {
+  readonly Status: BigIntStats
+  readonly Bytes: Uint8Array
 }
 
 interface AdmittedProject {
@@ -79,9 +110,18 @@ class ProjectSessionCleanupIdentityError extends Error {
 const WorkPath = ".artifacts/gates/work"
 const StageDirectoryName = "boundary-project"
 const OwnedStagingByPath = new Map<string, OwnedStaging>()
+const SnapshotTextDecoder = new TextDecoder("utf-8", { fatal: true })
 
 function CompareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
+}
+
+function BytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+  return true
 }
 
 function IsRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -104,6 +144,14 @@ function StageInvalid(path: string, message: string): ProjectSessionAdmissionErr
   return Admission("PROJECT_SESSION_STAGE_INVALID", path, message)
 }
 
+function ScopeInvalid(path: string, message: string): ProjectSessionAdmissionError {
+  return Admission("PROJECT_SESSION_SCOPE_INVALID", path, message)
+}
+
+function WorkspaceInputMissing(path: string, message: string): ProjectSessionAdmissionError {
+  return Admission("PROJECT_SESSION_INPUT_MISSING", path, message)
+}
+
 function IsSafeRelativePath(value: string): boolean {
   if (
     value.length === 0
@@ -115,11 +163,7 @@ function IsSafeRelativePath(value: string): boolean {
   return value.split("/").every((part) => part.length > 0 && part !== "." && part !== "..")
 }
 
-function SelectProjectInput(snapshot: InputSnapshot, projectPrefix: string): SelectedProjectInput {
-  if (!IsSafeRelativePath(projectPrefix)) {
-    throw InputInvalid(projectPrefix, "project prefix must be a canonical POSIX relative path")
-  }
-
+function IndexProjectInput(snapshot: InputSnapshot): IndexedProjectInput {
   const filesByPath = new Map<string, SnapshotFile>()
   for (const file of snapshot.Files) {
     const path: unknown = file.Path
@@ -146,8 +190,18 @@ function SelectProjectInput(snapshot: InputSnapshot, projectPrefix: string): Sel
     }
   }
 
+  return { FilesByPath: filesByPath, Paths: paths }
+}
+
+function SelectProjectInput(snapshot: InputSnapshot, projectPrefix: string): SelectedProjectInput {
+  if (!IsSafeRelativePath(projectPrefix)) {
+    throw InputInvalid(projectPrefix, "project prefix must be a canonical POSIX relative path")
+  }
+
+  const indexed = IndexProjectInput(snapshot)
+
   const configPath = `${projectPrefix}/tsconfig.json`
-  if (!filesByPath.has(configPath)) {
+  if (!indexed.FilesByPath.has(configPath)) {
     throw Admission(
       "PROJECT_SESSION_CONFIG_MISSING",
       configPath,
@@ -155,10 +209,178 @@ function SelectProjectInput(snapshot: InputSnapshot, projectPrefix: string): Sel
     )
   }
   const projectPathPrefix = `${projectPrefix}/`
-  const selected = paths
+  const selected = indexed.Paths
     .filter((path) => path.startsWith(projectPathPrefix))
-    .map((path) => filesByPath.get(path) as SnapshotFile)
-  return { ProjectPrefix: projectPrefix, ConfigPath: configPath, Files: selected }
+    .map((path) => indexed.FilesByPath.get(path) as SnapshotFile)
+  return {
+    ProjectPrefix: projectPrefix,
+    DependencyPrefixes: [],
+    SelectedPrefixes: [projectPrefix],
+    ConfigPath: configPath,
+    Files: selected,
+    SourceFilesByPath: null
+  }
+}
+
+function PrefixesOverlap(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`)
+}
+
+function AdmitWorkspaceAuthority(value: unknown): WorkspaceProjectAuthority {
+  if (
+    typeof value !== "object"
+    || value === null
+    || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype
+  ) {
+    throw ScopeInvalid("", "workspace project authority must be a plain object")
+  }
+  const keys = Reflect.ownKeys(value)
+  if (
+    keys.length !== 2
+    || !keys.includes("ProjectPrefix")
+    || !keys.includes("DependencyPrefixes")
+  ) {
+    throw ScopeInvalid(
+      "",
+      "workspace project authority must contain exactly ProjectPrefix and DependencyPrefixes"
+    )
+  }
+  const projectDescriptor = Object.getOwnPropertyDescriptor(value, "ProjectPrefix")
+  const dependenciesDescriptor = Object.getOwnPropertyDescriptor(value, "DependencyPrefixes")
+  if (
+    projectDescriptor === undefined
+    || dependenciesDescriptor === undefined
+    || !("value" in projectDescriptor)
+    || !("value" in dependenciesDescriptor)
+  ) {
+    throw ScopeInvalid("", "workspace project authority properties must be own data properties")
+  }
+  const projectPrefix = typeof projectDescriptor.value === "string" ? projectDescriptor.value : ""
+  if (!IsSafeRelativePath(projectPrefix)) {
+    throw ScopeInvalid(projectPrefix, "target project prefix must be a canonical POSIX relative path")
+  }
+  const dependenciesValue: unknown = dependenciesDescriptor.value
+  if (
+    !Array.isArray(dependenciesValue)
+    || Object.getPrototypeOf(dependenciesValue) !== Array.prototype
+  ) {
+    throw ScopeInvalid("", "dependency prefixes must be a plain array")
+  }
+  const dependencyKeys = Reflect.ownKeys(dependenciesValue)
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(dependenciesValue, "length")
+  if (
+    lengthDescriptor === undefined
+    || !("value" in lengthDescriptor)
+    || typeof lengthDescriptor.value !== "number"
+    || !Number.isSafeInteger(lengthDescriptor.value)
+    || lengthDescriptor.value < 0
+    || dependencyKeys.length !== lengthDescriptor.value + 1
+  ) {
+    throw ScopeInvalid("", "dependency prefixes must be a dense data-property array")
+  }
+
+  const dependencyPrefixes: string[] = []
+  let prior: string | null = null
+  for (let index = 0; index < lengthDescriptor.value; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(dependenciesValue, `${index}`)
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw ScopeInvalid("", "dependency prefixes must contain only own data properties")
+    }
+    const prefix = typeof descriptor.value === "string" ? descriptor.value : ""
+    if (!IsSafeRelativePath(prefix)) {
+      throw ScopeInvalid(prefix, "dependency prefix must be a canonical POSIX relative path")
+    }
+    if (prefix === projectPrefix) {
+      throw ScopeInvalid(prefix, "dependency prefix must not select the target project")
+    }
+    if (prior !== null && CompareCodeUnits(prior, prefix) >= 0) {
+      throw ScopeInvalid(prefix, "dependency prefixes must be unique and sorted by code unit")
+    }
+    dependencyPrefixes.push(prefix)
+    prior = prefix
+  }
+
+  const selectedPrefixes = [projectPrefix, ...dependencyPrefixes]
+  for (let left = 0; left < selectedPrefixes.length; left += 1) {
+    for (let right = left + 1; right < selectedPrefixes.length; right += 1) {
+      if (PrefixesOverlap(selectedPrefixes[left] as string, selectedPrefixes[right] as string)) {
+        throw ScopeInvalid(
+          selectedPrefixes[right] as string,
+          "selected package prefixes must not overlap"
+        )
+      }
+    }
+  }
+  return { ProjectPrefix: projectPrefix, DependencyPrefixes: dependencyPrefixes }
+}
+
+function IsPackageSourcePath(path: string, prefix: string): boolean {
+  return path.startsWith(`${prefix}/src/`) && path.endsWith(".ts")
+}
+
+function CanonicalWorkspaceSourceText(file: SnapshotFile): string {
+  if (
+    file.Bytes.length >= 3
+    && file.Bytes[0] === 0xef
+    && file.Bytes[1] === 0xbb
+    && file.Bytes[2] === 0xbf
+  ) {
+    throw Admission(
+      "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+      file.Path,
+      "selected source snapshot must not contain a UTF-8 BOM"
+    )
+  }
+  try {
+    return SnapshotTextDecoder.decode(file.Bytes)
+  } catch {
+    throw Admission(
+      "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+      file.Path,
+      "selected source snapshot is not fatal UTF-8 text"
+    )
+  }
+}
+
+function SelectWorkspaceProjectInput(
+  snapshot: InputSnapshot,
+  authorityValue: unknown
+): SelectedProjectInput {
+  const authority = AdmitWorkspaceAuthority(authorityValue)
+  const indexed = IndexProjectInput(snapshot)
+  const selectedPrefixes = [authority.ProjectPrefix, ...authority.DependencyPrefixes]
+  const sourceFilesByPath = new Map<string, SnapshotFile>()
+
+  for (const prefix of selectedPrefixes) {
+    for (const required of ["package.json", "tsconfig.json"] as const) {
+      const path = `${prefix}/${required}`
+      if (!indexed.FilesByPath.has(path)) {
+        throw WorkspaceInputMissing(path, `selected package ${required} snapshot byte is required`)
+      }
+    }
+    const sourcePaths = indexed.Paths.filter((path) => IsPackageSourcePath(path, prefix))
+    if (sourcePaths.length === 0) {
+      throw WorkspaceInputMissing(`${prefix}/src`, "selected package requires at least one src/**/*.ts snapshot byte")
+    }
+    for (const path of sourcePaths) {
+      const source = indexed.FilesByPath.get(path) as SnapshotFile
+      CanonicalWorkspaceSourceText(source)
+      sourceFilesByPath.set(path, source)
+    }
+  }
+
+  const files = indexed.Paths
+    .filter((path) => selectedPrefixes.some((prefix) => path.startsWith(`${prefix}/`)))
+    .map((path) => indexed.FilesByPath.get(path) as SnapshotFile)
+  return {
+    ProjectPrefix: authority.ProjectPrefix,
+    DependencyPrefixes: authority.DependencyPrefixes,
+    SelectedPrefixes: selectedPrefixes,
+    ConfigPath: `${authority.ProjectPrefix}/tsconfig.json`,
+    Files: files,
+    SourceFilesByPath: sourceFilesByPath
+  }
 }
 
 function IsInside(root: string, candidate: string): boolean {
@@ -239,6 +461,97 @@ async function MaterializeFile(stagedRoot: string, file: SnapshotFile): Promise<
   }
 }
 
+function SelectedFileInvalid(
+  path: string,
+  source: boolean,
+  message: string
+): ProjectSessionAdmissionError {
+  return source
+    ? Admission("PROJECT_SESSION_SOURCE_NOT_SNAPSHOT", path, message)
+    : StageInvalid(path, message)
+}
+
+function SameFileStatus(left: BigIntStats, right: BigIntStats): boolean {
+  return left.dev === right.dev
+    && left.ino === right.ino
+    && left.size === right.size
+    && left.ctimeNs === right.ctimeNs
+    && left.mtimeNs === right.mtimeNs
+}
+
+async function ReadSelectedFileEvidence(
+  target: string,
+  path: string,
+  source: boolean
+): Promise<SelectedFileEvidence> {
+  try {
+    const before = await lstat(target, { bigint: true })
+    if (before.isSymbolicLink() || !before.isFile() || await realpath(target) !== target) {
+      throw SelectedFileInvalid(path, source, "selected staged file identity is invalid")
+    }
+    const bytes = new Uint8Array(await readFile(target))
+    const after = await lstat(target, { bigint: true })
+    if (!SameFileStatus(before, after)) {
+      throw SelectedFileInvalid(path, source, "selected staged file changed while observed")
+    }
+    return { Status: after, Bytes: bytes }
+  } catch (error) {
+    if (error instanceof ProjectSessionAdmissionError) throw error
+    throw SelectedFileInvalid(path, source, "selected staged file evidence is unavailable")
+  }
+}
+
+async function CaptureSelectedFileSeals(
+  stagedRoot: string,
+  selected: SelectedProjectInput
+): Promise<readonly SelectedFileSeal[] | null> {
+  if (selected.SourceFilesByPath === null) return null
+  const seals: SelectedFileSeal[] = []
+  for (const file of selected.Files) {
+    const target = join(stagedRoot, ...file.Path.split("/"))
+    const source = selected.SourceFilesByPath.has(file.Path)
+    const evidence = await ReadSelectedFileEvidence(target, file.Path, source)
+    if (!BytesEqual(evidence.Bytes, file.Bytes)) {
+      throw SelectedFileInvalid(file.Path, source, "selected staged bytes differ after materialization")
+    }
+    seals.push({
+      Path: file.Path,
+      Target: target,
+      Source: source,
+      Dev: evidence.Status.dev,
+      Ino: evidence.Status.ino,
+      Size: evidence.Status.size,
+      CtimeNs: evidence.Status.ctimeNs,
+      MtimeNs: evidence.Status.mtimeNs,
+      Bytes: evidence.Bytes
+    })
+  }
+  return seals
+}
+
+async function RequireSelectedFileSeals(
+  seals: readonly SelectedFileSeal[] | null
+): Promise<void> {
+  if (seals === null) return
+  for (const seal of seals) {
+    const evidence = await ReadSelectedFileEvidence(seal.Target, seal.Path, seal.Source)
+    if (
+      evidence.Status.dev !== seal.Dev
+      || evidence.Status.ino !== seal.Ino
+      || evidence.Status.size !== seal.Size
+      || evidence.Status.ctimeNs !== seal.CtimeNs
+      || evidence.Status.mtimeNs !== seal.MtimeNs
+      || !BytesEqual(evidence.Bytes, seal.Bytes)
+    ) {
+      throw SelectedFileInvalid(
+        seal.Path,
+        seal.Source,
+        "selected staged file changed across the worker update"
+      )
+    }
+  }
+}
+
 async function AcquireStagedProject(
   selected: SelectedProjectInput,
   operations: ProjectSessionOperations,
@@ -289,9 +602,11 @@ async function AcquireStagedProject(
   acquisition.OwnedStaging = ownedStaging
   const stagedRoot = boundaryIdentity.Path
   for (const file of selected.Files) await MaterializeFile(stagedRoot, file)
+  const selectedFileSeals = await CaptureSelectedFileSeals(stagedRoot, selected)
   return {
     StagedRoot: stagedRoot,
-    CanonicalConfig: join(stagedRoot, ...selected.ConfigPath.split("/"))
+    CanonicalConfig: join(stagedRoot, ...selected.ConfigPath.split("/")),
+    SelectedFileSeals: selectedFileSeals
   }
 }
 
@@ -492,16 +807,32 @@ async function RequireConfigIdentity(
 async function AdmitSourceFiles(
   project: Project,
   stagedRoot: string,
-  projectPrefix: string
+  selected: SelectedProjectInput
 ): Promise<readonly SourceFile[]> {
-  const sourceRoot = join(stagedRoot, ...projectPrefix.split("/"), "src")
+  const sourceRoots = selected.SelectedPrefixes.map((Prefix) => ({
+    Prefix,
+    Root: join(stagedRoot, ...Prefix.split("/"), "src")
+  }))
   const sourceNames = await project.program.getSourceFileNames()
   const sources: SourceFile[] = []
   const realPaths = new Set<string>()
-  let sourceRootReal: string | null = null
+  const realSourceRoots = new Map<string, string>()
+
+  function ExactSnapshotSource(path: string): SnapshotFile | null {
+    if (selected.SourceFilesByPath === null) return null
+    const file = selected.SourceFilesByPath.get(path)
+    if (file === undefined) {
+      throw Admission(
+        "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+        path,
+        "program source does not correspond to a selected snapshot byte"
+      )
+    }
+    return file
+  }
 
   for (const sourceName of sourceNames) {
-    const stablePath = StableStagePath(stagedRoot, sourceName, projectPrefix)
+    const stablePath = StableStagePath(stagedRoot, sourceName, selected.ProjectPrefix)
     if (!isAbsolute(sourceName) || normalize(sourceName) !== sourceName || resolve(sourceName) !== sourceName) {
       throw Admission(
         "PROJECT_SESSION_SOURCE_IDENTITY",
@@ -532,17 +863,35 @@ async function AdmitSourceFiles(
         "non-default external library source is not snapshotted authority"
       )
     }
-    if (!IsInside(sourceRoot, sourceName) || sourceName === sourceRoot) {
+    if (
+      selected.SourceFilesByPath !== null
+      && stablePath.split("/").includes("node_modules")
+    ) {
       throw Admission(
-        "PROJECT_SESSION_SOURCE_ESCAPE",
+        "PROJECT_SESSION_EXTERNAL_SOURCE",
         stablePath,
-        "local project source is outside the staged src directory"
+        "node_modules source is not snapshotted workspace authority"
       )
     }
+    const matchingRoots = sourceRoots.filter((sourceRoot) => (
+      IsInside(sourceRoot.Root, sourceName) && sourceName !== sourceRoot.Root
+    ))
+    if (matchingRoots.length !== 1) {
+      throw Admission(
+        selected.SourceFilesByPath === null
+          ? "PROJECT_SESSION_SOURCE_ESCAPE"
+          : "PROJECT_SESSION_SOURCE_UNAUTHORIZED",
+        stablePath,
+        "local project source is outside exactly one selected src directory"
+      )
+    }
+    const matchingRoot = matchingRoots[0] as { readonly Prefix: string; readonly Root: string }
+    const snapshottedSource = ExactSnapshotSource(stablePath)
 
     try {
-      if (sourceRootReal === null) {
-        const rootStatus = await lstat(sourceRoot)
+      let sourceRootReal = realSourceRoots.get(matchingRoot.Prefix)
+      if (sourceRootReal === undefined) {
+        const rootStatus = await lstat(matchingRoot.Root)
         if (rootStatus.isSymbolicLink() || !rootStatus.isDirectory()) {
           throw Admission(
             "PROJECT_SESSION_SOURCE_ESCAPE",
@@ -550,14 +899,15 @@ async function AdmitSourceFiles(
             "staged src root identity is invalid"
           )
         }
-        sourceRootReal = await realpath(sourceRoot)
-        if (sourceRootReal !== sourceRoot) {
+        sourceRootReal = await realpath(matchingRoot.Root)
+        if (sourceRootReal !== matchingRoot.Root) {
           throw Admission(
             "PROJECT_SESSION_SOURCE_ESCAPE",
             stablePath,
             "staged src root realpath differs"
           )
         }
+        realSourceRoots.set(matchingRoot.Prefix, sourceRootReal)
       }
       const status = await lstat(sourceName)
       if (status.isSymbolicLink() || !status.isFile()) {
@@ -580,6 +930,24 @@ async function AdmitSourceFiles(
         )
       }
       realPaths.add(sourceReal)
+      if (snapshottedSource !== null) {
+        const snapshotText = CanonicalWorkspaceSourceText(snapshottedSource)
+        if (sourceFile.text !== snapshotText) {
+          throw Admission(
+            "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+            stablePath,
+            "program AST text differs from the selected snapshot text"
+          )
+        }
+        const stagedBytes = new Uint8Array(await readFile(sourceName))
+        if (!BytesEqual(stagedBytes, snapshottedSource.Bytes)) {
+          throw Admission(
+            "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+            stablePath,
+            "program source bytes differ from the selected snapshot byte"
+          )
+        }
+      }
     } catch (error) {
       if (error instanceof ProjectSessionAdmissionError) throw error
       if (ErrorCode(error) === "ENOENT") {
@@ -591,13 +959,13 @@ async function AdmitSourceFiles(
       }
       throw error
     }
-    sources.push(sourceFile)
+    if (matchingRoot.Prefix === selected.ProjectPrefix) sources.push(sourceFile)
   }
 
   if (sources.length === 0) {
     throw Admission(
       "PROJECT_SESSION_SOURCE_ZERO",
-      `${projectPrefix}/src`,
+      `${selected.ProjectPrefix}/src`,
       "project contains no admitted local package source"
     )
   }
@@ -607,25 +975,25 @@ async function AdmitSourceFiles(
 async function AdmitProject(
   snapshot: Snapshot,
   staged: StagedProject,
-  projectPrefix: string
+  selected: SelectedProjectInput
 ): Promise<AdmittedProject> {
   const projects = snapshot.getProjects()
   if (projects.length !== 1) {
     throw Admission(
       "PROJECT_SESSION_PROJECT_COUNT",
-      `${projectPrefix}/tsconfig.json`,
+      `${selected.ProjectPrefix}/tsconfig.json`,
       "TypeScript worker must return exactly one project"
     )
   }
   const project = projects[0] as Project
-  await RequireConfigIdentity(project, staged.CanonicalConfig, projectPrefix)
-  const sourceFiles = await AdmitSourceFiles(project, staged.StagedRoot, projectPrefix)
+  await RequireConfigIdentity(project, staged.CanonicalConfig, selected.ProjectPrefix)
+  const sourceFiles = await AdmitSourceFiles(project, staged.StagedRoot, selected)
   return { Project: project, SourceFiles: sourceFiles }
 }
 
 async function RunProjectSession<T>(
   snapshot: InputSnapshot,
-  projectPrefix: string,
+  select: (snapshot: InputSnapshot) => SelectedProjectInput,
   use: (session: ProjectSession) => Promise<T>,
   operations: ProjectSessionOperations
 ): Promise<T> {
@@ -638,11 +1006,12 @@ async function RunProjectSession<T>(
   let primary: unknown
 
   try {
-    const selected = SelectProjectInput(snapshot, projectPrefix)
+    const selected = select(snapshot)
     const staged = await AcquireStagedProject(selected, operations, acquisition)
     api = new API({ cwd: staged.StagedRoot })
     workerSnapshot = await operations.UpdateSnapshot(api, staged.CanonicalConfig)
-    const admitted = await AdmitProject(workerSnapshot, staged, selected.ProjectPrefix)
+    await RequireSelectedFileSeals(staged.SelectedFileSeals)
+    const admitted = await AdmitProject(workerSnapshot, staged, selected)
     value = await use({
       Project: admitted.Project,
       SourceFiles: admitted.SourceFiles,
@@ -716,7 +1085,26 @@ export async function WithProjectSessionWithOperations<T>(
   use: (session: ProjectSession) => Promise<T>,
   operations: ProjectSessionOperations
 ): Promise<T> {
-  return RunProjectSession(snapshot, projectPrefix, use, operations)
+  return RunProjectSession(
+    snapshot,
+    (input) => SelectProjectInput(input, projectPrefix),
+    use,
+    operations
+  )
+}
+
+export async function WithWorkspaceProjectSessionWithOperations<T>(
+  snapshot: InputSnapshot,
+  authority: WorkspaceProjectAuthority,
+  use: (session: ProjectSession) => Promise<T>,
+  operations: ProjectSessionOperations
+): Promise<T> {
+  return RunProjectSession(
+    snapshot,
+    (input) => SelectWorkspaceProjectInput(input, authority),
+    use,
+    operations
+  )
 }
 
 export async function AnalyzeProjectSession(
@@ -743,13 +1131,24 @@ interface MappedDiagnosticPath {
 interface DiagnosticReplacement {
   readonly From: string
   readonly To: string
+  readonly Escaped: boolean
 }
 
 interface DiagnosticContext {
   readonly StagedRoot: string
-  readonly ProjectRoot: string
+  readonly SelectedRoots: readonly DiagnosticSelectedRoot[]
   readonly ProjectPrefix: string
   readonly Replacements: readonly DiagnosticReplacement[]
+}
+
+interface NormalizedDiagnosticText {
+  readonly Text: string
+  readonly Escaped: boolean
+}
+
+interface DiagnosticSelectedRoot {
+  readonly Prefix: string
+  readonly Root: string
 }
 
 function NormalizeDiagnosticSeparators(value: string): string {
@@ -759,15 +1158,16 @@ function NormalizeDiagnosticSeparators(value: string): string {
 function MapDiagnosticFileName(
   fileName: string | undefined,
   stagedRoot: string,
-  projectRoot: string,
+  selectedRoots: readonly DiagnosticSelectedRoot[],
   projectPrefix: string
 ): MappedDiagnosticPath {
   if (fileName === undefined) return { Path: projectPrefix, Escaped: false }
+  const matchingRoots = selectedRoots.filter((selected) => IsInside(selected.Root, fileName))
   if (
     !isAbsolute(fileName)
     || (sep === "/" && fileName.includes("\\"))
     || NormalizeDiagnosticSeparators(normalize(fileName)) !== NormalizeDiagnosticSeparators(fileName)
-    || !IsInside(projectRoot, fileName)
+    || matchingRoots.length !== 1
   ) return { Path: projectPrefix, Escaped: true }
   const mapped = relative(stagedRoot, fileName).split(sep).join("/")
   return { Path: mapped.length === 0 ? projectPrefix : mapped, Escaped: false }
@@ -785,21 +1185,36 @@ function VisitDiagnosticGraph(
 async function CreateDiagnosticContext(
   stagedRoot: string,
   projectPrefix: string,
+  selectedPrefixes: readonly string[],
   families: readonly DiagnosticFamily[]
 ): Promise<DiagnosticContext> {
   const stagedRealRoot = await realpath(stagedRoot)
-  const projectRoot = join(stagedRoot, ...projectPrefix.split("/"))
-  const replacementsBySource = new Map<string, string>()
-  function AddReplacement(source: string, target: string): void {
+  const selectedRoots = selectedPrefixes.map((Prefix) => ({
+    Prefix,
+    Root: join(stagedRoot, ...Prefix.split("/"))
+  }))
+  const replacementsBySource = new Map<string, DiagnosticReplacement>()
+  function AddReplacement(source: string, target: string, escaped: boolean): void {
     const normalizedSource = NormalizeDiagnosticSeparators(source)
     const existing = replacementsBySource.get(normalizedSource)
-    if (existing !== undefined && existing !== target) {
+    if (
+      existing !== undefined
+      && (existing.To !== target || existing.Escaped !== escaped)
+    ) {
       throw new Error("diagnostic path has conflicting stable replacements")
     }
-    replacementsBySource.set(normalizedSource, target)
+    replacementsBySource.set(normalizedSource, {
+      From: normalizedSource,
+      To: target,
+      Escaped: escaped
+    })
   }
-  AddReplacement(stagedRoot, projectPrefix)
-  AddReplacement(stagedRealRoot, projectPrefix)
+  AddReplacement(stagedRoot, projectPrefix, true)
+  AddReplacement(stagedRealRoot, projectPrefix, true)
+  for (const selected of selectedRoots) {
+    AddReplacement(selected.Root, selected.Prefix, false)
+    AddReplacement(await realpath(selected.Root), selected.Prefix, false)
+  }
   for (const family of families) {
     for (const diagnostic of family.Diagnostics) {
       VisitDiagnosticGraph(diagnostic, (node) => {
@@ -807,26 +1222,115 @@ async function CreateDiagnosticContext(
         const mapped = MapDiagnosticFileName(
           node.fileName,
           stagedRoot,
-          projectRoot,
+          selectedRoots,
           projectPrefix
         )
-        AddReplacement(node.fileName, mapped.Path)
+        AddReplacement(node.fileName, mapped.Path, mapped.Escaped)
       })
     }
   }
-  const replacements = [...replacementsBySource].map(([From, To]) => ({ From, To }))
+  const replacements = [...replacementsBySource.values()]
     .sort((left, right) => (
       right.From.length - left.From.length || CompareCodeUnits(left.From, right.From)
     ))
-  return { StagedRoot: stagedRoot, ProjectRoot: projectRoot, ProjectPrefix: projectPrefix, Replacements: replacements }
+  return { StagedRoot: stagedRoot, SelectedRoots: selectedRoots, ProjectPrefix: projectPrefix, Replacements: replacements }
 }
 
-function NormalizeDiagnosticText(value: string, context: DiagnosticContext): string {
-  let stable = NormalizeDiagnosticSeparators(value).replaceAll("\r\n", "\n").replaceAll("\r", "\n")
-  for (const replacement of context.Replacements) {
-    stable = stable.replaceAll(replacement.From, replacement.To)
+function NormalizeDiagnosticText(
+  value: string,
+  context: DiagnosticContext
+): NormalizedDiagnosticText {
+  let stable = value.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
+  let escaped = false
+  function RedactAbsolutePath(value: string): string {
+    let candidate = value
+    let suffix = ""
+    while (candidate.endsWith(".")) {
+      candidate = candidate.slice(0, -1)
+      suffix += "."
+    }
+    const normalizedCandidate = NormalizeDiagnosticSeparators(candidate)
+    const mapped = MapDiagnosticFileName(
+      normalizedCandidate,
+      context.StagedRoot,
+      context.SelectedRoots,
+      context.ProjectPrefix
+    )
+    for (const replacement of context.Replacements) {
+      if (
+        normalizedCandidate !== replacement.From
+        && !normalizedCandidate.startsWith(`${replacement.From}/`)
+      ) continue
+      if (replacement.Escaped || mapped.Escaped) {
+        escaped = true
+        return `${context.ProjectPrefix}${suffix}`
+      }
+      return `${mapped.Path}${suffix}`
+    }
+    if (mapped.Escaped) escaped = true
+    return `${mapped.Path}${suffix}`
   }
-  return stable
+  function RedactPathText(value: string): string {
+    let redacted = value
+    const fileUrls = [...redacted.matchAll(
+      /(^|[^A-Za-z0-9_\/])(file:\/\/[^\s"'`<>()\[\]{},;!?]+)/gim
+    )]
+    for (const match of fileUrls) {
+      const prefix = match[1] as string
+      escaped = true
+      redacted = redacted.replaceAll(match[0], `${prefix}file:///${context.ProjectPrefix}`)
+    }
+    const quotedWindowsPaths = [...redacted.matchAll(
+      /(["'`])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^"'`\r\n]+)\1/g
+    )]
+    for (const match of quotedWindowsPaths) {
+      const quote = match[1] as string
+      const path = match[2] as string
+      redacted = redacted.replaceAll(match[0], `${quote}${RedactAbsolutePath(path)}${quote}`)
+    }
+    const unquotedWindowsPaths = [...redacted.matchAll(
+      /(^|[^A-Za-z0-9_\/\\])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^\s"'`<>()\[\]{},;!?]+)/gm
+    )]
+    for (const match of unquotedWindowsPaths) {
+      const prefix = match[1] as string
+      const path = match[2] as string
+      redacted = redacted.replaceAll(match[0], `${prefix}${RedactAbsolutePath(path)}`)
+    }
+    redacted = NormalizeDiagnosticSeparators(redacted)
+    const quotedPaths = [...redacted.matchAll(
+      /(["'`])((?:[A-Za-z]:\/|\/(?!\/))[^"'`\r\n]+)\1/g
+    )]
+    for (const match of quotedPaths) {
+      const quote = match[1] as string
+      const path = match[2] as string
+      redacted = redacted.replaceAll(match[0], `${quote}${RedactAbsolutePath(path)}${quote}`)
+    }
+    const unquotedPaths = [...redacted.matchAll(
+      /(^|[^A-Za-z0-9_.\/\\])((?:[A-Za-z]:\/|\/(?!\/))[^\s"'`<>()\[\]{},;!?]+)/gm
+    )]
+    for (const match of unquotedPaths) {
+      const prefix = match[1] as string
+      const path = match[2] as string
+      redacted = redacted.replaceAll(match[0], `${prefix}${RedactAbsolutePath(path)}`)
+    }
+    return redacted
+  }
+
+  const preservedUrls = [...stable.matchAll(
+    /(^|[^A-Za-z0-9_\/])(https?:\/\/[^\s"'`<>]+)|(^|[^A-Za-z0-9_:/])(\/\/[^\s"'`<>]+)/gim
+  )]
+  let text = ""
+  let cursor = 0
+  for (const match of preservedUrls) {
+    const prefix = (match[1] ?? match[3]) as string
+    const url = (match[2] ?? match[4]) as string
+    const start = (match.index as number) + prefix.length
+    text += RedactPathText(stable.slice(cursor, start))
+    text += url
+    cursor = start + url.length
+  }
+  text += RedactPathText(stable.slice(cursor))
+  return { Text: text, Escaped: escaped }
 }
 
 function DiagnosticEscapeIssue(projectPrefix: string): SessionIssue {
@@ -847,12 +1351,17 @@ function CollectDiagnosticMessage(
   const mapped = MapDiagnosticFileName(
     diagnostic.fileName,
     context.StagedRoot,
-    context.ProjectRoot,
+    context.SelectedRoots,
     context.ProjectPrefix
   )
   const text = NormalizeDiagnosticText(diagnostic.text, context)
-  segments.push(related && diagnostic.fileName !== undefined ? `${mapped.Path}: ${text}` : text)
+  segments.push(
+    related && diagnostic.fileName !== undefined
+      ? `${mapped.Path}: ${text.Text}`
+      : text.Text
+  )
   if (mapped.Escaped) escapeIssues.push(DiagnosticEscapeIssue(context.ProjectPrefix))
+  if (text.Escaped) escapeIssues.push(DiagnosticEscapeIssue(context.ProjectPrefix))
   for (const child of diagnostic.messageChain ?? []) {
     CollectDiagnosticMessage(child, false, context, segments, escapeIssues)
   }
@@ -875,7 +1384,7 @@ function DiagnosticIssues(
       Path: MapDiagnosticFileName(
         diagnostic.fileName,
         context.StagedRoot,
-        context.ProjectRoot,
+        context.SelectedRoots,
         context.ProjectPrefix
       ).Path,
       Message: segments.join("\n")
@@ -893,7 +1402,8 @@ function CompareSessionIssues(left: SessionIssue, right: SessionIssue): number {
 
 async function AnalyzeAdmittedProject(
   session: ProjectSession,
-  projectPrefix: string
+  projectPrefix: string,
+  selectedPrefixes: readonly string[]
 ): Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly SessionIssue[] }> {
   const program = session.Project.program
   const configFileParsing = await program.getConfigFileParsingDiagnostics()
@@ -910,7 +1420,12 @@ async function AnalyzeAdmittedProject(
     { Name: "BIND", Diagnostics: bindDiagnostics },
     { Name: "SEMANTIC", Diagnostics: semanticDiagnostics }
   ]
-  const context = await CreateDiagnosticContext(session.StagedRoot, projectPrefix, families)
+  const context = await CreateDiagnosticContext(
+    session.StagedRoot,
+    projectPrefix,
+    selectedPrefixes,
+    families
+  )
   const issues = families.flatMap((family) => DiagnosticIssues(family, context))
     .sort(CompareSessionIssues)
   return { SourceFilesChecked: session.SourceFiles.length, Issues: issues }
@@ -925,7 +1440,36 @@ export async function AnalyzeProjectSessionWithOperations(
     return await WithProjectSessionWithOperations(
       snapshot,
       projectPrefix,
-      (session) => AnalyzeAdmittedProject(session, projectPrefix),
+      (session) => AnalyzeAdmittedProject(session, projectPrefix, [projectPrefix]),
+      operations
+    )
+  } catch (error) {
+    if (error instanceof ProjectSessionAdmissionError) {
+      return { SourceFilesChecked: 0, Issues: [error.Issue] }
+    }
+    throw error
+  }
+}
+
+export async function AnalyzeWorkspaceProjectSessionWithOperations(
+  snapshot: InputSnapshot,
+  authority: WorkspaceProjectAuthority,
+  operations: ProjectSessionOperations
+): Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly SessionIssue[] }> {
+  try {
+    const admittedAuthority = AdmitWorkspaceAuthority(authority)
+    const selectedPrefixes = [
+      admittedAuthority.ProjectPrefix,
+      ...admittedAuthority.DependencyPrefixes
+    ]
+    return await WithWorkspaceProjectSessionWithOperations(
+      snapshot,
+      admittedAuthority,
+      (session) => AnalyzeAdmittedProject(
+        session,
+        admittedAuthority.ProjectPrefix,
+        selectedPrefixes
+      ),
       operations
     )
   } catch (error) {

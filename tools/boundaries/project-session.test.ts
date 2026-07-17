@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink
 import { tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve, win32 } from "node:path"
 import { isDeepStrictEqual } from "node:util"
-import { Program, type API, type Project, type Snapshot as TypeScriptSnapshot } from "typescript/unstable/async"
+import { Program, type API, type Diagnostic, type Project, type Snapshot as TypeScriptSnapshot } from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
 import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
 import { SnapshotInputs, type InputSnapshot, type SnapshotFile } from "../gates/result.ts"
@@ -60,6 +60,11 @@ interface TestProjectSessionOperations {
   readonly RemoveStaging: (path: string) => Promise<void>
 }
 
+interface TestWorkspaceProjectAuthority {
+  readonly ProjectPrefix: string
+  readonly DependencyPrefixes: readonly string[]
+}
+
 interface ProjectSessionModule extends Readonly<Record<string, unknown>> {
   readonly NodeProjectSessionOperations: (repositoryRoot?: string) => TestProjectSessionOperations
   readonly WithProjectSession: <T>(
@@ -81,6 +86,17 @@ interface ProjectSessionModule extends Readonly<Record<string, unknown>> {
   readonly AnalyzeProjectSession: (
     snapshot: InputSnapshot,
     projectPrefix: string
+  ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
+  readonly WithWorkspaceProjectSessionWithOperations: <T>(
+    snapshot: InputSnapshot,
+    authority: TestWorkspaceProjectAuthority,
+    use: (session: TestProjectSession) => Promise<T>,
+    operations: TestProjectSessionOperations
+  ) => Promise<T>
+  readonly AnalyzeWorkspaceProjectSessionWithOperations: (
+    snapshot: InputSnapshot,
+    authority: TestWorkspaceProjectAuthority,
+    operations: TestProjectSessionOperations
   ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
 }
 
@@ -483,6 +499,20 @@ function File(Path: string, utf8: string): SnapshotFile {
   return { Path, RealPath: `/snapshotted/${Path}`, Sha256: Sha256(Bytes), Bytes }
 }
 
+function BytesFile(Path: string, Bytes: Uint8Array): SnapshotFile {
+  return { Path, RealPath: `/snapshotted/${Path}`, Sha256: Sha256(Bytes), Bytes }
+}
+
+function ConcatenateBytes(...parts: readonly Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((length, part) => length + part.length, 0))
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.length
+  }
+  return result
+}
+
 function Snapshot(entries: readonly (readonly [string, string])[]): InputSnapshot {
   const Files = entries.map(([path, utf8]) => File(path, utf8))
   return {
@@ -733,6 +763,32 @@ async function LoadProjectSession(): Promise<ProjectSessionModule> {
   return value as ProjectSessionModule
 }
 
+async function WithInjectedProgramDiagnostics<T>(
+  create: () => readonly Diagnostic[],
+  use: () => Promise<T>
+): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(Program.prototype, "getProgramDiagnostics")
+  if (descriptor === undefined || typeof descriptor.value !== "function") {
+    throw new Error("missing real TypeScript Program.getProgramDiagnostics")
+  }
+  const original = descriptor.value as (
+    this: Program,
+    ...args: readonly unknown[]
+  ) => Promise<readonly Diagnostic[]>
+  Object.defineProperty(Program.prototype, "getProgramDiagnostics", {
+    ...descriptor,
+    value: async function(this: Program, ...args: readonly unknown[]): Promise<readonly Diagnostic[]> {
+      const actual = await Reflect.apply(original, this, args)
+      return [...actual, ...create()]
+    }
+  })
+  try {
+    return await use()
+  } finally {
+    Object.defineProperty(Program.prototype, "getProgramDiagnostics", descriptor)
+  }
+}
+
 async function LoadProjectSessionProbe(): Promise<ProjectSessionProbeModule> {
   const value: unknown = await import(`./project-session.${"probe"}.cli.ts`)
   if (!IsRecord(value)) throw new Error("project-session probe module must be an object")
@@ -889,6 +945,82 @@ function ValidProjectSnapshot(extra: readonly SnapshotFile[] = []): InputSnapsho
     File("project/src/index.ts", "export const value = 1\n"),
     ...extra
   ])
+}
+
+function WorkspaceConfig(
+  paths: Readonly<Record<string, readonly string[]>> = {},
+  rootShape: Readonly<Record<string, unknown>> = { include: ["src/**/*.ts"] }
+): string {
+  return `${JSON.stringify({
+    compilerOptions: {
+      strict: true,
+      noEmit: true,
+      target: "ES2022",
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      paths,
+      types: []
+    },
+    ...rootShape
+  }, null, 2)}\n`
+}
+
+function WorkspacePackage(
+  prefix: string,
+  name: string,
+  source: string,
+  config: string = WorkspaceConfig(),
+  extra: readonly SnapshotFile[] = []
+): readonly SnapshotFile[] {
+  return [
+    File(`${prefix}/package.json`, `${JSON.stringify({ name })}\n`),
+    File(`${prefix}/tsconfig.json`, config),
+    File(`${prefix}/src/index.ts`, source),
+    ...extra
+  ]
+}
+
+function ValidWorkspaceSnapshot(
+  overrides: {
+    readonly ASource?: string
+    readonly BSource?: string
+    readonly CSource?: string
+    readonly AConfig?: string
+    readonly Extra?: readonly SnapshotFile[]
+  } = {}
+): InputSnapshot {
+  return SnapshotFiles([
+    ...WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      overrides.ASource ?? 'import { b } from "@workspace/b"\nexport const a = b\n',
+      overrides.AConfig ?? WorkspaceConfig({
+        "@workspace/b": ["../b/src/index.ts"],
+        "@workspace/c": ["../c/src/index.ts"]
+      })
+    ),
+    ...WorkspacePackage(
+      "packages/b",
+      "@workspace/b",
+      overrides.BSource ?? 'import { c } from "@workspace/c"\nexport const b = c\n'
+    ),
+    ...WorkspacePackage(
+      "packages/c",
+      "@workspace/c",
+      overrides.CSource ?? "export const c = 1\n"
+    ),
+    ...WorkspacePackage(
+      "packages/d",
+      "@workspace/d",
+      "export const unrelated = true\n"
+    ),
+    ...(overrides.Extra ?? [])
+  ])
+}
+
+const ValidWorkspaceAuthority: TestWorkspaceProjectAuthority = {
+  ProjectPrefix: "packages/a",
+  DependencyPrefixes: ["packages/b", "packages/c"]
 }
 
 async function RepositoryFixture(prefix: string): Promise<string> {
@@ -1266,6 +1398,10 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
     expect(result).toEqual({
       SourceFilesChecked: 1,
       Issues: [{
+        Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
+        Path: "project",
+        Message: "TypeScript diagnostic file path is outside the staged project"
+      }, {
         Code: "TYPESCRIPT_SEMANTIC_2322",
         Path: "project/src/index.ts",
         Message: "Type '\"different\"' is not assignable to type '\"project\"'."
@@ -3732,9 +3868,1078 @@ describe("project-session production selector RED", () => {
       "WithProjectSession",
       "WithProjectSessionWithOperations",
       "AnalyzeProjectSession",
-      "AnalyzeProjectSessionWithOperations"
+      "AnalyzeProjectSessionWithOperations",
+      "WithWorkspaceProjectSessionWithOperations",
+      "AnalyzeWorkspaceProjectSessionWithOperations"
     ]) {
       expect(module[name]).toBeFunction()
     }
+  })
+})
+
+describe("Pre-kernel Task 7a workspace project authority RED", () => {
+  test("Task 7a rereview regression: rejects source BOM and detects both restored BOM worker inputs", async () => {
+    const module = await LoadProjectSession()
+    const sourceBytes = Encoder.encode("export const authority = 'canonical'\n")
+    const bomSourceBytes = ConcatenateBytes(new Uint8Array([0xef, 0xbb, 0xbf]), sourceBytes)
+    const expectedIssue = {
+      Code: "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+      Path: "packages/a/src/index.ts",
+      Message: expect.any(String)
+    }
+
+    async function AnalyzeBytes(
+      label: string,
+      snapshotBytes: Uint8Array,
+      workerBytes: Uint8Array | null
+    ): Promise<{
+      readonly Result: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }
+      readonly Calls: readonly string[]
+    }> {
+      const root = await RepositoryFixture(`likego-workspace-bom-${label}-`)
+      const base = module.NodeProjectSessionOperations(root)
+      const calls: string[] = []
+      const source = BytesFile("packages/a/src/index.ts", snapshotBytes)
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        SnapshotFiles([
+          File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+          File("packages/a/tsconfig.json", WorkspaceConfig()),
+          source
+        ]),
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        {
+          ...base,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            calls.push("update")
+            if (workerBytes === null) return base.UpdateSnapshot(api, canonicalTsconfig)
+            const stagedSource = join(dirname(canonicalTsconfig), "src/index.ts")
+            await Bun.write(stagedSource, workerBytes)
+            try {
+              return await base.UpdateSnapshot(api, canonicalTsconfig)
+            } finally {
+              await Bun.write(stagedSource, source.Bytes)
+            }
+          }
+        }
+      )
+      return { Result: result, Calls: calls }
+    }
+
+    const bomToPlain = await AnalyzeBytes("snapshot-bom-worker-plain", bomSourceBytes, sourceBytes)
+    const plainToBom = await AnalyzeBytes("snapshot-plain-worker-bom", sourceBytes, bomSourceBytes)
+    const unchangedBom = await AnalyzeBytes("unchanged-bom", bomSourceBytes, null)
+    const unchangedPlain = await AnalyzeBytes("unchanged-plain", sourceBytes, null)
+
+    expect([bomToPlain, plainToBom, unchangedBom, unchangedPlain]).toEqual([
+      { Result: { SourceFilesChecked: 0, Issues: [expectedIssue] }, Calls: [] },
+      { Result: { SourceFilesChecked: 0, Issues: [expectedIssue] }, Calls: ["update"] },
+      { Result: { SourceFilesChecked: 0, Issues: [expectedIssue] }, Calls: [] },
+      { Result: { SourceFilesChecked: 1, Issues: [] }, Calls: ["update"] }
+    ])
+
+    const legacyRoot = await RepositoryFixture("likego-project-legacy-bom-")
+    const legacy = await module.AnalyzeProjectSessionWithOperations(
+      SnapshotFiles([
+        File("project/tsconfig.json", WorkspaceConfig()),
+        BytesFile("project/src/index.ts", bomSourceBytes)
+      ]),
+      "project",
+      module.NodeProjectSessionOperations(legacyRoot)
+    )
+    expect(legacy).toEqual({ SourceFilesChecked: 1, Issues: [] })
+  })
+
+  test("Task 7a rereview regression: seals every selected input across the worker update", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-selected-input-seal-")
+    const base = module.NodeProjectSessionOperations(root)
+    const config = File("packages/a/tsconfig.json", WorkspaceConfig())
+    const calls: string[] = []
+    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      SnapshotFiles([
+        File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+        config,
+        File("packages/a/src/index.ts", "export const a = true\n")
+      ]),
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      {
+        ...base,
+        UpdateSnapshot: async (api, canonicalTsconfig) => {
+          calls.push("update")
+          await Bun.write(canonicalTsconfig, ConcatenateBytes(config.Bytes, Encoder.encode("\n")))
+          try {
+            return await base.UpdateSnapshot(api, canonicalTsconfig)
+          } finally {
+            await Bun.write(canonicalTsconfig, config.Bytes)
+          }
+        }
+      }
+    )
+
+    expect(result).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_STAGE_INVALID",
+        Path: "packages/a/tsconfig.json",
+        Message: expect.any(String)
+      }]
+    })
+    expect(calls).toEqual(["update"])
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+  })
+
+  test("Task 7a rereview regression: preserves only selected diagnostic replacements as non-escapes", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-replacement-scope-")
+    const base = module.NodeProjectSessionOperations(root)
+    let stagedRoot = ""
+    const result = await WithInjectedProgramDiagnostics(
+      () => [{
+        pos: 0,
+        end: 0,
+        code: 9902,
+        category: 1,
+        text: `target ${join(stagedRoot, "packages/a/src/index.ts")}`,
+        messageChain: [{
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `dependency ${join(stagedRoot, "packages/b/src/index.ts")}`
+        }, {
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `broad ${stagedRoot}`
+        }, {
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `parent ${stagedRoot}/packages/a/../d/src/secret-parent.ts`
+        }, {
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `dot ${stagedRoot}/packages/a/./src/secret-dot.ts`
+        }, {
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `duplicate ${stagedRoot}/packages/a//src/secret-duplicate.ts`
+        }, {
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `backslash ${stagedRoot}/packages/a\\..\\d\\src\\secret-backslash.ts`
+        }],
+        relatedInformation: [{
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `sibling ${join(stagedRoot, "packages/d/src/secret.ts")}`
+        }]
+      }],
+      () => module.AnalyzeWorkspaceProjectSessionWithOperations(
+        SnapshotFiles([
+          ...WorkspacePackage(
+            "packages/a",
+            "@workspace/a",
+            'import { b } from "@workspace/b"\nexport const a = b\n',
+            WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] })
+          ),
+          ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
+        ]),
+        { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
+        {
+          ...base,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
+            return base.UpdateSnapshot(api, canonicalTsconfig)
+          }
+        }
+      )
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"))
+      .toHaveLength(6)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9902")).toEqual({
+      Code: "TYPESCRIPT_PROGRAM_9902",
+      Path: "packages/a",
+      Message: [
+        "target packages/a/src/index.ts",
+        "dependency packages/b/src/index.ts",
+        "broad packages/a",
+        "parent packages/a",
+        "dot packages/a",
+        "duplicate packages/a",
+        "backslash packages/a",
+        "sibling packages/a"
+      ].join("\n")
+    })
+    const serialized = JSON.stringify(result)
+    expect(serialized).not.toContain(stagedRoot)
+    expect(serialized).not.toContain("packages/a/packages/d")
+    expect(serialized).not.toContain("secret.ts")
+  })
+
+  test("Task 7a rereview regression: redacts raw UNC paths through top, chain and related diagnostics", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-unc-")
+    const unc = "\\\\server\\share\\secret.ts"
+    const extended = "\\\\?\\C:\\secret.ts"
+    const device = "\\\\.\\C:\\device.ts"
+    const relatedUnc = "\\\\fileserver\\private\\related.ts"
+    const https = "https://safe.example/path.ts"
+    const protocolRelative = "//cdn.safe.example/path.ts"
+    const result = await WithInjectedProgramDiagnostics(
+      () => [{
+        pos: 0,
+        end: 0,
+        code: 9903,
+        category: 1,
+        text: `top "${unc}" ${https} ${protocolRelative} path=${unc} [${extended}]`,
+        messageChain: [{
+          pos: 0,
+          end: 0,
+          code: 9903,
+          category: 1,
+          text: `chain ${extended} ${device} ${https} {${unc}} :${device} ,${extended}`
+        }],
+        relatedInformation: [{
+          pos: 0,
+          end: 0,
+          code: 9903,
+          category: 1,
+          text: `related ${relatedUnc} ${protocolRelative} path=/private/tmp/related-posix.ts [/private/tmp/bracket-posix.ts]`
+        }]
+      }],
+      () => module.AnalyzeWorkspaceProjectSessionWithOperations(
+        SnapshotFiles(WorkspacePackage(
+          "packages/a",
+          "@workspace/a",
+          "export const a = true\n"
+        )),
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        module.NodeProjectSessionOperations(root)
+      )
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9903")?.Message).toBe([
+      `top "packages/a" ${https} ${protocolRelative} path=packages/a [packages/a]`,
+      `chain packages/a packages/a ${https} {packages/a} :packages/a ,packages/a`,
+      `related packages/a ${protocolRelative} path=packages/a [packages/a]`
+    ].join("\n"))
+    expect(result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"))
+      .toHaveLength(3)
+    const serialized = JSON.stringify(result)
+    for (const forbidden of ["server", "share", "secret.ts", "device.ts", "fileserver", "private", "tmp", "C:"]) {
+      expect(serialized).not.toContain(forbidden)
+    }
+    expect(serialized).toContain(https)
+    expect(serialized).toContain(protocolRelative)
+  })
+
+  test("Task 7a rereview regression: preserves complete URLs and relatives but redacts file URIs", async () => {
+    const module = await LoadProjectSession()
+    const snapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      "export const a = true\n"
+    ))
+
+    async function AnalyzeDiagnostic(label: string, code: number, text: string): Promise<{
+      readonly SourceFilesChecked: number
+      readonly Issues: readonly TestSessionIssue[]
+    }> {
+      const root = await RepositoryFixture(`likego-workspace-diagnostic-url-${label}-`)
+      return WithInjectedProgramDiagnostics(
+        () => [{ pos: 0, end: 0, code, category: 1, text }],
+        () => module.AnalyzeWorkspaceProjectSessionWithOperations(
+          snapshot,
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          module.NodeProjectSessionOperations(root)
+        )
+      )
+    }
+
+    const richUrls = [
+      "https://[::1]/path.ts",
+      "https://safe.example/?next=/docs/x",
+      "//[::1]/path.ts",
+      "//cdn.example/#/route",
+      "URL:https://[::1]/label-path.ts"
+    ].join(" ")
+    const urlsAndRelatives = await AnalyzeDiagnostic(
+      "preserved",
+      9904,
+      `urls ${richUrls} relatives ./relative.ts ../parent.ts`
+    )
+    const fileUris = [
+      "file:///private/tmp/file-uri-secret.ts",
+      "file://localhost/private/localhost-secret.ts",
+      "file://server/share/server-secret.ts",
+      "file:///C:/drive-secret.ts",
+      "URI:file:///private/tmp/label-secret.ts",
+      "path:file://server/share/path-label-secret.ts"
+    ]
+    const fileResult = await AnalyzeDiagnostic("file-uri", 9905, `files ${fileUris.join(" ")}`)
+    expect({ urlsAndRelatives, fileResult }).toEqual({
+      urlsAndRelatives: {
+        SourceFilesChecked: 1,
+        Issues: [{
+          Code: "TYPESCRIPT_PROGRAM_9904",
+          Path: "packages/a",
+          Message: `urls ${richUrls} relatives ./relative.ts ../parent.ts`
+        }]
+      },
+      fileResult: {
+        SourceFilesChecked: 1,
+        Issues: [{
+          Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
+          Path: "packages/a",
+          Message: "TypeScript diagnostic file path is outside the staged project"
+        }, {
+          Code: "TYPESCRIPT_PROGRAM_9905",
+          Path: "packages/a",
+          Message: "files file:///packages/a file:///packages/a file:///packages/a file:///packages/a URI:file:///packages/a path:file:///packages/a"
+        }]
+      }
+    })
+    expect(JSON.stringify(fileResult)).not.toContain("private")
+    for (const forbidden of ["file-uri-secret.ts", "localhost", "server", "drive-secret.ts", "label-secret.ts"]) {
+      expect(JSON.stringify(fileResult)).not.toContain(forbidden)
+    }
+  })
+
+  test("Task 7a rereview regression: validates authority prototypes and data descriptors before reads", async () => {
+    const module = await LoadProjectSession()
+    const snapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      "export const a = true\n"
+    ))
+    let getterReads = 0
+
+    function DataAuthority(prototype: object | null, dependencies: unknown): object {
+      const authority = Object.create(prototype) as object
+      Object.defineProperties(authority, {
+        ProjectPrefix: { value: "packages/a", enumerable: true },
+        DependencyPrefixes: { value: dependencies, enumerable: true }
+      })
+      return authority
+    }
+
+    const projectAccessor = Object.defineProperties({}, {
+      ProjectPrefix: {
+        enumerable: true,
+        get: () => { getterReads += 1; return "packages/a" }
+      },
+      DependencyPrefixes: { value: [], enumerable: true }
+    })
+    const dependenciesAccessor = Object.defineProperties({}, {
+      ProjectPrefix: { value: "packages/a", enumerable: true },
+      DependencyPrefixes: {
+        enumerable: true,
+        get: () => { getterReads += 1; return [] }
+      }
+    })
+    const customArray: unknown[] = []
+    Object.setPrototypeOf(customArray, Object.create(Array.prototype) as object)
+    const extraArray: unknown[] = []
+    Object.defineProperty(extraArray, "Extra", { value: true })
+    const symbolArray: unknown[] = []
+    Object.defineProperty(symbolArray, Symbol("extra"), { value: true })
+    const accessorArray: unknown[] = ["packages/b"]
+    Object.defineProperty(accessorArray, "0", {
+      enumerable: true,
+      configurable: true,
+      get: () => { getterReads += 1; return "packages/b" }
+    })
+    const invalidAuthorities = [
+      DataAuthority({ marker: true }, []),
+      DataAuthority(null, []),
+      projectAccessor,
+      dependenciesAccessor,
+      DataAuthority(Object.prototype, customArray),
+      DataAuthority(Object.prototype, extraArray),
+      DataAuthority(Object.prototype, symbolArray),
+      DataAuthority(Object.prototype, new Array(1)),
+      DataAuthority(Object.prototype, accessorArray)
+    ]
+    const observed: {
+      readonly Result: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }
+      readonly Calls: readonly string[]
+    }[] = []
+
+    for (const [index, authority] of invalidAuthorities.entries()) {
+      const root = await RepositoryFixture(`likego-workspace-authority-descriptor-${index}-`)
+      const base = module.NodeProjectSessionOperations(root)
+      const calls: string[] = []
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        authority as TestWorkspaceProjectAuthority,
+        {
+          ...base,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            calls.push("update")
+            return base.UpdateSnapshot(api, canonicalTsconfig)
+          }
+        }
+      )
+      observed.push({ Result: result, Calls: calls })
+    }
+
+    expect(observed).toEqual(invalidAuthorities.map(() => ({
+      Result: {
+        SourceFilesChecked: 0,
+        Issues: [{
+          Code: "PROJECT_SESSION_SCOPE_INVALID",
+          Path: "",
+          Message: expect.any(String)
+        }]
+      },
+      Calls: []
+    })))
+    expect(getterReads).toBe(0)
+
+    const frozenRoot = await RepositoryFixture("likego-workspace-authority-frozen-")
+    const frozenAuthority = Object.freeze({
+      ProjectPrefix: "packages/a",
+      DependencyPrefixes: Object.freeze([] as string[])
+    })
+    expect(await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      snapshot,
+      frozenAuthority,
+      module.NodeProjectSessionOperations(frozenRoot)
+    )).toEqual({ SourceFilesChecked: 1, Issues: [] })
+  })
+
+  test("Task 7a review regression: binds worker AST text to fatal UTF-8 snapshot text", async () => {
+    const module = await LoadProjectSession()
+    const expectedIssue = {
+      Code: "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+      Path: "packages/a/src/index.ts",
+      Message: expect.any(String)
+    }
+    const results: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }[] = []
+
+    const changedRoot = await RepositoryFixture("likego-workspace-project-ast-snapshot-")
+    const changedBase = module.NodeProjectSessionOperations(changedRoot)
+    const changedSource = File("packages/a/src/index.ts", "export const authority = 'snapshot'\n")
+    const changedSnapshot = SnapshotFiles([
+      File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+      File("packages/a/tsconfig.json", WorkspaceConfig()),
+      changedSource
+    ])
+    results.push(await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      changedSnapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      {
+        ...changedBase,
+        UpdateSnapshot: async (api, canonicalTsconfig) => {
+          const stagedSource = join(dirname(canonicalTsconfig), "src/index.ts")
+          await Bun.write(stagedSource, "export const authority = 'worker'\n")
+          try {
+            return await changedBase.UpdateSnapshot(api, canonicalTsconfig)
+          } finally {
+            await Bun.write(stagedSource, changedSource.Bytes)
+          }
+        }
+      }
+    ))
+
+    const invalidRoot = await RepositoryFixture("likego-workspace-project-invalid-utf8-")
+    const invalidSource = BytesFile(
+      "packages/a/src/index.ts",
+      new Uint8Array([0x65, 0x78, 0x70, 0x6f, 0x72, 0x74, 0x20, 0xc3, 0x28])
+    )
+    results.push(await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      SnapshotFiles([
+        File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+        File("packages/a/tsconfig.json", WorkspaceConfig()),
+        invalidSource
+      ]),
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.NodeProjectSessionOperations(invalidRoot)
+    ))
+
+    expect(results).toEqual([
+      { SourceFilesChecked: 0, Issues: [expectedIssue] },
+      { SourceFilesChecked: 0, Issues: [expectedIssue] }
+    ])
+  })
+
+  test("Task 7a review regression: preserves legacy src/node_modules admission only", async () => {
+    const module = await LoadProjectSession()
+    const source = "export const local = true\n"
+    const legacyRoot = await RepositoryFixture("likego-project-legacy-local-node-modules-")
+    const legacy = await module.AnalyzeProjectSessionWithOperations(
+      SnapshotFiles([
+        File(
+          "project/tsconfig.json",
+          WorkspaceConfig({}, { files: ["src/node_modules/local.ts"] })
+        ),
+        File("project/src/node_modules/local.ts", source)
+      ]),
+      "project",
+      module.NodeProjectSessionOperations(legacyRoot)
+    )
+    expect(legacy).toEqual({ SourceFilesChecked: 1, Issues: [] })
+
+    const workspaceRoot = await RepositoryFixture("likego-workspace-local-node-modules-")
+    const workspace = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      SnapshotFiles([
+        File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+        File(
+          "packages/a/tsconfig.json",
+          WorkspaceConfig({}, { files: ["src/node_modules/local.ts"] })
+        ),
+        File("packages/a/src/node_modules/local.ts", source)
+      ]),
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.NodeProjectSessionOperations(workspaceRoot)
+    )
+    expect(workspace).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
+        Path: "packages/a/src/node_modules/local.ts",
+        Message: expect.any(String)
+      }]
+    })
+  })
+
+  test("Task 7a review regression: redacts path escapes in real fileless TS6053 diagnostics", async () => {
+    const module = await LoadProjectSession()
+    const repositoryRoot = await RepositoryFixture("likego-workspace-fileless-diagnostic-repository-")
+    const hostRoot = await RepositoryFixture("likego-workspace-fileless-diagnostic-host-")
+    const missingHostPath = join(hostRoot, "private", "missing.ts")
+    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      SnapshotFiles(WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        "export const a = true\n",
+        WorkspaceConfig({}, { files: ["src/index.ts", missingHostPath] })
+      )),
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.NodeProjectSessionOperations(repositoryRoot)
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    const missingIssue = result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_6053")
+    expect(missingIssue).toBeDefined()
+    expect(missingIssue?.Path).toBe("packages/a")
+    expect(result.Issues.map((issue) => issue.Code))
+      .toContain("PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    const serialized = JSON.stringify(result)
+    for (const forbidden of [
+      missingHostPath,
+      hostRoot,
+      repositoryRoot,
+      RepositoryRoot,
+      ".artifacts/gates/work"
+    ]) expect(serialized).not.toContain(forbidden)
+  })
+
+  test("Task 7a review regression: rejects extra workspace authority runtime keys", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-extra-authority-key-")
+    const calls: string[] = []
+    const authority = {
+      ProjectPrefix: "packages/a",
+      DependencyPrefixes: [],
+      Unexpected: true
+    }
+
+    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      ValidWorkspaceSnapshot(),
+      authority,
+      ForbiddenOperations(root, calls)
+    )
+
+    expect(result).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_SCOPE_INVALID",
+        Path: "",
+        Message: expect.any(String)
+      }]
+    })
+    expect(calls).toEqual([])
+    await ExpectEnoent(join(root, ".artifacts"))
+  })
+
+  test("stages exactly the selected transitive closure and returns only sorted target sources", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-valid-")
+    const base = module.NodeProjectSessionOperations(root)
+    const openedConfigs: string[] = []
+    const operations: TestProjectSessionOperations = {
+      ...base,
+      UpdateSnapshot: async (api, canonicalTsconfig) => {
+        openedConfigs.push(canonicalTsconfig)
+        return base.UpdateSnapshot(api, canonicalTsconfig)
+      }
+    }
+    const snapshot = ValidWorkspaceSnapshot()
+
+    const callbackValue = await module.WithWorkspaceProjectSessionWithOperations(
+      snapshot,
+      ValidWorkspaceAuthority,
+      async (session) => {
+        expect(session.SourceFiles.map((file) => relative(session.StagedRoot, file.fileName))).toEqual([
+          "packages/a/src/index.ts"
+        ])
+        const sourceNames = (await session.Project.program.getSourceFileNames())
+          .map((path) => relative(session.StagedRoot, path).split("\\").join("/"))
+        expect(sourceNames).toContain("packages/a/src/index.ts")
+        expect(sourceNames).toContain("packages/b/src/index.ts")
+        expect(sourceNames).toContain("packages/c/src/index.ts")
+        expect(sourceNames).not.toContain("packages/d/src/index.ts")
+        await ExpectEnoent(join(session.StagedRoot, "packages/d"))
+        return "workspace-callback"
+      },
+      operations
+    )
+
+    expect(callbackValue).toBe("workspace-callback")
+    expect(openedConfigs).toHaveLength(1)
+    expect(openedConfigs[0]).toEndWith("/packages/a/tsconfig.json")
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+
+    const analyzed = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      snapshot,
+      ValidWorkspaceAuthority,
+      operations
+    )
+    expect(analyzed).toEqual({ SourceFilesChecked: 1, Issues: [] })
+    expect(openedConfigs).toHaveLength(2)
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+  })
+
+  test("preserves isolated selection semantics for the legacy API", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-legacy-")
+    const snapshot = ValidWorkspaceSnapshot()
+
+    const result = await module.AnalyzeProjectSessionWithOperations(
+      snapshot,
+      "packages/a",
+      module.NodeProjectSessionOperations(root)
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.map((issue) => issue.Code)).toContain("TYPESCRIPT_SEMANTIC_2307")
+    expect(result.Issues.some((issue) => issue.Path === "packages/a/src/index.ts")).toBe(true)
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+  })
+
+  test("rejects malformed, unsafe, unordered, duplicate, self and overlapping authority before staging", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-scope-")
+    const calls: string[] = []
+    const operations = ForbiddenOperations(root, calls)
+    const authorities: readonly unknown[] = [
+      null,
+      { ProjectPrefix: "../packages/a", DependencyPrefixes: [] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: "packages/b" },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [17] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/c", "packages/b"] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b", "packages/b"] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/a"] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b", "packages/b/nested"] },
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b", "packages\\c"] }
+    ]
+
+    for (const authority of authorities) {
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        ValidWorkspaceSnapshot(),
+        authority as TestWorkspaceProjectAuthority,
+        operations
+      )
+      expect(result.SourceFilesChecked).toBe(0)
+      expect(result.Issues).toEqual([{
+        Code: "PROJECT_SESSION_SCOPE_INVALID",
+        Path: expect.any(String),
+        Message: expect.any(String)
+      }])
+    }
+    expect(calls).toEqual([])
+    await ExpectEnoent(join(root, ".artifacts"))
+  })
+
+  test("requires each selected package manifest, config and source snapshot byte", async () => {
+    const module = await LoadProjectSession()
+    const complete = SnapshotFiles([
+      ...WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        'import { b } from "@workspace/b"\nexport const a = b\n',
+        WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] })
+      ),
+      ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
+    ])
+    const authority = {
+      ProjectPrefix: "packages/a",
+      DependencyPrefixes: ["packages/b"]
+    }
+    const missingCases = [
+      { removed: "packages/a/package.json", Path: "packages/a/package.json" },
+      { removed: "packages/a/tsconfig.json", Path: "packages/a/tsconfig.json" },
+      { removed: "packages/a/src/index.ts", Path: "packages/a/src" },
+      { removed: "packages/b/package.json", Path: "packages/b/package.json" },
+      { removed: "packages/b/tsconfig.json", Path: "packages/b/tsconfig.json" },
+      { removed: "packages/b/src/index.ts", Path: "packages/b/src" }
+    ] as const
+
+    for (const item of missingCases) {
+      const root = await RepositoryFixture(`likego-workspace-project-missing-${basename(item.removed)}-`)
+      const calls: string[] = []
+      const snapshot = SnapshotFiles(complete.Files.filter((file) => file.Path !== item.removed))
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        authority,
+        ForbiddenOperations(root, calls)
+      )
+      expect(result).toEqual({
+        SourceFilesChecked: 0,
+        Issues: [{
+          Code: "PROJECT_SESSION_INPUT_MISSING",
+          Path: item.Path,
+          Message: expect.any(String)
+        }]
+      })
+      expect(calls).toEqual([])
+      await ExpectEnoent(join(root, ".artifacts"))
+    }
+  })
+
+  test("fails closed on unselected, unsnapshotted, changed and node_modules program sources", async () => {
+    const module = await LoadProjectSession()
+
+    const unselectedRoot = await RepositoryFixture("likego-workspace-project-unselected-")
+    const unselectedBase = module.NodeProjectSessionOperations(unselectedRoot)
+    const unselectedSnapshot = ValidWorkspaceSnapshot({
+      ASource: 'import { unrelated } from "@workspace/d"\nexport const a = unrelated\n',
+      AConfig: WorkspaceConfig({ "@workspace/d": ["../d/src/index.ts"] })
+    })
+    const unselected = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      unselectedSnapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      {
+        ...unselectedBase,
+        UpdateSnapshot: async (api, canonicalTsconfig) => {
+          const stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
+          await Bun.write(
+            join(stagedRoot, "packages/d/src/index.ts"),
+            "export const unrelated = true\n"
+          )
+          return unselectedBase.UpdateSnapshot(api, canonicalTsconfig)
+        }
+      }
+    )
+    expect(unselected).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_SOURCE_UNAUTHORIZED",
+        Path: "packages/d/src/index.ts",
+        Message: expect.any(String)
+      }]
+    })
+
+    for (const kind of ["created", "changed"] as const) {
+      const root = await RepositoryFixture(`likego-workspace-project-not-snapshot-${kind}-`)
+      const base = module.NodeProjectSessionOperations(root)
+      const snapshot = SnapshotFiles(WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        "export const a = 1\n"
+      ))
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        {
+          ...base,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            const sourceRoot = join(dirname(canonicalTsconfig), "src")
+            if (kind === "created") {
+              await Bun.write(join(sourceRoot, "created.ts"), "export const created = true\n")
+              return base.UpdateSnapshot(api, canonicalTsconfig)
+            }
+            const workerSnapshot = await base.UpdateSnapshot(api, canonicalTsconfig)
+            await Bun.write(join(sourceRoot, "index.ts"), "export const a = 2\n")
+            return workerSnapshot
+          }
+        }
+      )
+      expect(result.SourceFilesChecked).toBe(0)
+      expect(result.Issues).toEqual([{
+        Code: "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+        Path: `packages/a/src/${kind === "created" ? "created.ts" : "index.ts"}`,
+        Message: expect.any(String)
+      }])
+    }
+
+    const externalRoot = await RepositoryFixture("likego-workspace-project-external-")
+    const externalSnapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      'import { dependency } from "package-dependency"\nexport const a = dependency\n',
+      WorkspaceConfig(),
+      [
+        File(
+          "packages/a/node_modules/package-dependency/package.json",
+          '{"name":"package-dependency","types":"index.d.ts"}\n'
+        ),
+        File(
+          "packages/a/node_modules/package-dependency/index.d.ts",
+          "export declare const dependency: number\n"
+        )
+      ]
+    ))
+    const external = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      externalSnapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.NodeProjectSessionOperations(externalRoot)
+    )
+    expect(external).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
+        Path: "packages/a/node_modules/package-dependency/index.d.ts",
+        Message: expect.any(String)
+      }]
+    })
+  })
+
+  test("requires at least one admitted target source even when a dependency is admitted", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-target-zero-")
+    const snapshot = SnapshotFiles([
+      ...WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        "export const unused = true\n",
+        WorkspaceConfig(
+          { "@workspace/b": ["../b/src/index.ts"] },
+          { files: ["../b/src/index.ts"] }
+        )
+      ),
+      ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
+    ])
+
+    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      snapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
+      module.NodeProjectSessionOperations(root)
+    )
+
+    expect(result).toEqual({
+      SourceFilesChecked: 0,
+      Issues: [{
+        Code: "PROJECT_SESSION_SOURCE_ZERO",
+        Path: "packages/a/src",
+        Message: expect.any(String)
+      }]
+    })
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+  })
+
+  test("maps dependency syntactic, semantic and related diagnostic paths without host leakage", async () => {
+    const module = await LoadProjectSession()
+    for (const diagnostic of [
+      { family: "TYPESCRIPT_SYNTACTIC_", source: "export const broken = ;\n" },
+      { family: "TYPESCRIPT_SEMANTIC_", source: "export const broken: string = 1\n" }
+    ] as const) {
+      const root = await RepositoryFixture(`likego-workspace-project-diagnostic-${diagnostic.family}-`)
+      const snapshot = SnapshotFiles([
+        ...WorkspacePackage(
+          "packages/a",
+          "@workspace/a",
+          'import { broken } from "@workspace/b"\nexport const a = broken\n',
+          WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] })
+        ),
+        ...WorkspacePackage("packages/b", "@workspace/b", diagnostic.source)
+      ])
+      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
+        module.NodeProjectSessionOperations(root)
+      )
+      const familyIssues = result.Issues.filter((issue) => issue.Code.startsWith(diagnostic.family))
+      expect(result.SourceFilesChecked).toBe(1)
+      expect(familyIssues.length).toBeGreaterThan(0)
+      expect(familyIssues.every((issue) => issue.Path === "packages/b/src/index.ts")).toBe(true)
+      const serialized = JSON.stringify(result)
+      expect(serialized).not.toContain(root)
+      expect(serialized).not.toContain(RepositoryRoot)
+      expect(serialized).not.toContain(".artifacts/gates/work")
+    }
+
+    const relatedRoot = await RepositoryFixture("likego-workspace-project-diagnostic-related-")
+    const relatedSnapshot = ValidWorkspaceSnapshot({
+      ASource: [
+        'import "@workspace/b"',
+        'import "@workspace/c"',
+        "export const a = true"
+      ].join("\n"),
+      BSource: "declare global { interface WorkspaceMerge { value: string } }\nexport {}\n",
+      CSource: "declare global { interface WorkspaceMerge { value: number } }\nexport {}\n"
+    })
+    const related = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      relatedSnapshot,
+      ValidWorkspaceAuthority,
+      module.NodeProjectSessionOperations(relatedRoot)
+    )
+    const relatedIssue = related.Issues.find((issue) => issue.Code === "TYPESCRIPT_SEMANTIC_2717")
+    expect(relatedIssue).toBeDefined()
+    expect(relatedIssue?.Path).toMatch(/^packages\/[bc]\/src\/index\.ts$/)
+    expect(relatedIssue?.Message).toMatch(/packages\/[bc]\/src\/index\.ts/)
+    expect(JSON.stringify(related)).not.toContain(relatedRoot)
+  })
+
+  test("keeps diagnostic escapes stable for workspace sessions", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-project-diagnostic-escape-")
+    const snapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      "export {}\ndeclare global { type Array<T> = T }\n"
+    ))
+
+    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      snapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.NodeProjectSessionOperations(root)
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.map((issue) => issue.Code))
+      .toContain("PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    const serialized = JSON.stringify(result)
+    expect(serialized).not.toContain(root)
+    expect(serialized).not.toContain(RepositoryRoot)
+    expect(serialized).not.toContain("node_modules")
+  })
+
+  test("binds workspace sessions to the explicit repository root despite later cwd changes", async () => {
+    const module = await LoadProjectSession()
+    const container = await RepositoryFixture("likego-workspace-project-root-")
+    const root = join(container, "repository")
+    const later = join(container, "later")
+    await mkdir(root)
+    await mkdir(later)
+    const operations = module.NodeProjectSessionOperations(root)
+    const snapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      "export const a = 1\n"
+    ))
+    const previousCwd = process.cwd()
+    let stagedRoot = ""
+    try {
+      process.chdir(later)
+      await module.WithWorkspaceProjectSessionWithOperations(
+        snapshot,
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        async (session) => { stagedRoot = session.StagedRoot },
+        operations
+      )
+    } finally {
+      process.chdir(previousCwd)
+    }
+
+    expect(stagedRoot.startsWith(`${await realpath(root)}/`)).toBe(true)
+    await ExpectEnoent(join(later, ".artifacts"))
+    expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
+  })
+
+  test("settles workspace worker, callback and cleanup failures through the shared lifecycle", async () => {
+    const module = await LoadProjectSession()
+    const snapshot = SnapshotFiles(WorkspacePackage(
+      "packages/a",
+      "@workspace/a",
+      "export const a = 1\n"
+    ))
+    const authority = { ProjectPrefix: "packages/a", DependencyPrefixes: [] }
+
+    const callbackRoot = await RepositoryFixture("likego-workspace-project-cleanup-")
+    const callbackBase = module.NodeProjectSessionOperations(callbackRoot)
+    const callbackPrimary = new Error("workspace callback primary")
+    const snapshotFault = new Error("workspace snapshot cleanup")
+    const apiFault = new Error("workspace api cleanup")
+    const removeFault = new Error("workspace remove cleanup")
+    const cleanupOrder: string[] = []
+    let callbackCaught: unknown
+    try {
+      await module.WithWorkspaceProjectSessionWithOperations(
+        snapshot,
+        authority,
+        async () => { throw callbackPrimary },
+        {
+          RepositoryRoot: callbackBase.RepositoryRoot,
+          UpdateSnapshot: callbackBase.UpdateSnapshot,
+          DisposeSnapshot: async (workerSnapshot) => {
+            cleanupOrder.push("snapshot.dispose")
+            await callbackBase.DisposeSnapshot(workerSnapshot)
+            throw snapshotFault
+          },
+          CloseAPI: async (api) => {
+            cleanupOrder.push("api.close")
+            await callbackBase.CloseAPI(api)
+            throw apiFault
+          },
+          RemoveStaging: async (path) => {
+            cleanupOrder.push("remove-staging")
+            await callbackBase.RemoveStaging(path)
+            throw removeFault
+          }
+        }
+      )
+    } catch (error) {
+      callbackCaught = error
+    }
+    expect(callbackCaught).toBeInstanceOf(AggregateError)
+    expect((callbackCaught as AggregateError).errors).toEqual([
+      callbackPrimary,
+      snapshotFault,
+      apiFault,
+      removeFault
+    ])
+    expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
+    expect(await readdir(join(callbackRoot, ".artifacts/gates/work"))).toEqual([])
+
+    const workerRoot = await RepositoryFixture("likego-workspace-project-worker-")
+    const workerBase = module.NodeProjectSessionOperations(workerRoot)
+    const workerPrimary = new Error("workspace worker primary")
+    const workerOrder: string[] = []
+    let workerCaught: unknown
+    try {
+      await module.WithWorkspaceProjectSessionWithOperations(
+        snapshot,
+        authority,
+        async () => { throw new Error("workspace callback must not run") },
+        {
+          ...CleanObservedOperations(workerBase, workerOrder),
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            await api.parseConfigFile(canonicalTsconfig)
+            throw workerPrimary
+          }
+        }
+      )
+    } catch (error) {
+      workerCaught = error
+    }
+    expect(workerCaught).toBe(workerPrimary)
+    expect(workerOrder).toEqual(["api.close", "remove-staging"])
+    expect(await readdir(join(workerRoot, ".artifacts/gates/work"))).toEqual([])
   })
 })

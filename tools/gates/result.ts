@@ -227,6 +227,9 @@ async function SnapshotInputsWithRoot(
       if (realPaths.has(inputRealPath)) {
         throw new Error(`duplicate input real path: ${canonical.Path}`)
       }
+      if (inputRealPath !== canonical.Absolute) {
+        throw new Error(`resolved input path differs from its canonical lexical path: ${canonical.Path}`)
+      }
       realPaths.add(inputRealPath)
 
       const inputStat = await stat(inputRealPath)
