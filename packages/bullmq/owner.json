@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/bullmq",
+  "resources": [
+    {
+      "id": "queue",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "application-owned"
+    },
+    {
+      "id": "worker",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "redis-connections",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

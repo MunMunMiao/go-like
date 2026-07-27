@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/store-file",
+  "resources": [
+    {
+      "id": "file-store-directory",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "node-file-lock",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

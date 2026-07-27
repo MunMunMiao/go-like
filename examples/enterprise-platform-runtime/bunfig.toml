@@ -1,0 +1,9 @@
+[test]
+timeout = 30000
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["../../packages/**", "test/**"]
+coverageReporter = ["text", "lcov"]
+
+[test.coverageThreshold]
+lines = 1.0
+functions = 1.0

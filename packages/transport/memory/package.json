@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/transport-memory",
+  "version": "0.0.1",
+  "description": "Portable process-local transport for LikeGo internal services.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "smoke:bun": "bun test/runtime/portable-runtime.ts",
+    "smoke:node": "tsx test/runtime/portable-runtime.ts",
+    "smoke:deno": "deno run --sloppy-imports --config ../../../deno.json test/runtime/portable-runtime.ts",
+    "smoke:package": "tsx test/smoke/package-smoke.ts"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/metadata": "0.0.1",
+    "@likego/transport": "0.0.1"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/registry-consul",
+  "resources": [
+    {
+      "id": "consul-registration",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "consul-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

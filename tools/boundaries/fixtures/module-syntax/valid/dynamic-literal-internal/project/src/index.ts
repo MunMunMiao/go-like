@@ -1,1 +1,1 @@
-export const load = () => import("./value.js")
+export const load = () => import("./value")

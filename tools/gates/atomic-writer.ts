@@ -117,7 +117,11 @@ function PathError(message: string): Error {
   return new Error(`GATE_RESULT_PATH_ERROR ${message}`)
 }
 
-function ThrowFailures(primaryThrown: boolean, primary: unknown, cleanup: readonly unknown[]): void {
+function ThrowFailures(
+  primaryThrown: boolean,
+  primary: unknown,
+  cleanup: readonly unknown[]
+): void {
   if (primaryThrown) {
     if (cleanup.length > 0) {
       throw new AggregateError([primary, ...cleanup], ErrorMessage(primary))
@@ -143,10 +147,10 @@ async function VerifyDirectoryIdentity(
     const currentRealPath = await realpath(path)
     const information = await stat(path)
     if (
-      !information.isDirectory()
-      || currentRealPath !== expected.RealPath
-      || information.dev !== expected.Device
-      || information.ino !== expected.Inode
+      !information.isDirectory() ||
+      currentRealPath !== expected.RealPath ||
+      information.dev !== expected.Device ||
+      information.ino !== expected.Inode
     ) {
       throw new Error("atomic result directory identity changed")
     }
@@ -170,10 +174,12 @@ function IsPathError(error: unknown): boolean {
 }
 
 function PlatformDirectoryDescriptorRoot(): string | null {
-  return new Map<string, string>([
-    ["darwin", "/dev/fd"],
-    ["linux", "/proc/self/fd"]
-  ]).get(process.platform) ?? null
+  return (
+    new Map<string, string>([
+      ["darwin", "/dev/fd"],
+      ["linux", "/proc/self/fd"]
+    ]).get(process.platform) ?? null
+  )
 }
 
 async function OpenDirectoryLease(
@@ -188,7 +194,9 @@ async function OpenDirectoryLease(
         await VerifyDirectoryIdentity(expected.Path, expected)
         return { ...expected }
       },
-      Close: async () => { closed = true }
+      Close: async () => {
+        closed = true
+      }
     }
   }
 
@@ -198,9 +206,9 @@ async function OpenDirectoryLease(
     const leaseHandle = handle
     const information = await leaseHandle.stat()
     if (
-      !information.isDirectory()
-      || information.dev !== expected.Device
-      || information.ino !== expected.Inode
+      !information.isDirectory() ||
+      information.dev !== expected.Device ||
+      information.ino !== expected.Inode
     ) {
       throw new Error("atomic result directory lease identity changed")
     }
@@ -212,9 +220,9 @@ async function OpenDirectoryLease(
         const currentPath = await realpath(descriptorPath)
         const currentInformation = await stat(currentPath)
         if (
-          !currentInformation.isDirectory()
-          || currentInformation.dev !== expected.Device
-          || currentInformation.ino !== expected.Inode
+          !currentInformation.isDirectory() ||
+          currentInformation.dev !== expected.Device ||
+          currentInformation.ino !== expected.Inode
         ) {
           throw PathError("atomic result directory lease identity changed")
         }
@@ -268,7 +276,8 @@ async function AcquireCanonicalLock(
       lockHandle = await lockFiles.Open(lockPath)
     } catch (error) {
       if (IsFileSystemError(error, "EEXIST")) {
-        if (Date.now() >= deadline) throw PathError("atomic result writer lock acquisition timed out")
+        if (Date.now() >= deadline)
+          throw PathError("atomic result writer lock acquisition timed out")
         await Wait(retryMilliseconds)
         continue
       }
@@ -291,10 +300,10 @@ async function AcquireCanonicalLock(
         const lockPath = join(current.Path, lockName)
         const information = await lstat(lockPath)
         if (
-          information.isSymbolicLink()
-          || !information.isFile()
-          || information.dev !== ownedInformation.Device
-          || information.ino !== ownedInformation.Inode
+          information.isSymbolicLink() ||
+          !information.isFile() ||
+          information.dev !== ownedInformation.Device ||
+          information.ino !== ownedInformation.Inode
         ) {
           throw new Error("atomic result writer lock identity changed")
         }
@@ -361,7 +370,10 @@ async function RollbackCanonical(
     return
   }
 
-  const rollbackPath = join(current.Path, `${basename(canonicalPath)}.${rollbackSuffix}.rollback.tmp`)
+  const rollbackPath = join(
+    current.Path,
+    `${basename(canonicalPath)}.${rollbackSuffix}.rollback.tmp`
+  )
   let rollbackHandle: AtomicRollbackFileHandle | null = null
   let rollbackOwned = false
   let rollbackConsumed = false
@@ -414,9 +426,10 @@ async function CaptureCommittedCanonical(
     }
     const actual = new Uint8Array(await readFile(canonicalPath))
     if (
-      actual.length !== expectedContents.length
-      || actual.some((value, index) => value !== expectedContents[index])
-    ) throw new Error("canonical result changed before commit confirmation")
+      actual.length !== expectedContents.length ||
+      actual.some((value, index) => value !== expectedContents[index])
+    )
+      throw new Error("canonical result changed before commit confirmation")
     return { Device: information.dev, Inode: information.ino }
   } catch (error) {
     if (IsPathError(error)) throw error
@@ -434,18 +447,19 @@ async function RequireCommittedCanonical(
     await VerifyDirectoryIdentity(identity.Path, identity)
     const information = await lstat(canonicalPath)
     if (
-      information.isSymbolicLink()
-      || !information.isFile()
-      || information.dev !== expectedFile.Device
-      || information.ino !== expectedFile.Inode
+      information.isSymbolicLink() ||
+      !information.isFile() ||
+      information.dev !== expectedFile.Device ||
+      information.ino !== expectedFile.Inode
     ) {
       throw new Error("canonical result changed before output rollback")
     }
     const actual = new Uint8Array(await readFile(canonicalPath))
     if (
-      actual.length !== expectedContents.length
-      || actual.some((value, index) => value !== expectedContents[index])
-    ) throw new Error("canonical result changed before output rollback")
+      actual.length !== expectedContents.length ||
+      actual.some((value, index) => value !== expectedContents[index])
+    )
+      throw new Error("canonical result changed before output rollback")
   } catch (error) {
     if (IsPathError(error)) throw error
     throw PathError(ErrorMessage(error))
@@ -513,8 +527,9 @@ function CreateReceipt(
     try {
       const current = await lease.Resolve()
       if (
-        !rollback
-        && (current.Path !== identity.Directory.Path || current.RealPath !== identity.Directory.RealPath)
+        !rollback &&
+        (current.Path !== identity.Directory.Path ||
+          current.RealPath !== identity.Directory.RealPath)
       ) {
         throw PathError("atomic result directory moved before commit confirmation")
       }
@@ -536,7 +551,7 @@ function CreateReceipt(
   }
 }
 
-export function NodeAtomicWriterOperations(
+export function nodeAtomicWriterOperations(
   directoryDescriptorRoot: string | null = PlatformDirectoryDescriptorRoot(),
   lockTimeoutMilliseconds = 5_000,
   lockRetryMilliseconds = 5,
@@ -548,7 +563,9 @@ export function NodeAtomicWriterOperations(
           const information = await handle.stat()
           return { Device: information.dev, Inode: information.ino }
         },
-        Close: async () => { await handle.close() }
+        Close: async () => {
+          await handle.close()
+        }
       }
     }
   }
@@ -557,14 +574,15 @@ export function NodeAtomicWriterOperations(
     Pid: process.pid,
     RandomSuffix: () => randomBytes(12).toString("hex"),
     LeaseDirectory: (identity) => OpenDirectoryLease(identity, directoryDescriptorRoot),
-    AcquireLock: (canonicalPath, identity, lease) => AcquireCanonicalLock(
-      canonicalPath,
-      identity,
-      lease,
-      lockTimeoutMilliseconds,
-      lockRetryMilliseconds,
-      lockFiles
-    ),
+    AcquireLock: (canonicalPath, identity, lease) =>
+      AcquireCanonicalLock(
+        canonicalPath,
+        identity,
+        lease,
+        lockTimeoutMilliseconds,
+        lockRetryMilliseconds,
+        lockFiles
+      ),
     MakeDirectory: async (path, identity) => {
       await VerifyDirectoryIdentity(path, identity)
     },
@@ -625,7 +643,7 @@ export function NodeAtomicWriterOperations(
   }
 }
 
-export async function WriteCanonicalFile(
+export async function writeCanonicalFile(
   canonicalPath: string,
   contents: string,
   identity: AtomicWriteIdentity,
@@ -696,14 +714,18 @@ export async function WriteCanonicalFile(
     tempConsumed = true
     try {
       const current = await lease.Resolve()
-      if (current.Path !== identity.Directory.Path || current.RealPath !== identity.Directory.RealPath) {
+      if (
+        current.Path !== identity.Directory.Path ||
+        current.RealPath !== identity.Directory.RealPath
+      ) {
         throw PathError("atomic result directory moved before commit confirmation")
       }
-      committedFile = await CaptureCommittedCanonical(canonicalPath, committedContents, identity.Directory)
-      if (
-        committedFile.Device !== stagedFile.Device
-        || committedFile.Inode !== stagedFile.Inode
-      ) {
+      committedFile = await CaptureCommittedCanonical(
+        canonicalPath,
+        committedContents,
+        identity.Directory
+      )
+      if (committedFile.Device !== stagedFile.Device || committedFile.Inode !== stagedFile.Inode) {
         throw PathError("canonical result changed before commit confirmation")
       }
     } catch (error) {

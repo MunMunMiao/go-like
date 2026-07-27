@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/testing",
+  "private": true,
+  "description": "Repository-internal conformance cases for LikeGo lifecycle contracts.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./listener": "./src/listener.ts"
+  },
+  "scripts": {
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*"
+  },
+  "license": "MIT"
+}

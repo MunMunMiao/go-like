@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/config",
+  "resources": [
+    {
+      "id": "source-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "watch-subscription",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "node-file-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

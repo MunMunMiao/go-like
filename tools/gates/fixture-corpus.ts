@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises"
 import { basename, join, relative, resolve, sep } from "node:path"
-import type { GateCheck, InputSnapshot, SnapshotFile } from "./result.ts"
+import type { GateCheck, InputSnapshot, SnapshotFile } from "./result"
 
 export interface FixtureIssue {
   readonly Code: string
@@ -80,28 +80,34 @@ function ParseCases(file: SnapshotFile): CasesDocument | null {
   try {
     const value: unknown = JSON.parse(Decoder.decode(file.Bytes))
     if (
-      !IsRecord(value)
-      || !HasExactKeys(value, ["schemaVersion", "cases"])
-      || value.schemaVersion !== 1
-      || !Array.isArray(value.cases)
+      !IsRecord(value) ||
+      !HasExactKeys(value, ["schemaVersion", "cases"]) ||
+      value.schemaVersion !== 1 ||
+      !Array.isArray(value.cases)
     ) {
       return null
     }
     const cases: FixtureCase[] = []
     for (const item of value.cases) {
       if (
-        !IsRecord(item)
-        || !HasExactKeys(item, ["id", "path", "expectedCodes"])
-        || typeof item.id !== "string"
-        || !/^[a-z][a-z0-9-]*$/.test(item.id)
-        || typeof item.path !== "string"
-        || !IsSafeRelativePath(item.path)
-        || !Array.isArray(item.expectedCodes)
-        || !item.expectedCodes.every((code) => typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code))
+        !IsRecord(item) ||
+        !HasExactKeys(item, ["id", "path", "expectedCodes"]) ||
+        typeof item.id !== "string" ||
+        !/^[a-z][a-z0-9-]*$/.test(item.id) ||
+        typeof item.path !== "string" ||
+        !IsSafeRelativePath(item.path) ||
+        !Array.isArray(item.expectedCodes) ||
+        !item.expectedCodes.every(
+          (code) => typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code)
+        )
       ) {
         return null
       }
-      cases.push({ id: item.id, path: item.path, expectedCodes: [...item.expectedCodes] as string[] })
+      cases.push({
+        id: item.id,
+        path: item.path,
+        expectedCodes: [...item.expectedCodes] as string[]
+      })
     }
     return { schemaVersion: 1, cases }
   } catch {
@@ -113,21 +119,26 @@ function InventoryFailure(expected: number, actual: number, detail: string): Cor
   return {
     SubjectsExpected: expected,
     SubjectsChecked: 0,
-    Checks: [{
-      id: "FIXTURE_INVENTORY_MISMATCH",
-      status: "fail",
-      expected,
-      actual,
-      detail
-    }]
+    Checks: [
+      {
+        id: "FIXTURE_INVENTORY_MISMATCH",
+        status: "fail",
+        expected,
+        actual,
+        detail
+      }
+    ]
   }
 }
 
-function RebasedFile(file: SnapshotFile, familyPrefix: string, fixtureCase: FixtureCase): SnapshotFile {
+function RebasedFile(
+  file: SnapshotFile,
+  familyPrefix: string,
+  fixtureCase: FixtureCase
+): SnapshotFile {
   const casePrefix = `${familyPrefix}${fixtureCase.path}`
-  const Path = file.Path === casePrefix
-    ? basename(fixtureCase.path)
-    : file.Path.slice(casePrefix.length + 1)
+  const Path =
+    file.Path === casePrefix ? basename(fixtureCase.path) : file.Path.slice(casePrefix.length + 1)
   return { Path, RealPath: file.RealPath, Sha256: file.Sha256, Bytes: file.Bytes }
 }
 
@@ -186,7 +197,11 @@ async function SafelyValidateAsync(
   }
 }
 
-function PreparationFailure(expected: number, actual: number, detail: string): CorpusPreparationFailure {
+function PreparationFailure(
+  expected: number,
+  actual: number,
+  detail: string
+): CorpusPreparationFailure {
   return { Kind: "preparation-failure", Evaluation: InventoryFailure(expected, actual, detail) }
 }
 
@@ -232,27 +247,38 @@ function PrepareFixtureCorpus(snapshot: InputSnapshot, familyRoot: string): Corp
   for (const file of snapshot.Files) {
     if (file.Path === casesPath || !file.Path.startsWith(familyPrefix)) continue
     const pathWithinFamily = file.Path.slice(familyPrefix.length)
-    const matches = document.cases.filter((fixtureCase) => (
-      pathWithinFamily === fixtureCase.path || pathWithinFamily.startsWith(`${fixtureCase.path}/`)
-    ))
+    const matches = document.cases.filter(
+      (fixtureCase) =>
+        pathWithinFamily === fixtureCase.path || pathWithinFamily.startsWith(`${fixtureCase.path}/`)
+    )
     if (matches.length !== 1) {
-      return PreparationFailure(expected, 0, `fixture payload must belong to exactly one listed case: ${file.Path}`)
+      return PreparationFailure(
+        expected,
+        0,
+        `fixture payload must belong to exactly one listed case: ${file.Path}`
+      )
     }
     payloadsByCase.get(matches[0]!.id)?.push(file)
   }
   for (const fixtureCase of document.cases) {
     if ((payloadsByCase.get(fixtureCase.id)?.length ?? 0) === 0) {
-      return PreparationFailure(expected, 0, `listed fixture path has no snapshotted payload: ${fixtureCase.path}`)
+      return PreparationFailure(
+        expected,
+        0,
+        `listed fixture path has no snapshotted payload: ${fixtureCase.path}`
+      )
     }
   }
 
   const sharedFiles = snapshot.Files.filter((file) => !file.Path.startsWith(familyPrefix))
   const preparedCases: (PreparedCase | CaseLocalFailure)[] = []
   for (const fixtureCase of document.cases) {
-    const caseFiles = (payloadsByCase.get(fixtureCase.id) ?? [])
-      .map((file) => RebasedFile(file, familyPrefix, fixtureCase))
-    const validationFiles = [...sharedFiles, ...caseFiles]
-      .sort((left, right) => CompareCodeUnits(left.Path, right.Path))
+    const caseFiles = (payloadsByCase.get(fixtureCase.id) ?? []).map((file) =>
+      RebasedFile(file, familyPrefix, fixtureCase)
+    )
+    const validationFiles = [...sharedFiles, ...caseFiles].sort((left, right) =>
+      CompareCodeUnits(left.Path, right.Path)
+    )
     if (new Set(validationFiles.map((file) => file.Path)).size !== validationFiles.length) {
       preparedCases.push({
         Kind: "case-local-failure",
@@ -284,11 +310,16 @@ function ValidationCheck(prepared: PreparedCase, validation: ValidationCodes): G
     path: prepared.FixtureCase.path,
     expected: JSON.stringify(prepared.ExpectedCodes),
     actual: JSON.stringify(validation.Codes),
-    ...(matches ? {} : { detail: "fixture validator code multiset did not exactly match cases.json" })
+    ...(matches
+      ? {}
+      : { detail: "fixture validator code multiset did not exactly match cases.json" })
   }
 }
 
-function CompletedEvaluation(preparation: PreparedCorpus, checks: readonly GateCheck[]): CorpusEvaluation {
+function CompletedEvaluation(
+  preparation: PreparedCorpus,
+  checks: readonly GateCheck[]
+): CorpusEvaluation {
   return {
     SubjectsExpected: preparation.SubjectsExpected,
     SubjectsChecked: preparation.Cases.length,
@@ -296,7 +327,7 @@ function CompletedEvaluation(preparation: PreparedCorpus, checks: readonly GateC
   }
 }
 
-export function EvaluateFixtureCorpus(
+export function evaluateFixtureCorpus(
   snapshot: InputSnapshot,
   familyRoot: string,
   validate: (caseFiles: readonly SnapshotFile[]) => readonly FixtureIssue[]
@@ -305,14 +336,16 @@ export function EvaluateFixtureCorpus(
   if (preparation.Kind === "preparation-failure") return preparation.Evaluation
   const checks: GateCheck[] = []
   for (const prepared of preparation.Cases) {
-    checks.push(prepared.Kind === "case-local-failure"
-      ? prepared.Check
-      : ValidationCheck(prepared, SafelyValidate(prepared.Files, validate)))
+    checks.push(
+      prepared.Kind === "case-local-failure"
+        ? prepared.Check
+        : ValidationCheck(prepared, SafelyValidate(prepared.Files, validate))
+    )
   }
   return CompletedEvaluation(preparation, checks)
 }
 
-export async function EvaluateAsyncFixtureCorpus(
+export async function evaluateAsyncFixtureCorpus(
   snapshot: InputSnapshot,
   familyRoot: string,
   validate: (caseFiles: readonly SnapshotFile[]) => Promise<readonly FixtureIssue[]>
@@ -334,7 +367,7 @@ function IsMissingDirectory(error: unknown): boolean {
   return IsRecord(error) && error.code === "ENOENT"
 }
 
-export async function FindBunDiscoveredFixturePaths(root: string): Promise<readonly string[]> {
+export async function findBunDiscoveredFixturePaths(root: string): Promise<readonly string[]> {
   const absoluteRoot = resolve(root)
   const paths: string[] = []
 
@@ -352,8 +385,8 @@ export async function FindBunDiscoveredFixturePaths(root: string): Promise<reado
         await Visit(absolute)
       } else if (entry.isFile() || entry.isSymbolicLink()) {
         const path = relative(absoluteRoot, absolute).split(sep).join("/")
-        const fixturePayload = /^tools\/(?:.*\/)?fixtures\//.test(path)
-          || path.startsWith("test/runtime/probes/")
+        const fixturePayload =
+          /^tools\/(?:.*\/)?fixtures\//.test(path) || path.startsWith("test/runtime/probes/")
         if (fixturePayload && DiscoverySubstrings.some((substring) => path.includes(substring))) {
           paths.push(path)
         }

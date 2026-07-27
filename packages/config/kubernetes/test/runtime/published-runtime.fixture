@@ -1,0 +1,59 @@
+import { background } from "@likego/context"
+import { kubernetesSource } from "@likego/config-kubernetes"
+
+function check(condition, message) {
+  if (!condition) throw new Error(`config-kubernetes published assertion failed: ${message}`)
+}
+
+function resource(revision, value) {
+  return Response.json({
+    apiVersion: "v1",
+    kind: "ConfigMap",
+    metadata: { namespace: "orders", name: "orders-config", resourceVersion: revision },
+    data: { "config.json": JSON.stringify(value) }
+  })
+}
+
+export async function run() {
+  const requests = []
+  let watchCall = false
+  const source = kubernetesSource({
+    async fetch(request) {
+      requests.push(request)
+      const url = new URL(request.url)
+      if (url.searchParams.get("watch") === "true") {
+        watchCall = true
+        return new Response(
+          `${JSON.stringify({
+            type: "MODIFIED",
+            object: {
+              metadata: {
+                namespace: "orders",
+                name: "orders-config",
+                resourceVersion: "2"
+              }
+            }
+          })}\n`
+        )
+      }
+      return resource("1", { published: true })
+    },
+    address: "https://kubernetes.example",
+    namespace: "orders",
+    kind: "ConfigMap",
+    name: "orders-config",
+    key: "config.json"
+  })
+  const loaded = await source.load(background())
+  check(loaded.value.published === true, "public load drifted")
+  check(loaded.revision === "1", "public resourceVersion drifted")
+  const watcher = await source.watch(background(), loaded.revision)
+  await watcher.next(background())
+  check(watchCall, "public watch drifted")
+  check(
+    new URL(requests[1].url).searchParams.get("fieldSelector") ===
+      "metadata.name=orders-config",
+    "public field selector drifted"
+  )
+  await watcher.stop(background())
+}

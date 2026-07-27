@@ -1,0 +1,156 @@
+import { background } from "@likego/context"
+import * as RabbitMqPackage from "@likego/broker-rabbitmq"
+import {
+  newConfirmRabbitMqBroker,
+  newRecoveringRabbitMqBroker
+} from "@likego/broker-rabbitmq"
+import * as Amqplib from "amqplib"
+
+function check(condition, message) {
+  if (!condition) throw new Error(`broker-rabbitmq published assertion failed: ${message}`)
+}
+
+function fakeChannel(name) {
+  const calls = { publish: [], cancel: [], ack: [], close: 0, consume: 0 }
+  let callback = null
+  const channel = {
+    publish(exchange, routingKey, body, options, callback) {
+      calls.publish.push([exchange, routingKey, body, options])
+      body[0] = 99
+      if (callback !== undefined) queueMicrotask(() => callback(null, {}))
+      return true
+    },
+    async assertQueue(queue) {
+      return { queue, messageCount: 0, consumerCount: 0 }
+    },
+    async consume(_queue, onMessage) {
+      calls.consume += 1
+      callback = onMessage
+      return { consumerTag: `${name}-consumer` }
+    },
+    async cancel(consumerTag) {
+      calls.cancel.push(consumerTag)
+      return {}
+    },
+    ack(message) {
+      calls.ack.push(message)
+    },
+    nack() {},
+    reject() {},
+    async close() {
+      calls.close += 1
+    },
+    async waitForConfirms() {
+    }
+  }
+  return {
+    channel,
+    calls,
+    deliver(message) {
+      check(callback !== null, `${name} consumer callback is missing`)
+      callback(message)
+    }
+  }
+}
+
+function nativeDelivery(consumerTag, value) {
+  return {
+    content: new Uint8Array([value]),
+    fields: {
+      consumerTag,
+      deliveryTag: value,
+      redelivered: false,
+      exchange: "",
+      routingKey: "events.created"
+    },
+    properties: {
+      headers: { trace: "delivery" }
+    }
+  }
+}
+
+export async function run() {
+  check(typeof Amqplib.connect === "function", "amqplib public dependency is unavailable")
+  check(
+    Object.keys(RabbitMqPackage).sort().join(",") ===
+      "newConfirmRabbitMqBroker,newRabbitMqBroker,newRecoveringRabbitMqBroker",
+    "public runtime surface drifted"
+  )
+  const borrowed = fakeChannel("borrowed")
+  const borrowedAccepted = await newConfirmRabbitMqBroker(borrowed.channel).publish(
+    background(),
+    "events.borrowed",
+    { headers: {}, body: new Uint8Array() }
+  )
+  check(borrowedAccepted === true, "borrowed publisher confirm drifted")
+  const first = fakeChannel("first")
+  const second = fakeChannel("second")
+  const third = fakeChannel("third")
+  let selected = first
+  let setup = async function missingSetup() {
+    throw new Error("recovery setup was not captured")
+  }
+  let connectionCloseCalls = 0
+  const listeners = {}
+  const connection = {
+    on(event, listener) {
+      listeners[event] = listener
+      return this
+    },
+    async close() {
+      connectionCloseCalls += 1
+    }
+  }
+  const model = {
+    async createConfirmChannel() {
+      return selected.channel
+    }
+  }
+  const provider = await newRecoveringRabbitMqBroker(background(), async function connectRecovery(provided) {
+    setup = provided
+    await provided(model)
+    return connection
+  })
+  const body = new Uint8Array([7, 8])
+  const accepted = await provider.broker.publish(
+    background(),
+    "events.created",
+    { headers: { trace: "published" }, body },
+    { properties: { persistent: true } }
+  )
+  check(accepted === true, "native publish result drifted")
+  check(body[0] === 7, "publish bytes were not detached")
+  check(first.calls.publish[0][0] === "", "default exchange drifted")
+  check(first.calls.publish[0][1] === "events.created", "default routing key drifted")
+  check(first.calls.publish[0][3].headers.trace === "published", "portable header drifted")
+
+  const nativeSeen = []
+  const subscriber = await provider.broker.subscribe(background(), "events.created", (_ctx, event) => {
+    nativeSeen.push(event.native)
+    provider.broker.ack(event.native)
+  })
+  const firstNative = nativeDelivery("first-consumer", 1)
+  first.deliver(firstNative)
+  await Promise.resolve()
+  check(first.calls.ack[0] === firstNative, "first generation ack drifted")
+
+  listeners.disconnect(new Error("published disconnect"))
+  selected = second
+  await setup(model)
+  check(second.calls.consume === 1, "consumer was not replayed exactly once")
+  const secondNative = nativeDelivery("second-consumer", 2)
+  second.deliver(secondNative)
+  await Promise.resolve()
+  check(second.calls.ack[0] === secondNative, "recovered generation ack drifted")
+
+  await subscriber.unsubscribe(background())
+  selected = third
+  await setup(model)
+  check(third.calls.consume === 0, "unsubscribed consumer revived")
+  check(nativeSeen[0] === firstNative && nativeSeen[1] === secondNative, "native identity drifted")
+  check(second.calls.cancel.join(",") === "second-consumer", "consumer ownership drifted")
+  check(connectionCloseCalls === 0, "provider closed the application connection")
+  await provider.connection.close()
+  check(connectionCloseCalls === 1, "application connection close drifted")
+  check(provider.broker.string() === "rabbitmq", "provider diagnostic name drifted")
+}

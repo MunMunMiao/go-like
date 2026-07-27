@@ -1,11 +1,9 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["bun"]
   },
   "include": ["scripts/**/*.ts", "tools/**/*.ts"],
-  "exclude": ["**/*.test.ts", "tools/**/fixtures/**", "test/**"],
-  "references": []
+  "exclude": ["**/*.test.ts", "tools/**/fixtures/**", "test/**"]
 }

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/broker-rabbitmq",
+  "resources": [
+    {
+      "id": "rabbitmq-consumer",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

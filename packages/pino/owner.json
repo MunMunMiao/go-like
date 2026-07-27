@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/pino",
+  "resources": [
+    {
+      "id": "logger",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "application-owned"
+    },
+    {
+      "id": "destination",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/hono",
+  "version": "0.0.1",
+  "description": "Thin Hono native application bridge for LikeGo Web handlers.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/web": "0.0.1"
+  },
+  "peerDependencies": {
+    "hono": "4.12.32"
+  },
+  "license": "MIT"
+}

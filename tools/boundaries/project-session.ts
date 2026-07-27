@@ -4,7 +4,7 @@ import { lstat, mkdir, readFile, realpath, rm, rmdir, writeFile } from "node:fs/
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path"
 import { API, type Diagnostic, type Project, type Snapshot } from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
-import type { InputSnapshot, SnapshotFile } from "../gates/result.ts"
+import type { InputSnapshot, SnapshotFile } from "../gates/result"
 
 export interface ProjectSession {
   readonly Project: Project
@@ -66,6 +66,7 @@ interface StagedProject {
   readonly StagedRoot: string
   readonly CanonicalConfig: string
   readonly SelectedFileSeals: readonly SelectedFileSeal[] | null
+  readonly SelectedDirectorySeals: readonly SelectedDirectorySeal[] | null
 }
 
 interface SelectedFileSeal {
@@ -83,6 +84,16 @@ interface SelectedFileSeal {
 interface SelectedFileEvidence {
   readonly Status: BigIntStats
   readonly Bytes: Uint8Array
+}
+
+interface SelectedDirectorySeal {
+  readonly Path: string
+  readonly Target: string
+  readonly Dev: bigint
+  readonly Ino: bigint
+  readonly Size: bigint
+  readonly CtimeNs: bigint
+  readonly MtimeNs: bigint
 }
 
 interface AdmittedProject {
@@ -154,12 +165,13 @@ function WorkspaceInputMissing(path: string, message: string): ProjectSessionAdm
 
 function IsSafeRelativePath(value: string): boolean {
   if (
-    value.length === 0
-    || value.startsWith("/")
-    || /^[A-Za-z]:\//.test(value)
-    || value.includes("\\")
-    || value.includes("\0")
-  ) return false
+    value.length === 0 ||
+    value.startsWith("/") ||
+    /^[A-Za-z]:\//.test(value) ||
+    value.includes("\\") ||
+    value.includes("\0")
+  )
+    return false
   return value.split("/").every((part) => part.length > 0 && part !== "." && part !== "..")
 }
 
@@ -209,9 +221,9 @@ function SelectProjectInput(snapshot: InputSnapshot, projectPrefix: string): Sel
     )
   }
   const projectPathPrefix = `${projectPrefix}/`
-  const selected = indexed.Paths
-    .filter((path) => path.startsWith(projectPathPrefix))
-    .map((path) => indexed.FilesByPath.get(path) as SnapshotFile)
+  const selected = indexed.Paths.filter((path) => path.startsWith(projectPathPrefix)).map(
+    (path) => indexed.FilesByPath.get(path) as SnapshotFile
+  )
   return {
     ProjectPrefix: projectPrefix,
     DependencyPrefixes: [],
@@ -228,18 +240,18 @@ function PrefixesOverlap(left: string, right: string): boolean {
 
 function AdmitWorkspaceAuthority(value: unknown): WorkspaceProjectAuthority {
   if (
-    typeof value !== "object"
-    || value === null
-    || Array.isArray(value)
-    || Object.getPrototypeOf(value) !== Object.prototype
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
   ) {
     throw ScopeInvalid("", "workspace project authority must be a plain object")
   }
   const keys = Reflect.ownKeys(value)
   if (
-    keys.length !== 2
-    || !keys.includes("ProjectPrefix")
-    || !keys.includes("DependencyPrefixes")
+    keys.length !== 2 ||
+    !keys.includes("ProjectPrefix") ||
+    !keys.includes("DependencyPrefixes")
   ) {
     throw ScopeInvalid(
       "",
@@ -249,33 +261,36 @@ function AdmitWorkspaceAuthority(value: unknown): WorkspaceProjectAuthority {
   const projectDescriptor = Object.getOwnPropertyDescriptor(value, "ProjectPrefix")
   const dependenciesDescriptor = Object.getOwnPropertyDescriptor(value, "DependencyPrefixes")
   if (
-    projectDescriptor === undefined
-    || dependenciesDescriptor === undefined
-    || !("value" in projectDescriptor)
-    || !("value" in dependenciesDescriptor)
+    projectDescriptor === undefined ||
+    dependenciesDescriptor === undefined ||
+    !("value" in projectDescriptor) ||
+    !("value" in dependenciesDescriptor)
   ) {
     throw ScopeInvalid("", "workspace project authority properties must be own data properties")
   }
   const projectPrefix = typeof projectDescriptor.value === "string" ? projectDescriptor.value : ""
   if (!IsSafeRelativePath(projectPrefix)) {
-    throw ScopeInvalid(projectPrefix, "target project prefix must be a canonical POSIX relative path")
+    throw ScopeInvalid(
+      projectPrefix,
+      "target project prefix must be a canonical POSIX relative path"
+    )
   }
   const dependenciesValue: unknown = dependenciesDescriptor.value
   if (
-    !Array.isArray(dependenciesValue)
-    || Object.getPrototypeOf(dependenciesValue) !== Array.prototype
+    !Array.isArray(dependenciesValue) ||
+    Object.getPrototypeOf(dependenciesValue) !== Array.prototype
   ) {
     throw ScopeInvalid("", "dependency prefixes must be a plain array")
   }
   const dependencyKeys = Reflect.ownKeys(dependenciesValue)
   const lengthDescriptor = Object.getOwnPropertyDescriptor(dependenciesValue, "length")
   if (
-    lengthDescriptor === undefined
-    || !("value" in lengthDescriptor)
-    || typeof lengthDescriptor.value !== "number"
-    || !Number.isSafeInteger(lengthDescriptor.value)
-    || lengthDescriptor.value < 0
-    || dependencyKeys.length !== lengthDescriptor.value + 1
+    lengthDescriptor === undefined ||
+    !("value" in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== "number" ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0 ||
+    dependencyKeys.length !== lengthDescriptor.value + 1
   ) {
     throw ScopeInvalid("", "dependency prefixes must be a dense data-property array")
   }
@@ -321,10 +336,10 @@ function IsPackageSourcePath(path: string, prefix: string): boolean {
 
 function CanonicalWorkspaceSourceText(file: SnapshotFile): string {
   if (
-    file.Bytes.length >= 3
-    && file.Bytes[0] === 0xef
-    && file.Bytes[1] === 0xbb
-    && file.Bytes[2] === 0xbf
+    file.Bytes.length >= 3 &&
+    file.Bytes[0] === 0xef &&
+    file.Bytes[1] === 0xbb &&
+    file.Bytes[2] === 0xbf
   ) {
     throw Admission(
       "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
@@ -361,7 +376,10 @@ function SelectWorkspaceProjectInput(
     }
     const sourcePaths = indexed.Paths.filter((path) => IsPackageSourcePath(path, prefix))
     if (sourcePaths.length === 0) {
-      throw WorkspaceInputMissing(`${prefix}/src`, "selected package requires at least one src/**/*.ts snapshot byte")
+      throw WorkspaceInputMissing(
+        `${prefix}/src`,
+        "selected package requires at least one src/**/*.ts snapshot byte"
+      )
     }
     for (const path of sourcePaths) {
       const source = indexed.FilesByPath.get(path) as SnapshotFile
@@ -370,9 +388,9 @@ function SelectWorkspaceProjectInput(
     }
   }
 
-  const files = indexed.Paths
-    .filter((path) => selectedPrefixes.some((prefix) => path.startsWith(`${prefix}/`)))
-    .map((path) => indexed.FilesByPath.get(path) as SnapshotFile)
+  const files = indexed.Paths.filter((path) =>
+    selectedPrefixes.some((prefix) => path.startsWith(`${prefix}/`))
+  ).map((path) => indexed.FilesByPath.get(path) as SnapshotFile)
   return {
     ProjectPrefix: authority.ProjectPrefix,
     DependencyPrefixes: authority.DependencyPrefixes,
@@ -385,8 +403,10 @@ function SelectWorkspaceProjectInput(
 
 function IsInside(root: string, candidate: string): boolean {
   const fromRoot = relative(root, candidate)
-  return fromRoot === ""
-    || (!fromRoot.startsWith(`..${sep}`) && fromRoot !== ".." && !isAbsolute(fromRoot))
+  return (
+    fromRoot === "" ||
+    (!fromRoot.startsWith(`..${sep}`) && fromRoot !== ".." && !isAbsolute(fromRoot))
+  )
 }
 
 async function RequireDirectoryIdentity(
@@ -445,7 +465,9 @@ async function MaterializeFile(stagedRoot: string, file: SnapshotFile): Promise<
   if (!IsInside(stagedRoot, target) || pathFromRoot.length === 0) {
     throw InputInvalid(file.Path, "materialization target escapes staging")
   }
-  const parentParts = dirname(pathFromRoot).split(sep).filter((part) => part.length > 0 && part !== ".")
+  const parentParts = dirname(pathFromRoot)
+    .split(sep)
+    .filter((part) => part.length > 0 && part !== ".")
   let directory = stagedRoot
   for (const part of parentParts) {
     directory = join(directory, part)
@@ -472,11 +494,13 @@ function SelectedFileInvalid(
 }
 
 function SameFileStatus(left: BigIntStats, right: BigIntStats): boolean {
-  return left.dev === right.dev
-    && left.ino === right.ino
-    && left.size === right.size
-    && left.ctimeNs === right.ctimeNs
-    && left.mtimeNs === right.mtimeNs
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.size === right.size &&
+    left.ctimeNs === right.ctimeNs &&
+    left.mtimeNs === right.mtimeNs
+  )
 }
 
 async function ReadSelectedFileEvidence(
@@ -486,7 +510,7 @@ async function ReadSelectedFileEvidence(
 ): Promise<SelectedFileEvidence> {
   try {
     const before = await lstat(target, { bigint: true })
-    if (before.isSymbolicLink() || !before.isFile() || await realpath(target) !== target) {
+    if (before.isSymbolicLink() || !before.isFile() || (await realpath(target)) !== target) {
       throw SelectedFileInvalid(path, source, "selected staged file identity is invalid")
     }
     const bytes = new Uint8Array(await readFile(target))
@@ -512,7 +536,11 @@ async function CaptureSelectedFileSeals(
     const source = selected.SourceFilesByPath.has(file.Path)
     const evidence = await ReadSelectedFileEvidence(target, file.Path, source)
     if (!BytesEqual(evidence.Bytes, file.Bytes)) {
-      throw SelectedFileInvalid(file.Path, source, "selected staged bytes differ after materialization")
+      throw SelectedFileInvalid(
+        file.Path,
+        source,
+        "selected staged bytes differ after materialization"
+      )
     }
     seals.push({
       Path: file.Path,
@@ -529,25 +557,100 @@ async function CaptureSelectedFileSeals(
   return seals
 }
 
-async function RequireSelectedFileSeals(
-  seals: readonly SelectedFileSeal[] | null
-): Promise<void> {
+async function RequireSelectedFileSeals(seals: readonly SelectedFileSeal[] | null): Promise<void> {
   if (seals === null) return
   for (const seal of seals) {
     const evidence = await ReadSelectedFileEvidence(seal.Target, seal.Path, seal.Source)
     if (
-      evidence.Status.dev !== seal.Dev
-      || evidence.Status.ino !== seal.Ino
-      || evidence.Status.size !== seal.Size
-      || evidence.Status.ctimeNs !== seal.CtimeNs
-      || evidence.Status.mtimeNs !== seal.MtimeNs
-      || !BytesEqual(evidence.Bytes, seal.Bytes)
+      evidence.Status.dev !== seal.Dev ||
+      evidence.Status.ino !== seal.Ino ||
+      evidence.Status.size !== seal.Size ||
+      evidence.Status.ctimeNs !== seal.CtimeNs ||
+      evidence.Status.mtimeNs !== seal.MtimeNs ||
+      !BytesEqual(evidence.Bytes, seal.Bytes)
     ) {
       throw SelectedFileInvalid(
         seal.Path,
         seal.Source,
         "selected staged file changed across the worker update"
       )
+    }
+  }
+}
+
+async function ReadSelectedDirectoryStatus(target: string, path: string): Promise<BigIntStats> {
+  try {
+    const before = await lstat(target, { bigint: true })
+    if (before.isSymbolicLink() || !before.isDirectory() || (await realpath(target)) !== target) {
+      throw StageInvalid(path, "selected staged directory identity is invalid")
+    }
+    const after = await lstat(target, { bigint: true })
+    if (!SameFileStatus(before, after)) {
+      throw StageInvalid(path, "selected staged directory changed while observed")
+    }
+    return after
+  } catch (error) {
+    if (error instanceof ProjectSessionAdmissionError) throw error
+    throw StageInvalid(path, "selected staged directory evidence is unavailable")
+  }
+}
+
+async function CaptureSelectedDirectorySeals(
+  stagedRoot: string,
+  nonce: string,
+  selected: SelectedProjectInput
+): Promise<readonly SelectedDirectorySeal[] | null> {
+  if (selected.SourceFilesByPath === null) return null
+  const paths = new Map<string, string>([
+    [nonce, WorkPath],
+    [stagedRoot, WorkPath]
+  ])
+  for (const file of selected.Files) {
+    const ancestors: string[] = []
+    let directory = dirname(join(stagedRoot, ...file.Path.split("/")))
+    while (IsInside(stagedRoot, directory)) {
+      ancestors.push(directory)
+      if (directory === stagedRoot) break
+      directory = dirname(directory)
+    }
+    ancestors.reverse()
+    for (const ancestor of ancestors) {
+      if (paths.has(ancestor)) continue
+      const stable = relative(stagedRoot, ancestor).split(sep).join("/")
+      paths.set(ancestor, stable.length === 0 ? WorkPath : stable)
+    }
+  }
+
+  const seals: SelectedDirectorySeal[] = []
+  for (const [target, path] of paths) {
+    const status = await ReadSelectedDirectoryStatus(target, path)
+    seals.push({
+      Path: path,
+      Target: target,
+      Dev: status.dev,
+      Ino: status.ino,
+      Size: status.size,
+      CtimeNs: status.ctimeNs,
+      MtimeNs: status.mtimeNs
+    })
+  }
+  return seals
+}
+
+async function RequireSelectedDirectorySeals(
+  seals: readonly SelectedDirectorySeal[] | null
+): Promise<void> {
+  if (seals === null) return
+  for (const seal of seals) {
+    const status = await ReadSelectedDirectoryStatus(seal.Target, seal.Path)
+    if (
+      status.dev !== seal.Dev ||
+      status.ino !== seal.Ino ||
+      status.size !== seal.Size ||
+      status.ctimeNs !== seal.CtimeNs ||
+      status.mtimeNs !== seal.MtimeNs
+    ) {
+      throw StageInvalid(seal.Path, "selected staged directory changed across the worker update")
     }
   }
 }
@@ -603,10 +706,16 @@ async function AcquireStagedProject(
   const stagedRoot = boundaryIdentity.Path
   for (const file of selected.Files) await MaterializeFile(stagedRoot, file)
   const selectedFileSeals = await CaptureSelectedFileSeals(stagedRoot, selected)
+  const selectedDirectorySeals = await CaptureSelectedDirectorySeals(
+    stagedRoot,
+    nonceIdentity.Path,
+    selected
+  )
   return {
     StagedRoot: stagedRoot,
     CanonicalConfig: join(stagedRoot, ...selected.ConfigPath.split("/")),
-    SelectedFileSeals: selectedFileSeals
+    SelectedFileSeals: selectedFileSeals,
+    SelectedDirectorySeals: selectedDirectorySeals
   }
 }
 
@@ -629,13 +738,14 @@ async function RequireCleanupDirectoryIdentity(identity: DirectoryIdentity): Pro
     throw error
   }
   if (
-    status.isSymbolicLink()
-    || !status.isDirectory()
-    || status.dev !== identity.Dev
-    || status.ino !== identity.Ino
-  ) throw new ProjectSessionCleanupIdentityError()
+    status.isSymbolicLink() ||
+    !status.isDirectory() ||
+    status.dev !== identity.Dev ||
+    status.ino !== identity.Ino
+  )
+    throw new ProjectSessionCleanupIdentityError()
   try {
-    if (await realpath(identity.Path) !== identity.Path) {
+    if ((await realpath(identity.Path)) !== identity.Path) {
       throw new ProjectSessionCleanupIdentityError()
     }
   } catch (error) {
@@ -677,14 +787,15 @@ async function RemoveOwnedStaging(repositoryRoot: string, path: string): Promise
   const nonce = dirname(path)
   const owned = OwnedStagingByPath.get(path)
   if (
-    basename(path) !== StageDirectoryName
-    || dirname(nonce) !== work
-    || basename(nonce).length === 0
-    || owned === undefined
-    || owned.Work.Path !== work
-    || owned.Nonce.Path !== nonce
-    || owned.Boundary.Path !== path
-  ) throw new Error("refusing to remove a non-owned project session path")
+    basename(path) !== StageDirectoryName ||
+    dirname(nonce) !== work ||
+    basename(nonce).length === 0 ||
+    owned === undefined ||
+    owned.Work.Path !== work ||
+    owned.Nonce.Path !== nonce ||
+    owned.Boundary.Path !== path
+  )
+    throw new Error("refusing to remove a non-owned project session path")
   await RequireRegisteredOwnedStagingIdentity(owned)
   await rm(path, { recursive: true, force: true })
   await RemoveOwnedNonce(owned.Nonce)
@@ -692,7 +803,7 @@ async function RemoveOwnedStaging(repositoryRoot: string, path: string): Promise
   OwnedStagingByPath.delete(path)
 }
 
-export function NodeProjectSessionOperations(
+export function nodeProjectSessionOperations(
   repositoryRoot: string = process.cwd()
 ): ProjectSessionOperations {
   const absoluteRoot = resolve(repositoryRoot)
@@ -707,9 +818,10 @@ export function NodeProjectSessionOperations(
   }
   return {
     RepositoryRoot: boundRoot,
-    UpdateSnapshot: (api, canonicalTsconfig) => api.updateSnapshot({
-      openProjects: [canonicalTsconfig]
-    }),
+    UpdateSnapshot: (api, canonicalTsconfig) =>
+      api.updateSnapshot({
+        openProjects: [canonicalTsconfig]
+      }),
     DisposeSnapshot: (snapshot) => snapshot.dispose(),
     CloseAPI: (api) => api.close(),
     RemoveStaging: (path) => RemoveOwnedStaging(boundRoot, path)
@@ -735,14 +847,14 @@ async function IsLowercaseConfigIdentity(
     if (result.status === "rejected" && ErrorCode(result.reason) !== "ENOENT") throw result.reason
   }
   return (
-    lowercaseConfig !== canonicalConfig
-    && lowercaseStatus.status === "fulfilled"
-    && !lowercaseStatus.value.isSymbolicLink()
-    && lowercaseStatus.value.isFile()
-    && lowercaseStatus.value.dev === canonicalStatus.dev
-    && lowercaseStatus.value.ino === canonicalStatus.ino
-    && lowercaseRealPath.status === "fulfilled"
-    && lowercaseRealPath.value === canonicalConfig
+    lowercaseConfig !== canonicalConfig &&
+    lowercaseStatus.status === "fulfilled" &&
+    !lowercaseStatus.value.isSymbolicLink() &&
+    lowercaseStatus.value.isFile() &&
+    lowercaseStatus.value.dev === canonicalStatus.dev &&
+    lowercaseStatus.value.ino === canonicalStatus.ino &&
+    lowercaseRealPath.status === "fulfilled" &&
+    lowercaseRealPath.value === canonicalConfig
   )
 }
 
@@ -754,9 +866,9 @@ async function RequireConfigIdentity(
   const issuePath = `${projectPrefix}/tsconfig.json`
   const projectId = String(project.id)
   if (
-    project.configFileName !== canonicalConfig
-    || !isAbsolute(canonicalConfig)
-    || normalize(canonicalConfig) !== canonicalConfig
+    project.configFileName !== canonicalConfig ||
+    !isAbsolute(canonicalConfig) ||
+    normalize(canonicalConfig) !== canonicalConfig
   ) {
     throw Admission(
       "PROJECT_SESSION_PROJECT_IDENTITY",
@@ -768,9 +880,9 @@ async function RequireConfigIdentity(
   try {
     canonicalStatus = await lstat(canonicalConfig)
     if (
-      canonicalStatus.isSymbolicLink()
-      || !canonicalStatus.isFile()
-      || await realpath(canonicalConfig) !== canonicalConfig
+      canonicalStatus.isSymbolicLink() ||
+      !canonicalStatus.isFile() ||
+      (await realpath(canonicalConfig)) !== canonicalConfig
     ) {
       throw Admission(
         "PROJECT_SESSION_PROJECT_IDENTITY",
@@ -790,11 +902,9 @@ async function RequireConfigIdentity(
     throw error
   }
   if (
-    projectId !== canonicalConfig
-    && (
-      projectId !== canonicalConfig.toLowerCase()
-      || !await IsLowercaseConfigIdentity(canonicalConfig, canonicalStatus)
-    )
+    projectId !== canonicalConfig &&
+    (projectId !== canonicalConfig.toLowerCase() ||
+      !(await IsLowercaseConfigIdentity(canonicalConfig, canonicalStatus)))
   ) {
     throw Admission(
       "PROJECT_SESSION_PROJECT_IDENTITY",
@@ -833,7 +943,11 @@ async function AdmitSourceFiles(
 
   for (const sourceName of sourceNames) {
     const stablePath = StableStagePath(stagedRoot, sourceName, selected.ProjectPrefix)
-    if (!isAbsolute(sourceName) || normalize(sourceName) !== sourceName || resolve(sourceName) !== sourceName) {
+    if (
+      !isAbsolute(sourceName) ||
+      normalize(sourceName) !== sourceName ||
+      resolve(sourceName) !== sourceName
+    ) {
       throw Admission(
         "PROJECT_SESSION_SOURCE_IDENTITY",
         stablePath,
@@ -863,19 +977,16 @@ async function AdmitSourceFiles(
         "non-default external library source is not snapshotted authority"
       )
     }
-    if (
-      selected.SourceFilesByPath !== null
-      && stablePath.split("/").includes("node_modules")
-    ) {
+    if (selected.SourceFilesByPath !== null && stablePath.split("/").includes("node_modules")) {
       throw Admission(
         "PROJECT_SESSION_EXTERNAL_SOURCE",
         stablePath,
         "node_modules source is not snapshotted workspace authority"
       )
     }
-    const matchingRoots = sourceRoots.filter((sourceRoot) => (
-      IsInside(sourceRoot.Root, sourceName) && sourceName !== sourceRoot.Root
-    ))
+    const matchingRoots = sourceRoots.filter(
+      (sourceRoot) => IsInside(sourceRoot.Root, sourceName) && sourceName !== sourceRoot.Root
+    )
     if (matchingRoots.length !== 1) {
       throw Admission(
         selected.SourceFilesByPath === null
@@ -919,9 +1030,9 @@ async function AdmitSourceFiles(
       }
       const sourceReal = await realpath(sourceName)
       if (
-        sourceReal !== sourceName
-        || !IsInside(sourceRootReal, sourceReal)
-        || realPaths.has(sourceReal)
+        sourceReal !== sourceName ||
+        !IsInside(sourceRootReal, sourceReal) ||
+        realPaths.has(sourceReal)
       ) {
         throw Admission(
           "PROJECT_SESSION_SOURCE_ESCAPE",
@@ -1012,6 +1123,7 @@ async function RunProjectSession<T>(
     workerSnapshot = await operations.UpdateSnapshot(api, staged.CanonicalConfig)
     await RequireSelectedFileSeals(staged.SelectedFileSeals)
     const admitted = await AdmitProject(workerSnapshot, staged, selected)
+    await RequireSelectedDirectorySeals(staged.SelectedDirectorySeals)
     value = await use({
       Project: admitted.Project,
       SourceFiles: admitted.SourceFiles,
@@ -1066,20 +1178,20 @@ async function RunProjectSession<T>(
   throw new Error("project session completed without a callback value")
 }
 
-export async function WithProjectSession<T>(
+export async function withProjectSession<T>(
   snapshot: InputSnapshot,
   projectPrefix: string,
   use: (session: ProjectSession) => Promise<T>
 ): Promise<T> {
-  return WithProjectSessionWithOperations(
+  return withProjectSessionWithOperations(
     snapshot,
     projectPrefix,
     use,
-    NodeProjectSessionOperations(process.cwd())
+    nodeProjectSessionOperations(process.cwd())
   )
 }
 
-export async function WithProjectSessionWithOperations<T>(
+export async function withProjectSessionWithOperations<T>(
   snapshot: InputSnapshot,
   projectPrefix: string,
   use: (session: ProjectSession) => Promise<T>,
@@ -1093,7 +1205,7 @@ export async function WithProjectSessionWithOperations<T>(
   )
 }
 
-export async function WithWorkspaceProjectSessionWithOperations<T>(
+export async function withWorkspaceProjectSessionWithOperations<T>(
   snapshot: InputSnapshot,
   authority: WorkspaceProjectAuthority,
   use: (session: ProjectSession) => Promise<T>,
@@ -1107,14 +1219,14 @@ export async function WithWorkspaceProjectSessionWithOperations<T>(
   )
 }
 
-export async function AnalyzeProjectSession(
+export async function analyzeProjectSession(
   snapshot: InputSnapshot,
   projectPrefix: string
 ): Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly SessionIssue[] }> {
-  return AnalyzeProjectSessionWithOperations(
+  return analyzeProjectSessionWithOperations(
     snapshot,
     projectPrefix,
-    NodeProjectSessionOperations(process.cwd())
+    nodeProjectSessionOperations(process.cwd())
   )
 }
 
@@ -1130,6 +1242,7 @@ interface MappedDiagnosticPath {
 
 interface DiagnosticReplacement {
   readonly From: string
+  readonly BackslashFrom: string
   readonly To: string
   readonly Escaped: boolean
 }
@@ -1155,6 +1268,14 @@ function NormalizeDiagnosticSeparators(value: string): string {
   return value.replaceAll("\\", "/")
 }
 
+function IsScannableDiagnosticFileName(fileName: string): boolean {
+  return (
+    fileName.length > 0 &&
+    !NormalizeDiagnosticSeparators(fileName).startsWith("//") &&
+    isAbsolute(fileName)
+  )
+}
+
 function MapDiagnosticFileName(
   fileName: string | undefined,
   stagedRoot: string,
@@ -1164,11 +1285,13 @@ function MapDiagnosticFileName(
   if (fileName === undefined) return { Path: projectPrefix, Escaped: false }
   const matchingRoots = selectedRoots.filter((selected) => IsInside(selected.Root, fileName))
   if (
-    !isAbsolute(fileName)
-    || (sep === "/" && fileName.includes("\\"))
-    || NormalizeDiagnosticSeparators(normalize(fileName)) !== NormalizeDiagnosticSeparators(fileName)
-    || matchingRoots.length !== 1
-  ) return { Path: projectPrefix, Escaped: true }
+    !isAbsolute(fileName) ||
+    (sep === "/" && fileName.includes("\\")) ||
+    NormalizeDiagnosticSeparators(normalize(fileName)) !==
+      NormalizeDiagnosticSeparators(fileName) ||
+    matchingRoots.length !== 1
+  )
+    return { Path: projectPrefix, Escaped: true }
   const mapped = relative(stagedRoot, fileName).split(sep).join("/")
   return { Path: mapped.length === 0 ? projectPrefix : mapped, Escaped: false }
 }
@@ -1189,6 +1312,8 @@ async function CreateDiagnosticContext(
   families: readonly DiagnosticFamily[]
 ): Promise<DiagnosticContext> {
   const stagedRealRoot = await realpath(stagedRoot)
+  const workRoot = dirname(dirname(stagedRoot))
+  const repositoryRoot = dirname(dirname(dirname(workRoot)))
   const selectedRoots = selectedPrefixes.map((Prefix) => ({
     Prefix,
     Root: join(stagedRoot, ...Prefix.split("/"))
@@ -1197,18 +1322,18 @@ async function CreateDiagnosticContext(
   function AddReplacement(source: string, target: string, escaped: boolean): void {
     const normalizedSource = NormalizeDiagnosticSeparators(source)
     const existing = replacementsBySource.get(normalizedSource)
-    if (
-      existing !== undefined
-      && (existing.To !== target || existing.Escaped !== escaped)
-    ) {
+    if (existing !== undefined && (existing.To !== target || existing.Escaped !== escaped)) {
       throw new Error("diagnostic path has conflicting stable replacements")
     }
     replacementsBySource.set(normalizedSource, {
       From: normalizedSource,
+      BackslashFrom: normalizedSource.replaceAll("/", "\\"),
       To: target,
       Escaped: escaped
     })
   }
+  AddReplacement(repositoryRoot, projectPrefix, true)
+  AddReplacement(await realpath(repositoryRoot), projectPrefix, true)
   AddReplacement(stagedRoot, projectPrefix, true)
   AddReplacement(stagedRealRoot, projectPrefix, true)
   for (const selected of selectedRoots) {
@@ -1218,7 +1343,7 @@ async function CreateDiagnosticContext(
   for (const family of families) {
     for (const diagnostic of family.Diagnostics) {
       VisitDiagnosticGraph(diagnostic, (node) => {
-        if (node.fileName === undefined) return
+        if (node.fileName === undefined || !IsScannableDiagnosticFileName(node.fileName)) return
         const mapped = MapDiagnosticFileName(
           node.fileName,
           stagedRoot,
@@ -1229,11 +1354,15 @@ async function CreateDiagnosticContext(
       })
     }
   }
-  const replacements = [...replacementsBySource.values()]
-    .sort((left, right) => (
-      right.From.length - left.From.length || CompareCodeUnits(left.From, right.From)
-    ))
-  return { StagedRoot: stagedRoot, SelectedRoots: selectedRoots, ProjectPrefix: projectPrefix, Replacements: replacements }
+  const replacements = [...replacementsBySource.values()].sort(
+    (left, right) => right.From.length - left.From.length || CompareCodeUnits(left.From, right.From)
+  )
+  return {
+    StagedRoot: stagedRoot,
+    SelectedRoots: selectedRoots,
+    ProjectPrefix: projectPrefix,
+    Replacements: replacements
+  }
 }
 
 function NormalizeDiagnosticText(
@@ -1242,6 +1371,13 @@ function NormalizeDiagnosticText(
 ): NormalizedDiagnosticText {
   let stable = value.replaceAll("\r\n", "\n").replaceAll("\r", "\n")
   let escaped = false
+  function DiagnosticPathTokenEnd(value: string, start: number): number {
+    let end = start
+    while (end < value.length && !/[\s"'`<>()\[\]{},;!?]/.test(value[end] as string)) {
+      end += 1
+    }
+    return end
+  }
   function RedactAbsolutePath(value: string): string {
     let candidate = value
     let suffix = ""
@@ -1258,9 +1394,10 @@ function NormalizeDiagnosticText(
     )
     for (const replacement of context.Replacements) {
       if (
-        normalizedCandidate !== replacement.From
-        && !normalizedCandidate.startsWith(`${replacement.From}/`)
-      ) continue
+        normalizedCandidate !== replacement.From &&
+        !normalizedCandidate.startsWith(`${replacement.From}/`)
+      )
+        continue
       if (replacement.Escaped || mapped.Escaped) {
         escaped = true
         return `${context.ProjectPrefix}${suffix}`
@@ -1270,44 +1407,88 @@ function NormalizeDiagnosticText(
     if (mapped.Escaped) escaped = true
     return `${mapped.Path}${suffix}`
   }
-  function RedactPathText(value: string): string {
-    let redacted = value
-    const fileUrls = [...redacted.matchAll(
-      /(^|[^A-Za-z0-9_\/])(file:\/\/[^\s"'`<>()\[\]{},;!?]+)/gim
-    )]
-    for (const match of fileUrls) {
-      const prefix = match[1] as string
-      escaped = true
-      redacted = redacted.replaceAll(match[0], `${prefix}file:///${context.ProjectPrefix}`)
+  function RedactKnownPaths(value: string): string {
+    let redacted = ""
+    let cursor = 0
+    while (cursor < value.length) {
+      let selectedStart = -1
+      let selectedLength = -1
+      for (const replacement of context.Replacements) {
+        for (const variant of replacement.From === replacement.BackslashFrom
+          ? [replacement.From]
+          : [replacement.From, replacement.BackslashFrom]) {
+          if (variant.length === 0) continue
+          const start = value.indexOf(variant, cursor)
+          if (
+            start !== -1 &&
+            (selectedStart === -1 ||
+              start < selectedStart ||
+              (start === selectedStart && variant.length > selectedLength))
+          ) {
+            selectedStart = start
+            selectedLength = variant.length
+          }
+        }
+      }
+      if (selectedStart === -1) {
+        redacted += value.slice(cursor)
+        break
+      }
+      redacted += value.slice(cursor, selectedStart)
+      const end = DiagnosticPathTokenEnd(value, selectedStart + selectedLength)
+      redacted += RedactAbsolutePath(value.slice(selectedStart, end))
+      cursor = end
     }
-    const quotedWindowsPaths = [...redacted.matchAll(
-      /(["'`])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^"'`\r\n]+)\1/g
-    )]
+    return redacted
+  }
+  function RedactBoundarylessWindowsPaths(value: string): string {
+    let redacted = value
+    const windowsPaths = [
+      ...redacted.matchAll(/((?:\\\\[?.]\\|\\\\(?![?.]\\))[^\s"'`<>()\[\]{},;!?]+)/g)
+    ]
+    for (const match of windowsPaths) {
+      redacted = redacted.replaceAll(match[0], RedactAbsolutePath(match[0]))
+    }
+    return redacted
+  }
+  function RedactPathText(value: string): string {
+    let redacted = RedactKnownPaths(value)
+    redacted = RedactBoundarylessWindowsPaths(redacted)
+    const fileUrls = [...redacted.matchAll(/file:\/\/[^\s"'`<>()\[\]{},;!?]+/gim)]
+    for (const match of fileUrls) {
+      escaped = true
+      redacted = redacted.replaceAll(match[0], `file:///${context.ProjectPrefix}`)
+    }
+    const quotedWindowsPaths = [
+      ...redacted.matchAll(/(["'`])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^"'`\r\n]+)\1/g)
+    ]
     for (const match of quotedWindowsPaths) {
       const quote = match[1] as string
       const path = match[2] as string
       redacted = redacted.replaceAll(match[0], `${quote}${RedactAbsolutePath(path)}${quote}`)
     }
-    const unquotedWindowsPaths = [...redacted.matchAll(
-      /(^|[^A-Za-z0-9_\/\\])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^\s"'`<>()\[\]{},;!?]+)/gm
-    )]
+    const unquotedWindowsPaths = [
+      ...redacted.matchAll(
+        /(^|[^A-Za-z0-9_\/\\])((?:\\\\[?.]\\|\\\\(?![?.]\\)|[A-Za-z]:\\)[^\s"'`<>()\[\]{},;!?]+)/gm
+      )
+    ]
     for (const match of unquotedWindowsPaths) {
       const prefix = match[1] as string
       const path = match[2] as string
       redacted = redacted.replaceAll(match[0], `${prefix}${RedactAbsolutePath(path)}`)
     }
     redacted = NormalizeDiagnosticSeparators(redacted)
-    const quotedPaths = [...redacted.matchAll(
-      /(["'`])((?:[A-Za-z]:\/|\/(?!\/))[^"'`\r\n]+)\1/g
-    )]
+    const quotedPaths = [...redacted.matchAll(/(["'`])((?:[A-Za-z]:\/|\/(?!\/))[^"'`\r\n]+)\1/g)]
     for (const match of quotedPaths) {
       const quote = match[1] as string
       const path = match[2] as string
       redacted = redacted.replaceAll(match[0], `${quote}${RedactAbsolutePath(path)}${quote}`)
     }
-    const unquotedPaths = [...redacted.matchAll(
-      /(^|[^A-Za-z0-9_.\/\\])((?:[A-Za-z]:\/|\/(?!\/))[^\s"'`<>()\[\]{},;!?]+)/gm
-    )]
+    const unquotedPaths = [
+      ...redacted.matchAll(
+        /(^|[^A-Za-z0-9_.\/\\])((?:[A-Za-z]:\/|\/(?!\/))[^\s"'`<>()\[\]{},;!?]+)/gm
+      )
+    ]
     for (const match of unquotedPaths) {
       const prefix = match[1] as string
       const path = match[2] as string
@@ -1316,9 +1497,11 @@ function NormalizeDiagnosticText(
     return redacted
   }
 
-  const preservedUrls = [...stable.matchAll(
-    /(^|[^A-Za-z0-9_\/])(https?:\/\/[^\s"'`<>]+)|(^|[^A-Za-z0-9_:/])(\/\/[^\s"'`<>]+)/gim
-  )]
+  const preservedUrls = [
+    ...stable.matchAll(
+      /(^|[^A-Za-z0-9_\/])(https?:\/\/[^\s"'`<>]+)|(^|[^A-Za-z0-9_:/])(\/\/[^\s"'`<>]+)/gim
+    )
+  ]
   let text = ""
   let cursor = 0
   for (const match of preservedUrls) {
@@ -1356,9 +1539,7 @@ function CollectDiagnosticMessage(
   )
   const text = NormalizeDiagnosticText(diagnostic.text, context)
   segments.push(
-    related && diagnostic.fileName !== undefined
-      ? `${mapped.Path}: ${text.Text}`
-      : text.Text
+    related && diagnostic.fileName !== undefined ? `${mapped.Path}: ${text.Text}` : text.Text
   )
   if (mapped.Escaped) escapeIssues.push(DiagnosticEscapeIssue(context.ProjectPrefix))
   if (text.Escaped) escapeIssues.push(DiagnosticEscapeIssue(context.ProjectPrefix))
@@ -1370,10 +1551,7 @@ function CollectDiagnosticMessage(
   }
 }
 
-function DiagnosticIssues(
-  family: DiagnosticFamily,
-  context: DiagnosticContext
-): SessionIssue[] {
+function DiagnosticIssues(family: DiagnosticFamily, context: DiagnosticContext): SessionIssue[] {
   const issues: SessionIssue[] = []
   for (const diagnostic of family.Diagnostics) {
     const segments: string[] = []
@@ -1395,9 +1573,11 @@ function DiagnosticIssues(
 }
 
 function CompareSessionIssues(left: SessionIssue, right: SessionIssue): number {
-  return CompareCodeUnits(left.Code, right.Code)
-    || CompareCodeUnits(left.Path, right.Path)
-    || CompareCodeUnits(left.Message, right.Message)
+  return (
+    CompareCodeUnits(left.Code, right.Code) ||
+    CompareCodeUnits(left.Path, right.Path) ||
+    CompareCodeUnits(left.Message, right.Message)
+  )
 }
 
 async function AnalyzeAdmittedProject(
@@ -1426,18 +1606,19 @@ async function AnalyzeAdmittedProject(
     selectedPrefixes,
     families
   )
-  const issues = families.flatMap((family) => DiagnosticIssues(family, context))
+  const issues = families
+    .flatMap((family) => DiagnosticIssues(family, context))
     .sort(CompareSessionIssues)
   return { SourceFilesChecked: session.SourceFiles.length, Issues: issues }
 }
 
-export async function AnalyzeProjectSessionWithOperations(
+export async function analyzeProjectSessionWithOperations(
   snapshot: InputSnapshot,
   projectPrefix: string,
   operations: ProjectSessionOperations
 ): Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly SessionIssue[] }> {
   try {
-    return await WithProjectSessionWithOperations(
+    return await withProjectSessionWithOperations(
       snapshot,
       projectPrefix,
       (session) => AnalyzeAdmittedProject(session, projectPrefix, [projectPrefix]),
@@ -1451,7 +1632,7 @@ export async function AnalyzeProjectSessionWithOperations(
   }
 }
 
-export async function AnalyzeWorkspaceProjectSessionWithOperations(
+export async function analyzeWorkspaceProjectSessionWithOperations(
   snapshot: InputSnapshot,
   authority: WorkspaceProjectAuthority,
   operations: ProjectSessionOperations
@@ -1462,14 +1643,11 @@ export async function AnalyzeWorkspaceProjectSessionWithOperations(
       admittedAuthority.ProjectPrefix,
       ...admittedAuthority.DependencyPrefixes
     ]
-    return await WithWorkspaceProjectSessionWithOperations(
+    return await withWorkspaceProjectSessionWithOperations(
       snapshot,
       admittedAuthority,
-      (session) => AnalyzeAdmittedProject(
-        session,
-        admittedAuthority.ProjectPrefix,
-        selectedPrefixes
-      ),
+      (session) =>
+        AnalyzeAdmittedProject(session, admittedAuthority.ProjectPrefix, selectedPrefixes),
       operations
     )
   } catch (error) {

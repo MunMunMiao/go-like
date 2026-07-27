@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/registry-mdns",
+  "resources": [
+    {
+      "id": "mdns-registration",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "mdns-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "node-mdns-datagram",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

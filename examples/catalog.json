@@ -1,0 +1,396 @@
+{
+  "schemaVersion": 1,
+  "examples": [
+    {
+      "id": "commerce-catalog",
+      "industry": "电商",
+      "requiresExternalServices": true,
+      "invariant": "缓存失效时仍须从 Pricing 获取权威价格",
+      "capabilities": [
+        "@likego/web",
+        "@likego/client",
+        "@likego/cache",
+        "@likego/resilience",
+        "@likego/health",
+        "@likego/cache-redis",
+        "@likego/registry-consul",
+        "@likego/transport-http"
+      ],
+      "tier": "production"
+    },
+    {
+      "id": "saas-tenant-api",
+      "industry": "多租户 SaaS",
+      "requiresExternalServices": true,
+      "invariant": "任一租户的配置、缓存和限流状态不得泄漏到其他租户",
+      "capabilities": [
+        "@likego/web",
+        "@likego/cache",
+        "@likego/hono",
+        "@likego/resilience",
+        "@likego/config-consul",
+        "@likego/cache-redis",
+        "@likego/pino",
+        "@likego/store-consul"
+      ],
+      "tier": "production"
+    },
+    {
+      "id": "payments-ledger",
+      "industry": "支付",
+      "requiresExternalServices": true,
+      "invariant": "每笔入账分录借贷平衡且同一幂等键只能生效一次",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "production"
+    },
+    {
+      "id": "iot-telemetry",
+      "industry": "物联网",
+      "requiresExternalServices": true,
+      "invariant": "设备遥测在重投和断线重连后至多产生一个业务结果",
+      "capabilities": ["@likego/broker", "@likego/nats"],
+      "tier": "production"
+    },
+    {
+      "id": "batch-reporting",
+      "industry": "数据报表",
+      "requiresExternalServices": true,
+      "invariant": "批次从检查点恢复时不得重复提交已经完成的报表分片",
+      "capabilities": ["@likego/croner", "@likego/bullmq", "@likego/store-file"],
+      "tier": "production"
+    },
+    {
+      "id": "enterprise-platform-runtime",
+      "industry": "企业基础平台",
+      "requiresExternalServices": true,
+      "invariant": "多服务进程退出时所有常驻资源都必须进入统一生命周期且无孤儿资源",
+      "capabilities": [
+        "@likego/config-vault",
+        "@likego/registry-consul",
+        "@likego/transport-http",
+        "@likego/health",
+        "@likego/otel",
+        "@likego/pino",
+        "@likego/prometheus",
+        "@likego/store-vault"
+      ],
+      "tier": "production"
+    },
+    {
+      "id": "retail-inventory-reservation",
+      "industry": "全渠道零售",
+      "invariant": "并发预占不得超卖且请求重试不得重复扣减",
+      "capabilities": ["@likego/web", "@likego/cache", "@likego/cache-memory", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "marketplace-order-fulfillment",
+      "industry": "平台电商",
+      "invariant": "履约事件只能合法迁移且重投结果必须幂等",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "subscription-billing",
+      "industry": "订阅计费",
+      "invariant": "升降级差额必须按剩余账期确定性结算",
+      "capabilities": ["@likego/web", "@likego/config"],
+      "tier": "integration"
+    },
+    {
+      "id": "bank-transfer-gateway",
+      "industry": "银行",
+      "invariant": "转账必须按国家币种与 BIC 路由清算网络",
+      "capabilities": [
+        "@likego/client",
+        "@likego/server",
+        "@likego/transport",
+        "@likego/transport-memory",
+        "@likego/web"
+      ],
+      "tier": "integration"
+    },
+    {
+      "id": "insurance-claims",
+      "industry": "保险",
+      "invariant": "赔付必须受承保期免赔额和累计上限约束",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "fraud-risk-scoring",
+      "industry": "金融风控",
+      "invariant": "风险评分必须使用受控信号并在依赖失败时熔断",
+      "capabilities": [
+        "@likego/web",
+        "@likego/cache",
+        "@likego/cache-memory",
+        "@likego/resilience"
+      ],
+      "tier": "integration"
+    },
+    {
+      "id": "securities-market-data",
+      "industry": "证券",
+      "invariant": "行情序列不得倒退且冲突重放必须拒绝",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "healthcare-appointments",
+      "industry": "医疗服务",
+      "invariant": "同一医生时段只能被一个有效预约占用",
+      "capabilities": [
+        "@likego/web",
+        "@likego/client",
+        "@likego/server",
+        "@likego/transport",
+        "@likego/transport-memory"
+      ],
+      "tier": "core"
+    },
+    {
+      "id": "laboratory-results",
+      "industry": "临床检验",
+      "invariant": "检验结果只能发送给匹配的就诊上下文且日志不得暴露结果正文",
+      "capabilities": ["@likego/web", "@likego/metadata", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "pharmacy-prescription",
+      "industry": "医药",
+      "invariant": "处方只能按合法状态流转且库存扣减失败不得标记为已发药",
+      "capabilities": ["@likego/web", "@likego/resilience"],
+      "tier": "integration"
+    },
+    {
+      "id": "logistics-shipment-tracking",
+      "industry": "物流",
+      "invariant": "乱序和重复运输事件不得使包裹状态倒退",
+      "capabilities": ["@likego/web", "@likego/cache-memory"],
+      "tier": "integration"
+    },
+    {
+      "id": "warehouse-wave-picking",
+      "industry": "仓储",
+      "invariant": "一个拣货任务只能由一个有效租约执行并可从停滞状态恢复",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "last-mile-dispatch",
+      "industry": "末端配送",
+      "invariant": "订单只能派给满足容量约束的健康配送节点",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "airline-irregular-operations",
+      "industry": "航空",
+      "invariant": "航变重订任务必须可重试且同一旅客只保留一个有效处置结果",
+      "capabilities": ["@likego/web", "@likego/registry", "@likego/registry-zookeeper"],
+      "tier": "integration"
+    },
+    {
+      "id": "hotel-room-reservation",
+      "industry": "酒店",
+      "invariant": "跨夜预留不得超卖且显式释放必须恢复库存",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "core"
+    },
+    {
+      "id": "public-transit-arrivals",
+      "industry": "公共交通",
+      "invariant": "过期到站预测不得作为当前结果返回",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "core"
+    },
+    {
+      "id": "manufacturing-maintenance",
+      "industry": "制造业",
+      "invariant": "同一设备故障窗口只能创建一个维保工单",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "energy-meter-settlement",
+      "industry": "能源",
+      "invariant": "结算必须使用配置快照与安全整数金额",
+      "capabilities": ["@likego/web", "@likego/config"],
+      "tier": "integration"
+    },
+    {
+      "id": "ev-charging-control",
+      "industry": "新能源汽车",
+      "invariant": "充电分配不得超容量且离线站点不得接单",
+      "capabilities": ["@likego/web", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "smart-agriculture-irrigation",
+      "industry": "智慧农业",
+      "invariant": "传感数据过期或配置失效时不得继续发出灌溉命令",
+      "capabilities": ["@likego/web", "@likego/config"],
+      "tier": "core"
+    },
+    {
+      "id": "telecom-service-provisioning",
+      "industry": "电信",
+      "invariant": "重复开通不得重复分配 SIM 或资源",
+      "capabilities": [
+        "@likego/client",
+        "@likego/server",
+        "@likego/transport-memory",
+        "@likego/web"
+      ],
+      "tier": "integration"
+    },
+    {
+      "id": "media-transcoding-pipeline",
+      "industry": "数字媒体",
+      "invariant": "相同转码任务只能产生一个确定性结果",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "live-game-matchmaking",
+      "industry": "在线游戏",
+      "invariant": "玩家不得重复入队且只能匹配同区近似水平玩家",
+      "capabilities": ["@likego/web", "@likego/registry", "@likego/registry-kubernetes"],
+      "tier": "core"
+    },
+    {
+      "id": "ad-campaign-serving",
+      "industry": "广告技术",
+      "invariant": "投放不得突破活动预算和频控上限",
+      "capabilities": ["@likego/web", "@likego/cache-memory", "@likego/core", "@likego/resilience"],
+      "tier": "integration"
+    },
+    {
+      "id": "learning-enrollment",
+      "industry": "在线教育",
+      "invariant": "并发选课不得超容量且请求重试不得重复占位",
+      "capabilities": [
+        "@likego/web",
+        "@likego/core",
+        "@likego/transport",
+        "@likego/transport-memory"
+      ],
+      "tier": "core"
+    },
+    {
+      "id": "government-permit-workflow",
+      "industry": "政务",
+      "invariant": "许可申请必须按材料政策审核且重复提交幂等",
+      "capabilities": ["@likego/web", "@likego/core"],
+      "tier": "integration"
+    },
+    {
+      "id": "real-estate-search-index",
+      "industry": "房地产",
+      "invariant": "房源撤回后陈旧索引不得继续返回可售状态",
+      "capabilities": ["@likego/web", "@likego/cache-memory", "@likego/core"],
+      "tier": "core"
+    },
+    {
+      "id": "restaurant-kitchen-routing",
+      "industry": "餐饮",
+      "invariant": "菜品任务只能路由到可用档口且重复事件不得重复出餐",
+      "capabilities": [
+        "@likego/web",
+        "@likego/registry",
+        "@likego/registry-mdns",
+        "@likego/health"
+      ],
+      "tier": "core"
+    },
+    {
+      "id": "cold-chain-monitoring",
+      "industry": "食品冷链",
+      "invariant": "温度判定必须使用配置快照且读数序列只增不减",
+      "capabilities": ["@likego/web", "@likego/config"],
+      "tier": "integration"
+    },
+    {
+      "id": "customer-support-routing",
+      "industry": "客户服务",
+      "invariant": "工单必须按语言技能筛选并在候选坐席间轮转",
+      "capabilities": ["@likego/web", "@likego/registry"],
+      "tier": "core"
+    },
+    {
+      "id": "notification-delivery",
+      "industry": "消息通信",
+      "invariant": "通知重试必须有界且重复请求不得重复投递",
+      "capabilities": [
+        "@likego/web",
+        "@likego/resilience",
+        "@likego/broker-memory",
+        "@likego/event",
+        "@likego/store-memory",
+        "@likego/winston"
+      ],
+      "tier": "integration"
+    },
+    {
+      "id": "cybersecurity-alert-triage",
+      "industry": "网络安全",
+      "invariant": "告警必须按规则取最高严重度且重复上报幂等",
+      "capabilities": [
+        "@likego/web",
+        "@likego/config",
+        "@likego/config-etcd",
+        "@likego/registry-etcd",
+        "@likego/store-etcd",
+        "@likego/health"
+      ],
+      "tier": "production"
+    },
+    {
+      "id": "digital-identity-verification",
+      "industry": "数字身份",
+      "invariant": "验证请求只能发送给受信服务且日志不得记录证件内容",
+      "capabilities": ["@likego/web", "@likego/resilience", "@likego/health"],
+      "tier": "integration"
+    },
+    {
+      "id": "emergency-response-dispatch",
+      "industry": "公共安全",
+      "invariant": "紧急事件必须优先投递到健康节点且超过时限立即取消",
+      "capabilities": ["@likego/web", "@likego/registry"],
+      "tier": "integration"
+    },
+    {
+      "id": "elysia",
+      "industry": "第三方框架集成",
+      "kind": "framework",
+      "invariant": "Elysia 路由须经专用适配器导出标准 Handler",
+      "capabilities": ["@likego/elysia", "@likego/web"],
+      "tier": "integration"
+    },
+    {
+      "id": "h3",
+      "industry": "第三方框架集成",
+      "kind": "framework",
+      "invariant": "H3 路由必须经专用适配器导出标准 Handler",
+      "capabilities": ["@likego/h3", "@likego/web"],
+      "tier": "integration"
+    },
+    {
+      "id": "hono",
+      "industry": "第三方框架集成",
+      "kind": "framework",
+      "invariant": "Hono 路由必须经专用适配器导出标准 Handler",
+      "capabilities": ["@likego/hono", "@likego/web"],
+      "tier": "integration"
+    },
+    {
+      "id": "vanilla-web",
+      "industry": "第三方框架集成",
+      "kind": "framework",
+      "invariant": "原生 Fetch Handler 必须可由 LikeGo Web 生命周期直接承接",
+      "capabilities": ["@likego/web"],
+      "tier": "integration"
+    }
+  ]
+}

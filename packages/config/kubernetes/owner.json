@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/config-kubernetes",
+  "resources": [
+    {
+      "id": "watch-stream",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

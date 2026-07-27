@@ -10,38 +10,118 @@
     "packageKind",
     "stability",
     "releaseBlocking",
-    "residency",
-    "capabilities",
-    "runtimes"
+    "exports"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "package": { "type": "string", "pattern": "^@likego/[a-z0-9][a-z0-9-]*$" },
-    "packageKind": { "enum": ["portable", "adapter"] },
+    "packageKind": { "enum": ["portable", "integration", "hybrid"] },
     "stability": { "enum": ["provisional", "beta", "stable"] },
     "releaseBlocking": { "type": "boolean" },
-    "residency": { "enum": ["non-resident", "resident"] },
-    "capabilities": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
-    },
-    "runtimes": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/runtime" }
+    "exports": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "anyOf": [
+          { "const": "." },
+          {
+            "type": "string",
+            "pattern": "^\\./[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)*$"
+          }
+        ]
+      },
+      "additionalProperties": { "$ref": "#/$defs/export" }
     }
   },
   "$defs": {
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "residency", "ownerResources", "capabilities", "runtimes"],
+      "properties": {
+        "kind": { "enum": ["portable", "integration"] },
+        "residency": { "enum": ["non-resident", "resident"] },
+        "ownerResources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "broker",
+              "broker-memory",
+              "broker-rabbitmq",
+              "bullmq",
+              "cache",
+              "cache-memory",
+              "cache-redis",
+              "client",
+              "config",
+              "config-consul",
+              "config-env",
+              "config-etcd",
+              "config-file",
+              "config-kubernetes",
+              "config-vault",
+              "config-yaml",
+              "context",
+              "cron",
+              "discovery",
+              "etcd-json-gateway",
+              "event",
+              "headers",
+              "health",
+              "http",
+              "jobs",
+              "lifecycle",
+              "logging",
+              "metadata",
+              "metrics",
+              "nats-core",
+              "nats-jetstream",
+              "node-filesystem",
+              "observability",
+              "opentelemetry",
+              "prometheus",
+              "registry",
+              "registry-consul",
+              "registry-etcd",
+              "registry-kubernetes",
+              "registry-mdns",
+              "registry-zookeeper",
+              "resilience",
+              "scaffold",
+              "selector",
+              "server",
+              "service-discovery",
+              "store",
+              "store-consul",
+              "store-etcd",
+              "store-file",
+              "store-memory",
+              "store-vault",
+              "transport",
+              "web"
+            ]
+          }
+        },
+        "runtimes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/runtime" }
+        }
+      }
+    },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "runtime",
-        "lane",
-        "minimumVersion",
-        "testedVersions",
-        "terminalObservability"
-      ],
+      "required": ["runtime", "lane", "minimumVersion", "testedVersions", "terminalObservability"],
       "properties": {
         "runtime": { "enum": ["bun", "node", "deno"] },
         "lane": { "enum": ["exact", "lts", "current"] },

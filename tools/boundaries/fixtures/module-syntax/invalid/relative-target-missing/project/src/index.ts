@@ -1,1 +1,1 @@
-import "./missing.js"
+import "./missing"

@@ -1,13 +1,29 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink } from "node:fs/promises"
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  symlink
+} from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join, relative, resolve, win32 } from "node:path"
 import { isDeepStrictEqual } from "node:util"
-import { Program, type API, type Diagnostic, type Project, type Snapshot as TypeScriptSnapshot } from "typescript/unstable/async"
+import {
+  Program,
+  type API,
+  type Diagnostic,
+  type Project,
+  type Snapshot as TypeScriptSnapshot
+} from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
-import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
-import { SnapshotInputs, type InputSnapshot, type SnapshotFile } from "../gates/result.ts"
+import type { AtomicWriterOperations } from "../gates/atomic-writer"
+import { snapshotInputs, type InputSnapshot, type SnapshotFile } from "../gates/result"
 
 interface ProbeCase {
   readonly scenario: string
@@ -66,38 +82,47 @@ interface TestWorkspaceProjectAuthority {
 }
 
 interface ProjectSessionModule extends Readonly<Record<string, unknown>> {
-  readonly NodeProjectSessionOperations: (repositoryRoot?: string) => TestProjectSessionOperations
-  readonly WithProjectSession: <T>(
+  readonly nodeProjectSessionOperations: (repositoryRoot?: string) => TestProjectSessionOperations
+  readonly withProjectSession: <T>(
     snapshot: InputSnapshot,
     projectPrefix: string,
     use: (session: TestProjectSession) => Promise<T>
   ) => Promise<T>
-  readonly WithProjectSessionWithOperations: <T>(
+  readonly withProjectSessionWithOperations: <T>(
     snapshot: InputSnapshot,
     projectPrefix: string,
     use: (session: TestProjectSession) => Promise<T>,
     operations: TestProjectSessionOperations
   ) => Promise<T>
-  readonly AnalyzeProjectSessionWithOperations: (
+  readonly analyzeProjectSessionWithOperations: (
     snapshot: InputSnapshot,
     projectPrefix: string,
     operations: TestProjectSessionOperations
-  ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
-  readonly AnalyzeProjectSession: (
+  ) => Promise<{
+    readonly SourceFilesChecked: number
+    readonly Issues: readonly TestSessionIssue[]
+  }>
+  readonly analyzeProjectSession: (
     snapshot: InputSnapshot,
     projectPrefix: string
-  ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
-  readonly WithWorkspaceProjectSessionWithOperations: <T>(
+  ) => Promise<{
+    readonly SourceFilesChecked: number
+    readonly Issues: readonly TestSessionIssue[]
+  }>
+  readonly withWorkspaceProjectSessionWithOperations: <T>(
     snapshot: InputSnapshot,
     authority: TestWorkspaceProjectAuthority,
     use: (session: TestProjectSession) => Promise<T>,
     operations: TestProjectSessionOperations
   ) => Promise<T>
-  readonly AnalyzeWorkspaceProjectSessionWithOperations: (
+  readonly analyzeWorkspaceProjectSessionWithOperations: (
     snapshot: InputSnapshot,
     authority: TestWorkspaceProjectAuthority,
     operations: TestProjectSessionOperations
-  ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
+  ) => Promise<{
+    readonly SourceFilesChecked: number
+    readonly Issues: readonly TestSessionIssue[]
+  }>
 }
 
 interface ProjectSessionProbeResult {
@@ -116,20 +141,23 @@ interface ProjectSessionProbeExecution {
 }
 
 interface ProjectSessionProbeModule extends Readonly<Record<string, unknown>> {
-  readonly EvaluateProjectSessionProbe: (
+  readonly evaluateProjectSessionProbe: (
     snapshot: InputSnapshot,
     scenario: string,
     repositoryRoot: string
   ) => Promise<ProjectSessionProbeExecution>
-  readonly EvaluateProjectSessionProbeWithReadbackOperations: (
+  readonly evaluateProjectSessionProbeWithReadbackOperations: (
     snapshot: InputSnapshot,
     scenario: string,
     repositoryRoot: string,
     readback: { readonly Lstat: (path: string) => Promise<unknown> }
   ) => Promise<ProjectSessionProbeExecution>
-  readonly Main: (
+  readonly main: (
     args: readonly string[],
-    io?: { readonly WriteStdout: (value: string) => void; readonly WriteStderr: (value: string) => void }
+    io?: {
+      readonly WriteStdout: (value: string) => void
+      readonly WriteStderr: (value: string) => void
+    }
   ) => Promise<number>
 }
 
@@ -144,27 +172,36 @@ interface TestCorpusEvaluation {
 }
 
 interface ProjectSessionFixtureModule extends Readonly<Record<string, unknown>> {
-  readonly DiscoverProjectSessionFixtureInputs: (root: string) => Promise<readonly string[]>
-  readonly EvaluateProjectSessionFixtureCorpus: (
+  readonly discoverProjectSessionFixtureInputs: (root: string) => Promise<readonly string[]>
+  readonly evaluateProjectSessionFixtureCorpus: (
     snapshot: InputSnapshot,
     repositoryRoot: string
   ) => Promise<TestCorpusEvaluation>
-  readonly EvaluateProjectSessionFixtureCorpusWithAnalyzer: (
+  readonly evaluateProjectSessionFixtureCorpusWithAnalyzer: (
     snapshot: InputSnapshot,
     repositoryRoot: string,
     analyze: (
       snapshot: InputSnapshot,
       projectPrefix: string,
       operations: TestProjectSessionOperations
-    ) => Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }>
+    ) => Promise<{
+      readonly SourceFilesChecked: number
+      readonly Issues: readonly TestSessionIssue[]
+    }>
   ) => Promise<TestCorpusEvaluation>
-  readonly Main: (
+  readonly main: (
     args: readonly string[],
-    io?: { readonly WriteStdout: (value: string) => void; readonly WriteStderr: (value: string) => void }
+    io?: {
+      readonly WriteStdout: (value: string) => void
+      readonly WriteStderr: (value: string) => void
+    }
   ) => Promise<number>
-  readonly MainWithDependencies: (
+  readonly mainWithDependencies: (
     args: readonly string[],
-    io: { readonly WriteStdout: (value: string) => void; readonly WriteStderr: (value: string) => void },
+    io: {
+      readonly WriteStdout: (value: string) => void
+      readonly WriteStderr: (value: string) => void
+    },
     dependencies: {
       readonly DiscoverInputPaths: (root: string) => Promise<readonly string[]>
       readonly Evaluate: (snapshot: InputSnapshot, root: string) => Promise<TestCorpusEvaluation>
@@ -269,31 +306,97 @@ const DelegateCleanup = { snapshot: "delegate", api: "delegate", remove: "delega
 const FailGate = { exitCode: 1, status: "fail", checkIds: ["GATE_INTERNAL_ERROR"] } as const
 const AllCleanupOrder = ["snapshot.dispose", "api.close", "remove-staging"] as const
 const PrimaryErrorOrder = ["primary"] as const
-const OverlongMaterializationPath = "project/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/value.ts"
-const ExpectedProbeInputIdentities: Readonly<Record<ProbeScenario, {
-  readonly projectPrefix: string
-  readonly virtualInputsSha256: string
-}>> = {
-  success: { projectPrefix: "project", virtualInputsSha256: "3f36de135d47804c908599299de232eabf5a0aeaa1ce15019e61f9438b3c5349" },
-  "primary-error": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "primary-undefined": { projectPrefix: "project", virtualInputsSha256: "3f36de135d47804c908599299de232eabf5a0aeaa1ce15019e61f9438b3c5349" },
-  "materialization-failure": { projectPrefix: "project", virtualInputsSha256: "a56a0154e9671a168c5aeb8b2200cab6ec4f230682fc3b3d008e8579b8d2d6f3" },
-  "update-before-snapshot": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "update-after-snapshot": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "admission-failure": { projectPrefix: "project", virtualInputsSha256: "311470c0dc3a97655cc28591e9d707abfd7704d6372ea5bac64b7ffc52726ba9" },
-  "snapshot-cleanup": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "api-cleanup": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "remove-before": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "remove-after": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "primary-plus-all-cleanups": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "value-plus-all-cleanups": { projectPrefix: "project", virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0" },
-  "project-count-zero": { projectPrefix: "project", virtualInputsSha256: "ac1e9df2bd6a00647403d0bd0b54abaf451fee81ec065427035a4137a9cf031d" },
-  "project-count-multiple": { projectPrefix: "project", virtualInputsSha256: "0a6e8ce3a4c751add16781a3141b8576ce0d634845aa81f2648e92f9d6f28c63" },
-  "project-identity": { projectPrefix: "project", virtualInputsSha256: "0a6e8ce3a4c751add16781a3141b8576ce0d634845aa81f2648e92f9d6f28c63" },
-  "input-invalid-prefix": { projectPrefix: "../project", virtualInputsSha256: "598b9c64d03cb71761e64be7fe938f71728e1b37f9a19d6ada348ee39a032190" },
-  "input-invalid-path": { projectPrefix: "project", virtualInputsSha256: "602a1927a1f6b47d59ea08eddfb2bc12aef558e03ef05331c08f801cab7f0527" },
-  "source-realpath-escape": { projectPrefix: "project", virtualInputsSha256: "190928c40fbc78865ff06e069ce5f5e1a8ceaafef5a588d65068a8c798a44f02" },
-  "external-source": { projectPrefix: "project", virtualInputsSha256: "cc8c501837c6ece9d62e9a555a88eabbf32a3816181e4ee110879f2b90b043d1" }
+const OverlongMaterializationPath =
+  "project/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/value.ts"
+const ExpectedProbeInputIdentities: Readonly<
+  Record<
+    ProbeScenario,
+    {
+      readonly projectPrefix: string
+      readonly virtualInputsSha256: string
+    }
+  >
+> = {
+  success: {
+    projectPrefix: "project",
+    virtualInputsSha256: "3f36de135d47804c908599299de232eabf5a0aeaa1ce15019e61f9438b3c5349"
+  },
+  "primary-error": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "primary-undefined": {
+    projectPrefix: "project",
+    virtualInputsSha256: "3f36de135d47804c908599299de232eabf5a0aeaa1ce15019e61f9438b3c5349"
+  },
+  "materialization-failure": {
+    projectPrefix: "project",
+    virtualInputsSha256: "a56a0154e9671a168c5aeb8b2200cab6ec4f230682fc3b3d008e8579b8d2d6f3"
+  },
+  "update-before-snapshot": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "update-after-snapshot": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "admission-failure": {
+    projectPrefix: "project",
+    virtualInputsSha256: "311470c0dc3a97655cc28591e9d707abfd7704d6372ea5bac64b7ffc52726ba9"
+  },
+  "snapshot-cleanup": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "api-cleanup": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "remove-before": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "remove-after": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "primary-plus-all-cleanups": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "value-plus-all-cleanups": {
+    projectPrefix: "project",
+    virtualInputsSha256: "277a42f43e5555617e14c2669365c33c115600f07c79401a2ae54ce3b8b289e0"
+  },
+  "project-count-zero": {
+    projectPrefix: "project",
+    virtualInputsSha256: "ac1e9df2bd6a00647403d0bd0b54abaf451fee81ec065427035a4137a9cf031d"
+  },
+  "project-count-multiple": {
+    projectPrefix: "project",
+    virtualInputsSha256: "0a6e8ce3a4c751add16781a3141b8576ce0d634845aa81f2648e92f9d6f28c63"
+  },
+  "project-identity": {
+    projectPrefix: "project",
+    virtualInputsSha256: "0a6e8ce3a4c751add16781a3141b8576ce0d634845aa81f2648e92f9d6f28c63"
+  },
+  "input-invalid-prefix": {
+    projectPrefix: "../project",
+    virtualInputsSha256: "598b9c64d03cb71761e64be7fe938f71728e1b37f9a19d6ada348ee39a032190"
+  },
+  "input-invalid-path": {
+    projectPrefix: "project",
+    virtualInputsSha256: "602a1927a1f6b47d59ea08eddfb2bc12aef558e03ef05331c08f801cab7f0527"
+  },
+  "source-realpath-escape": {
+    projectPrefix: "project",
+    virtualInputsSha256: "190928c40fbc78865ff06e069ce5f5e1a8ceaafef5a588d65068a8c798a44f02"
+  },
+  "external-source": {
+    projectPrefix: "project",
+    virtualInputsSha256: "cc8c501837c6ece9d62e9a555a88eabbf32a3816181e4ee110879f2b90b043d1"
+  }
 }
 
 function Actions(
@@ -325,12 +428,11 @@ function Contract(
 }
 
 const ExpectedProbeContracts: Readonly<Record<ProbeScenario, ProbeContract>> = {
-  success: Contract(
-    "success",
-    Actions(),
-    Lifecycle(0, "success", AllCleanupOrder, [], "absent"),
-    { exitCode: 0, status: "pass", checkIds: ["PROJECT_SESSION_PROBE_PASS"] }
-  ),
+  success: Contract("success", Actions(), Lifecycle(0, "success", AllCleanupOrder, [], "absent"), {
+    exitCode: 0,
+    status: "pass",
+    checkIds: ["PROJECT_SESSION_PROBE_PASS"]
+  }),
   "primary-error": Contract(
     "primary-error",
     Actions("throw-error"),
@@ -390,7 +492,13 @@ const ExpectedProbeContracts: Readonly<Record<ProbeScenario, ProbeContract>> = {
       api: "delegate",
       remove: "throw-before-delegate"
     }),
-    Lifecycle(7, "aggregate-error", AllCleanupOrder, ["remove-staging"], "retained-then-harness-removed")
+    Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["remove-staging"],
+      "retained-then-harness-removed"
+    )
   ),
   "remove-after": Contract(
     "remove-after",
@@ -408,12 +516,13 @@ const ExpectedProbeContracts: Readonly<Record<ProbeScenario, ProbeContract>> = {
       api: "delegate-then-throw",
       remove: "delegate-then-throw"
     }),
-    Lifecycle(7, "aggregate-error", AllCleanupOrder, [
-      "primary",
-      "snapshot.dispose",
-      "api.close",
-      "remove-staging"
-    ], "absent")
+    Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["primary", "snapshot.dispose", "api.close", "remove-staging"],
+      "absent"
+    )
   ),
   "value-plus-all-cleanups": Contract(
     "value-plus-all-cleanups",
@@ -422,11 +531,13 @@ const ExpectedProbeContracts: Readonly<Record<ProbeScenario, ProbeContract>> = {
       api: "delegate-then-throw",
       remove: "delegate-then-throw"
     }),
-    Lifecycle(7, "aggregate-error", AllCleanupOrder, [
-      "snapshot.dispose",
-      "api.close",
-      "remove-staging"
-    ], "absent")
+    Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["snapshot.dispose", "api.close", "remove-staging"],
+      "absent"
+    )
   ),
   "project-count-zero": Contract(
     "project-count-zero",
@@ -479,7 +590,9 @@ const ExpectedProbeContracts: Readonly<Record<ProbeScenario, ProbeContract>> = {
 }
 
 afterEach(async () => {
-  await Promise.all(TemporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(
+    TemporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true }))
+  )
 })
 
 function Sha256(value: string | Uint8Array): string {
@@ -488,7 +601,7 @@ function Sha256(value: string | Uint8Array): string {
 
 function VirtualInputsSha256(files: ProbeDescriptor["virtualFiles"]): string {
   const inventory = [...files]
-    .sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0)
+    .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
     .map((file) => `${file.path}\0${Sha256(Encoder.encode(file.utf8))}\n`)
     .join("")
   return Sha256(inventory)
@@ -531,8 +644,10 @@ function HasExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly s
 }
 
 function IsStringArray(value: unknown, allowed?: ReadonlySet<string>): value is readonly string[] {
-  return Array.isArray(value)
-    && value.every((item) => typeof item === "string" && (allowed === undefined || allowed.has(item)))
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "string" && (allowed === undefined || allowed.has(item)))
+  )
 }
 
 function ParseJson(file: SnapshotFile): unknown {
@@ -542,67 +657,79 @@ function ParseJson(file: SnapshotFile): unknown {
 function ParseProbeCases(file: SnapshotFile): readonly ProbeCase[] {
   const value = ParseJson(file)
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "cases"])
-    || value.schemaVersion !== 1
-    || !Array.isArray(value.cases)
-    || value.cases.length === 0
-  ) throw new Error("probe inventory must use the fixed non-empty shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, ["schemaVersion", "cases"]) ||
+    value.schemaVersion !== 1 ||
+    !Array.isArray(value.cases) ||
+    value.cases.length === 0
+  )
+    throw new Error("probe inventory must use the fixed non-empty shape")
   const cases: ProbeCase[] = []
   const scenarios = new Set<string>()
   const paths = new Set<string>()
   for (const item of value.cases) {
     if (
-      !IsRecord(item)
-      || !HasExactKeys(item, ["scenario", "path"])
-      || typeof item.scenario !== "string"
-      || !/^[a-z][a-z0-9-]*$/.test(item.scenario)
-      || typeof item.path !== "string"
-      || item.path !== `${item.scenario}.json`
-      || scenarios.has(item.scenario)
-      || paths.has(item.path)
-    ) throw new Error("probe inventory entry is invalid or duplicated")
+      !IsRecord(item) ||
+      !HasExactKeys(item, ["scenario", "path"]) ||
+      typeof item.scenario !== "string" ||
+      !/^[a-z][a-z0-9-]*$/.test(item.scenario) ||
+      typeof item.path !== "string" ||
+      item.path !== `${item.scenario}.json` ||
+      scenarios.has(item.scenario) ||
+      paths.has(item.path)
+    )
+      throw new Error("probe inventory entry is invalid or duplicated")
     scenarios.add(item.scenario)
     paths.add(item.path)
     cases.push({ scenario: item.scenario, path: item.path })
   }
   const canonicalScenarios = new Set<string>(ExpectedProbeScenarios)
   if (
-    scenarios.size !== canonicalScenarios.size
-    || [...canonicalScenarios].some((scenario) => !scenarios.has(scenario))
-  ) throw new Error("probe inventory must contain the canonical scenario set")
+    scenarios.size !== canonicalScenarios.size ||
+    [...canonicalScenarios].some((scenario) => !scenarios.has(scenario))
+  )
+    throw new Error("probe inventory must contain the canonical scenario set")
   return cases
 }
 
 function ParseProbeDescriptor(file: SnapshotFile): ProbeDescriptor {
   const value = ParseJson(file)
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "scenario", "projectPrefix", "virtualFiles", "actions", "expected"])
-    || value.schemaVersion !== 1
-    || typeof value.scenario !== "string"
-    || !/^[a-z][a-z0-9-]*$/.test(value.scenario)
-    || typeof value.projectPrefix !== "string"
-    || value.projectPrefix.length === 0
-    || !Array.isArray(value.virtualFiles)
-    || value.virtualFiles.length === 0
-    || !IsRecord(value.actions)
-    || !HasExactKeys(value.actions, ["stage", "update", "callback", "cleanup"])
-    || !IsRecord(value.expected)
-    || !HasExactKeys(value.expected, ["lifecycle", "gate"])
-  ) throw new Error("probe descriptor must use the fixed root shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, [
+      "schemaVersion",
+      "scenario",
+      "projectPrefix",
+      "virtualFiles",
+      "actions",
+      "expected"
+    ]) ||
+    value.schemaVersion !== 1 ||
+    typeof value.scenario !== "string" ||
+    !/^[a-z][a-z0-9-]*$/.test(value.scenario) ||
+    typeof value.projectPrefix !== "string" ||
+    value.projectPrefix.length === 0 ||
+    !Array.isArray(value.virtualFiles) ||
+    value.virtualFiles.length === 0 ||
+    !IsRecord(value.actions) ||
+    !HasExactKeys(value.actions, ["stage", "update", "callback", "cleanup"]) ||
+    !IsRecord(value.expected) ||
+    !HasExactKeys(value.expected, ["lifecycle", "gate"])
+  )
+    throw new Error("probe descriptor must use the fixed root shape")
 
   const virtualPaths = new Set<string>()
   for (const virtualFile of value.virtualFiles) {
     if (
-      !IsRecord(virtualFile)
-      || !HasExactKeys(virtualFile, ["path", "utf8"])
-      || typeof virtualFile.path !== "string"
-      || virtualFile.path.length === 0
-      || typeof virtualFile.utf8 !== "string"
-      || Decoder.decode(Encoder.encode(virtualFile.utf8)) !== virtualFile.utf8
-      || virtualPaths.has(virtualFile.path)
-    ) throw new Error("probe virtual file must use canonical UTF-8 fields")
+      !IsRecord(virtualFile) ||
+      !HasExactKeys(virtualFile, ["path", "utf8"]) ||
+      typeof virtualFile.path !== "string" ||
+      virtualFile.path.length === 0 ||
+      typeof virtualFile.utf8 !== "string" ||
+      Decoder.decode(Encoder.encode(virtualFile.utf8)) !== virtualFile.utf8 ||
+      virtualPaths.has(virtualFile.path)
+    )
+      throw new Error("probe virtual file must use canonical UTF-8 fields")
     virtualPaths.add(virtualFile.path)
   }
 
@@ -613,52 +740,67 @@ function ParseProbeDescriptor(file: SnapshotFile): ProbeDescriptor {
   const lifecycle = value.expected.lifecycle
   const gate = value.expected.gate
   if (
-    !IsRecord(stage)
-    || !HasExactKeys(stage, ["kind", "path", "targetPath"])
-    || typeof stage.kind !== "string"
-    || !new Set(["normal", "materialization-failure", "source-realpath-escape"]).has(stage.kind)
-    || typeof stage.path !== "string"
-    || typeof stage.targetPath !== "string"
-    || !IsRecord(update)
-    || !HasExactKeys(update, ["kind", "path"])
-    || typeof update.kind !== "string"
-    || !new Set([
+    !IsRecord(stage) ||
+    !HasExactKeys(stage, ["kind", "path", "targetPath"]) ||
+    typeof stage.kind !== "string" ||
+    !new Set(["normal", "materialization-failure", "source-realpath-escape"]).has(stage.kind) ||
+    typeof stage.path !== "string" ||
+    typeof stage.targetPath !== "string" ||
+    !IsRecord(update) ||
+    !HasExactKeys(update, ["kind", "path"]) ||
+    typeof update.kind !== "string" ||
+    !new Set([
       "normal",
       "throw-before-snapshot",
       "throw-after-snapshot",
       "project-count-zero",
       "project-count-multiple",
       "project-identity"
-    ]).has(update.kind)
-    || typeof update.path !== "string"
-    || !IsRecord(callback)
-    || !HasExactKeys(callback, ["kind"])
-    || typeof callback.kind !== "string"
-    || !new Set(["return-value", "throw-error", "throw-undefined"]).has(callback.kind)
-    || !IsRecord(cleanup)
-    || !HasExactKeys(cleanup, ["snapshot", "api", "remove"])
-    || typeof cleanup.snapshot !== "string"
-    || !new Set(["delegate", "delegate-then-throw"]).has(cleanup.snapshot)
-    || typeof cleanup.api !== "string"
-    || !new Set(["delegate", "delegate-then-throw"]).has(cleanup.api)
-    || typeof cleanup.remove !== "string"
-    || !new Set(["delegate", "delegate-then-throw", "throw-before-delegate"]).has(cleanup.remove)
-    || !IsRecord(lifecycle)
-    || !HasExactKeys(lifecycle, ["exitCode", "outcome", "cleanupOrder", "errorOrder", "stageReadback"])
-    || !Number.isInteger(lifecycle.exitCode)
-    || typeof lifecycle.outcome !== "string"
-    || !new Set(["success", "primary-error", "aggregate-error"]).has(lifecycle.outcome)
-    || !IsStringArray(lifecycle.cleanupOrder, new Set(["snapshot.dispose", "api.close", "remove-staging"]))
-    || !IsStringArray(lifecycle.errorOrder, new Set(["primary", "snapshot.dispose", "api.close", "remove-staging"]))
-    || typeof lifecycle.stageReadback !== "string"
-    || !new Set(["absent", "retained-then-harness-removed", "not-acquired"]).has(lifecycle.stageReadback)
-    || !IsRecord(gate)
-    || !HasExactKeys(gate, ["exitCode", "status", "checkIds"])
-    || !Number.isInteger(gate.exitCode)
-    || (gate.status !== "pass" && gate.status !== "fail")
-    || !IsStringArray(gate.checkIds)
-    || gate.checkIds.length === 0
-  ) throw new Error("probe descriptor actions or expectations are invalid")
+    ]).has(update.kind) ||
+    typeof update.path !== "string" ||
+    !IsRecord(callback) ||
+    !HasExactKeys(callback, ["kind"]) ||
+    typeof callback.kind !== "string" ||
+    !new Set(["return-value", "throw-error", "throw-undefined"]).has(callback.kind) ||
+    !IsRecord(cleanup) ||
+    !HasExactKeys(cleanup, ["snapshot", "api", "remove"]) ||
+    typeof cleanup.snapshot !== "string" ||
+    !new Set(["delegate", "delegate-then-throw"]).has(cleanup.snapshot) ||
+    typeof cleanup.api !== "string" ||
+    !new Set(["delegate", "delegate-then-throw"]).has(cleanup.api) ||
+    typeof cleanup.remove !== "string" ||
+    !new Set(["delegate", "delegate-then-throw", "throw-before-delegate"]).has(cleanup.remove) ||
+    !IsRecord(lifecycle) ||
+    !HasExactKeys(lifecycle, [
+      "exitCode",
+      "outcome",
+      "cleanupOrder",
+      "errorOrder",
+      "stageReadback"
+    ]) ||
+    !Number.isInteger(lifecycle.exitCode) ||
+    typeof lifecycle.outcome !== "string" ||
+    !new Set(["success", "primary-error", "aggregate-error"]).has(lifecycle.outcome) ||
+    !IsStringArray(
+      lifecycle.cleanupOrder,
+      new Set(["snapshot.dispose", "api.close", "remove-staging"])
+    ) ||
+    !IsStringArray(
+      lifecycle.errorOrder,
+      new Set(["primary", "snapshot.dispose", "api.close", "remove-staging"])
+    ) ||
+    typeof lifecycle.stageReadback !== "string" ||
+    !new Set(["absent", "retained-then-harness-removed", "not-acquired"]).has(
+      lifecycle.stageReadback
+    ) ||
+    !IsRecord(gate) ||
+    !HasExactKeys(gate, ["exitCode", "status", "checkIds"]) ||
+    !Number.isInteger(gate.exitCode) ||
+    (gate.status !== "pass" && gate.status !== "fail") ||
+    !IsStringArray(gate.checkIds) ||
+    gate.checkIds.length === 0
+  )
+    throw new Error("probe descriptor actions or expectations are invalid")
   return value as unknown as ProbeDescriptor
 }
 
@@ -678,7 +820,9 @@ function AdmitProbeDescriptor(descriptor: ProbeDescriptor): void {
     expected: descriptor.expected
   }
   if (!isDeepStrictEqual(contract, canonical)) {
-    throw new Error("probe descriptor input, actions and expected outcome do not match its scenario")
+    throw new Error(
+      "probe descriptor input, actions and expected outcome do not match its scenario"
+    )
   }
 
   const virtualPaths = new Set(descriptor.virtualFiles.map((file) => file.path))
@@ -689,20 +833,22 @@ function AdmitProbeDescriptor(descriptor: ProbeDescriptor): void {
   if (stage.kind === "source-realpath-escape") {
     const sourcePrefix = `${descriptor.projectPrefix}/src/`
     if (
-      !virtualPaths.has(stage.path)
-      || !virtualPaths.has(stage.targetPath)
-      || !stage.path.startsWith(sourcePrefix)
-      || !stage.targetPath.startsWith(`${descriptor.projectPrefix}/`)
-      || stage.targetPath.startsWith(sourcePrefix)
-      || stage.path === stage.targetPath
-    ) throw new Error("probe source escape action must be self-contained and leave src")
+      !virtualPaths.has(stage.path) ||
+      !virtualPaths.has(stage.targetPath) ||
+      !stage.path.startsWith(sourcePrefix) ||
+      !stage.targetPath.startsWith(`${descriptor.projectPrefix}/`) ||
+      stage.targetPath.startsWith(sourcePrefix) ||
+      stage.path === stage.targetPath
+    )
+      throw new Error("probe source escape action must be self-contained and leave src")
   }
 
   const update = descriptor.actions.update
   if (
-    (update.kind === "project-count-multiple" || update.kind === "project-identity")
-    && !virtualPaths.has(update.path)
-  ) throw new Error("probe alternate config must be a virtual file")
+    (update.kind === "project-count-multiple" || update.kind === "project-identity") &&
+    !virtualPaths.has(update.path)
+  )
+    throw new Error("probe alternate config must be a virtual file")
 }
 
 function SelectProbe(
@@ -751,14 +897,16 @@ async function ReadSnapshotText(path: string): Promise<string> {
 
 async function OrdinaryFixtureSnapshot(casePath: string): Promise<InputSnapshot> {
   const caseRoot = join(RepositoryRoot, FixtureRoot, casePath)
-  const files = await Promise.all((await FilesBelow(caseRoot)).map(async (path) => (
-    File(path, await readFile(join(caseRoot, path), "utf8"))
-  )))
+  const files = await Promise.all(
+    (await FilesBelow(caseRoot)).map(async (path) =>
+      File(path, await readFile(join(caseRoot, path), "utf8"))
+    )
+  )
   return SnapshotFiles(files)
 }
 
 async function LoadProjectSession(): Promise<ProjectSessionModule> {
-  const value: unknown = await import(`./project-${"session"}.ts`)
+  const value: unknown = await import(`./project-${"session"}`)
   if (!IsRecord(value)) throw new Error("project-session module must be an object")
   return value as ProjectSessionModule
 }
@@ -777,7 +925,10 @@ async function WithInjectedProgramDiagnostics<T>(
   ) => Promise<readonly Diagnostic[]>
   Object.defineProperty(Program.prototype, "getProgramDiagnostics", {
     ...descriptor,
-    value: async function(this: Program, ...args: readonly unknown[]): Promise<readonly Diagnostic[]> {
+    value: async function (
+      this: Program,
+      ...args: readonly unknown[]
+    ): Promise<readonly Diagnostic[]> {
       const actual = await Reflect.apply(original, this, args)
       return [...actual, ...create()]
     }
@@ -790,19 +941,19 @@ async function WithInjectedProgramDiagnostics<T>(
 }
 
 async function LoadProjectSessionProbe(): Promise<ProjectSessionProbeModule> {
-  const value: unknown = await import(`./project-session.${"probe"}.cli.ts`)
+  const value: unknown = await import(`./project-session.${"probe"}.cli`)
   if (!IsRecord(value)) throw new Error("project-session probe module must be an object")
   return value as ProjectSessionProbeModule
 }
 
 async function LoadProjectSessionFixture(): Promise<ProjectSessionFixtureModule> {
-  const value: unknown = await import(`./project-session.${"fixture"}.cli.ts`)
+  const value: unknown = await import(`./project-session.${"fixture"}.cli`)
   if (!IsRecord(value)) throw new Error("project-session fixture module must be an object")
   return value as ProjectSessionFixtureModule
 }
 
 async function ProbeInputSnapshot(scenario: string): Promise<InputSnapshot> {
-  const snapshot = await SnapshotInputs(RepositoryRoot, [
+  const snapshot = await snapshotInputs(RepositoryRoot, [
     ProbeCasesPath,
     `${ProbeRoot}/${scenario}.json`
   ])
@@ -831,31 +982,38 @@ async function CopyProjectSessionFixtureCorpus(root: string): Promise<void> {
 async function SpawnLifecycleProbe(
   scenario: string,
   root: string
-): Promise<{ readonly exitCode: number; readonly signalCode: unknown; readonly stdout: string; readonly stderr: string }> {
-  const child = Bun.spawn([
-    process.execPath,
-    join(RepositoryRoot, "tools/boundaries/project-session.probe.cli.ts"),
-    "--mode",
-    "lifecycle",
-    "--scenario",
-    scenario,
-    "--root",
-    root
-  ], {
-    cwd: RepositoryRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  })
+): Promise<{
+  readonly exitCode: number
+  readonly signalCode: unknown
+  readonly stdout: string
+  readonly stderr: string
+}> {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(RepositoryRoot, "tools/boundaries/project-session.probe.cli.ts"),
+      "--mode",
+      "lifecycle",
+      "--scenario",
+      scenario,
+      "--root",
+      root
+    ],
+    {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    }
+  )
   const stdoutPromise = new Response(child.stdout).text()
   const stderrPromise = new Response(child.stderr).text()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<"timeout">((resolveTimeout) => {
-    timer = setTimeout(() => { resolveTimeout("timeout") }, 5000)
+    timer = setTimeout(() => {
+      resolveTimeout("timeout")
+    }, 5000)
   })
-  const completed = await Promise.race([
-    child.exited.then((exitCode) => ({ exitCode })),
-    timeout
-  ])
+  const completed = await Promise.race([child.exited.then((exitCode) => ({ exitCode })), timeout])
   if (completed === "timeout") {
     child.kill("SIGKILL")
     const exitCode = await child.exited
@@ -871,33 +1029,40 @@ async function SpawnGateProbe(
   scenario: string,
   root: string,
   runId: string
-): Promise<{ readonly exitCode: number; readonly signalCode: unknown; readonly stdout: string; readonly stderr: string }> {
-  const child = Bun.spawn([
-    process.execPath,
-    join(RepositoryRoot, "tools/boundaries/project-session.probe.cli.ts"),
-    "--mode",
-    "gate",
-    "--scenario",
-    scenario,
-    "--root",
-    root,
-    "--run-id",
-    runId
-  ], {
-    cwd: RepositoryRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  })
+): Promise<{
+  readonly exitCode: number
+  readonly signalCode: unknown
+  readonly stdout: string
+  readonly stderr: string
+}> {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(RepositoryRoot, "tools/boundaries/project-session.probe.cli.ts"),
+      "--mode",
+      "gate",
+      "--scenario",
+      scenario,
+      "--root",
+      root,
+      "--run-id",
+      runId
+    ],
+    {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    }
+  )
   const stdoutPromise = new Response(child.stdout).text()
   const stderrPromise = new Response(child.stderr).text()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<"timeout">((resolveTimeout) => {
-    timer = setTimeout(() => { resolveTimeout("timeout") }, 5000)
+    timer = setTimeout(() => {
+      resolveTimeout("timeout")
+    }, 5000)
   })
-  const completed = await Promise.race([
-    child.exited.then((exitCode) => ({ exitCode })),
-    timeout
-  ])
+  const completed = await Promise.race([child.exited.then((exitCode) => ({ exitCode })), timeout])
   if (completed === "timeout") {
     child.kill("SIGKILL")
     const exitCode = await child.exited
@@ -909,21 +1074,27 @@ async function SpawnGateProbe(
   return { exitCode: completed.exitCode, signalCode: child.signalCode, stdout, stderr }
 }
 
-async function SpawnWithClosedStdout(
-  args: readonly string[]
-): Promise<{ readonly exitCode: number; readonly signalCode: unknown; readonly stdout: string; readonly stderr: string }> {
-  const child = Bun.spawn([
-    "bash",
-    "-c",
-    "set -o pipefail; \"$@\" | true",
-    "likego-closed-stdout",
-    process.execPath,
-    ...args
-  ], {
-    cwd: RepositoryRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  })
+async function SpawnWithClosedStdout(args: readonly string[]): Promise<{
+  readonly exitCode: number
+  readonly signalCode: unknown
+  readonly stdout: string
+  readonly stderr: string
+}> {
+  const child = Bun.spawn(
+    [
+      "bash",
+      "-c",
+      'set -o pipefail; "$@" | true',
+      "likego-closed-stdout",
+      process.execPath,
+      ...args
+    ],
+    {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    }
+  )
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -941,7 +1112,10 @@ function SnapshotFiles(Files: readonly SnapshotFile[]): InputSnapshot {
 
 function ValidProjectSnapshot(extra: readonly SnapshotFile[] = []): InputSnapshot {
   return SnapshotFiles([
-    File("project/tsconfig.json", "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"target\": \"ES2022\" },\n  \"include\": [\"src/**/*.ts\"]\n}\n"),
+    File(
+      "project/tsconfig.json",
+      '{\n  "compilerOptions": { "strict": true, "noEmit": true, "target": "ES2022" },\n  "include": ["src/**/*.ts"]\n}\n'
+    ),
     File("project/src/index.ts", "export const value = 1\n"),
     ...extra
   ])
@@ -951,18 +1125,22 @@ function WorkspaceConfig(
   paths: Readonly<Record<string, readonly string[]>> = {},
   rootShape: Readonly<Record<string, unknown>> = { include: ["src/**/*.ts"] }
 ): string {
-  return `${JSON.stringify({
-    compilerOptions: {
-      strict: true,
-      noEmit: true,
-      target: "ES2022",
-      module: "ESNext",
-      moduleResolution: "Bundler",
-      paths,
-      types: []
+  return `${JSON.stringify(
+    {
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        target: "ES2022",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        paths,
+        types: []
+      },
+      ...rootShape
     },
-    ...rootShape
-  }, null, 2)}\n`
+    null,
+    2
+  )}\n`
 }
 
 function WorkspacePackage(
@@ -994,26 +1172,19 @@ function ValidWorkspaceSnapshot(
       "packages/a",
       "@workspace/a",
       overrides.ASource ?? 'import { b } from "@workspace/b"\nexport const a = b\n',
-      overrides.AConfig ?? WorkspaceConfig({
-        "@workspace/b": ["../b/src/index.ts"],
-        "@workspace/c": ["../c/src/index.ts"]
-      })
+      overrides.AConfig ??
+        WorkspaceConfig({
+          "@workspace/b": ["../b/src/index.ts"],
+          "@workspace/c": ["../c/src/index.ts"]
+        })
     ),
     ...WorkspacePackage(
       "packages/b",
       "@workspace/b",
       overrides.BSource ?? 'import { c } from "@workspace/c"\nexport const b = c\n'
     ),
-    ...WorkspacePackage(
-      "packages/c",
-      "@workspace/c",
-      overrides.CSource ?? "export const c = 1\n"
-    ),
-    ...WorkspacePackage(
-      "packages/d",
-      "@workspace/d",
-      "export const unrelated = true\n"
-    ),
+    ...WorkspacePackage("packages/c", "@workspace/c", overrides.CSource ?? "export const c = 1\n"),
+    ...WorkspacePackage("packages/d", "@workspace/d", "export const unrelated = true\n"),
     ...(overrides.Extra ?? [])
   ])
 }
@@ -1036,9 +1207,15 @@ function ForbiddenOperations(root: string, calls: string[]): TestProjectSessionO
       calls.push("update")
       throw new Error("UpdateSnapshot must not run")
     },
-    DisposeSnapshot: async () => { calls.push("snapshot.dispose") },
-    CloseAPI: async () => { calls.push("api.close") },
-    RemoveStaging: async () => { calls.push("remove-staging") }
+    DisposeSnapshot: async () => {
+      calls.push("snapshot.dispose")
+    },
+    CloseAPI: async () => {
+      calls.push("api.close")
+    },
+    RemoveStaging: async () => {
+      calls.push("remove-staging")
+    }
   }
 }
 
@@ -1077,7 +1254,11 @@ async function ExpectAdmissionIssue(
   Code: string,
   Path: string
 ): Promise<void> {
-  const result = await module.AnalyzeProjectSessionWithOperations(snapshot, projectPrefix, operations)
+  const result = await module.analyzeProjectSessionWithOperations(
+    snapshot,
+    projectPrefix,
+    operations
+  )
   expect(result.SourceFilesChecked).toBe(0)
   expect(result.Issues).toHaveLength(1)
   expect(result.Issues[0]).toEqual({ Code, Path, Message: expect.any(String) })
@@ -1095,7 +1276,7 @@ async function ReadProbeDescriptor(scenario: string): Promise<ProbeDescriptor> {
 function DescriptorSnapshot(descriptor: ProbeDescriptor): InputSnapshot {
   const files = descriptor.virtualFiles
     .map((file) => File(file.path, file.utf8))
-    .sort((left, right) => left.Path < right.Path ? -1 : left.Path > right.Path ? 1 : 0)
+    .sort((left, right) => (left.Path < right.Path ? -1 : left.Path > right.Path ? 1 : 0))
   return SnapshotFiles(files)
 }
 
@@ -1162,12 +1343,13 @@ describe("project-session committed ordinary fixture corpus", () => {
     const document: unknown = JSON.parse(await ReadSnapshotText(FixtureCasesPath))
     expect(document).toEqual({ schemaVersion: 1, cases: ExpectedFixtureCases })
 
-    const payloads = (await FilesBelow(join(RepositoryRoot, FixtureRoot)))
-      .filter((path) => path !== "cases.json")
+    const payloads = (await FilesBelow(join(RepositoryRoot, FixtureRoot))).filter(
+      (path) => path !== "cases.json"
+    )
     for (const payload of payloads) {
-      expect(ExpectedFixtureCases.filter((item) => (
-        payload.startsWith(`${item.path}/`)
-      ))).toHaveLength(1)
+      expect(
+        ExpectedFixtureCases.filter((item) => payload.startsWith(`${item.path}/`))
+      ).toHaveLength(1)
     }
     for (const fixtureCase of ExpectedFixtureCases) {
       expect(payloads.some((payload) => payload.startsWith(`${fixtureCase.path}/`))).toBe(true)
@@ -1179,8 +1361,8 @@ describe("project-session committed ordinary fixture corpus", () => {
   })
 
   test("keeps every committed fixture and descriptor path outside Bun discovery", async () => {
-    const { FindBunDiscoveredFixturePaths } = await import("../gates/fixture-corpus.ts")
-    expect(await FindBunDiscoveredFixturePaths(RepositoryRoot)).toEqual([])
+    const { findBunDiscoveredFixturePaths } = await import("../gates/fixture-corpus")
+    expect(await findBunDiscoveredFixturePaths(RepositoryRoot)).toEqual([])
   })
 
   test("rejects symlinks and other non-regular inventory entries instead of silently skipping them", async () => {
@@ -1189,7 +1371,9 @@ describe("project-session committed ordinary fixture corpus", () => {
     await Bun.write(join(root, "regular.json"), "{}\n")
     await symlink("regular.json", join(root, "alias.json"))
 
-    await expect(FilesBelow(root)).rejects.toThrow("inventory entry must be a regular file or directory")
+    await expect(FilesBelow(root)).rejects.toThrow(
+      "inventory entry must be a regular file or directory"
+    )
   })
 })
 
@@ -1200,16 +1384,16 @@ describe("Task4 Step3 Phase A diagnostics RED", () => {
     for (const fixtureCase of ExpectedFixtureCases) {
       const root = await RepositoryFixture(`likego-project-session-diagnostic-${fixtureCase.id}-`)
       const snapshot = await OrdinaryFixtureSnapshot(fixtureCase.path)
-      const result = await module.AnalyzeProjectSessionWithOperations(
+      const result = await module.analyzeProjectSessionWithOperations(
         snapshot,
         "project",
-        module.NodeProjectSessionOperations(root)
+        module.nodeProjectSessionOperations(root)
       )
 
-      const expectedSourceCount = fixtureCase.id === "missing-exact-config"
-        || fixtureCase.id === "zero-package-source"
-        ? 0
-        : 1
+      const expectedSourceCount =
+        fixtureCase.id === "missing-exact-config" || fixtureCase.id === "zero-package-source"
+          ? 0
+          : 1
       expect(result.SourceFilesChecked).toBe(expectedSourceCount)
       expect(result.Issues.map((issue) => issue.Code)).toEqual(
         [...fixtureCase.expectedCodes].sort()
@@ -1221,7 +1405,7 @@ describe("Task4 Step3 Phase A diagnostics RED", () => {
         expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
       }
     }
-  })
+  }, 30_000)
 
   test("awaits all six real TypeScript diagnostic families in exact serial order", async () => {
     const module = await LoadProjectSession()
@@ -1248,7 +1432,7 @@ describe("Task4 Step3 Phase A diagnostics RED", () => {
         const original = descriptor.value as (...args: unknown[]) => Promise<readonly unknown[]>
         Object.defineProperty(Program.prototype, name, {
           ...descriptor,
-          value: async function(this: Program, ...args: unknown[]): Promise<readonly unknown[]> {
+          value: async function (this: Program, ...args: unknown[]): Promise<readonly unknown[]> {
             order.push(`${name}:start`)
             const diagnostics = await Reflect.apply(original, this, args)
             order.push(`${name}:end`)
@@ -1257,10 +1441,10 @@ describe("Task4 Step3 Phase A diagnostics RED", () => {
         })
       }
 
-      await module.AnalyzeProjectSessionWithOperations(
+      await module.analyzeProjectSessionWithOperations(
         snapshot,
         "project",
-        module.NodeProjectSessionOperations(root)
+        module.nodeProjectSessionOperations(root)
       )
     } finally {
       for (const name of methodNames) {
@@ -1279,21 +1463,27 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-diagnostic-graph-")
     const snapshot = SnapshotFiles([
-      File("project/tsconfig.json", "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"lib\": [\"es5\"] },\n  \"files\": [\"src/index.ts\"]\n}\n"),
-      File("project/src/index.ts", [
-        "export interface Source { nested: { value: number } }",
-        "export interface Target { nested: { value: string } }",
-        "declare const source: Source",
-        "export const target: Target = source",
-        "interface Merge { prop: string }",
-        "interface Merge { prop: number }"
-      ].join("\n"))
+      File(
+        "project/tsconfig.json",
+        '{\n  "compilerOptions": { "strict": true, "noEmit": true, "lib": ["es5"] },\n  "files": ["src/index.ts"]\n}\n'
+      ),
+      File(
+        "project/src/index.ts",
+        [
+          "export interface Source { nested: { value: number } }",
+          "export interface Target { nested: { value: string } }",
+          "declare const source: Source",
+          "export const target: Target = source",
+          "interface Merge { prop: string }",
+          "interface Merge { prop: number }"
+        ].join("\n")
+      )
     ])
 
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       snapshot,
       "project",
-      module.NodeProjectSessionOperations(root)
+      module.nodeProjectSessionOperations(root)
     )
 
     expect(result).toEqual({
@@ -1325,14 +1515,17 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-diagnostic-escape-")
     const snapshot = SnapshotFiles([
-      File("project/tsconfig.json", "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"lib\": [\"es5\"] },\n  \"files\": [\"src/index.ts\"]\n}\n"),
+      File(
+        "project/tsconfig.json",
+        '{\n  "compilerOptions": { "strict": true, "noEmit": true, "lib": ["es5"] },\n  "files": ["src/index.ts"]\n}\n'
+      ),
       File("project/src/index.ts", "export {}\ndeclare global { type Array<T> = T }\n")
     ])
 
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       snapshot,
       "project",
-      module.NodeProjectSessionOperations(root)
+      module.nodeProjectSessionOperations(root)
     )
     const escapeIssue = {
       Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
@@ -1350,17 +1543,20 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
         {
           Code: "TYPESCRIPT_SEMANTIC_2300",
           Path: "project",
-          Message: "Duplicate identifier 'Array'.\nproject/src/index.ts: 'Array' was also declared here."
+          Message:
+            "Duplicate identifier 'Array'.\nproject/src/index.ts: 'Array' was also declared here."
         },
         {
           Code: "TYPESCRIPT_SEMANTIC_2300",
           Path: "project",
-          Message: "Duplicate identifier 'Array'.\nproject/src/index.ts: 'Array' was also declared here."
+          Message:
+            "Duplicate identifier 'Array'.\nproject/src/index.ts: 'Array' was also declared here."
         },
         {
           Code: "TYPESCRIPT_SEMANTIC_2300",
           Path: "project/src/index.ts",
-          Message: "Duplicate identifier 'Array'.\nproject: 'Array' was also declared here.\nproject: and here."
+          Message:
+            "Duplicate identifier 'Array'.\nproject: 'Array' was also declared here.\nproject: and here."
         }
       ]
     })
@@ -1375,7 +1571,7 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
   test("normalizes a real diagnostic message containing the random staged root", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-diagnostic-root-text-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     let stagedRoot = ""
     const operations: TestProjectSessionOperations = {
       ...base,
@@ -1389,7 +1585,7 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
       }
     }
 
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       ValidProjectSnapshot(),
       "project",
       operations
@@ -1397,15 +1593,18 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
 
     expect(result).toEqual({
       SourceFilesChecked: 1,
-      Issues: [{
-        Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
-        Path: "project",
-        Message: "TypeScript diagnostic file path is outside the staged project"
-      }, {
-        Code: "TYPESCRIPT_SEMANTIC_2322",
-        Path: "project/src/index.ts",
-        Message: "Type '\"different\"' is not assignable to type '\"project\"'."
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
+          Path: "project",
+          Message: "TypeScript diagnostic file path is outside the staged project"
+        },
+        {
+          Code: "TYPESCRIPT_SEMANTIC_2322",
+          Path: "project/src/index.ts",
+          Message: "Type '\"different\"' is not assignable to type '\"project\"'."
+        }
+      ]
     })
     expect(JSON.stringify(result)).not.toContain(stagedRoot)
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
@@ -1417,7 +1616,7 @@ describe("Task4 Step3 Phase B diagnostic graph and redaction RED", () => {
     const previousCwd = process.cwd()
     try {
       process.chdir(root)
-      expect(await module.AnalyzeProjectSession(ValidProjectSnapshot(), "project")).toEqual({
+      expect(await module.analyzeProjectSession(ValidProjectSnapshot(), "project")).toEqual({
         SourceFilesChecked: 1,
         Issues: []
       })
@@ -1442,8 +1641,9 @@ describe("Task4 Step3 Phase C diagnostic path portability RED", () => {
     expect(win32.normalize(typescriptWindowsPath).replaceAll("\\", "/")).toBe(typescriptWindowsPath)
 
     const productionSource = await ReadSnapshotText("tools/boundaries/project-session.ts")
+    const normalizedProductionSource = productionSource.replace(/\s+/g, " ")
     expect(productionSource).not.toContain("normalize(fileName) !== fileName")
-    expect(productionSource).toContain(
+    expect(normalizedProductionSource).toContain(
       "NormalizeDiagnosticSeparators(normalize(fileName)) !== NormalizeDiagnosticSeparators(fileName)"
     )
     expect(productionSource).toContain('sep === "/" && fileName.includes("\\\\")')
@@ -1457,13 +1657,15 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
     const callbackRoot = await RepositoryFixture("likego-project-session-primary-callback-")
     const callbackOrder: string[] = []
     const callbackPrimary = new Error("callback primary")
-    const callbackBase = module.NodeProjectSessionOperations(callbackRoot)
+    const callbackBase = module.nodeProjectSessionOperations(callbackRoot)
     let callbackCaught: unknown
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
-        async () => { throw callbackPrimary },
+        async () => {
+          throw callbackPrimary
+        },
         CleanObservedOperations(callbackBase, callbackOrder)
       )
     } catch (error) {
@@ -1475,14 +1677,16 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
 
     const undefinedRoot = await RepositoryFixture("likego-project-session-primary-undefined-")
     const undefinedOrder: string[] = []
-    const undefinedBase = module.NodeProjectSessionOperations(undefinedRoot)
+    const undefinedBase = module.nodeProjectSessionOperations(undefinedRoot)
     let undefinedThrown = false
     let undefinedCaught: unknown = "not thrown"
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
-        async () => { throw undefined },
+        async () => {
+          throw undefined
+        },
         CleanObservedOperations(undefinedBase, undefinedOrder)
       )
     } catch (error) {
@@ -1497,7 +1701,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
     const updateRoot = await RepositoryFixture("likego-project-session-primary-update-after-")
     const updateOrder: string[] = []
     const updatePrimary = new Error("update after real snapshot")
-    const updateBase = module.NodeProjectSessionOperations(updateRoot)
+    const updateBase = module.nodeProjectSessionOperations(updateRoot)
     const updateOperations: TestProjectSessionOperations = {
       ...CleanObservedOperations(updateBase, updateOrder),
       UpdateSnapshot: async (api, canonicalTsconfig) => {
@@ -1507,7 +1711,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
     }
     let updateCaught: unknown
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
         async () => "unreachable",
@@ -1534,7 +1738,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
 
     for (const item of cases) {
       const root = await RepositoryFixture(`likego-project-session-cleanup-${item.id}-`)
-      const base = module.NodeProjectSessionOperations(root)
+      const base = module.nodeProjectSessionOperations(root)
       const order: string[] = []
       const callbackPrimary = new Error(`${item.id} primary`)
       const nestedPrimary = new AggregateError([callbackPrimary], `${item.id} nested primary`)
@@ -1562,7 +1766,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
       }
       let caught: unknown
       try {
-        await module.WithProjectSessionWithOperations(
+        await module.withProjectSessionWithOperations(
           ValidProjectSnapshot(),
           "project",
           async () => {
@@ -1599,18 +1803,22 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
   test("preserves every setup primary ahead of all applicable real cleanup faults", async () => {
     const module = await LoadProjectSession()
 
-    const materializationRoot = await RepositoryFixture("likego-project-session-setup-materialization-")
+    const materializationRoot = await RepositoryFixture(
+      "likego-project-session-setup-materialization-"
+    )
     const materializationDescriptor = await ReadProbeDescriptor("materialization-failure")
-    const materializationBase = module.NodeProjectSessionOperations(materializationRoot)
+    const materializationBase = module.nodeProjectSessionOperations(materializationRoot)
     const materializationOrder: string[] = []
     const materializationRemoveFault = new Error("materialization remove cleanup")
     let materializationCallback = false
     let materializationCaught: unknown
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         DescriptorSnapshot(materializationDescriptor),
         materializationDescriptor.projectPrefix,
-        async () => { materializationCallback = true },
+        async () => {
+          materializationCallback = true
+        },
         {
           ...materializationBase,
           RemoveStaging: async (path) => {
@@ -1634,7 +1842,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
 
     for (const phase of ["before-snapshot", "after-snapshot"] as const) {
       const root = await RepositoryFixture(`likego-project-session-setup-update-${phase}-`)
-      const base = module.NodeProjectSessionOperations(root)
+      const base = module.nodeProjectSessionOperations(root)
       const order: string[] = []
       const primary = new Error(`${phase} primary`)
       const apiFault = new Error(`${phase} api cleanup`)
@@ -1647,7 +1855,9 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
           else await base.UpdateSnapshot(api, canonicalTsconfig)
           throw primary
         },
-        DisposeSnapshot: async () => { throw new Error("unreturned snapshot must not be disposed") },
+        DisposeSnapshot: async () => {
+          throw new Error("unreturned snapshot must not be disposed")
+        },
         CloseAPI: async (api) => {
           order.push("api.close")
           await base.CloseAPI(api)
@@ -1661,10 +1871,12 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
       }
       let caught: unknown
       try {
-        await module.WithProjectSessionWithOperations(
+        await module.withProjectSessionWithOperations(
           ValidProjectSnapshot(),
           "project",
-          async () => { callbackCalled = true },
+          async () => {
+            callbackCalled = true
+          },
           operations
         )
       } catch (error) {
@@ -1679,7 +1891,7 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
 
     const admissionRoot = await RepositoryFixture("likego-project-session-setup-admission-")
     const admissionDescriptor = await ReadProbeDescriptor("admission-failure")
-    const admissionBase = module.NodeProjectSessionOperations(admissionRoot)
+    const admissionBase = module.nodeProjectSessionOperations(admissionRoot)
     const admissionOrder: string[] = []
     const snapshotFault = new Error("admission snapshot cleanup")
     const apiFault = new Error("admission api cleanup")
@@ -1687,10 +1899,12 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
     let admissionCallback = false
     let admissionCaught: unknown
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         DescriptorSnapshot(admissionDescriptor),
         admissionDescriptor.projectPrefix,
-        async () => { admissionCallback = true },
+        async () => {
+          admissionCallback = true
+        },
         {
           RepositoryRoot: admissionBase.RepositoryRoot,
           UpdateSnapshot: admissionBase.UpdateSnapshot,
@@ -1718,9 +1932,11 @@ describe("Task4 Step4 Phase A real lifecycle matrix", () => {
     expect(admissionCaught).toBeInstanceOf(AggregateError)
     const admissionErrors = (admissionCaught as AggregateError).errors
     expect(admissionErrors).toHaveLength(4)
-    expect(IsRecord(admissionErrors[0]) && IsRecord(admissionErrors[0].Issue)
-      ? admissionErrors[0].Issue.Code
-      : null).toBe("PROJECT_SESSION_SOURCE_ZERO")
+    expect(
+      IsRecord(admissionErrors[0]) && IsRecord(admissionErrors[0].Issue)
+        ? admissionErrors[0].Issue.Code
+        : null
+    ).toBe("PROJECT_SESSION_SOURCE_ZERO")
     expect(admissionErrors.slice(1)).toEqual([snapshotFault, apiFault, removeFault])
     expect(admissionOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
     expect(await readdir(join(admissionRoot, ".artifacts/gates/work"))).toEqual([])
@@ -1734,7 +1950,7 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     for (const scenario of ExpectedProbeScenarios) {
       const root = await RepositoryFixture(`likego-project-session-probe-${scenario}-`)
       const descriptor = await ReadProbeDescriptor(scenario)
-      const execution = await probe.EvaluateProjectSessionProbe(
+      const execution = await probe.evaluateProjectSessionProbe(
         await ProbeInputSnapshot(scenario),
         scenario,
         root
@@ -1752,9 +1968,12 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
       })
       expect(execution.Failure.Thrown).toBe(expected.exitCode === 7)
       if (expected.outcome === "aggregate-error") {
-        if (!execution.Failure.Thrown) throw new Error("aggregate probe outcome must carry a failure")
+        if (!execution.Failure.Thrown)
+          throw new Error("aggregate probe outcome must carry a failure")
         expect(execution.Failure.Value).toBeInstanceOf(AggregateError)
-        expect((execution.Failure.Value as AggregateError).errors).toHaveLength(expected.errorOrder.length)
+        expect((execution.Failure.Value as AggregateError).errors).toHaveLength(
+          expected.errorOrder.length
+        )
       }
       if (scenario === "primary-undefined") {
         expect(execution.Failure).toEqual({ Thrown: true, Value: undefined })
@@ -1775,11 +1994,11 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     const descriptorPath = join(root, ProbeRoot, "success.json")
     await Bun.write(casesPath, await ReadSnapshotText(ProbeCasesPath))
     await Bun.write(descriptorPath, await ReadSnapshotText(`${ProbeRoot}/success.json`))
-    const snapshot = await SnapshotInputs(root, [ProbeCasesPath, `${ProbeRoot}/success.json`])
+    const snapshot = await snapshotInputs(root, [ProbeCasesPath, `${ProbeRoot}/success.json`])
     if (snapshot.Snapshot === null) throw new Error("copied probe inputs must snapshot")
-    await Bun.write(descriptorPath, "{\"mutatedAfterSnapshot\":true}\n")
+    await Bun.write(descriptorPath, '{"mutatedAfterSnapshot":true}\n')
 
-    const execution = await probe.EvaluateProjectSessionProbe(snapshot.Snapshot, "success", root)
+    const execution = await probe.evaluateProjectSessionProbe(snapshot.Snapshot, "success", root)
     expect(execution.Result).toEqual({
       schemaVersion: 1,
       scenario: "success",
@@ -1800,8 +2019,10 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     ])
     const invalidRoot = await RepositoryFixture("likego-project-session-probe-invalid-")
     await expect(
-      probe.EvaluateProjectSessionProbe(driftedSnapshot, "success", invalidRoot)
-    ).rejects.toThrow("probe descriptor input, actions and expected outcome do not match its scenario")
+      probe.evaluateProjectSessionProbe(driftedSnapshot, "success", invalidRoot)
+    ).rejects.toThrow(
+      "probe descriptor input, actions and expected outcome do not match its scenario"
+    )
     await ExpectEnoent(join(invalidRoot, ".artifacts"))
   })
 
@@ -1815,10 +2036,10 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     const corrupt = { ...canonical, Files: [corruptFile, ...canonical.Files.slice(1)] }
     const corruptRoot = await RepositoryFixture("likego-project-session-probe-corrupt-")
     await expect(
-      probe.EvaluateProjectSessionProbe(corrupt, "success", corruptRoot)
+      probe.evaluateProjectSessionProbe(corrupt, "success", corruptRoot)
     ).rejects.toThrow("probe snapshot file integrity is invalid")
     await expect(
-      probe.EvaluateProjectSessionProbe(canonical, "unknown", corruptRoot)
+      probe.evaluateProjectSessionProbe(canonical, "unknown", corruptRoot)
     ).rejects.toThrow("unknown or duplicated probe scenario")
     await ExpectEnoent(join(corruptRoot, ".artifacts"))
 
@@ -1865,9 +2086,11 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
         File(ProbeCasesPath, casesText),
         File(`${ProbeRoot}/${variant.scenario}.json`, `${JSON.stringify(descriptor)}\n`)
       ])
-      const root = await RepositoryFixture(`likego-project-session-probe-reference-${variant.scenario}-`)
+      const root = await RepositoryFixture(
+        `likego-project-session-probe-reference-${variant.scenario}-`
+      )
       await expect(
-        probe.EvaluateProjectSessionProbe(snapshot, variant.scenario, root)
+        probe.evaluateProjectSessionProbe(snapshot, variant.scenario, root)
       ).rejects.toThrow(variant.message)
       await ExpectEnoent(join(root, ".artifacts"))
     }
@@ -1879,11 +2102,15 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     const accessRoot = await RepositoryFixture("likego-project-session-probe-readback-error-")
     let accessCaught: unknown
     try {
-      await probe.EvaluateProjectSessionProbeWithReadbackOperations(
+      await probe.evaluateProjectSessionProbeWithReadbackOperations(
         await ProbeInputSnapshot("success"),
         "success",
         accessRoot,
-        { Lstat: async () => { throw accessError } }
+        {
+          Lstat: async () => {
+            throw accessError
+          }
+        }
       )
     } catch (error) {
       accessCaught = error
@@ -1891,14 +2118,13 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     expect(accessCaught).toBe(accessError)
     expect(await readdir(join(accessRoot, ".artifacts/gates/work"))).toEqual([])
 
-    const missing = (): Error & { readonly code: string } => (
+    const missing = (): Error & { readonly code: string } =>
       Object.assign(new Error("missing"), { code: "ENOENT" })
-    )
     let partialCalls = 0
     const partialRoot = await RepositoryFixture("likego-project-session-probe-readback-partial-")
     let partialCaught: unknown
     try {
-      await probe.EvaluateProjectSessionProbeWithReadbackOperations(
+      await probe.evaluateProjectSessionProbeWithReadbackOperations(
         await ProbeInputSnapshot("success"),
         "success",
         partialRoot,
@@ -1914,7 +2140,9 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
       partialCaught = error
     }
     expect(partialCaught).toBeInstanceOf(Error)
-    expect((partialCaught as Error).message).toBe("project session probe stage readback is partial or unexpected")
+    expect((partialCaught as Error).message).toBe(
+      "project session probe stage readback is partial or unexpected"
+    )
     expect(partialCalls).toBe(2)
     expect(await readdir(join(partialRoot, ".artifacts/gates/work"))).toEqual([])
 
@@ -1922,7 +2150,7 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
     const retainedRoot = await RepositoryFixture("likego-project-session-probe-readback-retained-")
     let retainedCaught: unknown
     try {
-      await probe.EvaluateProjectSessionProbeWithReadbackOperations(
+      await probe.evaluateProjectSessionProbeWithReadbackOperations(
         await ProbeInputSnapshot("remove-before"),
         "remove-before",
         retainedRoot,
@@ -1937,7 +2165,9 @@ describe("Task4 Step4 Phase B descriptor evaluator RED", () => {
       retainedCaught = error
     }
     expect(retainedCaught).toBeInstanceOf(Error)
-    expect((retainedCaught as Error).message).toBe("project session probe harness cleanup readback failed")
+    expect((retainedCaught as Error).message).toBe(
+      "project session probe harness cleanup readback failed"
+    )
     expect(retainedCalls).toBe(3)
     expect(await readdir(join(retainedRoot, ".artifacts/gates/work"))).toEqual([])
   }, 30_000)
@@ -1951,17 +2181,17 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
       await CopyProbeInputs(root, scenario)
       const stdout: string[] = []
       const stderr: string[] = []
-      const exitCode = await probe.Main([
-        "--mode",
-        "lifecycle",
-        "--scenario",
-        scenario,
-        "--root",
-        root
-      ], {
-        WriteStdout: (value) => { stdout.push(value) },
-        WriteStderr: (value) => { stderr.push(value) }
-      })
+      const exitCode = await probe.main(
+        ["--mode", "lifecycle", "--scenario", scenario, "--root", root],
+        {
+          WriteStdout: (value) => {
+            stdout.push(value)
+          },
+          WriteStderr: (value) => {
+            stderr.push(value)
+          }
+        }
+      )
       const descriptor = await ReadProbeDescriptor(scenario)
       const expected = descriptor.expected.lifecycle
       expect(exitCode).toBe(expected.exitCode)
@@ -2021,16 +2251,24 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
     const probe = await LoadProjectSessionProbe()
     const invoke = async (
       args: readonly string[],
-      writeStdout: (value: string) => void = (value) => { throw new Error(`unexpected stdout ${value}`) }
-    ): Promise<{ readonly exitCode: number; readonly stdout: readonly string[]; readonly stderr: readonly string[] }> => {
+      writeStdout: (value: string) => void = (value) => {
+        throw new Error(`unexpected stdout ${value}`)
+      }
+    ): Promise<{
+      readonly exitCode: number
+      readonly stdout: readonly string[]
+      readonly stderr: readonly string[]
+    }> => {
       const stdout: string[] = []
       const stderr: string[] = []
-      const exitCode = await probe.Main(args, {
+      const exitCode = await probe.main(args, {
         WriteStdout: (value) => {
           stdout.push(value)
           writeStdout(value)
         },
-        WriteStderr: (value) => { stderr.push(value) }
+        WriteStderr: (value) => {
+          stderr.push(value)
+        }
       })
       return { exitCode, stdout, stderr }
     }
@@ -2044,7 +2282,12 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
 
     const missingRoot = await RepositoryFixture("likego-project-session-probe-main-missing-")
     const input = await invoke([
-      "--mode", "lifecycle", "--scenario", "success", "--root", missingRoot
+      "--mode",
+      "lifecycle",
+      "--scenario",
+      "success",
+      "--root",
+      missingRoot
     ])
     expect(input).toEqual({
       exitCode: 1,
@@ -2060,7 +2303,12 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
     drifted.actions.callback.kind = "throw-error"
     await Bun.write(join(driftRoot, ProbeRoot, "success.json"), `${JSON.stringify(drifted)}\n`)
     const execution = await invoke([
-      "--mode", "lifecycle", "--scenario", "success", "--root", driftRoot
+      "--mode",
+      "lifecycle",
+      "--scenario",
+      "success",
+      "--root",
+      driftRoot
     ])
     expect(execution).toEqual({
       exitCode: 1,
@@ -2076,7 +2324,9 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
     const numericMessage = new Error("numeric")
     Object.defineProperty(numericMessage, "message", { value: 17 })
     const nonCoercible = Object.create(null) as { [Symbol.toPrimitive]?: () => never }
-    nonCoercible[Symbol.toPrimitive] = () => { throw new Error("cannot stringify") }
+    nonCoercible[Symbol.toPrimitive] = () => {
+      throw new Error("cannot stringify")
+    }
     const outputFailures = [
       { thrown: new Error("stdout failed"), message: "stdout failed" },
       { thrown: "literal failure", message: "literal failure" },
@@ -2086,12 +2336,17 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
     for (const failure of outputFailures) {
       const stdout: string[] = []
       const stderr: string[] = []
-      const exitCode = await probe.Main([
-        "--mode", "lifecycle", "--scenario", "success", "--root", outputRoot
-      ], {
-        WriteStdout: () => { throw failure.thrown },
-        WriteStderr: (value) => { stderr.push(value) }
-      })
+      const exitCode = await probe.main(
+        ["--mode", "lifecycle", "--scenario", "success", "--root", outputRoot],
+        {
+          WriteStdout: () => {
+            throw failure.thrown
+          },
+          WriteStderr: (value) => {
+            stderr.push(value)
+          }
+        }
+      )
       expect(exitCode).toBe(1)
       expect(stdout).toEqual([])
       expect(stderr).toEqual([`PROJECT_SESSION_PROBE_OUTPUT_ERROR ${failure.message}\n`])
@@ -2104,23 +2359,29 @@ describe("Task4 Step4 Phase C lifecycle CLI and natural-exit subprocess RED", ()
     const stderr: string[] = []
     const originalStdoutWrite = process.stdout.write
     const originalStderrWrite = process.stderr.write
-    process.stdout.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stdout.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stdout.push(String(value))
       callback?.()
       return true
     }) as typeof process.stdout.write
-    process.stderr.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stderr.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stderr.push(String(value))
       callback?.()
       return true
     }) as typeof process.stderr.write
     try {
-      expect(await probe.Main([])).toBe(1)
+      expect(await probe.main([])).toBe(1)
       const root = await RepositoryFixture("likego-project-session-probe-default-io-")
       await CopyProbeInputs(root, "success")
-      expect(await probe.Main([
-        "--mode", "lifecycle", "--scenario", "success", "--root", root
-      ])).toBe(0)
+      expect(
+        await probe.main(["--mode", "lifecycle", "--scenario", "success", "--root", root])
+      ).toBe(0)
     } finally {
       process.stdout.write = originalStdoutWrite
       process.stderr.write = originalStderrWrite
@@ -2142,19 +2403,17 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
       const stdout: string[] = []
       const stderr: string[] = []
       const runId = `task4-gate-${scenario}`
-      const exitCode = await probe.Main([
-        "--mode",
-        "gate",
-        "--scenario",
-        scenario,
-        "--root",
-        root,
-        "--run-id",
-        runId
-      ], {
-        WriteStdout: (value) => { stdout.push(value) },
-        WriteStderr: (value) => { stderr.push(value) }
-      })
+      const exitCode = await probe.main(
+        ["--mode", "gate", "--scenario", scenario, "--root", root, "--run-id", runId],
+        {
+          WriteStdout: (value) => {
+            stdout.push(value)
+          },
+          WriteStderr: (value) => {
+            stderr.push(value)
+          }
+        }
+      )
       const descriptor = await ReadProbeDescriptor(scenario)
       const expected = descriptor.expected.gate
 
@@ -2181,10 +2440,9 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
       expect(result.subjects).toEqual({ expected: 1, checked: scenario === "success" ? 1 : 0 })
       expect(result.checks.map((check) => check.id)).toEqual([...expected.checkIds])
       inputsSha256.add(result.inputsSha256)
-      const canonical = JSON.parse(await readFile(
-        join(root, ".artifacts/gates/boundary-project-session-probe.json"),
-        "utf8"
-      ))
+      const canonical = JSON.parse(
+        await readFile(join(root, ".artifacts/gates/boundary-project-session-probe.json"), "utf8")
+      )
       expect(canonical).toEqual(result)
       expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
     }
@@ -2227,10 +2485,11 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
       expect(result.subjects).toEqual({ expected: 1, checked: scenario === "success" ? 1 : 0 })
       expect(result.checks.map((check) => check.id)).toEqual([...expected.checkIds])
       inputsSha256.add(result.inputsSha256)
-      expect(JSON.parse(await readFile(
-        join(root, ".artifacts/gates/boundary-project-session-probe.json"),
-        "utf8"
-      ))).toEqual(result)
+      expect(
+        JSON.parse(
+          await readFile(join(root, ".artifacts/gates/boundary-project-session-probe.json"), "utf8")
+        )
+      ).toEqual(result)
       try {
         expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
       } catch (error) {
@@ -2248,20 +2507,33 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
     await mkdir(dirname(canonicalPath), { recursive: true })
     await Bun.write(canonicalPath, "prior-result\n")
     const stderr: string[] = []
-    const exitCode = await probe.Main([
-      "--mode", "gate",
-      "--scenario", "success",
-      "--root", root,
-      "--run-id", "task4-gate-output-failure"
-    ], {
-      WriteStdout: () => { throw new Error("gate stdout failed") },
-      WriteStderr: (value) => { stderr.push(value) }
-    })
+    const exitCode = await probe.main(
+      [
+        "--mode",
+        "gate",
+        "--scenario",
+        "success",
+        "--root",
+        root,
+        "--run-id",
+        "task4-gate-output-failure"
+      ],
+      {
+        WriteStdout: () => {
+          throw new Error("gate stdout failed")
+        },
+        WriteStderr: (value) => {
+          stderr.push(value)
+        }
+      }
+    )
 
     expect(exitCode).toBe(1)
     expect(stderr).toEqual(["PROJECT_SESSION_PROBE_EMIT_ERROR gate stdout failed\n"])
     expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-    expect((await readdir(join(root, ".artifacts/gates"))).filter((path) => path.includes(".tmp-"))).toEqual([])
+    expect(
+      (await readdir(join(root, ".artifacts/gates"))).filter((path) => path.includes(".tmp-"))
+    ).toEqual([])
   })
 
   test("restores the probe prior after a real closed stdout pipe", async () => {
@@ -2272,10 +2544,14 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
     await Bun.write(canonicalPath, "prior-result\n")
     const child = await SpawnWithClosedStdout([
       join(RepositoryRoot, "tools/boundaries/project-session.probe.cli.ts"),
-      "--mode", "gate",
-      "--scenario", "success",
-      "--root", root,
-      "--run-id", "task4-probe-real-epipe"
+      "--mode",
+      "gate",
+      "--scenario",
+      "success",
+      "--root",
+      root,
+      "--run-id",
+      "task4-probe-real-epipe"
     ])
 
     expect(child.signalCode).toBeNull()
@@ -2284,9 +2560,11 @@ describe("Task4 Step4 Phase D runtime-probe gate RED", () => {
     expect(child.stderr).toContain("PROJECT_SESSION_PROBE_EMIT_ERROR")
     expect(child.stderr).toContain("EPIPE")
     expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-    expect((await readdir(dirname(canonicalPath))).filter((name) => (
-      name.endsWith(".tmp") || name.endsWith(".lock")
-    ))).toEqual([])
+    expect(
+      (await readdir(dirname(canonicalPath))).filter(
+        (name) => name.endsWith(".tmp") || name.endsWith(".lock")
+      )
+    ).toEqual([])
   })
 })
 
@@ -2300,7 +2578,8 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
       schemaVersion: 1,
       cases: [{ id: "snapshot-only", path: casePath, expectedCodes: [] }]
     })}\n`
-    const configText = "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"target\": \"ES2022\" },\n  \"include\": [\"src/**/*.ts\"]\n}\n"
+    const configText =
+      '{\n  "compilerOptions": { "strict": true, "noEmit": true, "target": "ES2022" },\n  "include": ["src/**/*.ts"]\n}\n'
     const sourceText = "export const snapshotted: number = 1\n"
     const inputPaths = [
       `${FixtureRoot}/cases.json`,
@@ -2310,30 +2589,36 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     await Bun.write(join(root, inputPaths[0]!), casesText)
     await Bun.write(join(root, inputPaths[1]!), configText)
     await Bun.write(join(root, inputPaths[2]!), sourceText)
-    const snapshotted = await SnapshotInputs(root, inputPaths)
+    const snapshotted = await snapshotInputs(root, inputPaths)
     if (snapshotted.Snapshot === null) throw new Error("single fixture inputs must snapshot")
     await Bun.write(join(root, inputPaths[2]!), "const changedAfterSnapshot: string = 1\n")
 
     let observed: InputSnapshot | null = null
-    const evaluation = await fixture.EvaluateProjectSessionFixtureCorpusWithAnalyzer(
+    const evaluation = await fixture.evaluateProjectSessionFixtureCorpusWithAnalyzer(
       snapshotted.Snapshot,
       root,
       async (snapshot, projectPrefix, operations) => {
         observed = snapshot
         expect(projectPrefix).toBe("project")
         expect(operations.RepositoryRoot).toBe(await realpath(root))
-        return projectSession.AnalyzeProjectSessionWithOperations(snapshot, projectPrefix, operations)
+        return projectSession.analyzeProjectSessionWithOperations(
+          snapshot,
+          projectPrefix,
+          operations
+        )
       }
     )
 
     expect(evaluation).toEqual({
       SubjectsExpected: 1,
       SubjectsChecked: 1,
-      Checks: [expect.objectContaining({
-        id: "FIXTURE_CASE_MATCH",
-        status: "pass",
-        path: casePath
-      })]
+      Checks: [
+        expect.objectContaining({
+          id: "FIXTURE_CASE_MATCH",
+          status: "pass",
+          path: casePath
+        })
+      ]
     })
     const caseSnapshot = observed as InputSnapshot | null
     if (caseSnapshot === null) throw new Error("analyzer must receive a case-local snapshot")
@@ -2342,9 +2627,9 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
       "project/tsconfig.json"
     ])
     expect(new TextDecoder().decode(caseSnapshot.Files[0]!.Bytes)).toBe(sourceText)
-    expect(caseSnapshot.Sha256).toBe(Sha256(
-      caseSnapshot.Files.map((file) => `${file.Path}\0${file.Sha256}\n`).join("")
-    ))
+    expect(caseSnapshot.Sha256).toBe(
+      Sha256(caseSnapshot.Files.map((file) => `${file.Path}\0${file.Sha256}\n`).join(""))
+    )
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
   })
 
@@ -2353,19 +2638,22 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     const root = await RepositoryFixture("likego-project-session-fixture-current-")
     await CopyProjectSessionFixtureCorpus(root)
     const ignoredProbe = "tools/boundaries/probes/project-session/ignored-by-fixture-gate.json"
-    await Bun.write(join(root, ignoredProbe), "{\"ignored\":true}\n")
+    await Bun.write(join(root, ignoredProbe), '{"ignored":true}\n')
     const extra = `${FixtureRoot}/unlisted/extra.ts`
     await Bun.write(join(root, extra), "export const extra = true\n")
 
     const failedStdout: string[] = []
     const failedStderr: string[] = []
-    expect(await fixture.Main([
-      "--root", root,
-      "--run-id", "task4-fixture-domain-failure"
-    ], {
-      WriteStdout: (value) => { failedStdout.push(value) },
-      WriteStderr: (value) => { failedStderr.push(value) }
-    })).toBe(1)
+    expect(
+      await fixture.main(["--root", root, "--run-id", "task4-fixture-domain-failure"], {
+        WriteStdout: (value) => {
+          failedStdout.push(value)
+        },
+        WriteStderr: (value) => {
+          failedStderr.push(value)
+        }
+      })
+    ).toBe(1)
     expect(failedStderr).toEqual([])
     expect(failedStdout).toHaveLength(1)
     const failed = JSON.parse(failedStdout[0]!.slice("LIKEGO_GATE_RESULT=".length)) as {
@@ -2386,19 +2674,23 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     ])
 
     await rm(join(root, extra))
-    const discovered = await fixture.DiscoverProjectSessionFixtureInputs(root)
+    const discovered = await fixture.discoverProjectSessionFixtureInputs(root)
     expect(discovered).not.toContain(ignoredProbe)
-    const expectedSnapshot = await SnapshotInputs(root, discovered)
-    if (expectedSnapshot.Snapshot === null) throw new Error("ordinary fixture inventory must snapshot")
+    const expectedSnapshot = await snapshotInputs(root, discovered)
+    if (expectedSnapshot.Snapshot === null)
+      throw new Error("ordinary fixture inventory must snapshot")
     const passedStdout: string[] = []
     const passedStderr: string[] = []
-    expect(await fixture.Main([
-      "--root", root,
-      "--run-id", "task4-fixture-current-pass"
-    ], {
-      WriteStdout: (value) => { passedStdout.push(value) },
-      WriteStderr: (value) => { passedStderr.push(value) }
-    })).toBe(0)
+    expect(
+      await fixture.main(["--root", root, "--run-id", "task4-fixture-current-pass"], {
+        WriteStdout: (value) => {
+          passedStdout.push(value)
+        },
+        WriteStderr: (value) => {
+          passedStderr.push(value)
+        }
+      })
+    ).toBe(0)
     expect(passedStderr).toEqual([])
     expect(passedStdout).toHaveLength(1)
     const passed = JSON.parse(passedStdout[0]!.slice("LIKEGO_GATE_RESULT=".length)) as {
@@ -2410,7 +2702,11 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
       readonly releaseReadiness: string
       readonly inputsSha256: string
       readonly subjects: { readonly expected: number; readonly checked: number }
-      readonly checks: readonly { readonly id: string; readonly status: string; readonly path: string }[]
+      readonly checks: readonly {
+        readonly id: string
+        readonly status: string
+        readonly path: string
+      }[]
     }
     expect(passed.schemaVersion).toBe(1)
     expect(passed.runId).toBe("task4-fixture-current-pass")
@@ -2425,28 +2721,35 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     expect(passed.checks.map((check) => [check.id, check.status, check.path])).toEqual(
       ExpectedFixtureCases.map((item) => ["FIXTURE_CASE_MATCH", "pass", item.path])
     )
-    expect(JSON.parse(await readFile(
-      join(root, ".artifacts/gates/boundary-project-session-fixtures.json"),
-      "utf8"
-    ))).toEqual(passed)
+    expect(
+      JSON.parse(
+        await readFile(
+          join(root, ".artifacts/gates/boundary-project-session-fixtures.json"),
+          "utf8"
+        )
+      )
+    ).toEqual(passed)
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
   }, 30_000)
 
   test("persists current-run input, discovery and evaluator failures", async () => {
     const fixture = await LoadProjectSessionFixture()
-    const { NodeAtomicWriterOperations } = await import("../gates/result.ts")
+    const { nodeAtomicWriterOperations } = await import("../gates/result")
 
     const inputRoot = await RepositoryFixture("likego-project-session-fixture-input-")
     await CopyProjectSessionFixtureCorpus(inputRoot)
     await rm(join(inputRoot, FixtureCasesPath))
     const inputStdout: string[] = []
-    expect(await fixture.Main([
-      "--run-id", "task4-fixture-input",
-      "--root", inputRoot
-    ], {
-      WriteStdout: (value) => { inputStdout.push(value) },
-      WriteStderr: () => { throw new Error("input failure must not use stderr") }
-    })).toBe(1)
+    expect(
+      await fixture.main(["--run-id", "task4-fixture-input", "--root", inputRoot], {
+        WriteStdout: (value) => {
+          inputStdout.push(value)
+        },
+        WriteStderr: () => {
+          throw new Error("input failure must not use stderr")
+        }
+      })
+    ).toBe(1)
     const input = JSON.parse(inputStdout[0]!.slice("LIKEGO_GATE_RESULT=".length)) as {
       readonly runId: string
       readonly inputsSha256: null
@@ -2463,13 +2766,16 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     await mkdir(dirname(join(discoveryRoot, FixtureRoot)), { recursive: true })
     await symlink(outside, join(discoveryRoot, FixtureRoot))
     const discoveryStdout: string[] = []
-    expect(await fixture.Main([
-      "--root", discoveryRoot,
-      "--run-id", "task4-fixture-discovery"
-    ], {
-      WriteStdout: (value) => { discoveryStdout.push(value) },
-      WriteStderr: () => { throw new Error("discovery failure must not use stderr") }
-    })).toBe(1)
+    expect(
+      await fixture.main(["--root", discoveryRoot, "--run-id", "task4-fixture-discovery"], {
+        WriteStdout: (value) => {
+          discoveryStdout.push(value)
+        },
+        WriteStderr: () => {
+          throw new Error("discovery failure must not use stderr")
+        }
+      })
+    ).toBe(1)
     const discovery = JSON.parse(discoveryStdout[0]!.slice("LIKEGO_GATE_RESULT=".length)) as {
       readonly runId: string
       readonly inputsSha256: null
@@ -2480,25 +2786,35 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     expect(discovery.checks.map((check) => check.id)).toEqual(["GATE_INPUT_ERROR"])
 
     const nonRegularRoot = await RepositoryFixture("likego-project-session-fixture-nonregular-")
-    await Bun.write(join(nonRegularRoot, FixtureCasesPath), "{\"schemaVersion\":1,\"cases\":[]}\n")
+    await Bun.write(join(nonRegularRoot, FixtureCasesPath), '{"schemaVersion":1,"cases":[]}\n')
     await symlink("missing-target", join(nonRegularRoot, FixtureRoot, "linked-payload.ts"))
-    await expect(fixture.DiscoverProjectSessionFixtureInputs(nonRegularRoot))
-      .rejects.toThrow("project-session fixture inventory entries must be regular files or directories")
+    await expect(fixture.discoverProjectSessionFixtureInputs(nonRegularRoot)).rejects.toThrow(
+      "project-session fixture inventory entries must be regular files or directories"
+    )
 
     const evaluatorRoot = await RepositoryFixture("likego-project-session-fixture-evaluator-")
     await CopyProjectSessionFixtureCorpus(evaluatorRoot)
     const evaluatorStdout: string[] = []
-    expect(await fixture.MainWithDependencies([
-      "--root", evaluatorRoot,
-      "--run-id", "task4-fixture-evaluator"
-    ], {
-      WriteStdout: (value) => { evaluatorStdout.push(value) },
-      WriteStderr: () => { throw new Error("evaluator failure must not use stderr") }
-    }, {
-      DiscoverInputPaths: fixture.DiscoverProjectSessionFixtureInputs,
-      Evaluate: async () => { throw new Error("injected fixture evaluator failure") },
-      AtomicWriterOperations: NodeAtomicWriterOperations()
-    })).toBe(1)
+    expect(
+      await fixture.mainWithDependencies(
+        ["--root", evaluatorRoot, "--run-id", "task4-fixture-evaluator"],
+        {
+          WriteStdout: (value) => {
+            evaluatorStdout.push(value)
+          },
+          WriteStderr: () => {
+            throw new Error("evaluator failure must not use stderr")
+          }
+        },
+        {
+          DiscoverInputPaths: fixture.discoverProjectSessionFixtureInputs,
+          Evaluate: async () => {
+            throw new Error("injected fixture evaluator failure")
+          },
+          AtomicWriterOperations: nodeAtomicWriterOperations()
+        }
+      )
+    ).toBe(1)
     const evaluator = JSON.parse(evaluatorStdout[0]!.slice("LIKEGO_GATE_RESULT=".length)) as {
       readonly runId: string
       readonly inputsSha256: string
@@ -2536,44 +2852,61 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     for (const args of invalid) {
       const stdout: string[] = []
       const stderr: string[] = []
-      expect(await fixture.Main(args, {
-        WriteStdout: (value) => { stdout.push(value) },
-        WriteStderr: (value) => { stderr.push(value) }
-      })).toBe(1)
+      expect(
+        await fixture.main(args, {
+          WriteStdout: (value) => {
+            stdout.push(value)
+          },
+          WriteStderr: (value) => {
+            stderr.push(value)
+          }
+        })
+      ).toBe(1)
       expect(stdout).toEqual([])
       expect(stderr).toEqual(["PROJECT_SESSION_FIXTURE_USAGE invalid arguments\n"])
       expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-      expect((await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+      expect(
+        (await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))
+      ).toEqual([])
     }
   })
 
   test("rolls back atomic and hostile stdout failures with safe stderr", async () => {
     const fixture = await LoadProjectSessionFixture()
-    const { NodeAtomicWriterOperations } = await import("../gates/result.ts")
+    const { nodeAtomicWriterOperations } = await import("../gates/result")
     const root = await RepositoryFixture("likego-project-session-fixture-output-")
     await CopyProjectSessionFixtureCorpus(root)
     await Bun.write(join(root, FixtureRoot, "unlisted/extra.ts"), "export const extra = true\n")
     const canonicalPath = join(root, ".artifacts/gates/boundary-project-session-fixtures.json")
     await mkdir(dirname(canonicalPath), { recursive: true })
     await Bun.write(canonicalPath, "prior-result\n")
-    const base = NodeAtomicWriterOperations()
+    const base = nodeAtomicWriterOperations()
 
     const emissionStdout: string[] = []
     const emissionStderr: string[] = []
-    expect(await fixture.MainWithDependencies([
-      "--root", root,
-      "--run-id", "task4-fixture-emission"
-    ], {
-      WriteStdout: (value) => { emissionStdout.push(value) },
-      WriteStderr: (value) => { emissionStderr.push(value) }
-    }, {
-      DiscoverInputPaths: fixture.DiscoverProjectSessionFixtureInputs,
-      Evaluate: fixture.EvaluateProjectSessionFixtureCorpus,
-      AtomicWriterOperations: {
-        ...base,
-        Open: async () => { throw new Error("injected fixture emission failure") }
-      }
-    })).toBe(1)
+    expect(
+      await fixture.mainWithDependencies(
+        ["--root", root, "--run-id", "task4-fixture-emission"],
+        {
+          WriteStdout: (value) => {
+            emissionStdout.push(value)
+          },
+          WriteStderr: (value) => {
+            emissionStderr.push(value)
+          }
+        },
+        {
+          DiscoverInputPaths: fixture.discoverProjectSessionFixtureInputs,
+          Evaluate: fixture.evaluateProjectSessionFixtureCorpus,
+          AtomicWriterOperations: {
+            ...base,
+            Open: async () => {
+              throw new Error("injected fixture emission failure")
+            }
+          }
+        }
+      )
+    ).toBe(1)
     expect(emissionStdout).toEqual([])
     expect(emissionStderr).toEqual([
       "PROJECT_SESSION_FIXTURE_EMIT_ERROR injected fixture emission failure\n"
@@ -2584,23 +2917,38 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
       { thrown: "literal output failure", message: "literal output failure" },
       {
         thrown: Object.assign(Object.create(null) as object, {
-          [Symbol.toPrimitive]: () => { throw new Error("cannot stringify output") }
+          [Symbol.toPrimitive]: () => {
+            throw new Error("cannot stringify output")
+          }
         }),
         message: "unprintable error"
       }
     ]
     for (const failure of failures) {
       const stderr: string[] = []
-      expect(await fixture.Main([
-        "--root", root,
-        "--run-id", `task4-fixture-output-${failure.message === "unprintable error" ? "hostile" : "literal"}`
-      ], {
-        WriteStdout: () => { throw failure.thrown },
-        WriteStderr: (value) => { stderr.push(value) }
-      })).toBe(1)
+      expect(
+        await fixture.main(
+          [
+            "--root",
+            root,
+            "--run-id",
+            `task4-fixture-output-${failure.message === "unprintable error" ? "hostile" : "literal"}`
+          ],
+          {
+            WriteStdout: () => {
+              throw failure.thrown
+            },
+            WriteStderr: (value) => {
+              stderr.push(value)
+            }
+          }
+        )
+      ).toBe(1)
       expect(stderr).toEqual([`PROJECT_SESSION_FIXTURE_EMIT_ERROR ${failure.message}\n`])
       expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-      expect((await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))).toEqual([])
+      expect(
+        (await readdir(dirname(canonicalPath))).filter((name) => name.endsWith(".tmp"))
+      ).toEqual([])
     }
   })
 
@@ -2612,8 +2960,10 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     await Bun.write(canonicalPath, "prior-result\n")
     const child = await SpawnWithClosedStdout([
       join(RepositoryRoot, "tools/boundaries/project-session.fixture.cli.ts"),
-      "--root", root,
-      "--run-id", "task4-fixture-real-epipe"
+      "--root",
+      root,
+      "--run-id",
+      "task4-fixture-real-epipe"
     ])
 
     expect(child.signalCode).toBeNull()
@@ -2622,9 +2972,11 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     expect(child.stderr).toContain("PROJECT_SESSION_FIXTURE_EMIT_ERROR")
     expect(child.stderr).toContain("EPIPE")
     expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-    expect((await readdir(dirname(canonicalPath))).filter((name) => (
-      name.endsWith(".tmp") || name.endsWith(".lock")
-    ))).toEqual([])
+    expect(
+      (await readdir(dirname(canonicalPath))).filter(
+        (name) => name.endsWith(".tmp") || name.endsWith(".lock")
+      )
+    ).toEqual([])
   })
 
   test("routes executable default IO without bypassing the same gate", async () => {
@@ -2634,22 +2986,25 @@ describe("Task4 Step5 async project-session fixture gate RED", () => {
     const stderr: string[] = []
     const originalStdoutWrite = process.stdout.write
     const originalStderrWrite = process.stderr.write
-    process.stdout.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stdout.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stdout.push(String(value))
       callback?.()
       return true
     }) as typeof process.stdout.write
-    process.stderr.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stderr.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stderr.push(String(value))
       callback?.()
       return true
     }) as typeof process.stderr.write
     try {
-      expect(await fixture.Main([])).toBe(1)
-      expect(await fixture.Main([
-        "--root", root,
-        "--run-id", "task4-fixture-default-io"
-      ])).toBe(1)
+      expect(await fixture.main([])).toBe(1)
+      expect(await fixture.main(["--root", root, "--run-id", "task4-fixture-default-io"])).toBe(1)
     } finally {
       process.stdout.write = originalStdoutWrite
       process.stderr.write = originalStderrWrite
@@ -2666,25 +3021,24 @@ describe("project-session committed safe probe descriptors", () => {
     const cases = ParseProbeCases(indexFile)
     expect(cases.map((item) => item.scenario)).toEqual([...ExpectedProbeScenarios])
     expect(Object.keys(ExpectedProbeContracts)).toEqual([...ExpectedProbeScenarios])
-    expect(await FilesBelow(join(RepositoryRoot, ProbeRoot))).toEqual([
-      "cases.json",
-      ...cases.map((item) => item.path)
-    ].sort())
+    expect(await FilesBelow(join(RepositoryRoot, ProbeRoot))).toEqual(
+      ["cases.json", ...cases.map((item) => item.path)].sort()
+    )
 
     for (const probeCase of cases) {
-      const descriptor = ParseProbeDescriptor(File(
-        `${ProbeRoot}/${probeCase.path}`,
-        await ReadSnapshotText(`${ProbeRoot}/${probeCase.path}`)
-      ))
+      const descriptor = ParseProbeDescriptor(
+        File(
+          `${ProbeRoot}/${probeCase.path}`,
+          await ReadSnapshotText(`${ProbeRoot}/${probeCase.path}`)
+        )
+      )
       expect(descriptor.scenario).toBe(probeCase.scenario)
       expect({
         projectPrefix: descriptor.projectPrefix,
         virtualInputsSha256: VirtualInputsSha256(descriptor.virtualFiles),
         actions: descriptor.actions,
         expected: descriptor.expected
-      }).toEqual(
-        ExpectedProbeContracts[probeCase.scenario as ProbeScenario]
-      )
+      }).toEqual(ExpectedProbeContracts[probeCase.scenario as ProbeScenario])
       expect(descriptor.actions.stage.targetPath).toBe(
         probeCase.scenario === "source-realpath-escape" ? "project/escape-target.ts" : ""
       )
@@ -2692,10 +3046,13 @@ describe("project-session committed safe probe descriptors", () => {
   })
 
   test("keeps real multiple-project, alternate-identity, external-source and unsafe targets self-contained", async () => {
-    const descriptor = async (scenario: string): Promise<ProbeDescriptor> => ParseProbeDescriptor(File(
-      `${ProbeRoot}/${scenario}.json`,
-      await ReadSnapshotText(`${ProbeRoot}/${scenario}.json`)
-    ))
+    const descriptor = async (scenario: string): Promise<ProbeDescriptor> =>
+      ParseProbeDescriptor(
+        File(
+          `${ProbeRoot}/${scenario}.json`,
+          await ReadSnapshotText(`${ProbeRoot}/${scenario}.json`)
+        )
+      )
     const multiple = await descriptor("project-count-multiple")
     const identity = await descriptor("project-identity")
     const external = await descriptor("external-source")
@@ -2716,24 +3073,35 @@ describe("project-session committed safe probe descriptors", () => {
       kind: "project-identity",
       path: "project/alternate/tsconfig.json"
     })
-    expect(identity.virtualFiles.some((file) => file.path === "project/alternate/src/index.ts")).toBe(true)
+    expect(
+      identity.virtualFiles.some((file) => file.path === "project/alternate/src/index.ts")
+    ).toBe(true)
     expect(external.virtualFiles.map((file) => file.path)).toContain(
       "project/node_modules/package-dependency/index.d.ts"
     )
-    expect(materialization.virtualFiles.map((file) => file.path)).toContain(materialization.actions.stage.path)
-    expect(materialization.actions.stage.path.split("/").some((segment) => segment.length > 255)).toBe(true)
+    expect(materialization.virtualFiles.map((file) => file.path)).toContain(
+      materialization.actions.stage.path
+    )
+    expect(
+      materialization.actions.stage.path.split("/").some((segment) => segment.length > 255)
+    ).toBe(true)
     expect(sourceEscape.actions.stage).toEqual({
       kind: "source-realpath-escape",
       path: "project/src/index.ts",
       targetPath: "project/escape-target.ts"
     })
-    expect(sourceEscape.virtualFiles.map((file) => file.path)).toContain(sourceEscape.actions.stage.path)
-    expect(sourceEscape.virtualFiles.map((file) => file.path)).toContain(sourceEscape.actions.stage.targetPath)
+    expect(sourceEscape.virtualFiles.map((file) => file.path)).toContain(
+      sourceEscape.actions.stage.path
+    )
+    expect(sourceEscape.virtualFiles.map((file) => file.path)).toContain(
+      sourceEscape.actions.stage.targetPath
+    )
     expect(sourceEscape.actions.stage.targetPath.startsWith("project/src/")).toBe(false)
-    expect((await FilesBelow(join(RepositoryRoot, ProbeRoot))).some((path) => (
-      path.split("/").some((segment) => segment.length > 255)
-      || path.includes("..")
-    ))).toBe(false)
+    expect(
+      (await FilesBelow(join(RepositoryRoot, ProbeRoot))).some(
+        (path) => path.split("/").some((segment) => segment.length > 255) || path.includes("..")
+      )
+    ).toBe(false)
   })
 
   test("rejects missing, extra, duplicate, mismatched and malformed descriptors before worker admission", async () => {
@@ -2762,13 +3130,19 @@ describe("project-session committed safe probe descriptors", () => {
       ]),
       Snapshot([
         [ProbeCasesPath, casesText],
-        [`${ProbeRoot}/success.json`, `${JSON.stringify({ ...descriptorValue, scenario: "primary-error" })}\n`]
+        [
+          `${ProbeRoot}/success.json`,
+          `${JSON.stringify({ ...descriptorValue, scenario: "primary-error" })}\n`
+        ]
       ]),
       Snapshot([
-        [ProbeCasesPath, `${JSON.stringify({
-          schemaVersion: 1,
-          cases: [casesValue.cases[0], casesValue.cases[0]]
-        })}\n`],
+        [
+          ProbeCasesPath,
+          `${JSON.stringify({
+            schemaVersion: 1,
+            cases: [casesValue.cases[0], casesValue.cases[0]]
+          })}\n`
+        ],
         [`${ProbeRoot}/success.json`, descriptorText]
       ]),
       Snapshot([
@@ -2782,7 +3156,11 @@ describe("project-session committed safe probe descriptors", () => {
     ]
     let workerAdmissions = 0
     for (const variant of variants) {
-      expect(() => SelectProbe(variant, "success", () => { workerAdmissions += 1 })).toThrow()
+      expect(() =>
+        SelectProbe(variant, "success", () => {
+          workerAdmissions += 1
+        })
+      ).toThrow()
     }
     expect(workerAdmissions).toBe(0)
   })
@@ -2790,17 +3168,17 @@ describe("project-session committed safe probe descriptors", () => {
   test("rejects non-canonical scenario contracts and non-self-contained actions before worker admission", async () => {
     const casesText = await ReadSnapshotText(ProbeCasesPath)
     const casesValue = JSON.parse(casesText) as { schemaVersion: 1; cases: ProbeCase[] }
-    const readDescriptor = async (scenario: string): Promise<ProbeDescriptor> => (
+    const readDescriptor = async (scenario: string): Promise<ProbeDescriptor> =>
       JSON.parse(await ReadSnapshotText(`${ProbeRoot}/${scenario}.json`)) as ProbeDescriptor
-    )
     const success = await readDescriptor("success")
     const multiple = await readDescriptor("project-count-multiple")
     const identity = await readDescriptor("project-identity")
     const sourceEscape = await readDescriptor("source-realpath-escape")
-    const withIndex = (cases: readonly ProbeCase[]): string => `${JSON.stringify({
-      schemaVersion: 1,
-      cases
-    })}\n`
+    const withIndex = (cases: readonly ProbeCase[]): string =>
+      `${JSON.stringify({
+        schemaVersion: 1,
+        cases
+      })}\n`
     const variants: Array<{
       readonly name: string
       readonly requestedScenario: string
@@ -2937,9 +3315,9 @@ describe("project-session committed safe probe descriptors", () => {
         cases: casesValue.cases,
         descriptor: {
           ...multiple,
-          virtualFiles: multiple.virtualFiles.filter((file) => (
-            file.path !== multiple.actions.update.path
-          ))
+          virtualFiles: multiple.virtualFiles.filter(
+            (file) => file.path !== multiple.actions.update.path
+          )
         }
       },
       {
@@ -2949,9 +3327,9 @@ describe("project-session committed safe probe descriptors", () => {
         cases: casesValue.cases,
         descriptor: {
           ...identity,
-          virtualFiles: identity.virtualFiles.filter((file) => (
-            file.path !== identity.actions.update.path
-          ))
+          virtualFiles: identity.virtualFiles.filter(
+            (file) => file.path !== identity.actions.update.path
+          )
         }
       }
     ]
@@ -2964,7 +3342,9 @@ describe("project-session committed safe probe descriptors", () => {
         [`${ProbeRoot}/${variant.descriptorPath}`, `${JSON.stringify(variant.descriptor)}\n`]
       ])
       try {
-        SelectProbe(snapshot, variant.requestedScenario, () => { workerAdmissions += 1 })
+        SelectProbe(snapshot, variant.requestedScenario, () => {
+          workerAdmissions += 1
+        })
         accepted.push(variant.name)
       } catch {}
     }
@@ -2975,9 +3355,8 @@ describe("project-session committed safe probe descriptors", () => {
 
   test("rejects canonical actions when the project prefix or virtual input bytes drift before worker admission", async () => {
     const casesText = await ReadSnapshotText(ProbeCasesPath)
-    const readDescriptor = async (scenario: string): Promise<ProbeDescriptor> => (
+    const readDescriptor = async (scenario: string): Promise<ProbeDescriptor> =>
       JSON.parse(await ReadSnapshotText(`${ProbeRoot}/${scenario}.json`)) as ProbeDescriptor
-    )
     const success = await readDescriptor("success")
     const countZero = await readDescriptor("project-count-zero")
     const admission = await readDescriptor("admission-failure")
@@ -3009,7 +3388,7 @@ describe("project-session committed safe probe descriptors", () => {
             ...countZero.virtualFiles,
             {
               path: countZero.actions.update.path,
-              utf8: "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true }\n}\n"
+              utf8: '{\n  "compilerOptions": { "strict": true, "noEmit": true }\n}\n'
             }
           ]
         }
@@ -3030,9 +3409,11 @@ describe("project-session committed safe probe descriptors", () => {
         scenario: "external-source",
         descriptor: {
           ...external,
-          virtualFiles: external.virtualFiles.map((file) => file.path === "project/src/index.ts"
-            ? { ...file, utf8: "export const value = 1\n" }
-            : file)
+          virtualFiles: external.virtualFiles.map((file) =>
+            file.path === "project/src/index.ts"
+              ? { ...file, utf8: "export const value = 1\n" }
+              : file
+          )
         }
       },
       {
@@ -3040,9 +3421,9 @@ describe("project-session committed safe probe descriptors", () => {
         scenario: "external-source",
         descriptor: {
           ...external,
-          virtualFiles: external.virtualFiles.filter((file) => (
-            file.path !== "project/node_modules/package-dependency/index.d.ts"
-          ))
+          virtualFiles: external.virtualFiles.filter(
+            (file) => file.path !== "project/node_modules/package-dependency/index.d.ts"
+          )
         }
       }
     ]
@@ -3055,7 +3436,9 @@ describe("project-session committed safe probe descriptors", () => {
         [`${ProbeRoot}/${variant.scenario}.json`, `${JSON.stringify(variant.descriptor)}\n`]
       ])
       try {
-        SelectProbe(snapshot, variant.scenario, () => { workerAdmissions += 1 })
+        SelectProbe(snapshot, variant.scenario, () => {
+          workerAdmissions += 1
+        })
         accepted.push(variant.name)
       } catch {}
     }
@@ -3065,11 +3448,11 @@ describe("project-session committed safe probe descriptors", () => {
   })
 
   test("derives unique input hashes and never rereads a descriptor after snapshot", async () => {
-    const { SnapshotInputs } = await import("../gates/result.ts")
+    const { snapshotInputs } = await import("../gates/result")
     const index = ParseProbeCases(File(ProbeCasesPath, await ReadSnapshotText(ProbeCasesPath)))
     const hashes: string[] = []
     for (const probeCase of index) {
-      const result = await SnapshotInputs(RepositoryRoot, [
+      const result = await snapshotInputs(RepositoryRoot, [
         ProbeCasesPath,
         `${ProbeRoot}/${probeCase.path}`
       ])
@@ -3086,12 +3469,14 @@ describe("project-session committed safe probe descriptors", () => {
       await mkdir(dirname(join(root, path)), { recursive: true })
       await Bun.write(join(root, path), await ReadSnapshotText(path))
     }
-    const snapshotted = await SnapshotInputs(root, [ProbeCasesPath, descriptorPath])
+    const snapshotted = await snapshotInputs(root, [ProbeCasesPath, descriptorPath])
     expect(snapshotted.Checks).toEqual([])
     expect(snapshotted.Snapshot).not.toBeNull()
-    await Bun.write(join(root, descriptorPath), "{\"mutated\":true}\n")
+    await Bun.write(join(root, descriptorPath), '{"mutated":true}\n')
     let workerAdmissions = 0
-    const selected = SelectProbe(snapshotted.Snapshot!, "success", () => { workerAdmissions += 1 })
+    const selected = SelectProbe(snapshotted.Snapshot!, "success", () => {
+      workerAdmissions += 1
+    })
     expect(selected.scenario).toBe("success")
     expect(selected.virtualFiles[1]?.utf8).toBe("export const value: number = 1\n")
     expect(workerAdmissions).toBe(1)
@@ -3206,7 +3591,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     const invalidRoots = [join(parent, "missing-root"), rootFile, rootLink]
     for (const invalidRoot of invalidRoots) {
       const calls: string[] = []
-      const operations = ObservedOperations(module.NodeProjectSessionOperations(invalidRoot), calls)
+      const operations = ObservedOperations(module.nodeProjectSessionOperations(invalidRoot), calls)
       await ExpectAdmissionIssue(
         module,
         ValidProjectSnapshot(),
@@ -3231,7 +3616,10 @@ describe("Task4 Step2 input admission and real staging RED", () => {
           await symlink(target, absolute)
         }
         const calls: string[] = []
-        const operations = ObservedOperations(module.NodeProjectSessionOperations(repository), calls)
+        const operations = ObservedOperations(
+          module.nodeProjectSessionOperations(repository),
+          calls
+        )
         await ExpectAdmissionIssue(
           module,
           ValidProjectSnapshot(),
@@ -3251,16 +3639,27 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     const descriptor = JSON.parse(
       await ReadSnapshotText(`${ProbeRoot}/materialization-failure.json`)
     ) as ProbeDescriptor
-    const snapshot = SnapshotFiles(descriptor.virtualFiles.map((file) => File(file.path, file.utf8)))
+    const snapshot = SnapshotFiles(
+      descriptor.virtualFiles.map((file) => File(file.path, file.utf8))
+    )
     const calls: string[] = []
     const removedPaths: string[] = []
-    const operations = ObservedOperations(module.NodeProjectSessionOperations(root), calls, removedPaths)
+    const operations = ObservedOperations(
+      module.nodeProjectSessionOperations(root),
+      calls,
+      removedPaths
+    )
     let callbackCalled = false
     let caught: unknown
     try {
-      await module.WithProjectSessionWithOperations(snapshot, descriptor.projectPrefix, async () => {
-        callbackCalled = true
-      }, operations)
+      await module.withProjectSessionWithOperations(
+        snapshot,
+        descriptor.projectPrefix,
+        async () => {
+          callbackCalled = true
+        },
+        operations
+      )
     } catch (error) {
       caught = error
     }
@@ -3277,7 +3676,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
   test("refuses to remove a shape-matching staging path that was never acquired", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-unowned-remove-")
-    const operations = module.NodeProjectSessionOperations(root)
+    const operations = module.nodeProjectSessionOperations(root)
     const nonce = join(
       operations.RepositoryRoot,
       ".artifacts/gates/work/00000000-0000-4000-8000-000000000000"
@@ -3297,7 +3696,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-cleanup-identity-")
     const cleanupOrder: string[] = []
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const operations = CleanObservedOperations(base, cleanupOrder)
     const externalNonce = join(root, "external-nonce")
     const externalBoundary = join(externalNonce, "boundary-project")
@@ -3310,7 +3709,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     let caught: unknown
 
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
         async (session) => {
@@ -3346,7 +3745,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
   test("retains ownership for one safe retry after remove fails before delegating", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-remove-retry-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const cleanupOrder: string[] = []
     const removeFault = new Error("remove before delegate")
     const operations: TestProjectSessionOperations = {
@@ -3360,10 +3759,12 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     let caught: unknown
 
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
-        async (session) => { stagedRoot = session.StagedRoot },
+        async (session) => {
+          stagedRoot = session.StagedRoot
+        },
         operations
       )
     } catch (error) {
@@ -3384,7 +3785,7 @@ describe("Task4 Step2 input admission and real staging RED", () => {
   test("keeps ownership revoked when a remove delegate succeeds before its wrapper throws", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-remove-after-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const cleanupOrder: string[] = []
     const removeFault = new Error("remove after delegate")
     const operations: TestProjectSessionOperations = {
@@ -3399,10 +3800,12 @@ describe("Task4 Step2 input admission and real staging RED", () => {
     let caught: unknown
 
     try {
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
-        async (session) => { stagedRoot = session.StagedRoot },
+        async (session) => {
+          stagedRoot = session.StagedRoot
+        },
         operations
       )
     } catch (error) {
@@ -3427,9 +3830,10 @@ describe("Task4 Step2 clean real TypeScript project lifecycle RED", () => {
   test("materializes only selected bytes with owned modes and exposes sorted transitive package sources", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-clean-")
-    const configText = "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true, \"target\": \"ES2022\" },\n  \"files\": [\"src/z.ts\"]\n}\n"
+    const configText =
+      '{\n  "compilerOptions": { "strict": true, "noEmit": true, "target": "ES2022" },\n  "files": ["src/z.ts"]\n}\n'
     const aText = "export const a = 1\n"
-    const zText = "import { a } from \"./a.js\"\nexport const z = a\n"
+    const zText = 'import { a } from "./a"\nexport const z = a\n'
     const unselected = File("shared/unselected.ts", "must never be written\n")
     Object.defineProperty(unselected, "RealPath", {
       get(): never {
@@ -3445,62 +3849,67 @@ describe("Task4 Step2 clean real TypeScript project lifecycle RED", () => {
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
     const operations = CleanObservedOperations(
-      module.NodeProjectSessionOperations(root),
+      module.nodeProjectSessionOperations(root),
       cleanupOrder,
       removedPaths
     )
     const callbackValue = { exact: "callback-value" }
     let stagedRoot = ""
-    const value = await module.WithProjectSessionWithOperations(snapshot, "project", async (session) => {
-      stagedRoot = session.StagedRoot
-      const repositoryReal = await realpath(root)
-      const work = join(repositoryReal, ".artifacts/gates/work")
-      expect(basename(session.StagedRoot)).toBe("boundary-project")
-      expect(dirname(dirname(session.StagedRoot))).toBe(work)
-      expect(await realpath(session.StagedRoot)).toBe(session.StagedRoot)
-      expect(session.Project.configFileName).toBe(join(session.StagedRoot, "project/tsconfig.json"))
-      expect([
-        session.Project.configFileName,
-        session.Project.configFileName.toLowerCase()
-      ]).toContain(String(session.Project.id))
-      expect(session.Project.rootFiles).toEqual([join(session.StagedRoot, "project/src/z.ts")])
-      expect(session.SourceFiles.map((file) => file.fileName)).toEqual([
-        join(session.StagedRoot, "project/src/a.ts"),
-        join(session.StagedRoot, "project/src/z.ts")
-      ])
+    const value = await module.withProjectSessionWithOperations(
+      snapshot,
+      "project",
+      async (session) => {
+        stagedRoot = session.StagedRoot
+        const repositoryReal = await realpath(root)
+        const work = join(repositoryReal, ".artifacts/gates/work")
+        expect(basename(session.StagedRoot)).toBe("boundary-project")
+        expect(dirname(dirname(session.StagedRoot))).toBe(work)
+        expect(await realpath(session.StagedRoot)).toBe(session.StagedRoot)
+        expect(session.Project.configFileName).toBe(
+          join(session.StagedRoot, "project/tsconfig.json")
+        )
+        expect([
+          session.Project.configFileName,
+          session.Project.configFileName.toLowerCase()
+        ]).toContain(String(session.Project.id))
+        expect(session.Project.rootFiles).toEqual([join(session.StagedRoot, "project/src/z.ts")])
+        expect(session.SourceFiles.map((file) => file.fileName)).toEqual([
+          join(session.StagedRoot, "project/src/a.ts"),
+          join(session.StagedRoot, "project/src/z.ts")
+        ])
 
-      const ownedDirectories = [
-        join(repositoryReal, ".artifacts"),
-        join(repositoryReal, ".artifacts/gates"),
-        work,
-        dirname(session.StagedRoot),
-        session.StagedRoot,
-        join(session.StagedRoot, "project"),
-        join(session.StagedRoot, "project/src")
-      ]
-      for (const directory of ownedDirectories) {
-        const status = await lstat(directory)
-        expect(status.isDirectory()).toBe(true)
-        expect(status.isSymbolicLink()).toBe(false)
-        expect(status.mode & 0o777).toBe(0o700)
-        expect(await realpath(directory)).toBe(directory)
-      }
-      for (const path of [
-        "project/tsconfig.json",
-        "project/src/a.ts",
-        "project/src/z.ts"
-      ]) {
-        const status = await lstat(join(session.StagedRoot, path))
-        expect(status.isFile()).toBe(true)
-        expect(status.isSymbolicLink()).toBe(false)
-        expect(status.mode & 0o777).toBe(0o600)
-      }
-      expect(await readFile(join(session.StagedRoot, "project/tsconfig.json"), "utf8")).toBe(configText)
-      expect(await readFile(join(session.StagedRoot, "project/src/a.ts"), "utf8")).toBe(aText)
-      expect(await readFile(join(session.StagedRoot, "project/src/z.ts"), "utf8")).toBe(zText)
-      await ExpectEnoent(join(session.StagedRoot, "shared"))
-      return callbackValue
-    }, operations)
+        const ownedDirectories = [
+          join(repositoryReal, ".artifacts"),
+          join(repositoryReal, ".artifacts/gates"),
+          work,
+          dirname(session.StagedRoot),
+          session.StagedRoot,
+          join(session.StagedRoot, "project"),
+          join(session.StagedRoot, "project/src")
+        ]
+        for (const directory of ownedDirectories) {
+          const status = await lstat(directory)
+          expect(status.isDirectory()).toBe(true)
+          expect(status.isSymbolicLink()).toBe(false)
+          expect(status.mode & 0o777).toBe(0o700)
+          expect(await realpath(directory)).toBe(directory)
+        }
+        for (const path of ["project/tsconfig.json", "project/src/a.ts", "project/src/z.ts"]) {
+          const status = await lstat(join(session.StagedRoot, path))
+          expect(status.isFile()).toBe(true)
+          expect(status.isSymbolicLink()).toBe(false)
+          expect(status.mode & 0o777).toBe(0o600)
+        }
+        expect(await readFile(join(session.StagedRoot, "project/tsconfig.json"), "utf8")).toBe(
+          configText
+        )
+        expect(await readFile(join(session.StagedRoot, "project/src/a.ts"), "utf8")).toBe(aText)
+        expect(await readFile(join(session.StagedRoot, "project/src/z.ts"), "utf8")).toBe(zText)
+        await ExpectEnoent(join(session.StagedRoot, "shared"))
+        return callbackValue
+      },
+      operations
+    )
 
     expect(value).toBe(callbackValue)
     expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
@@ -3518,10 +3927,10 @@ describe("Task4 Step2 clean real TypeScript project lifecycle RED", () => {
     const cleanupOrder: string[] = []
     for (const callbackValue of [undefined, null] as const) {
       const operations = CleanObservedOperations(
-        module.NodeProjectSessionOperations(root),
+        module.nodeProjectSessionOperations(root),
         cleanupOrder
       )
-      const value = await module.WithProjectSessionWithOperations(
+      const value = await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
         async () => callbackValue,
@@ -3550,22 +3959,26 @@ describe("Task4 Step2 clean real TypeScript project lifecycle RED", () => {
     const previousCwd = process.cwd()
     try {
       process.chdir(container)
-      const boundOperations = module.NodeProjectSessionOperations("bound")
+      const boundOperations = module.nodeProjectSessionOperations("bound")
       expect(boundOperations.RepositoryRoot).toBe(await realpath(boundRoot))
       process.chdir(laterCwd)
       let explicitStage = ""
-      await module.WithProjectSessionWithOperations(
+      await module.withProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
-        async (session) => { explicitStage = session.StagedRoot },
+        async (session) => {
+          explicitStage = session.StagedRoot
+        },
         boundOperations
       )
       expect(explicitStage.startsWith(`${await realpath(boundRoot)}/`)).toBe(true)
-      expect(await readFile(join(boundRoot, ".artifacts/gates/work/unrelated.txt"), "utf8")).toBe("preserve me\n")
+      expect(await readFile(join(boundRoot, ".artifacts/gates/work/unrelated.txt"), "utf8")).toBe(
+        "preserve me\n"
+      )
       await ExpectEnoent(join(laterCwd, ".artifacts"))
 
       let defaultStage = ""
-      await module.WithProjectSession(ValidProjectSnapshot(), "project", async (session) => {
+      await module.withProjectSession(ValidProjectSnapshot(), "project", async (session) => {
         defaultStage = session.StagedRoot
       })
       expect(defaultStage.startsWith(`${await realpath(laterCwd)}/`)).toBe(true)
@@ -3581,7 +3994,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
     const root = await RepositoryFixture("LikeGo-project-session-project-id-case-")
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     let lowercaseAliasesCanonical = false
     const operations: TestProjectSessionOperations = {
       ...CleanObservedOperations(base, cleanupOrder, removedPaths),
@@ -3594,15 +4007,15 @@ describe("Task4 Step2 real project and source admission RED", () => {
         const canonicalStatus = await lstat(canonicalTsconfig)
         try {
           const lowercaseStatus = await lstat(lowercaseConfig)
-          lowercaseAliasesCanonical = (
-            !lowercaseStatus.isSymbolicLink()
-            && lowercaseStatus.isFile()
-            && lowercaseStatus.dev === canonicalStatus.dev
-            && lowercaseStatus.ino === canonicalStatus.ino
-            && await realpath(lowercaseConfig) === canonicalTsconfig
-          )
+          lowercaseAliasesCanonical =
+            !lowercaseStatus.isSymbolicLink() &&
+            lowercaseStatus.isFile() &&
+            lowercaseStatus.dev === canonicalStatus.dev &&
+            lowercaseStatus.ino === canonicalStatus.ino &&
+            (await realpath(lowercaseConfig)) === canonicalTsconfig
         } catch (error) {
-          if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error
+          if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT")
+            throw error
         }
         expect(Reflect.set(project, "id", lowercaseConfig)).toBe(true)
         expect(String(project.id)).toBe(lowercaseConfig)
@@ -3610,22 +4023,26 @@ describe("Task4 Step2 real project and source admission RED", () => {
       }
     }
 
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       ValidProjectSnapshot(),
       "project",
       operations
     )
 
-    expect(result).toEqual(lowercaseAliasesCanonical
-      ? { SourceFilesChecked: 1, Issues: [] }
-      : {
-          SourceFilesChecked: 0,
-          Issues: [{
-            Code: "PROJECT_SESSION_PROJECT_IDENTITY",
-            Path: "project/tsconfig.json",
-            Message: expect.any(String)
-          }]
-        })
+    expect(result).toEqual(
+      lowercaseAliasesCanonical
+        ? { SourceFilesChecked: 1, Issues: [] }
+        : {
+            SourceFilesChecked: 0,
+            Issues: [
+              {
+                Code: "PROJECT_SESSION_PROJECT_IDENTITY",
+                Path: "project/tsconfig.json",
+                Message: expect.any(String)
+              }
+            ]
+          }
+    )
     expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
     expect(removedPaths).toHaveLength(1)
     await ExpectEnoent(removedPaths[0]!)
@@ -3673,12 +4090,12 @@ describe("Task4 Step2 real project and source admission RED", () => {
       const cleanupOrder: string[] = []
       const removedPaths: string[] = []
       const operations = RealScenarioOperations(
-        module.NodeProjectSessionOperations(root),
+        module.nodeProjectSessionOperations(root),
         descriptor,
         cleanupOrder,
         removedPaths
       )
-      const result = await module.AnalyzeProjectSessionWithOperations(
+      const result = await module.analyzeProjectSessionWithOperations(
         DescriptorSnapshot(descriptor),
         descriptor.projectPrefix,
         operations
@@ -3703,25 +4120,30 @@ describe("Task4 Step2 real project and source admission RED", () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-source-outside-")
     const snapshot = SnapshotFiles([
-      File("project/tsconfig.json", "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true },\n  \"files\": [\"outside.ts\"]\n}\n"),
+      File(
+        "project/tsconfig.json",
+        '{\n  "compilerOptions": { "strict": true, "noEmit": true },\n  "files": ["outside.ts"]\n}\n'
+      ),
       File("project/outside.ts", "export const outside = true\n")
     ])
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
     const operations = CleanObservedOperations(
-      module.NodeProjectSessionOperations(root),
+      module.nodeProjectSessionOperations(root),
       cleanupOrder,
       removedPaths
     )
-    const result = await module.AnalyzeProjectSessionWithOperations(snapshot, "project", operations)
+    const result = await module.analyzeProjectSessionWithOperations(snapshot, "project", operations)
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_SOURCE_ESCAPE",
-        Path: "project/outside.ts",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_SOURCE_ESCAPE",
+          Path: "project/outside.ts",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
     expect(removedPaths).toHaveLength(1)
@@ -3732,16 +4154,21 @@ describe("Task4 Step2 real project and source admission RED", () => {
     const callbackCleanupOrder: string[] = []
     const callbackRemovedPaths: string[] = []
     const callbackOperations = CleanObservedOperations(
-      module.NodeProjectSessionOperations(callbackRoot),
+      module.nodeProjectSessionOperations(callbackRoot),
       callbackCleanupOrder,
       callbackRemovedPaths
     )
     let callbackCount = 0
     let admissionPrimary: unknown
     try {
-      await module.WithProjectSessionWithOperations(snapshot, "project", async () => {
-        callbackCount += 1
-      }, callbackOperations)
+      await module.withProjectSessionWithOperations(
+        snapshot,
+        "project",
+        async () => {
+          callbackCount += 1
+        },
+        callbackOperations
+      )
     } catch (error) {
       admissionPrimary = error
     }
@@ -3758,7 +4185,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
     const root = await RepositoryFixture("likego-project-session-source-directory-")
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const operations: TestProjectSessionOperations = {
       ...CleanObservedOperations(base, cleanupOrder, removedPaths),
       UpdateSnapshot: async (api, canonicalTsconfig) => {
@@ -3769,7 +4196,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
         return snapshot
       }
     }
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       ValidProjectSnapshot(),
       "project",
       operations
@@ -3777,11 +4204,13 @@ describe("Task4 Step2 real project and source admission RED", () => {
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_SOURCE_ESCAPE",
-        Path: "project/src/index.ts",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_SOURCE_ESCAPE",
+          Path: "project/src/index.ts",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
     expect(removedPaths).toHaveLength(1)
@@ -3792,7 +4221,8 @@ describe("Task4 Step2 real project and source admission RED", () => {
   test("rejects canonical config identity after replacing it with a staged self-contained symlink", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-project-session-config-symlink-")
-    const configText = "{\n  \"compilerOptions\": { \"strict\": true, \"noEmit\": true },\n  \"files\": [\"src/index.ts\"]\n}\n"
+    const configText =
+      '{\n  "compilerOptions": { "strict": true, "noEmit": true },\n  "files": ["src/index.ts"]\n}\n'
     const snapshot = SnapshotFiles([
       File("project/tsconfig.json", configText),
       File("project/config-target.json", configText),
@@ -3800,7 +4230,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
     ])
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const operations: TestProjectSessionOperations = {
       ...CleanObservedOperations(base, cleanupOrder, removedPaths),
       UpdateSnapshot: async (api, canonicalTsconfig) => {
@@ -3810,15 +4240,17 @@ describe("Task4 Step2 real project and source admission RED", () => {
         return realSnapshot
       }
     }
-    const result = await module.AnalyzeProjectSessionWithOperations(snapshot, "project", operations)
+    const result = await module.analyzeProjectSessionWithOperations(snapshot, "project", operations)
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_PROJECT_IDENTITY",
-        Path: "project/tsconfig.json",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_PROJECT_IDENTITY",
+          Path: "project/tsconfig.json",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(cleanupOrder).toEqual(["snapshot.dispose", "api.close", "remove-staging"])
     expect(removedPaths).toHaveLength(1)
@@ -3832,7 +4264,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
     const sentinel = new Error("unexpected update failure")
     const cleanupOrder: string[] = []
     const removedPaths: string[] = []
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const clean = CleanObservedOperations(base, cleanupOrder, removedPaths)
     const operations: TestProjectSessionOperations = {
       ...clean,
@@ -3843,7 +4275,7 @@ describe("Task4 Step2 real project and source admission RED", () => {
     }
     let caught: unknown
     try {
-      await module.AnalyzeProjectSessionWithOperations(
+      await module.analyzeProjectSessionWithOperations(
         ValidProjectSnapshot(),
         "project",
         operations
@@ -3864,13 +4296,13 @@ describe("project-session production selector RED", () => {
   test("exports the frozen project session interface", async () => {
     const module = await LoadProjectSession()
     for (const name of [
-      "NodeProjectSessionOperations",
-      "WithProjectSession",
-      "WithProjectSessionWithOperations",
-      "AnalyzeProjectSession",
-      "AnalyzeProjectSessionWithOperations",
-      "WithWorkspaceProjectSessionWithOperations",
-      "AnalyzeWorkspaceProjectSessionWithOperations"
+      "nodeProjectSessionOperations",
+      "withProjectSession",
+      "withProjectSessionWithOperations",
+      "analyzeProjectSession",
+      "analyzeProjectSessionWithOperations",
+      "withWorkspaceProjectSessionWithOperations",
+      "analyzeWorkspaceProjectSessionWithOperations"
     ]) {
       expect(module[name]).toBeFunction()
     }
@@ -3878,6 +4310,197 @@ describe("project-session production selector RED", () => {
 })
 
 describe("Pre-kernel Task 7a workspace project authority RED", () => {
+  test("Task 7a post-commit regression: rejects restored package, boundary and nonce directory swaps", async () => {
+    const module = await LoadProjectSession()
+    const source = "export function identity(value) { return value }\n"
+    const strictConfig = WorkspaceConfig()
+    const relaxedConfig = strictConfig.replace('"strict": true', '"strict": false')
+    const snapshot = SnapshotFiles(
+      WorkspacePackage("packages/a", "@workspace/a", source, strictConfig)
+    )
+
+    const baselineRoot = await RepositoryFixture("likego-workspace-parent-swap-baseline-")
+    const baseline = await module.analyzeWorkspaceProjectSessionWithOperations(
+      snapshot,
+      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+      module.nodeProjectSessionOperations(baselineRoot)
+    )
+    expect(baseline.Issues.map((issue) => issue.Code)).toContain("TYPESCRIPT_SEMANTIC_7006")
+
+    const observed: {
+      readonly Scenario: string
+      readonly Result: {
+        readonly SourceFilesChecked: number
+        readonly Issues: readonly TestSessionIssue[]
+      }
+      readonly Work: readonly string[]
+    }[] = []
+    for (const scenario of ["package", "boundary", "nonce"] as const) {
+      const root = await RepositoryFixture(`likego-workspace-parent-swap-${scenario}-`)
+      const base = module.nodeProjectSessionOperations(root)
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        {
+          ...base,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            const packageRoot = dirname(canonicalTsconfig)
+            const boundary = dirname(dirname(dirname(canonicalTsconfig)))
+            const target =
+              scenario === "package"
+                ? packageRoot
+                : scenario === "boundary"
+                  ? boundary
+                  : dirname(boundary)
+            const saved = `${target}.saved`
+            await rename(target, saved)
+            await mkdir(join(packageRoot, "src"), { recursive: true })
+            await Bun.write(join(packageRoot, "package.json"), '{"name":"@workspace/a"}\n')
+            await Bun.write(canonicalTsconfig, relaxedConfig)
+            await Bun.write(join(packageRoot, "src/index.ts"), source)
+            try {
+              return await base.UpdateSnapshot(api, canonicalTsconfig)
+            } finally {
+              await rm(target, { recursive: true, force: true })
+              await rename(saved, target)
+            }
+          }
+        }
+      )
+      observed.push({
+        Scenario: scenario,
+        Result: result,
+        Work: await readdir(join(root, ".artifacts/gates/work"))
+      })
+    }
+
+    expect(observed).toEqual([
+      {
+        Scenario: "package",
+        Result: {
+          SourceFilesChecked: 0,
+          Issues: [
+            {
+              Code: "PROJECT_SESSION_STAGE_INVALID",
+              Path: "packages",
+              Message: expect.any(String)
+            }
+          ]
+        },
+        Work: []
+      },
+      {
+        Scenario: "boundary",
+        Result: {
+          SourceFilesChecked: 0,
+          Issues: [
+            {
+              Code: "PROJECT_SESSION_STAGE_INVALID",
+              Path: ".artifacts/gates/work",
+              Message: expect.any(String)
+            }
+          ]
+        },
+        Work: []
+      },
+      {
+        Scenario: "nonce",
+        Result: {
+          SourceFilesChecked: 0,
+          Issues: [
+            {
+              Code: "PROJECT_SESSION_STAGE_INVALID",
+              Path: ".artifacts/gates/work",
+              Message: expect.any(String)
+            }
+          ]
+        },
+        Work: []
+      }
+    ])
+  })
+
+  test("Task 7a post-commit regression: redacts glued selected, staged, repository and UNC paths", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-glued-")
+    const base = module.nodeProjectSessionOperations(root)
+    const repositoryRoot = base.RepositoryRoot
+    let stagedRoot = ""
+    const unc = "\\\\server\\share\\unc-secret.ts"
+    const extended = "\\\\?\\C:\\extended-secret.ts"
+    const device = "\\\\.\\C:\\device-secret.ts"
+    const result = await WithInjectedProgramDiagnostics(
+      () => [
+        {
+          pos: 0,
+          end: 0,
+          code: 9910,
+          category: 1,
+          text: `label${join(stagedRoot, "packages/a/src/index.ts")} dot.${join(stagedRoot, "packages/d/stage-secret.ts")} raw${stagedRoot.replaceAll("/", "\\")}\\packages\\d\\raw-secret.ts`,
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9910,
+              category: 1,
+              text: `under_${repositoryRoot}/private/repository-secret.ts alias${stagedRoot}/packages/a/../d/alias-secret.ts`
+            }
+          ],
+          relatedInformation: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9910,
+              category: 1,
+              text: `unc${unc} extended${extended} device${device}`
+            }
+          ]
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          {
+            ...base,
+            UpdateSnapshot: async (api, canonicalTsconfig) => {
+              stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
+              return base.UpdateSnapshot(api, canonicalTsconfig)
+            }
+          }
+        )
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(
+      result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    ).toHaveLength(3)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9910")).toEqual({
+      Code: "TYPESCRIPT_PROGRAM_9910",
+      Path: "packages/a",
+      Message: [
+        "labelpackages/a/src/index.ts dot.packages/a rawpackages/a",
+        "under_packages/a aliaspackages/a",
+        "uncpackages/a extendedpackages/a devicepackages/a"
+      ].join("\n")
+    })
+    const serialized = JSON.stringify(result)
+    for (const forbidden of [
+      stagedRoot,
+      repositoryRoot,
+      "stage-secret.ts",
+      "raw-secret.ts",
+      "repository-secret.ts",
+      "alias-secret.ts",
+      "server",
+      "unc-secret.ts",
+      "extended-secret.ts",
+      "device-secret.ts"
+    ]) {
+      expect(serialized).not.toContain(forbidden)
+    }
+  })
+
   test("Task 7a rereview regression: rejects source BOM and detects both restored BOM worker inputs", async () => {
     const module = await LoadProjectSession()
     const sourceBytes = Encoder.encode("export const authority = 'canonical'\n")
@@ -3893,14 +4516,17 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       snapshotBytes: Uint8Array,
       workerBytes: Uint8Array | null
     ): Promise<{
-      readonly Result: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }
+      readonly Result: {
+        readonly SourceFilesChecked: number
+        readonly Issues: readonly TestSessionIssue[]
+      }
       readonly Calls: readonly string[]
     }> {
       const root = await RepositoryFixture(`likego-workspace-bom-${label}-`)
-      const base = module.NodeProjectSessionOperations(root)
+      const base = module.nodeProjectSessionOperations(root)
       const calls: string[] = []
       const source = BytesFile("packages/a/src/index.ts", snapshotBytes)
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         SnapshotFiles([
           File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
           File("packages/a/tsconfig.json", WorkspaceConfig()),
@@ -3938,13 +4564,13 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     ])
 
     const legacyRoot = await RepositoryFixture("likego-project-legacy-bom-")
-    const legacy = await module.AnalyzeProjectSessionWithOperations(
+    const legacy = await module.analyzeProjectSessionWithOperations(
       SnapshotFiles([
         File("project/tsconfig.json", WorkspaceConfig()),
         BytesFile("project/src/index.ts", bomSourceBytes)
       ]),
       "project",
-      module.NodeProjectSessionOperations(legacyRoot)
+      module.nodeProjectSessionOperations(legacyRoot)
     )
     expect(legacy).toEqual({ SourceFilesChecked: 1, Issues: [] })
   })
@@ -3952,10 +4578,10 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
   test("Task 7a rereview regression: seals every selected input across the worker update", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-workspace-selected-input-seal-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const config = File("packages/a/tsconfig.json", WorkspaceConfig())
     const calls: string[] = []
-    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const result = await module.analyzeWorkspaceProjectSessionWithOperations(
       SnapshotFiles([
         File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
         config,
@@ -3978,11 +4604,13 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_STAGE_INVALID",
-        Path: "packages/a/tsconfig.json",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_STAGE_INVALID",
+          Path: "packages/a/tsconfig.json",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(calls).toEqual(["update"])
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
@@ -3991,84 +4619,97 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
   test("Task 7a rereview regression: preserves only selected diagnostic replacements as non-escapes", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-workspace-diagnostic-replacement-scope-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     let stagedRoot = ""
     const result = await WithInjectedProgramDiagnostics(
-      () => [{
-        pos: 0,
-        end: 0,
-        code: 9902,
-        category: 1,
-        text: `target ${join(stagedRoot, "packages/a/src/index.ts")}`,
-        messageChain: [{
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `dependency ${join(stagedRoot, "packages/b/src/index.ts")}`
-        }, {
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `broad ${stagedRoot}`
-        }, {
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `parent ${stagedRoot}/packages/a/../d/src/secret-parent.ts`
-        }, {
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `dot ${stagedRoot}/packages/a/./src/secret-dot.ts`
-        }, {
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `duplicate ${stagedRoot}/packages/a//src/secret-duplicate.ts`
-        }, {
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `backslash ${stagedRoot}/packages/a\\..\\d\\src\\secret-backslash.ts`
-        }],
-        relatedInformation: [{
-          pos: 0,
-          end: 0,
-          code: 9902,
-          category: 1,
-          text: `sibling ${join(stagedRoot, "packages/d/src/secret.ts")}`
-        }]
-      }],
-      () => module.AnalyzeWorkspaceProjectSessionWithOperations(
-        SnapshotFiles([
-          ...WorkspacePackage(
-            "packages/a",
-            "@workspace/a",
-            'import { b } from "@workspace/b"\nexport const a = b\n',
-            WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] })
-          ),
-          ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
-        ]),
-        { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
+      () => [
         {
-          ...base,
-          UpdateSnapshot: async (api, canonicalTsconfig) => {
-            stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
-            return base.UpdateSnapshot(api, canonicalTsconfig)
-          }
+          pos: 0,
+          end: 0,
+          code: 9902,
+          category: 1,
+          text: `target ${join(stagedRoot, "packages/a/src/index.ts")}`,
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `dependency ${join(stagedRoot, "packages/b/src/index.ts")}`
+            },
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `broad ${stagedRoot}`
+            },
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `parent ${stagedRoot}/packages/a/../d/src/secret-parent.ts`
+            },
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `dot ${stagedRoot}/packages/a/./src/secret-dot.ts`
+            },
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `duplicate ${stagedRoot}/packages/a//src/secret-duplicate.ts`
+            },
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `backslash ${stagedRoot}/packages/a\\..\\d\\src\\secret-backslash.ts`
+            }
+          ],
+          relatedInformation: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9902,
+              category: 1,
+              text: `sibling ${join(stagedRoot, "packages/d/src/secret.ts")}`
+            }
+          ]
         }
-      )
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles([
+            ...WorkspacePackage(
+              "packages/a",
+              "@workspace/a",
+              'import { b } from "@workspace/b"\nexport const a = b\n',
+              WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] })
+            ),
+            ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
+          ]),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
+          {
+            ...base,
+            UpdateSnapshot: async (api, canonicalTsconfig) => {
+              stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
+              return base.UpdateSnapshot(api, canonicalTsconfig)
+            }
+          }
+        )
     )
 
     expect(result.SourceFilesChecked).toBe(1)
-    expect(result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"))
-      .toHaveLength(6)
+    expect(
+      result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    ).toHaveLength(6)
     expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9902")).toEqual({
       Code: "TYPESCRIPT_PROGRAM_9902",
       Path: "packages/a",
@@ -4099,48 +4740,63 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const https = "https://safe.example/path.ts"
     const protocolRelative = "//cdn.safe.example/path.ts"
     const result = await WithInjectedProgramDiagnostics(
-      () => [{
-        pos: 0,
-        end: 0,
-        code: 9903,
-        category: 1,
-        text: `top "${unc}" ${https} ${protocolRelative} path=${unc} [${extended}]`,
-        messageChain: [{
+      () => [
+        {
           pos: 0,
           end: 0,
           code: 9903,
           category: 1,
-          text: `chain ${extended} ${device} ${https} {${unc}} :${device} ,${extended}`
-        }],
-        relatedInformation: [{
-          pos: 0,
-          end: 0,
-          code: 9903,
-          category: 1,
-          text: `related ${relatedUnc} ${protocolRelative} path=/private/tmp/related-posix.ts [/private/tmp/bracket-posix.ts]`
-        }]
-      }],
-      () => module.AnalyzeWorkspaceProjectSessionWithOperations(
-        SnapshotFiles(WorkspacePackage(
-          "packages/a",
-          "@workspace/a",
-          "export const a = true\n"
-        )),
-        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-        module.NodeProjectSessionOperations(root)
-      )
+          text: `top "${unc}" ${https} ${protocolRelative} path=${unc} [${extended}]`,
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9903,
+              category: 1,
+              text: `chain ${extended} ${device} ${https} {${unc}} :${device} ,${extended}`
+            }
+          ],
+          relatedInformation: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9903,
+              category: 1,
+              text: `related ${relatedUnc} ${protocolRelative} path=/private/tmp/related-posix.ts [/private/tmp/bracket-posix.ts]`
+            }
+          ]
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          module.nodeProjectSessionOperations(root)
+        )
     )
 
     expect(result.SourceFilesChecked).toBe(1)
-    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9903")?.Message).toBe([
-      `top "packages/a" ${https} ${protocolRelative} path=packages/a [packages/a]`,
-      `chain packages/a packages/a ${https} {packages/a} :packages/a ,packages/a`,
-      `related packages/a ${protocolRelative} path=packages/a [packages/a]`
-    ].join("\n"))
-    expect(result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"))
-      .toHaveLength(3)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9903")?.Message).toBe(
+      [
+        `top "packages/a" ${https} ${protocolRelative} path=packages/a [packages/a]`,
+        `chain packages/a packages/a ${https} {packages/a} :packages/a ,packages/a`,
+        `related packages/a ${protocolRelative} path=packages/a [packages/a]`
+      ].join("\n")
+    )
+    expect(
+      result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    ).toHaveLength(3)
     const serialized = JSON.stringify(result)
-    for (const forbidden of ["server", "share", "secret.ts", "device.ts", "fileserver", "private", "tmp", "C:"]) {
+    for (const forbidden of [
+      "server",
+      "share",
+      "secret.ts",
+      "device.ts",
+      "fileserver",
+      "private",
+      "tmp",
+      "C:"
+    ]) {
       expect(serialized).not.toContain(forbidden)
     }
     expect(serialized).toContain(https)
@@ -4149,24 +4805,27 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
 
   test("Task 7a rereview regression: preserves complete URLs and relatives but redacts file URIs", async () => {
     const module = await LoadProjectSession()
-    const snapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      "export const a = true\n"
-    ))
+    const snapshot = SnapshotFiles(
+      WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")
+    )
 
-    async function AnalyzeDiagnostic(label: string, code: number, text: string): Promise<{
+    async function AnalyzeDiagnostic(
+      label: string,
+      code: number,
+      text: string
+    ): Promise<{
       readonly SourceFilesChecked: number
       readonly Issues: readonly TestSessionIssue[]
     }> {
       const root = await RepositoryFixture(`likego-workspace-diagnostic-url-${label}-`)
       return WithInjectedProgramDiagnostics(
         () => [{ pos: 0, end: 0, code, category: 1, text }],
-        () => module.AnalyzeWorkspaceProjectSessionWithOperations(
-          snapshot,
-          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-          module.NodeProjectSessionOperations(root)
-        )
+        () =>
+          module.analyzeWorkspaceProjectSessionWithOperations(
+            snapshot,
+            { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+            module.nodeProjectSessionOperations(root)
+          )
       )
     }
 
@@ -4194,38 +4853,269 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     expect({ urlsAndRelatives, fileResult }).toEqual({
       urlsAndRelatives: {
         SourceFilesChecked: 1,
-        Issues: [{
-          Code: "TYPESCRIPT_PROGRAM_9904",
-          Path: "packages/a",
-          Message: `urls ${richUrls} relatives ./relative.ts ../parent.ts`
-        }]
+        Issues: [
+          {
+            Code: "TYPESCRIPT_PROGRAM_9904",
+            Path: "packages/a",
+            Message: `urls ${richUrls} relatives ./relative.ts ../parent.ts`
+          }
+        ]
       },
       fileResult: {
         SourceFilesChecked: 1,
-        Issues: [{
-          Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
-          Path: "packages/a",
-          Message: "TypeScript diagnostic file path is outside the staged project"
-        }, {
-          Code: "TYPESCRIPT_PROGRAM_9905",
-          Path: "packages/a",
-          Message: "files file:///packages/a file:///packages/a file:///packages/a file:///packages/a URI:file:///packages/a path:file:///packages/a"
-        }]
+        Issues: [
+          {
+            Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
+            Path: "packages/a",
+            Message: "TypeScript diagnostic file path is outside the staged project"
+          },
+          {
+            Code: "TYPESCRIPT_PROGRAM_9905",
+            Path: "packages/a",
+            Message:
+              "files file:///packages/a file:///packages/a file:///packages/a file:///packages/a URI:file:///packages/a path:file:///packages/a"
+          }
+        ]
       }
     })
     expect(JSON.stringify(fileResult)).not.toContain("private")
-    for (const forbidden of ["file-uri-secret.ts", "localhost", "server", "drive-secret.ts", "label-secret.ts"]) {
+    for (const forbidden of [
+      "file-uri-secret.ts",
+      "localhost",
+      "server",
+      "drive-secret.ts",
+      "label-secret.ts"
+    ]) {
       expect(JSON.stringify(fileResult)).not.toContain(forbidden)
     }
   })
 
+  test("Task 7a third-round review regression: preserves relative and URL diagnostic file names in text", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-file-name-text-")
+    const relative = "./relative.ts"
+    const https = "https://safe.example/file-name.ts"
+    const protocolRelative = "//cdn.safe.example/file-name.ts"
+    const result = await WithInjectedProgramDiagnostics(
+      () => [
+        {
+          pos: 0,
+          end: 0,
+          code: 9911,
+          category: 1,
+          fileName: relative,
+          text: `relative ${relative} ../parent.ts`,
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9911,
+              category: 1,
+              fileName: https,
+              text: `https ${https}`
+            }
+          ],
+          relatedInformation: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9911,
+              category: 1,
+              fileName: protocolRelative,
+              text: `protocol ${protocolRelative}`
+            }
+          ]
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          module.nodeProjectSessionOperations(root)
+        )
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9911")).toEqual({
+      Code: "TYPESCRIPT_PROGRAM_9911",
+      Path: "packages/a",
+      Message: [
+        `relative ${relative} ../parent.ts`,
+        `https ${https}`,
+        `packages/a: protocol ${protocolRelative}`
+      ].join("\n")
+    })
+    expect(
+      result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    ).toHaveLength(3)
+  })
+
+  test("Task 7a third-round review regression: rejects an empty diagnostic file name without scanning it", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-empty-file-name-")
+    const message = "empty file name keeps ./relative.ts and ../parent.ts"
+    const result = await WithInjectedProgramDiagnostics(
+      () => [
+        {
+          pos: 0,
+          end: 0,
+          code: 9912,
+          category: 1,
+          fileName: "",
+          text: message
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          module.nodeProjectSessionOperations(root)
+        )
+    )
+
+    expect(result).toEqual({
+      SourceFilesChecked: 1,
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE",
+          Path: "packages/a",
+          Message: "TypeScript diagnostic file path is outside the staged project"
+        },
+        {
+          Code: "TYPESCRIPT_PROGRAM_9912",
+          Path: "packages/a",
+          Message: message
+        }
+      ]
+    })
+  })
+
+  test("Task 7a final-review regression: redacts glued file URIs across the diagnostic graph", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-glued-file-uri-")
+    const result = await WithInjectedProgramDiagnostics(
+      () => [
+        {
+          pos: 0,
+          end: 0,
+          code: 9913,
+          category: 1,
+          text: "local=labelfile:///private/uri-secret.ts localhost=prefixfile://localhost/private/localhost-secret.ts",
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9913,
+              category: 1,
+              text: "server=tagfile://server/share/server-secret.ts"
+            }
+          ],
+          relatedInformation: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9913,
+              category: 1,
+              text: "drive=under_file:///C:/drive-secret.ts"
+            }
+          ]
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          module.nodeProjectSessionOperations(root)
+        )
+    )
+
+    expect(result.SourceFilesChecked).toBe(1)
+    expect(result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_9913")).toEqual({
+      Code: "TYPESCRIPT_PROGRAM_9913",
+      Path: "packages/a",
+      Message: [
+        "local=labelfile:///packages/a localhost=prefixfile:///packages/a",
+        "server=tagfile:///packages/a",
+        "drive=under_file:///packages/a"
+      ].join("\n")
+    })
+    expect(
+      result.Issues.filter((issue) => issue.Code === "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    ).toHaveLength(3)
+    const serialized = JSON.stringify(result)
+    for (const forbidden of [
+      "uri-secret.ts",
+      "file://localhost",
+      "localhost-secret.ts",
+      "file://server",
+      "server-secret.ts",
+      "drive-secret.ts",
+      "private",
+      "share",
+      "C:"
+    ]) {
+      expect(serialized).not.toContain(forbidden)
+    }
+  })
+
+  test("Task 7a final-review regression: protects complete URLs before known path scans", async () => {
+    const module = await LoadProjectSession()
+    const root = await RepositoryFixture("likego-workspace-diagnostic-known-path-url-")
+    const base = module.nodeProjectSessionOperations(root)
+    let stagedRoot = ""
+    const result = await WithInjectedProgramDiagnostics(
+      () => [
+        {
+          pos: 0,
+          end: 0,
+          code: 9914,
+          category: 1,
+          text: `https https://safe.example${stagedRoot}/packages/d/url-path.ts`,
+          messageChain: [
+            {
+              pos: 0,
+              end: 0,
+              code: 9914,
+              category: 1,
+              text: `protocol //cdn.safe.example${stagedRoot}/packages/d/url-path.ts`
+            }
+          ]
+        }
+      ],
+      () =>
+        module.analyzeWorkspaceProjectSessionWithOperations(
+          SnapshotFiles(WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")),
+          { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+          {
+            ...base,
+            UpdateSnapshot: async (api, canonicalTsconfig) => {
+              stagedRoot = dirname(dirname(dirname(canonicalTsconfig)))
+              return base.UpdateSnapshot(api, canonicalTsconfig)
+            }
+          }
+        )
+    )
+
+    expect(result).toEqual({
+      SourceFilesChecked: 1,
+      Issues: [
+        {
+          Code: "TYPESCRIPT_PROGRAM_9914",
+          Path: "packages/a",
+          Message: [
+            `https https://safe.example${stagedRoot}/packages/d/url-path.ts`,
+            `protocol //cdn.safe.example${stagedRoot}/packages/d/url-path.ts`
+          ].join("\n")
+        }
+      ]
+    })
+  })
+
   test("Task 7a rereview regression: validates authority prototypes and data descriptors before reads", async () => {
     const module = await LoadProjectSession()
-    const snapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      "export const a = true\n"
-    ))
+    const snapshot = SnapshotFiles(
+      WorkspacePackage("packages/a", "@workspace/a", "export const a = true\n")
+    )
     let getterReads = 0
 
     function DataAuthority(prototype: object | null, dependencies: unknown): object {
@@ -4237,20 +5127,32 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       return authority
     }
 
-    const projectAccessor = Object.defineProperties({}, {
-      ProjectPrefix: {
-        enumerable: true,
-        get: () => { getterReads += 1; return "packages/a" }
-      },
-      DependencyPrefixes: { value: [], enumerable: true }
-    })
-    const dependenciesAccessor = Object.defineProperties({}, {
-      ProjectPrefix: { value: "packages/a", enumerable: true },
-      DependencyPrefixes: {
-        enumerable: true,
-        get: () => { getterReads += 1; return [] }
+    const projectAccessor = Object.defineProperties(
+      {},
+      {
+        ProjectPrefix: {
+          enumerable: true,
+          get: () => {
+            getterReads += 1
+            return "packages/a"
+          }
+        },
+        DependencyPrefixes: { value: [], enumerable: true }
       }
-    })
+    )
+    const dependenciesAccessor = Object.defineProperties(
+      {},
+      {
+        ProjectPrefix: { value: "packages/a", enumerable: true },
+        DependencyPrefixes: {
+          enumerable: true,
+          get: () => {
+            getterReads += 1
+            return []
+          }
+        }
+      }
+    )
     const customArray: unknown[] = []
     Object.setPrototypeOf(customArray, Object.create(Array.prototype) as object)
     const extraArray: unknown[] = []
@@ -4261,7 +5163,10 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     Object.defineProperty(accessorArray, "0", {
       enumerable: true,
       configurable: true,
-      get: () => { getterReads += 1; return "packages/b" }
+      get: () => {
+        getterReads += 1
+        return "packages/b"
+      }
     })
     const invalidAuthorities = [
       DataAuthority({ marker: true }, []),
@@ -4275,15 +5180,18 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       DataAuthority(Object.prototype, accessorArray)
     ]
     const observed: {
-      readonly Result: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }
+      readonly Result: {
+        readonly SourceFilesChecked: number
+        readonly Issues: readonly TestSessionIssue[]
+      }
       readonly Calls: readonly string[]
     }[] = []
 
     for (const [index, authority] of invalidAuthorities.entries()) {
       const root = await RepositoryFixture(`likego-workspace-authority-descriptor-${index}-`)
-      const base = module.NodeProjectSessionOperations(root)
+      const base = module.nodeProjectSessionOperations(root)
       const calls: string[] = []
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         snapshot,
         authority as TestWorkspaceProjectAuthority,
         {
@@ -4297,17 +5205,21 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       observed.push({ Result: result, Calls: calls })
     }
 
-    expect(observed).toEqual(invalidAuthorities.map(() => ({
-      Result: {
-        SourceFilesChecked: 0,
-        Issues: [{
-          Code: "PROJECT_SESSION_SCOPE_INVALID",
-          Path: "",
-          Message: expect.any(String)
-        }]
-      },
-      Calls: []
-    })))
+    expect(observed).toEqual(
+      invalidAuthorities.map(() => ({
+        Result: {
+          SourceFilesChecked: 0,
+          Issues: [
+            {
+              Code: "PROJECT_SESSION_SCOPE_INVALID",
+              Path: "",
+              Message: expect.any(String)
+            }
+          ]
+        },
+        Calls: []
+      }))
+    )
     expect(getterReads).toBe(0)
 
     const frozenRoot = await RepositoryFixture("likego-workspace-authority-frozen-")
@@ -4315,11 +5227,13 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       ProjectPrefix: "packages/a",
       DependencyPrefixes: Object.freeze([] as string[])
     })
-    expect(await module.AnalyzeWorkspaceProjectSessionWithOperations(
-      snapshot,
-      frozenAuthority,
-      module.NodeProjectSessionOperations(frozenRoot)
-    )).toEqual({ SourceFilesChecked: 1, Issues: [] })
+    expect(
+      await module.analyzeWorkspaceProjectSessionWithOperations(
+        snapshot,
+        frozenAuthority,
+        module.nodeProjectSessionOperations(frozenRoot)
+      )
+    ).toEqual({ SourceFilesChecked: 1, Issues: [] })
   })
 
   test("Task 7a review regression: binds worker AST text to fatal UTF-8 snapshot text", async () => {
@@ -4329,47 +5243,54 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       Path: "packages/a/src/index.ts",
       Message: expect.any(String)
     }
-    const results: { readonly SourceFilesChecked: number; readonly Issues: readonly TestSessionIssue[] }[] = []
+    const results: {
+      readonly SourceFilesChecked: number
+      readonly Issues: readonly TestSessionIssue[]
+    }[] = []
 
     const changedRoot = await RepositoryFixture("likego-workspace-project-ast-snapshot-")
-    const changedBase = module.NodeProjectSessionOperations(changedRoot)
+    const changedBase = module.nodeProjectSessionOperations(changedRoot)
     const changedSource = File("packages/a/src/index.ts", "export const authority = 'snapshot'\n")
     const changedSnapshot = SnapshotFiles([
       File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
       File("packages/a/tsconfig.json", WorkspaceConfig()),
       changedSource
     ])
-    results.push(await module.AnalyzeWorkspaceProjectSessionWithOperations(
-      changedSnapshot,
-      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      {
-        ...changedBase,
-        UpdateSnapshot: async (api, canonicalTsconfig) => {
-          const stagedSource = join(dirname(canonicalTsconfig), "src/index.ts")
-          await Bun.write(stagedSource, "export const authority = 'worker'\n")
-          try {
-            return await changedBase.UpdateSnapshot(api, canonicalTsconfig)
-          } finally {
-            await Bun.write(stagedSource, changedSource.Bytes)
+    results.push(
+      await module.analyzeWorkspaceProjectSessionWithOperations(
+        changedSnapshot,
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        {
+          ...changedBase,
+          UpdateSnapshot: async (api, canonicalTsconfig) => {
+            const stagedSource = join(dirname(canonicalTsconfig), "src/index.ts")
+            await Bun.write(stagedSource, "export const authority = 'worker'\n")
+            try {
+              return await changedBase.UpdateSnapshot(api, canonicalTsconfig)
+            } finally {
+              await Bun.write(stagedSource, changedSource.Bytes)
+            }
           }
         }
-      }
-    ))
+      )
+    )
 
     const invalidRoot = await RepositoryFixture("likego-workspace-project-invalid-utf8-")
     const invalidSource = BytesFile(
       "packages/a/src/index.ts",
       new Uint8Array([0x65, 0x78, 0x70, 0x6f, 0x72, 0x74, 0x20, 0xc3, 0x28])
     )
-    results.push(await module.AnalyzeWorkspaceProjectSessionWithOperations(
-      SnapshotFiles([
-        File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
-        File("packages/a/tsconfig.json", WorkspaceConfig()),
-        invalidSource
-      ]),
-      { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      module.NodeProjectSessionOperations(invalidRoot)
-    ))
+    results.push(
+      await module.analyzeWorkspaceProjectSessionWithOperations(
+        SnapshotFiles([
+          File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
+          File("packages/a/tsconfig.json", WorkspaceConfig()),
+          invalidSource
+        ]),
+        { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
+        module.nodeProjectSessionOperations(invalidRoot)
+      )
+    )
 
     expect(results).toEqual([
       { SourceFilesChecked: 0, Issues: [expectedIssue] },
@@ -4381,7 +5302,7 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const module = await LoadProjectSession()
     const source = "export const local = true\n"
     const legacyRoot = await RepositoryFixture("likego-project-legacy-local-node-modules-")
-    const legacy = await module.AnalyzeProjectSessionWithOperations(
+    const legacy = await module.analyzeProjectSessionWithOperations(
       SnapshotFiles([
         File(
           "project/tsconfig.json",
@@ -4390,12 +5311,12 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
         File("project/src/node_modules/local.ts", source)
       ]),
       "project",
-      module.NodeProjectSessionOperations(legacyRoot)
+      module.nodeProjectSessionOperations(legacyRoot)
     )
     expect(legacy).toEqual({ SourceFilesChecked: 1, Issues: [] })
 
     const workspaceRoot = await RepositoryFixture("likego-workspace-local-node-modules-")
-    const workspace = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const workspace = await module.analyzeWorkspaceProjectSessionWithOperations(
       SnapshotFiles([
         File("packages/a/package.json", '{"name":"@workspace/a"}\n'),
         File(
@@ -4405,40 +5326,47 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
         File("packages/a/src/node_modules/local.ts", source)
       ]),
       { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      module.NodeProjectSessionOperations(workspaceRoot)
+      module.nodeProjectSessionOperations(workspaceRoot)
     )
     expect(workspace).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
-        Path: "packages/a/src/node_modules/local.ts",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
+          Path: "packages/a/src/node_modules/local.ts",
+          Message: expect.any(String)
+        }
+      ]
     })
   })
 
   test("Task 7a review regression: redacts path escapes in real fileless TS6053 diagnostics", async () => {
     const module = await LoadProjectSession()
-    const repositoryRoot = await RepositoryFixture("likego-workspace-fileless-diagnostic-repository-")
+    const repositoryRoot = await RepositoryFixture(
+      "likego-workspace-fileless-diagnostic-repository-"
+    )
     const hostRoot = await RepositoryFixture("likego-workspace-fileless-diagnostic-host-")
     const missingHostPath = join(hostRoot, "private", "missing.ts")
-    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
-      SnapshotFiles(WorkspacePackage(
-        "packages/a",
-        "@workspace/a",
-        "export const a = true\n",
-        WorkspaceConfig({}, { files: ["src/index.ts", missingHostPath] })
-      )),
+    const result = await module.analyzeWorkspaceProjectSessionWithOperations(
+      SnapshotFiles(
+        WorkspacePackage(
+          "packages/a",
+          "@workspace/a",
+          "export const a = true\n",
+          WorkspaceConfig({}, { files: ["src/index.ts", missingHostPath] })
+        )
+      ),
       { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      module.NodeProjectSessionOperations(repositoryRoot)
+      module.nodeProjectSessionOperations(repositoryRoot)
     )
 
     expect(result.SourceFilesChecked).toBe(1)
     const missingIssue = result.Issues.find((issue) => issue.Code === "TYPESCRIPT_PROGRAM_6053")
     expect(missingIssue).toBeDefined()
     expect(missingIssue?.Path).toBe("packages/a")
-    expect(result.Issues.map((issue) => issue.Code))
-      .toContain("PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    expect(result.Issues.map((issue) => issue.Code)).toContain(
+      "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"
+    )
     const serialized = JSON.stringify(result)
     for (const forbidden of [
       missingHostPath,
@@ -4446,7 +5374,8 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       repositoryRoot,
       RepositoryRoot,
       ".artifacts/gates/work"
-    ]) expect(serialized).not.toContain(forbidden)
+    ])
+      expect(serialized).not.toContain(forbidden)
   })
 
   test("Task 7a review regression: rejects extra workspace authority runtime keys", async () => {
@@ -4459,7 +5388,7 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       Unexpected: true
     }
 
-    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const result = await module.analyzeWorkspaceProjectSessionWithOperations(
       ValidWorkspaceSnapshot(),
       authority,
       ForbiddenOperations(root, calls)
@@ -4467,11 +5396,13 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_SCOPE_INVALID",
-        Path: "",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_SCOPE_INVALID",
+          Path: "",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(calls).toEqual([])
     await ExpectEnoent(join(root, ".artifacts"))
@@ -4480,7 +5411,7 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
   test("stages exactly the selected transitive closure and returns only sorted target sources", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-workspace-project-valid-")
-    const base = module.NodeProjectSessionOperations(root)
+    const base = module.nodeProjectSessionOperations(root)
     const openedConfigs: string[] = []
     const operations: TestProjectSessionOperations = {
       ...base,
@@ -4491,15 +5422,16 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     }
     const snapshot = ValidWorkspaceSnapshot()
 
-    const callbackValue = await module.WithWorkspaceProjectSessionWithOperations(
+    const callbackValue = await module.withWorkspaceProjectSessionWithOperations(
       snapshot,
       ValidWorkspaceAuthority,
       async (session) => {
-        expect(session.SourceFiles.map((file) => relative(session.StagedRoot, file.fileName))).toEqual([
-          "packages/a/src/index.ts"
-        ])
-        const sourceNames = (await session.Project.program.getSourceFileNames())
-          .map((path) => relative(session.StagedRoot, path).split("\\").join("/"))
+        expect(
+          session.SourceFiles.map((file) => relative(session.StagedRoot, file.fileName))
+        ).toEqual(["packages/a/src/index.ts"])
+        const sourceNames = (await session.Project.program.getSourceFileNames()).map((path) =>
+          relative(session.StagedRoot, path).split("\\").join("/")
+        )
         expect(sourceNames).toContain("packages/a/src/index.ts")
         expect(sourceNames).toContain("packages/b/src/index.ts")
         expect(sourceNames).toContain("packages/c/src/index.ts")
@@ -4515,7 +5447,7 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     expect(openedConfigs[0]).toEndWith("/packages/a/tsconfig.json")
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
 
-    const analyzed = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const analyzed = await module.analyzeWorkspaceProjectSessionWithOperations(
       snapshot,
       ValidWorkspaceAuthority,
       operations
@@ -4530,10 +5462,10 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const root = await RepositoryFixture("likego-workspace-project-legacy-")
     const snapshot = ValidWorkspaceSnapshot()
 
-    const result = await module.AnalyzeProjectSessionWithOperations(
+    const result = await module.analyzeProjectSessionWithOperations(
       snapshot,
       "packages/a",
-      module.NodeProjectSessionOperations(root)
+      module.nodeProjectSessionOperations(root)
     )
 
     expect(result.SourceFilesChecked).toBe(1)
@@ -4560,17 +5492,19 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     ]
 
     for (const authority of authorities) {
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         ValidWorkspaceSnapshot(),
         authority as TestWorkspaceProjectAuthority,
         operations
       )
       expect(result.SourceFilesChecked).toBe(0)
-      expect(result.Issues).toEqual([{
-        Code: "PROJECT_SESSION_SCOPE_INVALID",
-        Path: expect.any(String),
-        Message: expect.any(String)
-      }])
+      expect(result.Issues).toEqual([
+        {
+          Code: "PROJECT_SESSION_SCOPE_INVALID",
+          Path: expect.any(String),
+          Message: expect.any(String)
+        }
+      ])
     }
     expect(calls).toEqual([])
     await ExpectEnoent(join(root, ".artifacts"))
@@ -4601,21 +5535,25 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     ] as const
 
     for (const item of missingCases) {
-      const root = await RepositoryFixture(`likego-workspace-project-missing-${basename(item.removed)}-`)
+      const root = await RepositoryFixture(
+        `likego-workspace-project-missing-${basename(item.removed)}-`
+      )
       const calls: string[] = []
       const snapshot = SnapshotFiles(complete.Files.filter((file) => file.Path !== item.removed))
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         snapshot,
         authority,
         ForbiddenOperations(root, calls)
       )
       expect(result).toEqual({
         SourceFilesChecked: 0,
-        Issues: [{
-          Code: "PROJECT_SESSION_INPUT_MISSING",
-          Path: item.Path,
-          Message: expect.any(String)
-        }]
+        Issues: [
+          {
+            Code: "PROJECT_SESSION_INPUT_MISSING",
+            Path: item.Path,
+            Message: expect.any(String)
+          }
+        ]
       })
       expect(calls).toEqual([])
       await ExpectEnoent(join(root, ".artifacts"))
@@ -4626,12 +5564,12 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const module = await LoadProjectSession()
 
     const unselectedRoot = await RepositoryFixture("likego-workspace-project-unselected-")
-    const unselectedBase = module.NodeProjectSessionOperations(unselectedRoot)
+    const unselectedBase = module.nodeProjectSessionOperations(unselectedRoot)
     const unselectedSnapshot = ValidWorkspaceSnapshot({
       ASource: 'import { unrelated } from "@workspace/d"\nexport const a = unrelated\n',
       AConfig: WorkspaceConfig({ "@workspace/d": ["../d/src/index.ts"] })
     })
-    const unselected = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const unselected = await module.analyzeWorkspaceProjectSessionWithOperations(
       unselectedSnapshot,
       { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
       {
@@ -4648,22 +5586,22 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     )
     expect(unselected).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_SOURCE_UNAUTHORIZED",
-        Path: "packages/d/src/index.ts",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_SOURCE_UNAUTHORIZED",
+          Path: "packages/d/src/index.ts",
+          Message: expect.any(String)
+        }
+      ]
     })
 
     for (const kind of ["created", "changed"] as const) {
       const root = await RepositoryFixture(`likego-workspace-project-not-snapshot-${kind}-`)
-      const base = module.NodeProjectSessionOperations(root)
-      const snapshot = SnapshotFiles(WorkspacePackage(
-        "packages/a",
-        "@workspace/a",
-        "export const a = 1\n"
-      ))
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const base = module.nodeProjectSessionOperations(root)
+      const snapshot = SnapshotFiles(
+        WorkspacePackage("packages/a", "@workspace/a", "export const a = 1\n")
+      )
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         snapshot,
         { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
         {
@@ -4681,42 +5619,48 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
         }
       )
       expect(result.SourceFilesChecked).toBe(0)
-      expect(result.Issues).toEqual([{
-        Code: "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
-        Path: `packages/a/src/${kind === "created" ? "created.ts" : "index.ts"}`,
-        Message: expect.any(String)
-      }])
+      expect(result.Issues).toEqual([
+        {
+          Code: "PROJECT_SESSION_SOURCE_NOT_SNAPSHOT",
+          Path: `packages/a/src/${kind === "created" ? "created.ts" : "index.ts"}`,
+          Message: expect.any(String)
+        }
+      ])
     }
 
     const externalRoot = await RepositoryFixture("likego-workspace-project-external-")
-    const externalSnapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      'import { dependency } from "package-dependency"\nexport const a = dependency\n',
-      WorkspaceConfig(),
-      [
-        File(
-          "packages/a/node_modules/package-dependency/package.json",
-          '{"name":"package-dependency","types":"index.d.ts"}\n'
-        ),
-        File(
-          "packages/a/node_modules/package-dependency/index.d.ts",
-          "export declare const dependency: number\n"
-        )
-      ]
-    ))
-    const external = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const externalSnapshot = SnapshotFiles(
+      WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        'import { dependency } from "package-dependency"\nexport const a = dependency\n',
+        WorkspaceConfig(),
+        [
+          File(
+            "packages/a/node_modules/package-dependency/package.json",
+            '{"name":"package-dependency","types":"index.d.ts"}\n'
+          ),
+          File(
+            "packages/a/node_modules/package-dependency/index.d.ts",
+            "export declare const dependency: number\n"
+          )
+        ]
+      )
+    )
+    const external = await module.analyzeWorkspaceProjectSessionWithOperations(
       externalSnapshot,
       { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      module.NodeProjectSessionOperations(externalRoot)
+      module.nodeProjectSessionOperations(externalRoot)
     )
     expect(external).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
-        Path: "packages/a/node_modules/package-dependency/index.d.ts",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_EXTERNAL_SOURCE",
+          Path: "packages/a/node_modules/package-dependency/index.d.ts",
+          Message: expect.any(String)
+        }
+      ]
     })
   })
 
@@ -4728,27 +5672,26 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
         "packages/a",
         "@workspace/a",
         "export const unused = true\n",
-        WorkspaceConfig(
-          { "@workspace/b": ["../b/src/index.ts"] },
-          { files: ["../b/src/index.ts"] }
-        )
+        WorkspaceConfig({ "@workspace/b": ["../b/src/index.ts"] }, { files: ["../b/src/index.ts"] })
       ),
       ...WorkspacePackage("packages/b", "@workspace/b", "export const b = 1\n")
     ])
 
-    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const result = await module.analyzeWorkspaceProjectSessionWithOperations(
       snapshot,
       { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
-      module.NodeProjectSessionOperations(root)
+      module.nodeProjectSessionOperations(root)
     )
 
     expect(result).toEqual({
       SourceFilesChecked: 0,
-      Issues: [{
-        Code: "PROJECT_SESSION_SOURCE_ZERO",
-        Path: "packages/a/src",
-        Message: expect.any(String)
-      }]
+      Issues: [
+        {
+          Code: "PROJECT_SESSION_SOURCE_ZERO",
+          Path: "packages/a/src",
+          Message: expect.any(String)
+        }
+      ]
     })
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
   })
@@ -4759,7 +5702,9 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
       { family: "TYPESCRIPT_SYNTACTIC_", source: "export const broken = ;\n" },
       { family: "TYPESCRIPT_SEMANTIC_", source: "export const broken: string = 1\n" }
     ] as const) {
-      const root = await RepositoryFixture(`likego-workspace-project-diagnostic-${diagnostic.family}-`)
+      const root = await RepositoryFixture(
+        `likego-workspace-project-diagnostic-${diagnostic.family}-`
+      )
       const snapshot = SnapshotFiles([
         ...WorkspacePackage(
           "packages/a",
@@ -4769,10 +5714,10 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
         ),
         ...WorkspacePackage("packages/b", "@workspace/b", diagnostic.source)
       ])
-      const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+      const result = await module.analyzeWorkspaceProjectSessionWithOperations(
         snapshot,
         { ProjectPrefix: "packages/a", DependencyPrefixes: ["packages/b"] },
-        module.NodeProjectSessionOperations(root)
+        module.nodeProjectSessionOperations(root)
       )
       const familyIssues = result.Issues.filter((issue) => issue.Code.startsWith(diagnostic.family))
       expect(result.SourceFilesChecked).toBe(1)
@@ -4786,18 +5731,16 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
 
     const relatedRoot = await RepositoryFixture("likego-workspace-project-diagnostic-related-")
     const relatedSnapshot = ValidWorkspaceSnapshot({
-      ASource: [
-        'import "@workspace/b"',
-        'import "@workspace/c"',
-        "export const a = true"
-      ].join("\n"),
+      ASource: ['import "@workspace/b"', 'import "@workspace/c"', "export const a = true"].join(
+        "\n"
+      ),
       BSource: "declare global { interface WorkspaceMerge { value: string } }\nexport {}\n",
       CSource: "declare global { interface WorkspaceMerge { value: number } }\nexport {}\n"
     })
-    const related = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const related = await module.analyzeWorkspaceProjectSessionWithOperations(
       relatedSnapshot,
       ValidWorkspaceAuthority,
-      module.NodeProjectSessionOperations(relatedRoot)
+      module.nodeProjectSessionOperations(relatedRoot)
     )
     const relatedIssue = related.Issues.find((issue) => issue.Code === "TYPESCRIPT_SEMANTIC_2717")
     expect(relatedIssue).toBeDefined()
@@ -4809,21 +5752,24 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
   test("keeps diagnostic escapes stable for workspace sessions", async () => {
     const module = await LoadProjectSession()
     const root = await RepositoryFixture("likego-workspace-project-diagnostic-escape-")
-    const snapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      "export {}\ndeclare global { type Array<T> = T }\n"
-    ))
+    const snapshot = SnapshotFiles(
+      WorkspacePackage(
+        "packages/a",
+        "@workspace/a",
+        "export {}\ndeclare global { type Array<T> = T }\n"
+      )
+    )
 
-    const result = await module.AnalyzeWorkspaceProjectSessionWithOperations(
+    const result = await module.analyzeWorkspaceProjectSessionWithOperations(
       snapshot,
       { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-      module.NodeProjectSessionOperations(root)
+      module.nodeProjectSessionOperations(root)
     )
 
     expect(result.SourceFilesChecked).toBe(1)
-    expect(result.Issues.map((issue) => issue.Code))
-      .toContain("PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE")
+    expect(result.Issues.map((issue) => issue.Code)).toContain(
+      "PROJECT_SESSION_DIAGNOSTIC_PATH_ESCAPE"
+    )
     const serialized = JSON.stringify(result)
     expect(serialized).not.toContain(root)
     expect(serialized).not.toContain(RepositoryRoot)
@@ -4837,20 +5783,20 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const later = join(container, "later")
     await mkdir(root)
     await mkdir(later)
-    const operations = module.NodeProjectSessionOperations(root)
-    const snapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      "export const a = 1\n"
-    ))
+    const operations = module.nodeProjectSessionOperations(root)
+    const snapshot = SnapshotFiles(
+      WorkspacePackage("packages/a", "@workspace/a", "export const a = 1\n")
+    )
     const previousCwd = process.cwd()
     let stagedRoot = ""
     try {
       process.chdir(later)
-      await module.WithWorkspaceProjectSessionWithOperations(
+      await module.withWorkspaceProjectSessionWithOperations(
         snapshot,
         { ProjectPrefix: "packages/a", DependencyPrefixes: [] },
-        async (session) => { stagedRoot = session.StagedRoot },
+        async (session) => {
+          stagedRoot = session.StagedRoot
+        },
         operations
       )
     } finally {
@@ -4864,15 +5810,13 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
 
   test("settles workspace worker, callback and cleanup failures through the shared lifecycle", async () => {
     const module = await LoadProjectSession()
-    const snapshot = SnapshotFiles(WorkspacePackage(
-      "packages/a",
-      "@workspace/a",
-      "export const a = 1\n"
-    ))
+    const snapshot = SnapshotFiles(
+      WorkspacePackage("packages/a", "@workspace/a", "export const a = 1\n")
+    )
     const authority = { ProjectPrefix: "packages/a", DependencyPrefixes: [] }
 
     const callbackRoot = await RepositoryFixture("likego-workspace-project-cleanup-")
-    const callbackBase = module.NodeProjectSessionOperations(callbackRoot)
+    const callbackBase = module.nodeProjectSessionOperations(callbackRoot)
     const callbackPrimary = new Error("workspace callback primary")
     const snapshotFault = new Error("workspace snapshot cleanup")
     const apiFault = new Error("workspace api cleanup")
@@ -4880,10 +5824,12 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     const cleanupOrder: string[] = []
     let callbackCaught: unknown
     try {
-      await module.WithWorkspaceProjectSessionWithOperations(
+      await module.withWorkspaceProjectSessionWithOperations(
         snapshot,
         authority,
-        async () => { throw callbackPrimary },
+        async () => {
+          throw callbackPrimary
+        },
         {
           RepositoryRoot: callbackBase.RepositoryRoot,
           UpdateSnapshot: callbackBase.UpdateSnapshot,
@@ -4918,15 +5864,17 @@ describe("Pre-kernel Task 7a workspace project authority RED", () => {
     expect(await readdir(join(callbackRoot, ".artifacts/gates/work"))).toEqual([])
 
     const workerRoot = await RepositoryFixture("likego-workspace-project-worker-")
-    const workerBase = module.NodeProjectSessionOperations(workerRoot)
+    const workerBase = module.nodeProjectSessionOperations(workerRoot)
     const workerPrimary = new Error("workspace worker primary")
     const workerOrder: string[] = []
     let workerCaught: unknown
     try {
-      await module.WithWorkspaceProjectSessionWithOperations(
+      await module.withWorkspaceProjectSessionWithOperations(
         snapshot,
         authority,
-        async () => { throw new Error("workspace callback must not run") },
+        async () => {
+          throw new Error("workspace callback must not run")
+        },
         {
           ...CleanObservedOperations(workerBase, workerOrder),
           UpdateSnapshot: async (api, canonicalTsconfig) => {

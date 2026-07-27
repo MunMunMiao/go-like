@@ -1,1 +1,1 @@
-import "../outside.js"
+import "../outside"

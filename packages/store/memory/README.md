@@ -1,0 +1,25 @@
+# @likego/store-memory
+
+LikeGo 的进程内 Store provider。每个实例拥有独立 `Map`，构造后即可使用，不创建 timer、
+socket 或其他常驻资源。
+
+该 provider 支持 CRUD、毫秒 TTL、compare-and-swap、Unicode code-point 排序和
+revision-bound cursor。TTL 在下一次操作时惰性清理；cursor 仅绑定当前实例的 revision、
+prefix 与 offset，实例发生 mutation 后旧 cursor 会 fail closed。
+
+`clock` functional option 用于注入确定性时钟；未指定时使用标准 `Date.now()`。
+
+```ts
+import { expiresIn, limit, prefix } from "@likego/store"
+import { background } from "@likego/context"
+import { newMemoryStore } from "@likego/store-memory"
+
+const store = newMemoryStore()
+await store.write(
+  background(),
+  { key: "sessions/1", value: new TextEncoder().encode("active") },
+  expiresIn(60_000)
+)
+
+const page = await store.list(background(), prefix("sessions/"), limit(100))
+```

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "package": "@likego/elysia",
+  "packageKind": "integration",
+  "stability": "provisional",
+  "releaseBlocking": true,
+  "exports": {
+    ".": {
+      "kind": "integration",
+      "residency": "non-resident",
+      "ownerResources": [],
+      "capabilities": ["web"],
+      "runtimes": [
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "not-applicable"
+        }
+      ]
+    }
+  }
+}

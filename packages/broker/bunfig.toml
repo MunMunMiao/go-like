@@ -1,0 +1,6 @@
+[test]
+root = "test"
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = ["../context/**", "../core/**", "test/**"]
+coverageThreshold = { lines = 1.0, functions = 1.0 }

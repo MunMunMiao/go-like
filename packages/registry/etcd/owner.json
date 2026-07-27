@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/registry-etcd",
+  "resources": [
+    {
+      "id": "etcd-registration",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "etcd-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+name: likego-iot-telemetry
+
+services:
+  nats:
+    image: docker.io/library/nats:2.14.3-alpine@sha256:c11af972c99ae542de8925e6a7d9c533aa1eb039660420d2074beed6089b3bf0
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "127.0.0.1:44222:4222"
+    volumes:
+      - nats-data:/data
+
+volumes:
+  nats-data:

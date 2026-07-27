@@ -1,0 +1,11 @@
+# Packages
+
+LikeGo keeps public packages flat even when their source folders are grouped by capability. The core set is `@likego/context`, `@likego/core`, `@likego/client`, `@likego/server`, `@likego/transport`, `@likego/metadata`, `@likego/web`, `@likego/config`, `@likego/registry`, `@likego/cache`, `@likego/store`, `@likego/broker`, `@likego/event`, `@likego/health`, and `@likego/resilience`.
+
+In-process internal calls and tests can use `@likego/transport-memory`. Internal HTTP uses `@likego/transport-http`; `@likego/transport-http/node` supplies the Node implementation for both `dial` and `listen`, including server-side PEM TLS/mTLS and ALPN HTTP/2. Web framework bridges use `@likego/hono`, `@likego/elysia`, and `@likego/h3`. Runtime or library lifecycle adapters include `@likego/croner`, `@likego/bullmq`, `@likego/nats`, `@likego/pino`, and `@likego/winston`. Observability adapters are `@likego/prometheus` and `@likego/otel`.
+
+Configuration providers are `@likego/config-consul`, `@likego/config-etcd`, `@likego/config-kubernetes`, and `@likego/config-vault`, alongside environment, file, and YAML subpaths of the core config package. Registry providers are `@likego/registry-mdns`, `@likego/registry-consul`, `@likego/registry-etcd`, `@likego/registry-kubernetes`, and `@likego/registry-zookeeper`. Broker providers are `@likego/broker-memory`, `@likego/broker-rabbitmq`, and the NATS broker subpaths. Cache providers are `@likego/cache-memory` and `@likego/cache-redis`. Store providers are `@likego/store-memory`, `@likego/store-file`, `@likego/store-consul`, `@likego/store-etcd`, and `@likego/store-vault`.
+
+The repository's scaffolding CLI package is `@likego/create`.
+
+Import from the smallest package that owns the contract. Runtime-specific implementations use explicit subpaths such as `/node`. No package name uses a generic `adapters` bucket, and public headers use the `Likego-` namespace.

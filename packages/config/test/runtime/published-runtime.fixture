@@ -1,0 +1,288 @@
+import { background, cause, withCancelCause } from "@likego/context"
+import * as ConfigPackage from "@likego/config"
+import { newConfig, objectSource } from "@likego/config"
+import { placeholderResolver, resolver } from "@likego/config"
+import { schema as configSchema, source as configSource } from "@likego/config"
+
+function check(condition, message) {
+  if (!condition) throw new Error(message)
+}
+
+function deferred() {
+  let resolveValue
+  let rejectValue
+  const promise = new Promise(function capture(resolve, reject) {
+    resolveValue = resolve
+    rejectValue = reject
+  })
+  return { promise, resolve: resolveValue, reject: rejectValue }
+}
+
+function cancellationFrom(ctx) {
+  return cause(ctx) ?? ctx.err() ?? new Error("context cancellation was expected")
+}
+
+function waitForAbort(ctx) {
+  const signal = ctx.done()
+  if (signal === null) return new Promise(function neverSettles() {})
+  return new Promise(function wait(_resolve, reject) {
+    signal.addEventListener(
+      "abort",
+      function canceled() {
+        reject(cancellationFrom(ctx))
+      },
+      { once: true }
+    )
+  })
+}
+
+async function failure(action) {
+  try {
+    await action()
+  } catch (error) {
+    return error
+  }
+  throw new Error("published failure scenario unexpectedly succeeded")
+}
+
+async function constructionAndLoadScenarios() {
+  check(
+    Object.keys(ConfigPackage).sort().join(",") ===
+      "newConfig,objectSource,onReloadError,onTerminalError,placeholderResolver,resolver,schema,source",
+    "config runtime surface drifted"
+  )
+  for (const option of [null, {}, [], [{ name: "", load() {} }]]) {
+    check(
+      (await failure(function construct() {
+        return Promise.resolve(newConfig(option))
+      })) instanceof TypeError,
+      "invalid config option was admitted"
+    )
+  }
+  const input = { nested: { enabled: true }, values: [1, 2] }
+  const stable = objectSource("defaults", input)
+  input.nested.enabled = false
+  input.values.push(3)
+  const first = await stable.load(background())
+  const second = await stable.load(background())
+  check(first === second, "object source identity drifted")
+  check(
+    first.value.nested.enabled === true &&
+      first.value.values.length === 2 &&
+      Object.isFrozen(first.value),
+    "object source isolation drifted"
+  )
+
+  const config = newConfig(
+    configSource(
+      objectSource("base", {
+        database: { host: "localhost", tls: true },
+        endpoint: "https://${database.host}",
+        release: 1
+      }),
+      {
+        name: "override",
+        async load() {
+          return { value: { database: { host: "db", port: 5432 } }, revision: "override-1" }
+        }
+      }
+    ),
+    resolver(placeholderResolver())
+  )
+  await config.load(background())
+  const database = config.value("database").load()
+  check(
+    database.host === "db" &&
+      database.port === 5432 &&
+      database.tls === true &&
+      config.value("endpoint").load() === "https://db",
+    "config merge or resolver drifted"
+  )
+  await config.close(background())
+}
+
+async function typedValueAndValidationScenarios() {
+  const config = newConfig(configSource(objectSource("typed", { service: { port: 8080 } })))
+  await config.load(background())
+  const numberSchema = {
+    "~standard": {
+      version: 1,
+      vendor: "published",
+      validate(value) {
+        return typeof value === "number"
+          ? { value }
+          : { issues: [{ message: "number required" }] }
+      }
+    }
+  }
+  const port = config.value("service.port")
+  const resolved = await port.scan(background(), numberSchema)
+  check(resolved === 8080, "typed value scan drifted")
+
+  const missing = await failure(function resolveMissing() {
+    return config.value("service.missing").scan(background(), numberSchema)
+  })
+  check(missing.code === "LIKEGO_CONFIG_NOT_FOUND", "missing value classification drifted")
+
+  const validated = newConfig(
+    configSource(objectSource("validated", { enabled: true })),
+    configSchema({
+      "~standard": {
+        version: 1,
+        vendor: "published",
+        validate(value) {
+          return { value: { accepted: value.enabled === true } }
+        }
+      }
+    })
+  )
+  await validated.load(background())
+  check(validated.value("accepted").load() === true, "Standard Schema output drifted")
+  await Promise.all([config.close(background()), validated.close(background())])
+}
+
+async function residentLifecycleScenarios() {
+  const events = []
+  const stopped = []
+  let loads = 0
+  const watcher = {
+    next(ctx) {
+      const event = deferred()
+      events.push(event)
+      const signal = ctx.done()
+      if (signal !== null) {
+        signal.addEventListener(
+          "abort",
+          function canceled() {
+            event.reject(cancellationFrom(ctx))
+          },
+          { once: true }
+        )
+      }
+      return event.promise
+    },
+    async stop() {
+      stopped.push("watcher")
+    }
+  }
+  const config = newConfig(
+    configSource({
+      name: "resident",
+      async load() {
+        loads += 1
+        return { value: { loads }, revision: String(loads) }
+      },
+      async watch() {
+        return watcher
+      }
+    })
+  )
+  await config.load(background())
+  check(config.value("loads").load() === 1, "initial load drifted")
+
+  const reloaded = deferred()
+  config.watch("loads", function published(_key, value) {
+    if (value.load() === 2) reloaded.resolve()
+  })
+  events[0].resolve()
+  await reloaded.promise
+  check(config.value("loads").load() === 2, "watcher reload drifted")
+  await config.close(background())
+  check(stopped.join(",") === "watcher", "Config close drifted")
+  check(
+    (await failure(function repeatedLoad() {
+      return config.load(background())
+    })).status === "closed",
+    "Config one-shot status drifted"
+  )
+}
+
+async function cancellationAndFailureScenarios() {
+  const [canceledContext, cancel] = withCancelCause(background())
+  const cancellation = new Error("published startup canceled")
+  cancel(cancellation)
+  let calls = 0
+  const canceledConfig = newConfig(
+    configSource({
+      name: "canceled",
+      async load() {
+        calls += 1
+        return { value: {}, revision: null }
+      }
+    })
+  )
+  check(
+    (await failure(function loadCanceled() {
+      return canceledConfig.load(canceledContext)
+    })) === cancellation && calls === 0,
+    "pre-canceled load drifted"
+  )
+
+  const nextEvent = deferred()
+  let stopCalls = 0
+  const failingConfig = newConfig(
+    configSource({
+      name: "next-failure",
+      async load() {
+        return { value: {}, revision: null }
+      },
+      async watch() {
+        return {
+          next() {
+            return nextEvent.promise
+          },
+          async stop() {
+            stopCalls += 1
+          }
+        }
+      }
+    })
+  )
+  await failingConfig.load(background())
+  const nextFailure = new Error("watcher next failed")
+  nextEvent.reject(nextFailure)
+  const terminal = await failure(function joinFailure() {
+    return failingConfig.close(background())
+  })
+  check(
+    terminal.phase === "next" && terminal.cause === nextFailure && stopCalls === 1,
+    "watcher terminal failure drifted"
+  )
+
+  const stoppingConfig = newConfig(
+    configSource({
+      name: "stop-failure",
+      async load() {
+        return { value: {}, revision: null }
+      },
+      async watch() {
+        return {
+          next(ctx) {
+            return waitForAbort(ctx)
+          },
+          async stop() {
+            throw new Error("stop failed")
+          }
+        }
+      }
+    })
+  )
+  await stoppingConfig.load(background())
+  const stopFailure = await failure(function closeConfig() {
+    return stoppingConfig.close(background())
+  })
+  check(stopFailure.phase === "stop", "watcher stop failure drifted")
+  check(
+    (await failure(function repeatedClose() {
+      return stoppingConfig.close(background())
+    })) === stopFailure,
+    "Config close did not preserve stop failure"
+  )
+}
+
+export async function run() {
+  await constructionAndLoadScenarios()
+  await typedValueAndValidationScenarios()
+  await residentLifecycleScenarios()
+  await cancellationAndFailureScenarios()
+}

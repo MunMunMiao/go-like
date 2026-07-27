@@ -1,11 +1,11 @@
 import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout,
   type GateEmissionDependencies
-} from "./result.ts"
+} from "./result"
 
 type Scenario = "pass" | "evaluator-throw" | "input-error" | "emission-error"
 
@@ -22,8 +22,8 @@ interface ParsedArguments {
 
 const Scenarios = new Set<string>(["pass", "evaluator-throw", "input-error", "emission-error"])
 const DefaultIO: ProtocolProbeIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function ParseArguments(args: readonly string[]): ParsedArguments | null {
@@ -64,7 +64,7 @@ function ErrorMessage(error: unknown): string {
   }
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: ProtocolProbeIO = DefaultIO
 ): Promise<number> {
@@ -74,37 +74,44 @@ export async function Main(
     return 1
   }
 
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: "protocol-probe",
-    mode: "repository",
-    readinessPolicy: "evaluation-only",
-    expectedSubjects: 1,
-    inputPaths: parsed.Scenario === "input-error" ? ["missing-protocol-input.txt"] : ["package.json"],
-    toolchain: { bun: Bun.version },
-    ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
-  }, async () => {
-    if (parsed.Scenario === "evaluator-throw") {
-      throw new Error("injected evaluator failure")
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: "protocol-probe",
+      mode: "repository",
+      readinessPolicy: "evaluation-only",
+      expectedSubjects: 1,
+      inputPaths:
+        parsed.Scenario === "input-error" ? ["missing-protocol-input.txt"] : ["package.json"],
+      toolchain: { bun: Bun.version },
+      ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
+    },
+    async () => {
+      if (parsed.Scenario === "evaluator-throw") {
+        throw new Error("injected evaluator failure")
+      }
+      return {
+        SubjectsChecked: 1,
+        Checks: [{ id: "PROTOCOL_PROBE_PASS", status: "pass" }]
+      }
     }
-    return {
-      SubjectsChecked: 1,
-      Checks: [{ id: "PROTOCOL_PROBE_PASS", status: "pass" }]
-    }
-  })
+  )
 
-  const operations = NodeAtomicWriterOperations()
+  const operations = nodeAtomicWriterOperations()
   const emissionDependencies: GateEmissionDependencies = {
-    AtomicWriterOperations: parsed.Scenario === "emission-error"
-      ? {
-          ...operations,
-          Open: async () => { throw new Error("injected emission failure") }
-        }
-      : operations,
+    AtomicWriterOperations:
+      parsed.Scenario === "emission-error"
+        ? {
+            ...operations,
+            Open: async () => {
+              throw new Error("injected emission failure")
+            }
+          }
+        : operations,
     WriteStdout: io.WriteStdout
   }
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, emissionDependencies)
+    await emitGateResultWithDependencies(parsed.Root, result, emissionDependencies)
   } catch (error) {
     await io.WriteStderr(`GATE_EMIT_ERROR ${ErrorMessage(error)}\n`)
     return 1
@@ -112,4 +119,4 @@ export async function Main(
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

@@ -1,34 +1,44 @@
-import { Server } from "./server.ts"
+import { server } from "./server"
 
 interface Context {
-  Deadline(): readonly [Date, boolean]
-  Done(): AbortSignal | null
-  Err(): Error | null
-  Value(key: unknown): unknown
+  deadline(): readonly [Date, boolean]
+  done(): AbortSignal | null
+  err(): Error | null
+  value(key: unknown): unknown
 }
 
 interface ServerHandle {
-  Done(): Promise<void>
-  Stop(ctx: Context): Promise<void>
+  done(): Promise<void>
+  stop(ctx: Context): Promise<void>
 }
 
 interface StructuralServer {
-  Start(ctx: Context): Promise<ServerHandle>
+  start(ctx: Context): Promise<ServerHandle>
 }
 
 type Equal<Left, Right> =
   (<Value>() => Value extends Left ? 1 : 2) extends
   (<Value>() => Value extends Right ? 1 : 2) ? true : false
 type Assert<Value extends true> = Value
-type StartedHandle = Awaited<ReturnType<typeof Server.Start>>
+type StartedHandle = Awaited<ReturnType<typeof server.start>>
 
-type StartArgumentsMatch = Assert<Equal<Parameters<typeof Server.Start>, [ctx: Context]>>
-type DoneArgumentsMatch = Assert<Equal<Parameters<StartedHandle["Done"]>, []>>
-type StopArgumentsMatch = Assert<Equal<Parameters<StartedHandle["Stop"]>, [ctx: Context]>>
+type StartArgumentsMatch = Assert<Equal<Parameters<typeof server.start>, [ctx: Context]>>
+type DoneArgumentsMatch = Assert<Equal<Parameters<StartedHandle["done"]>, []>>
+type StopArgumentsMatch = Assert<Equal<Parameters<StartedHandle["stop"]>, [ctx: Context]>>
 
-export const structuralServer: StructuralServer = Server
+// @ts-expect-error PascalCase start aliases are not part of the structural contract.
+type RemovedStartAlias = typeof server["Start"]
+// @ts-expect-error PascalCase done aliases are not part of the structural contract.
+type RemovedDoneAlias = StartedHandle["Done"]
+// @ts-expect-error PascalCase stop aliases are not part of the structural contract.
+type RemovedStopAlias = StartedHandle["Stop"]
+
+export const structuralServer: StructuralServer = server
 export type StructuralContractAssertions = readonly [
   StartArgumentsMatch,
   DoneArgumentsMatch,
-  StopArgumentsMatch
+  StopArgumentsMatch,
+  RemovedStartAlias,
+  RemovedDoneAlias,
+  RemovedStopAlias
 ]

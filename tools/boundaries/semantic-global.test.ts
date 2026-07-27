@@ -1,31 +1,21 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  symlink
-} from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, relative } from "node:path"
 import type { Project } from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
-import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
-import type { CorpusEvaluation } from "../gates/fixture-corpus.ts"
+import type { AtomicWriterOperations } from "../gates/atomic-writer"
+import type { CorpusEvaluation } from "../gates/fixture-corpus"
 import {
-  NodeAtomicWriterOperations,
-  SnapshotInputs,
+  nodeAtomicWriterOperations,
+  snapshotInputs,
   type InputSnapshot,
   type SnapshotFile
-} from "../gates/result.ts"
-import {
-  NodeProjectSessionOperations,
-  WithProjectSessionWithOperations
-} from "./project-session.ts"
-import { CheckSemanticGlobals } from "./semantic-global.ts"
-import type { BoundaryIssue } from "./module-syntax.ts"
+} from "../gates/result"
+import { nodeProjectSessionOperations, withProjectSessionWithOperations } from "./project-session"
+import { checkSemanticGlobals } from "./semantic-global"
+import type { BoundaryIssue } from "./module-syntax"
 
 interface SemanticGlobalFixtureIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -45,21 +35,18 @@ type SemanticGlobalChecker = (
 ) => Promise<readonly BoundaryIssue[]>
 
 interface SemanticGlobalFixtureModule extends Readonly<Record<string, unknown>> {
-  readonly DiscoverSemanticGlobalFixtureInputs: (root: string) => Promise<readonly string[]>
-  readonly EvaluateSemanticGlobalFixtureCorpus: (
+  readonly discoverSemanticGlobalFixtureInputs: (root: string) => Promise<readonly string[]>
+  readonly evaluateSemanticGlobalFixtureCorpus: (
     snapshot: InputSnapshot,
     repositoryRoot: string
   ) => Promise<CorpusEvaluation>
-  readonly EvaluateSemanticGlobalFixtureCorpusWithChecker: (
+  readonly evaluateSemanticGlobalFixtureCorpusWithChecker: (
     snapshot: InputSnapshot,
     repositoryRoot: string,
     check: SemanticGlobalChecker
   ) => Promise<CorpusEvaluation>
-  readonly Main: (
-    args: readonly string[],
-    io?: SemanticGlobalFixtureIO
-  ) => Promise<number>
-  readonly MainWithDependencies: (
+  readonly main: (args: readonly string[], io?: SemanticGlobalFixtureIO) => Promise<number>
+  readonly mainWithDependencies: (
     args: readonly string[],
     io: SemanticGlobalFixtureIO,
     dependencies: SemanticGlobalFixtureDependencies
@@ -79,38 +66,148 @@ const ExpectedCases = [
   { id: "valid-imported-declarations", path: "valid/imported-declarations", expectedCodes: [] },
   { id: "valid-allowlisted-console", path: "valid/allowlisted-console", expectedCodes: [] },
   { id: "valid-global-this-console-dot", path: "valid/global-this-console-dot", expectedCodes: [] },
-  { id: "valid-global-this-console-element", path: "valid/global-this-console-element", expectedCodes: [] },
-  { id: "invalid-free-bun", path: "invalid/free-bun", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-deno", path: "invalid/free-deno", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-process", path: "invalid/free-process", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-buffer", path: "invalid/free-buffer", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-global", path: "invalid/free-global", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-require", path: "invalid/free-require", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-module", path: "invalid/free-module", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-exports", path: "invalid/free-exports", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-filename", path: "invalid/free-filename", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-free-dirname", path: "invalid/free-dirname", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-unknown-global", path: "invalid/unknown-global", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-allowlisted-unresolved", path: "invalid/allowlisted-unresolved", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-unallowlisted-math", path: "invalid/unallowlisted-math", expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"] },
-  { id: "invalid-global-this-property", path: "invalid/global-this-property", expectedCodes: ["GLOBAL_THIS_PROPERTY_FORBIDDEN"] },
-  { id: "invalid-global-this-computed", path: "invalid/global-this-computed", expectedCodes: ["GLOBAL_THIS_COMPUTED_ACCESS_FORBIDDEN"] },
-  { id: "invalid-global-this-direct-alias", path: "invalid/global-this-direct-alias", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
-  { id: "invalid-global-this-chained-alias", path: "invalid/global-this-chained-alias", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
-  { id: "invalid-global-this-destructure", path: "invalid/global-this-destructure", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
-  { id: "invalid-global-this-reassignment", path: "invalid/global-this-reassignment", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
-  { id: "invalid-global-this-call-escape", path: "invalid/global-this-call-escape", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
-  { id: "invalid-global-this-return-escape", path: "invalid/global-this-return-escape", expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"] },
+  {
+    id: "valid-global-this-console-element",
+    path: "valid/global-this-console-element",
+    expectedCodes: []
+  },
+  {
+    id: "invalid-free-bun",
+    path: "invalid/free-bun",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-deno",
+    path: "invalid/free-deno",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-process",
+    path: "invalid/free-process",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-buffer",
+    path: "invalid/free-buffer",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-global",
+    path: "invalid/free-global",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-require",
+    path: "invalid/free-require",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-module",
+    path: "invalid/free-module",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-exports",
+    path: "invalid/free-exports",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-filename",
+    path: "invalid/free-filename",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-free-dirname",
+    path: "invalid/free-dirname",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-unknown-global",
+    path: "invalid/unknown-global",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-allowlisted-unresolved",
+    path: "invalid/allowlisted-unresolved",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-unallowlisted-math",
+    path: "invalid/unallowlisted-math",
+    expectedCodes: ["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-property",
+    path: "invalid/global-this-property",
+    expectedCodes: ["GLOBAL_THIS_PROPERTY_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-computed",
+    path: "invalid/global-this-computed",
+    expectedCodes: ["GLOBAL_THIS_COMPUTED_ACCESS_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-direct-alias",
+    path: "invalid/global-this-direct-alias",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-chained-alias",
+    path: "invalid/global-this-chained-alias",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-destructure",
+    path: "invalid/global-this-destructure",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-reassignment",
+    path: "invalid/global-this-reassignment",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-call-escape",
+    path: "invalid/global-this-call-escape",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-global-this-return-escape",
+    path: "invalid/global-this-return-escape",
+    expectedCodes: ["GLOBAL_THIS_ESCAPE_FORBIDDEN"]
+  },
   { id: "invalid-eval", path: "invalid/eval", expectedCodes: ["GLOBAL_DYNAMIC_CODE_FORBIDDEN"] },
-  { id: "invalid-function-constructor", path: "invalid/function-constructor", expectedCodes: ["GLOBAL_DYNAMIC_CODE_FORBIDDEN"] },
-  { id: "invalid-ambient-declaration", path: "invalid/ambient-declaration", expectedCodes: ["GLOBAL_AMBIENT_DECLARATION_FORBIDDEN"] },
-  { id: "invalid-triple-slash-types", path: "invalid/triple-slash-types", expectedCodes: ["GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN"] },
-  { id: "invalid-ts-ignore", path: "invalid/ts-ignore", expectedCodes: ["GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"] },
-  { id: "invalid-ts-nocheck", path: "invalid/ts-nocheck", expectedCodes: ["GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"] }
+  {
+    id: "invalid-function-constructor",
+    path: "invalid/function-constructor",
+    expectedCodes: ["GLOBAL_DYNAMIC_CODE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-ambient-declaration",
+    path: "invalid/ambient-declaration",
+    expectedCodes: ["GLOBAL_AMBIENT_DECLARATION_FORBIDDEN"]
+  },
+  {
+    id: "invalid-triple-slash-types",
+    path: "invalid/triple-slash-types",
+    expectedCodes: ["GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-ts-ignore",
+    path: "invalid/ts-ignore",
+    expectedCodes: ["GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"]
+  },
+  {
+    id: "invalid-ts-nocheck",
+    path: "invalid/ts-nocheck",
+    expectedCodes: ["GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"]
+  }
 ] as const
 
 afterEach(async () => {
-  await Promise.all(TemporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(
+    TemporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true }))
+  )
 })
 
 function CompareCodeUnits(left: string, right: string): number {
@@ -143,7 +240,7 @@ function IsRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 async function LoadFixtureModule(): Promise<SemanticGlobalFixtureModule> {
-  const value: unknown = await import("./semantic-global." + "fixture" + ".cli.ts")
+  const value: unknown = await import("./semantic-global." + "fixture" + ".cli")
   if (!IsRecord(value)) throw new Error("semantic-global fixture module must be an object")
   return value as SemanticGlobalFixtureModule
 }
@@ -178,19 +275,25 @@ async function CopyCorpus(root: string): Promise<void> {
 }
 
 function ProjectConfig(extra: Readonly<Record<string, unknown>> = {}): string {
-  return JSON.stringify({
-    compilerOptions: {
-      strict: true,
-      noEmit: true,
-      target: "ES2022",
-      module: "ESNext",
-      moduleResolution: "Bundler",
-      types: [],
-      lib: ["ES2022", "DOM"],
-      ...extra
-    },
-    include: ["src/**/*"]
-  }, null, 2) + "\n"
+  return (
+    JSON.stringify(
+      {
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          types: [],
+          lib: ["ES2022", "DOM"],
+          ...extra
+        },
+        include: ["src/**/*"]
+      },
+      null,
+      2
+    ) + "\n"
+  )
 }
 
 async function CheckProjectFiles(
@@ -203,15 +306,12 @@ async function CheckProjectFiles(
     File("project/tsconfig.json", ProjectConfig(compilerOptions)),
     ...Object.entries(sources).map(([path, text]) => File("project/src/" + path, text))
   ])
-  return WithProjectSessionWithOperations(
+  return withProjectSessionWithOperations(
     snapshot,
     "project",
-    async (session) => CheckSemanticGlobals(
-      session.Project,
-      session.SourceFiles,
-      { AllowedFreeGlobals: allowed }
-    ),
-    NodeProjectSessionOperations(root)
+    async (session) =>
+      checkSemanticGlobals(session.Project, session.SourceFiles, { AllowedFreeGlobals: allowed }),
+    nodeProjectSessionOperations(root)
   )
 }
 
@@ -222,16 +322,20 @@ async function CheckProject(
   return CheckProjectFiles({ "index.ts": source }, allowed)
 }
 
-function OneCaseSnapshot(policy: Uint8Array | null, extras: readonly SnapshotFile[] = []): InputSnapshot {
+function OneCaseSnapshot(
+  policy: Uint8Array | null,
+  extras: readonly SnapshotFile[] = []
+): InputSnapshot {
   const path = "valid/snapshot-only"
   return SnapshotFiles([
-    File(CasesPath, JSON.stringify({
-      schemaVersion: 1,
-      cases: [{ id: "snapshot-only", path, expectedCodes: [] }]
-    }) + "\n"),
-    ...(policy === null
-      ? []
-      : [FileBytes(FamilyRoot + "/" + path + "/policy.json", policy)]),
+    File(
+      CasesPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        cases: [{ id: "snapshot-only", path, expectedCodes: [] }]
+      }) + "\n"
+    ),
+    ...(policy === null ? [] : [FileBytes(FamilyRoot + "/" + path + "/policy.json", policy)]),
     File(FamilyRoot + "/" + path + "/project/tsconfig.json", ProjectConfig()),
     File(FamilyRoot + "/" + path + "/project/src/index.ts", "export const value = 1\n"),
     ...extras
@@ -247,38 +351,36 @@ async function SpawnCli(
   readonly stdout: string
   readonly stderr: string
 }> {
-  const child = Bun.spawn([
-    process.execPath,
-    join(RepositoryRoot, "tools/boundaries/semantic-global.fixture.cli.ts"),
-    "--root",
-    root,
-    "--run-id",
-    runId
-  ], {
-    cwd: RepositoryRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  })
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      join(RepositoryRoot, "tools/boundaries/semantic-global.fixture.cli.ts"),
+      "--root",
+      root,
+      "--run-id",
+      runId
+    ],
+    {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    }
+  )
   const stdoutPromise = new Response(child.stdout).text()
   const stderrPromise = new Response(child.stderr).text()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<"timeout">((resolveTimeout) => {
-    timer = setTimeout(() => { resolveTimeout("timeout") }, 30_000)
+    timer = setTimeout(() => {
+      resolveTimeout("timeout")
+    }, 30_000)
   })
-  const completed = await Promise.race([
-    child.exited.then((exitCode) => ({ exitCode })),
-    timeout
-  ])
+  const completed = await Promise.race([child.exited.then((exitCode) => ({ exitCode })), timeout])
   if (completed === "timeout") {
     child.kill("SIGKILL")
     const exitCode = await child.exited
     const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise])
     throw new Error(
-      "semantic-global fixture timed out with "
-      + String(exitCode)
-      + ": "
-      + stdout
-      + stderr
+      "semantic-global fixture timed out with " + String(exitCode) + ": " + stdout + stderr
     )
   }
   if (timer !== undefined) clearTimeout(timer)
@@ -295,22 +397,25 @@ async function SpawnWithClosedStdout(
   readonly stdout: string
   readonly stderr: string
 }> {
-  const child = Bun.spawn([
-    "bash",
-    "-c",
-    "set -o pipefail; \"$@\" | true",
-    "likego-semantic-global-closed-stdout",
-    process.execPath,
-    join(RepositoryRoot, "tools/boundaries/semantic-global.fixture.cli.ts"),
-    "--root",
-    root,
-    "--run-id",
-    runId
-  ], {
-    cwd: RepositoryRoot,
-    stdout: "pipe",
-    stderr: "pipe"
-  })
+  const child = Bun.spawn(
+    [
+      "bash",
+      "-c",
+      'set -o pipefail; "$@" | true',
+      "likego-semantic-global-closed-stdout",
+      process.execPath,
+      join(RepositoryRoot, "tools/boundaries/semantic-global.fixture.cli.ts"),
+      "--root",
+      root,
+      "--run-id",
+      runId
+    ],
+    {
+      cwd: RepositoryRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    }
+  )
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -329,7 +434,7 @@ function PassingEvaluation(): CorpusEvaluation {
 
 function QuickDependencies(
   inputPath: string,
-  atomic: AtomicWriterOperations = NodeAtomicWriterOperations()
+  atomic: AtomicWriterOperations = nodeAtomicWriterOperations()
 ): SemanticGlobalFixtureDependencies {
   return {
     DiscoverInputPaths: async () => [inputPath],
@@ -358,15 +463,16 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     const actualFiles = await FilesBelow(join(RepositoryRoot, FamilyRoot))
     expect(actualFiles).toEqual(expectedFiles)
     expect(actualFiles).toHaveLength(107)
-    expect(actualFiles.some((path) => (
-      [".test.", "_test_", ".spec.", "_spec_"].some((part) => path.includes(part))
-    ))).toBe(false)
+    expect(
+      actualFiles.some((path) =>
+        [".test.", "_test_", ".spec.", "_spec_"].some((part) => path.includes(part))
+      )
+    ).toBe(false)
 
     for (const fixtureCase of ExpectedCases) {
-      const policy = JSON.parse(await readFile(
-        join(RepositoryRoot, FamilyRoot, fixtureCase.path, "policy.json"),
-        "utf8"
-      ))
+      const policy = JSON.parse(
+        await readFile(join(RepositoryRoot, FamilyRoot, fixtureCase.path, "policy.json"), "utf8")
+      )
       const allowed = [
         "valid/allowlisted-console",
         "valid/global-this-console-dot",
@@ -377,10 +483,14 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
           ? ["MissingAllowed"]
           : []
       expect(policy).toEqual({ schemaVersion: 1, allowedFreeGlobals: allowed })
-      expect(JSON.parse(await readFile(
-        join(RepositoryRoot, FamilyRoot, fixtureCase.path, "project/tsconfig.json"),
-        "utf8"
-      ))).toEqual({
+      expect(
+        JSON.parse(
+          await readFile(
+            join(RepositoryRoot, FamilyRoot, fixtureCase.path, "project/tsconfig.json"),
+            "utf8"
+          )
+        )
+      ).toEqual({
         compilerOptions: {
           strict: true,
           noEmit: true,
@@ -399,66 +509,78 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     const root = await mkdtemp(join(tmpdir(), "likego-semantic-global-red-"))
     TemporaryRoots.push(root)
     const Files = [
-      File("project/tsconfig.json", JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          noEmit: true,
-          target: "ES2022",
-          module: "ESNext",
-          types: [],
-          lib: ["ES2022", "DOM"]
-        },
-        include: ["src/**/*.ts"]
-      })),
+      File(
+        "project/tsconfig.json",
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            noEmit: true,
+            target: "ES2022",
+            module: "ESNext",
+            types: [],
+            lib: ["ES2022", "DOM"]
+          },
+          include: ["src/**/*.ts"]
+        })
+      ),
       File("project/src/index.ts", "export const value = Bun\n")
     ]
-    await WithProjectSessionWithOperations(
-      { Sha256: Sha256(Files.map((file) => file.Path + "\0" + file.Sha256 + "\n").join("")), Files },
+    await withProjectSessionWithOperations(
+      {
+        Sha256: Sha256(Files.map((file) => file.Path + "\0" + file.Sha256 + "\n").join("")),
+        Files
+      },
       "project",
       async (session) => {
-        expect(await CheckSemanticGlobals(
-          session.Project,
-          session.SourceFiles,
-          { AllowedFreeGlobals: [] }
-        )).toEqual([{
-          Code: "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
-          Path: "src/index.ts",
-          Message: expect.stringContaining("Bun")
-        }])
+        expect(
+          await checkSemanticGlobals(session.Project, session.SourceFiles, {
+            AllowedFreeGlobals: []
+          })
+        ).toEqual([
+          {
+            Code: "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
+            Path: "src/index.ts",
+            Message: expect.stringContaining("Bun")
+          }
+        ])
       },
-      NodeProjectSessionOperations(root)
+      nodeProjectSessionOperations(root)
     )
   })
 
   test("excludes non-runtime names and text lookalikes while accepting proven local symbols", async () => {
-    const issues = await CheckProject([
-      "const text = \"@ts-ignore @ts-nocheck globalThis eval Function Bun\"",
-      "const object = { eval() { return text }, globalThis: 1, Bun: 2 }",
-      "object.eval()",
-      "function run(eval: (value: string) => string): string {",
-      "  return eval(text)",
-      "}",
-      "function count(): number { return arguments.length }",
-      "label: for (let index = 0; index < 1; index += 1) { break label }",
-      "type globalThis = eval | Function | Bun",
-      "export const value = run((input) => input) + count() + object.globalThis + object.Bun",
-      ""
-    ].join("\n"))
+    const issues = await CheckProject(
+      [
+        'const text = "@ts-ignore @ts-nocheck globalThis eval Function Bun"',
+        "const object = { eval() { return text }, globalThis: 1, Bun: 2 }",
+        "object.eval()",
+        "function run(eval: (value: string) => string): string {",
+        "  return eval(text)",
+        "}",
+        "function count(): number { return arguments.length }",
+        "label: for (let index = 0; index < 1; index += 1) { break label }",
+        "type globalThis = eval | Function | Bun",
+        "export const value = run((input) => input) + count() + object.globalThis + object.Bun",
+        ""
+      ].join("\n")
+    )
     expect(issues).toEqual([])
   })
 
   test("retains duplicate runtime origins, class extends, shorthand values, decorators, typeof and TSX", async () => {
-    const ordinary = await CheckProject([
-      "class Derived extends MissingBase<MissingType> {}",
-      "const shorthand = { Bun }",
-      "const first = UnknownPortableGlobal",
-      "const second = UnknownPortableGlobal",
-      "export const runtimeType = typeof Deno",
-      "@Decorator",
-      "export class Decorated {}",
-      "export { Derived, shorthand, first, second }",
-      ""
-    ].join("\n"))
+    const ordinary = await CheckProject(
+      [
+        "class Derived extends MissingBase<MissingType> {}",
+        "const shorthand = { Bun }",
+        "const first = UnknownPortableGlobal",
+        "const second = UnknownPortableGlobal",
+        "export const runtimeType = typeof Deno",
+        "@Decorator",
+        "export class Decorated {}",
+        "export { Derived, shorthand, first, second }",
+        ""
+      ].join("\n")
+    )
     expect(ordinary.map((issue) => issue.Code)).toEqual(
       Array.from({ length: 6 }, () => "GLOBAL_FREE_IDENTIFIER_FORBIDDEN")
     )
@@ -470,25 +592,35 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     }
     expect(messages.some((message) => message.includes("MissingType"))).toBe(false)
 
-    const tsx = await CheckProjectFiles({
-      "view.tsx": "export const view = <section>{Bun}</section>\n"
-    }, [], { jsx: "preserve" })
-    expect(tsx).toEqual([{
-      Code: "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
-      Path: "src/view.tsx",
-      Message: expect.stringContaining("Bun")
-    }])
+    const tsx = await CheckProjectFiles(
+      {
+        "view.tsx": "export const view = <section>{Bun}</section>\n"
+      },
+      [],
+      { jsx: "preserve" }
+    )
+    expect(tsx).toEqual([
+      {
+        Code: "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
+        Path: "src/view.tsx",
+        Message: expect.stringContaining("Bun")
+      }
+    ])
   })
 
   test("uses the exact TypeScript JSX intrinsic spelling rule", async () => {
-    const issues = await CheckProjectFiles({
-      "view.tsx": [
-        "export const view = (",
-        "  <section><portable-widget /><_Capability /><$Capability /></section>",
-        ")",
-        ""
-      ].join("\n")
-    }, [], { jsx: "preserve" })
+    const issues = await CheckProjectFiles(
+      {
+        "view.tsx": [
+          "export const view = (",
+          "  <section><portable-widget /><_Capability /><$Capability /></section>",
+          ")",
+          ""
+        ].join("\n")
+      },
+      [],
+      { jsx: "preserve" }
+    )
     expect(issues.map((issue) => issue.Code)).toEqual([
       "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
       "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
@@ -500,124 +632,160 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
   })
 
   test("classifies standard intrinsics and enforces exact globalThis wrappers, properties and escapes", async () => {
-    expect(await CheckProject(
-      "export const values = [Date, undefined]\n",
-      ["Date", "undefined"]
-    )).toEqual([])
-    expect((await CheckProject(
-      "export const values = [Date, undefined]\n"
-    )).map((issue) => issue.Code)).toEqual([
-      "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
-      "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
+    expect(
+      await CheckProject("export const values = [Date, undefined]\n", ["Date", "undefined"])
+    ).toEqual([])
+    expect(
+      (await CheckProject("export const values = [Date, undefined]\n")).map((issue) => issue.Code)
+    ).toEqual(["GLOBAL_FREE_IDENTIFIER_FORBIDDEN", "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"])
+
+    expect(
+      await CheckProject(
+        [
+          "export const dot = (((globalThis as typeof globalThis)!).console)",
+          'export const element = ((globalThis satisfies typeof globalThis))["console"]',
+          ""
+        ].join("\n"),
+        ["console"]
+      )
+    ).toEqual([])
+
+    expect(
+      await CheckProject(
+        [
+          "const globalThis = { console: 1, eval() { return 1 } }",
+          "export const values = [globalThis.console, globalThis.eval()]",
+          ""
+        ].join("\n")
+      )
+    ).toEqual([])
+
+    expect(
+      (
+        await CheckProject(
+          [
+            "export const evaluate = globalThis.eval",
+            'export const construct = globalThis["Function"]',
+            ""
+          ].join("\n"),
+          ["eval", "Function"]
+        )
+      ).map((issue) => issue.Code)
+    ).toEqual(["GLOBAL_DYNAMIC_CODE_FORBIDDEN", "GLOBAL_DYNAMIC_CODE_FORBIDDEN"])
+
+    expect(
+      await CheckProject('export const missing = globalThis["MissingAllowed"]\n', [
+        "MissingAllowed"
+      ])
+    ).toEqual([
+      {
+        Code: "GLOBAL_THIS_PROPERTY_FORBIDDEN",
+        Path: "src/index.ts",
+        Message: expect.stringContaining("MissingAllowed")
+      }
     ])
-
-    expect(await CheckProject([
-      "export const dot = (((globalThis as typeof globalThis)!).console)",
-      "export const element = ((globalThis satisfies typeof globalThis))[\"console\"]",
-      ""
-    ].join("\n"), ["console"])).toEqual([])
-
-    expect(await CheckProject([
-      "const globalThis = { console: 1, eval() { return 1 } }",
-      "export const values = [globalThis.console, globalThis.eval()]",
-      ""
-    ].join("\n"))).toEqual([])
-
-    expect((await CheckProject([
-      "export const evaluate = globalThis.eval",
-      "export const construct = globalThis[\"Function\"]",
-      ""
-    ].join("\n"), ["eval", "Function"])).map((issue) => issue.Code)).toEqual([
-      "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
-      "GLOBAL_DYNAMIC_CODE_FORBIDDEN"
-    ])
-
-    expect(await CheckProject(
-      "export const missing = globalThis[\"MissingAllowed\"]\n",
-      ["MissingAllowed"]
-    )).toEqual([{
-      Code: "GLOBAL_THIS_PROPERTY_FORBIDDEN",
-      Path: "src/index.ts",
-      Message: expect.stringContaining("MissingAllowed")
-    }])
   })
 
   test("peels every supported globalThis element selector wrapper", async () => {
-    expect(await CheckProject([
-      "export const parenthesized = globalThis[((\"console\"))]",
-      "export const asSelector = globalThis[(\"console\" as const)]",
-      "export const asserted = globalThis[(<\"console\">\"console\")]",
-      "export const satisfied = globalThis[(\"console\" satisfies string)]",
-      "export const nonNull = globalThis[(\"console\"!)]",
-      ""
-    ].join("\n"), ["console"])).toEqual([])
+    expect(
+      await CheckProject(
+        [
+          'export const parenthesized = globalThis[(("console"))]',
+          'export const asSelector = globalThis[("console" as const)]',
+          'export const asserted = globalThis[(<"console">"console")]',
+          'export const satisfied = globalThis[("console" satisfies string)]',
+          'export const nonNull = globalThis[("console"!)]',
+          ""
+        ].join("\n"),
+        ["console"]
+      )
+    ).toEqual([])
 
-    expect((await CheckProject([
-      "export const evaluate = globalThis[((\"eval\" as const)!)]",
-      "export const construct = globalThis[((<\"Function\">\"Function\") satisfies string)]",
-      ""
-    ].join("\n"), ["eval", "Function"])).map((issue) => issue.Code)).toEqual([
-      "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
-      "GLOBAL_DYNAMIC_CODE_FORBIDDEN"
-    ])
+    expect(
+      (
+        await CheckProject(
+          [
+            'export const evaluate = globalThis[(("eval" as const)!)]',
+            'export const construct = globalThis[((<"Function">"Function") satisfies string)]',
+            ""
+          ].join("\n"),
+          ["eval", "Function"]
+        )
+      ).map((issue) => issue.Code)
+    ).toEqual(["GLOBAL_DYNAMIC_CODE_FORBIDDEN", "GLOBAL_DYNAMIC_CODE_FORBIDDEN"])
   })
 
   test("permits downstream use of one proven globalThis capability", async () => {
-    expect(await CheckProject([
-      "export const call = globalThis.console.log(\"portable\")",
-      "export const property = (globalThis.console).log",
-      ""
-    ].join("\n"), ["console"])).toEqual([])
+    expect(
+      await CheckProject(
+        [
+          'export const call = globalThis.console.log("portable")',
+          "export const property = (globalThis.console).log",
+          ""
+        ].join("\n"),
+        ["console"]
+      )
+    ).toEqual([])
   })
 
   test("uses checker identity for well-known symbols and standard selector proof", async () => {
-    expect(await CheckProject([
-      "export function count(): number { return arguments.length }",
-      "export const intrinsic = undefined",
-      ""
-    ].join("\n"), ["undefined"])).toEqual([])
+    expect(
+      await CheckProject(
+        [
+          "export function count(): number { return arguments.length }",
+          "export const intrinsic = undefined",
+          ""
+        ].join("\n"),
+        ["undefined"]
+      )
+    ).toEqual([])
 
-    expect(await CheckProject(
-      "export const intrinsic = globalThis.undefined\n",
-      ["undefined"]
-    )).toEqual([])
+    expect(
+      await CheckProject("export const intrinsic = globalThis.undefined\n", ["undefined"])
+    ).toEqual([])
 
-    expect((await CheckProject(
-      "export const invalid = arguments\n"
-    )).map((issue) => issue.Code)).toEqual([
-      "GLOBAL_FREE_IDENTIFIER_FORBIDDEN"
-    ])
+    expect(
+      (await CheckProject("export const invalid = arguments\n")).map((issue) => issue.Code)
+    ).toEqual(["GLOBAL_FREE_IDENTIFIER_FORBIDDEN"])
   })
 
   test("reports declaration files, outermost ambient subtrees, references and real comment directives", async () => {
-    expect(await CheckProjectFiles({
-      "types.d.ts": "export declare const capability: unknown\n"
-    })).toEqual([{
-      Code: "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
-      Path: "src/types.d.ts",
-      Message: expect.any(String)
-    }])
+    expect(
+      await CheckProjectFiles({
+        "types.d.ts": "export declare const capability: unknown\n"
+      })
+    ).toEqual([
+      {
+        Code: "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
+        Path: "src/types.d.ts",
+        Message: expect.any(String)
+      }
+    ])
 
-    const ambient = await CheckProject([
-      "declare namespace Outer {",
-      "  const Bun: unknown",
-      "  namespace Inner { const Deno: unknown }",
-      "}",
-      "declare const Separate: unknown",
-      "export {}",
-      ""
-    ].join("\n"))
+    const ambient = await CheckProject(
+      [
+        "declare namespace Outer {",
+        "  const Bun: unknown",
+        "  namespace Inner { const Deno: unknown }",
+        "}",
+        "declare const Separate: unknown",
+        "export {}",
+        ""
+      ].join("\n")
+    )
     expect(ambient.map((issue) => issue.Code)).toEqual([
       "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
       "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN"
     ])
 
-    const references = await CheckProject([
-      "/// <reference types=\"first-missing-types\" />",
-      "/// <reference types=\"second-missing-types\" />",
-      "export const value = 1",
-      ""
-    ].join("\n"))
+    const references = await CheckProject(
+      [
+        '/// <reference types="first-missing-types" />',
+        '/// <reference types="second-missing-types" />',
+        "export const value = 1",
+        ""
+      ].join("\n")
+    )
     expect(references.map((issue) => issue.Code)).toEqual([
       "GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN",
       "GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN"
@@ -631,44 +799,51 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       "//\t@ts-nocheck"
     ]) {
       const directives = await CheckProject(comment + "\nexport const value: string = 1\n")
-      expect(directives).toEqual([{
-        Code: "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
-        Path: "src/index.ts",
-        Message: expect.any(String)
-      }])
+      expect(directives).toEqual([
+        {
+          Code: "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
+          Path: "src/index.ts",
+          Message: expect.any(String)
+        }
+      ])
     }
 
-    expect(await CheckProject([
-      "const first = \"// @ts-ignore\"",
-      "const second = \"/* @ts-nocheck */\"",
-      "const third = \"globalThis.eval\"",
-      "export { first, second, third }",
-      ""
-    ].join("\n"))).toEqual([])
-  })
+    expect(
+      await CheckProject(
+        [
+          'const first = "// @ts-ignore"',
+          'const second = "/* @ts-nocheck */"',
+          'const third = "globalThis.eval"',
+          "export { first, second, third }",
+          ""
+        ].join("\n")
+      )
+    ).toEqual([])
+  }, 30_000)
 
   test("derives paths only from project identity, preserves sorted multisets and throws on drift", async () => {
     const root = await RepositoryFixture("likego-semantic-global-paths-")
     const snapshot = SnapshotFiles([
       File("project/tsconfig.json", ProjectConfig()),
-      File("project/src/index.ts", [
-        "// @ts-ignore",
-        "declare const ambientValue: unknown",
-        "export const dynamic = eval(\"1\")",
-        "export const first = Bun",
-        "export const second = Bun",
-        ""
-      ].join("\n"))
+      File(
+        "project/src/index.ts",
+        [
+          "// @ts-ignore",
+          "declare const ambientValue: unknown",
+          'export const dynamic = eval("1")',
+          "export const first = Bun",
+          "export const second = Bun",
+          ""
+        ].join("\n")
+      )
     ])
-    await WithProjectSessionWithOperations(
+    await withProjectSessionWithOperations(
       snapshot,
       "project",
       async (session) => {
-        const issues = await CheckSemanticGlobals(
-          session.Project,
-          session.SourceFiles,
-          { AllowedFreeGlobals: [] }
-        )
+        const issues = await checkSemanticGlobals(session.Project, session.SourceFiles, {
+          AllowedFreeGlobals: []
+        })
         expect(issues.map((issue) => issue.Code)).toEqual([
           "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
           "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
@@ -677,11 +852,14 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
           "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN"
         ])
         expect(issues.every((issue) => issue.Path === "src/index.ts")).toBe(true)
-        expect(issues).toEqual([...issues].sort((left, right) => (
-          CompareCodeUnits(left.Code, right.Code)
-          || CompareCodeUnits(left.Path, right.Path)
-          || CompareCodeUnits(left.Message, right.Message)
-        )))
+        expect(issues).toEqual(
+          [...issues].sort(
+            (left, right) =>
+              CompareCodeUnits(left.Code, right.Code) ||
+              CompareCodeUnits(left.Path, right.Path) ||
+              CompareCodeUnits(left.Message, right.Message)
+          )
+        )
 
         const source = session.SourceFiles[0]!
         for (const fileName of [
@@ -691,24 +869,20 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
         ]) {
           const hostile = Object.create(source) as SourceFile
           Object.defineProperty(hostile, "fileName", { value: fileName })
-          await expect(CheckSemanticGlobals(
-            session.Project,
-            [hostile],
-            { AllowedFreeGlobals: [] }
-          )).rejects.toThrow("semantic global source")
+          await expect(
+            checkSemanticGlobals(session.Project, [hostile], { AllowedFreeGlobals: [] })
+          ).rejects.toThrow("semantic global source")
         }
 
         const hostileProject = Object.create(session.Project) as Project
         Object.defineProperty(hostileProject, "configFileName", {
           value: "project/tsconfig.json"
         })
-        await expect(CheckSemanticGlobals(
-          hostileProject,
-          session.SourceFiles,
-          { AllowedFreeGlobals: [] }
-        )).rejects.toThrow("semantic global project config")
+        await expect(
+          checkSemanticGlobals(hostileProject, session.SourceFiles, { AllowedFreeGlobals: [] })
+        ).rejects.toThrow("semantic global project config")
       },
-      NodeProjectSessionOperations(root)
+      nodeProjectSessionOperations(root)
     )
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
   })
@@ -717,11 +891,13 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     const fixture = await LoadFixtureModule()
     const root = await RepositoryFixture("likego-semantic-global-corpus-")
     await CopyCorpus(root)
-    const discovered = await fixture.DiscoverSemanticGlobalFixtureInputs(root)
-    expect(discovered).toEqual((await FilesBelow(join(root, FamilyRoot)))
-      .map((path) => FamilyRoot + "/" + path)
-      .sort(CompareCodeUnits))
-    const snapshotted = await SnapshotInputs(root, discovered)
+    const discovered = await fixture.discoverSemanticGlobalFixtureInputs(root)
+    expect(discovered).toEqual(
+      (await FilesBelow(join(root, FamilyRoot)))
+        .map((path) => FamilyRoot + "/" + path)
+        .sort(CompareCodeUnits)
+    )
+    const snapshotted = await snapshotInputs(root, discovered)
     expect(snapshotted.Checks).toEqual([])
     if (snapshotted.Snapshot === null) throw new Error("semantic-global corpus must snapshot")
     const before = snapshotted.Snapshot.Files.map((file) => ({
@@ -738,46 +914,49 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       join(root, FamilyRoot, "valid/property-keys/policy.json"),
       "not the snapshotted policy\n"
     )
-    const evaluation = await fixture.EvaluateSemanticGlobalFixtureCorpus(
-      snapshotted.Snapshot,
-      root
-    )
+    const evaluation = await fixture.evaluateSemanticGlobalFixtureCorpus(snapshotted.Snapshot, root)
     expect(evaluation.SubjectsExpected).toBe(35)
     expect(evaluation.SubjectsChecked).toBe(35)
     expect(evaluation.Checks.map((check) => [check.id, check.status, check.path])).toEqual(
       ExpectedCases.map((fixtureCase) => ["FIXTURE_CASE_MATCH", "pass", fixtureCase.path])
     )
     for (const item of before) {
-      expect(item.file.Bytes).toBe(snapshotted.Snapshot.Files.find((file) => (
-        file.Path === item.file.Path
-      ))!.Bytes)
+      expect(item.file.Bytes).toBe(
+        snapshotted.Snapshot.Files.find((file) => file.Path === item.file.Path)!.Bytes
+      )
       expect(item.file.Sha256).toBe(item.sha256)
       expect(Array.from(item.file.Bytes)).toEqual(Array.from(item.bytes))
     }
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
 
     const singleRoot = await RepositoryFixture("likego-semantic-global-real-checker-")
-    const single = OneCaseSnapshot(new TextEncoder().encode(JSON.stringify({
-      schemaVersion: 1,
-      allowedFreeGlobals: []
-    })))
+    const single = OneCaseSnapshot(
+      new TextEncoder().encode(
+        JSON.stringify({
+          schemaVersion: 1,
+          allowedFreeGlobals: []
+        })
+      )
+    )
     let observedProject: Project | null = null
     let observedSources: readonly SourceFile[] | null = null
-    const singleEvaluation = await fixture.EvaluateSemanticGlobalFixtureCorpusWithChecker(
+    const singleEvaluation = await fixture.evaluateSemanticGlobalFixtureCorpusWithChecker(
       single,
       singleRoot,
       async (project, sourceFiles, policy) => {
         observedProject = project
         observedSources = sourceFiles
         expect(policy).toEqual({ AllowedFreeGlobals: [] })
-        return CheckSemanticGlobals(project, sourceFiles, policy)
+        return checkSemanticGlobals(project, sourceFiles, policy)
       }
     )
-    expect(singleEvaluation.Checks).toEqual([expect.objectContaining({
-      id: "FIXTURE_CASE_MATCH",
-      status: "pass",
-      path: "valid/snapshot-only"
-    })])
+    expect(singleEvaluation.Checks).toEqual([
+      expect.objectContaining({
+        id: "FIXTURE_CASE_MATCH",
+        status: "pass",
+        path: "valid/snapshot-only"
+      })
+    ])
     const project = observedProject as Project | null
     const sources = observedSources as readonly SourceFile[] | null
     if (project === null || sources === null) {
@@ -802,24 +981,26 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       encoder.encode('{"schemaVersion":1,"allowedFreeGlobals":["console","console"]}\n')
     ]
     for (const policy of [null, ...malformed]) {
-      const evaluation = await fixture.EvaluateSemanticGlobalFixtureCorpus(
+      const evaluation = await fixture.evaluateSemanticGlobalFixtureCorpus(
         OneCaseSnapshot(policy),
         root
       )
       expect(evaluation.SubjectsExpected).toBe(1)
       expect(evaluation.SubjectsChecked).toBe(1)
-      expect(evaluation.Checks).toEqual([expect.objectContaining({
-        id: "FIXTURE_INVENTORY_MISMATCH",
-        status: "fail",
-        actual: '["FIXTURE_VALIDATOR_THROW"]'
-      })])
+      expect(evaluation.Checks).toEqual([
+        expect.objectContaining({
+          id: "FIXTURE_INVENTORY_MISMATCH",
+          status: "fail",
+          actual: '["FIXTURE_VALIDATOR_THROW"]'
+        })
+      ])
     }
 
-    const ordinary = OneCaseSnapshot(encoder.encode(
-      '{"schemaVersion":1,"allowedFreeGlobals":[]}\n'
-    ))
+    const ordinary = OneCaseSnapshot(
+      encoder.encode('{"schemaVersion":1,"allowedFreeGlobals":[]}\n')
+    )
     const extra = File(FamilyRoot + "/unlisted/extra.ts", "export const extra = true\n")
-    const inventory = await fixture.EvaluateSemanticGlobalFixtureCorpus(
+    const inventory = await fixture.evaluateSemanticGlobalFixtureCorpus(
       SnapshotFiles([...ordinary.Files, extra]),
       root
     )
@@ -827,7 +1008,7 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     expect(inventory.Checks).toEqual([
       expect.objectContaining({ id: "FIXTURE_INVENTORY_MISMATCH" })
     ])
-    const duplicated = await fixture.EvaluateSemanticGlobalFixtureCorpus(
+    const duplicated = await fixture.evaluateSemanticGlobalFixtureCorpus(
       { Sha256: ordinary.Sha256, Files: [...ordinary.Files, ordinary.Files[0]!] },
       root
     )
@@ -840,23 +1021,20 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     const outside = await RepositoryFixture("likego-semantic-global-family-outside-")
     await mkdir(dirname(join(symlinkRoot, FamilyRoot)), { recursive: true })
     await symlink(outside, join(symlinkRoot, FamilyRoot))
-    await expect(fixture.DiscoverSemanticGlobalFixtureInputs(symlinkRoot))
-      .rejects.toThrow("semantic-global fixture family must be a real directory")
+    await expect(fixture.discoverSemanticGlobalFixtureInputs(symlinkRoot)).rejects.toThrow(
+      "semantic-global fixture family must be a real directory"
+    )
 
     const nonRegularRoot = await RepositoryFixture("likego-semantic-global-nonregular-")
     await Bun.write(join(nonRegularRoot, CasesPath), '{"schemaVersion":1,"cases":[]}\n')
     await symlink("missing-target", join(nonRegularRoot, FamilyRoot, "linked-payload.ts"))
-    await expect(fixture.DiscoverSemanticGlobalFixtureInputs(nonRegularRoot))
-      .rejects.toThrow(
-        "semantic-global fixture inventory entries must be regular files or directories"
-      )
+    await expect(fixture.discoverSemanticGlobalFixtureInputs(nonRegularRoot)).rejects.toThrow(
+      "semantic-global fixture inventory entries must be regular files or directories"
+    )
 
     const missingCasesRoot = await RepositoryFixture("likego-semantic-global-missing-cases-")
-    await Bun.write(
-      join(missingCasesRoot, FamilyRoot, "payload.ts"),
-      "export const value = 1\n"
-    )
-    expect(await fixture.DiscoverSemanticGlobalFixtureInputs(missingCasesRoot)).toEqual([
+    await Bun.write(join(missingCasesRoot, FamilyRoot, "payload.ts"), "export const value = 1\n")
+    expect(await fixture.discoverSemanticGlobalFixtureInputs(missingCasesRoot)).toEqual([
       CasesPath,
       FamilyRoot + "/payload.ts"
     ])
@@ -865,10 +1043,7 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
   test("rejects malformed CLI usage and safely rolls back every hostile emission", async () => {
     const fixture = await LoadFixtureModule()
     const usageRoot = await RepositoryFixture("likego-semantic-global-usage-")
-    const canonicalPath = join(
-      usageRoot,
-      ".artifacts/gates/boundary-semantic-global-fixtures.json"
-    )
+    const canonicalPath = join(usageRoot, ".artifacts/gates/boundary-semantic-global-fixtures.json")
     await mkdir(dirname(canonicalPath), { recursive: true })
     await Bun.write(canonicalPath, "prior-result\n")
     const invalid = [
@@ -889,10 +1064,16 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     for (const args of invalid) {
       const stdout: string[] = []
       const stderr: string[] = []
-      expect(await fixture.Main(args, {
-        WriteStdout: (value) => { stdout.push(value) },
-        WriteStderr: (value) => { stderr.push(value) }
-      })).toBe(1)
+      expect(
+        await fixture.main(args, {
+          WriteStdout: (value) => {
+            stdout.push(value)
+          },
+          WriteStderr: (value) => {
+            stderr.push(value)
+          }
+        })
+      ).toBe(1)
       expect(stdout).toEqual([])
       expect(stderr).toEqual(["SEMANTIC_GLOBAL_FIXTURE_USAGE invalid arguments\n"])
       expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
@@ -901,27 +1082,31 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     const root = await RepositoryFixture("likego-semantic-global-output-")
     const inputPath = "input.txt"
     await Bun.write(join(root, inputPath), "snapshotted input\n")
-    const resultPath = join(
-      root,
-      ".artifacts/gates/boundary-semantic-global-fixtures.json"
-    )
+    const resultPath = join(root, ".artifacts/gates/boundary-semantic-global-fixtures.json")
     await mkdir(dirname(resultPath), { recursive: true })
     await Bun.write(resultPath, "prior-result\n")
 
     const successStdout: string[] = []
-    expect(await fixture.MainWithDependencies([
-      "--root", root,
-      "--run-id", "task6-injected-pass"
-    ], {
-      WriteStdout: (value) => { successStdout.push(value) },
-      WriteStderr: () => { throw new Error("passing gate must not use stderr") }
-    }, QuickDependencies(inputPath))).toBe(0)
+    expect(
+      await fixture.mainWithDependencies(
+        ["--root", root, "--run-id", "task6-injected-pass"],
+        {
+          WriteStdout: (value) => {
+            successStdout.push(value)
+          },
+          WriteStderr: () => {
+            throw new Error("passing gate must not use stderr")
+          }
+        },
+        QuickDependencies(inputPath)
+      )
+    ).toBe(0)
     expect(successStdout).toHaveLength(1)
     expect(JSON.parse(successStdout[0]!.slice("LIKEGO_GATE_RESULT=".length))).toEqual(
       expect.objectContaining({ runId: "task6-injected-pass", status: "pass" })
     )
 
-    const base = NodeAtomicWriterOperations()
+    const base = nodeAtomicWriterOperations()
     const failures: readonly {
       readonly id: string
       readonly thrown: unknown
@@ -932,7 +1117,12 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
         id: "atomic",
         thrown: null,
         expected: "injected atomic failure",
-        operations: { ...base, Open: async () => { throw new Error("injected atomic failure") } }
+        operations: {
+          ...base,
+          Open: async () => {
+            throw new Error("injected atomic failure")
+          }
+        }
       },
       { id: "literal", thrown: "literal output failure", expected: "literal output failure" },
       {
@@ -943,7 +1133,9 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       {
         id: "hostile",
         thrown: Object.assign(Object.create(null) as object, {
-          [Symbol.toPrimitive]: () => { throw new Error("cannot stringify output") }
+          [Symbol.toPrimitive]: () => {
+            throw new Error("cannot stringify output")
+          }
         }),
         expected: "unprintable error"
       }
@@ -953,27 +1145,37 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       const stdout: string[] = []
       const stderr: string[] = []
       const io = {
-        WriteStdout: failure.operations === undefined
-          ? () => { throw failure.thrown }
-          : (value: string) => { stdout.push(value) },
-        WriteStderr: (value: string) => { stderr.push(value) }
+        WriteStdout:
+          failure.operations === undefined
+            ? () => {
+                throw failure.thrown
+              }
+            : (value: string) => {
+                stdout.push(value)
+              },
+        WriteStderr: (value: string) => {
+          stderr.push(value)
+        }
       }
-      expect(await fixture.MainWithDependencies([
-        "--root", root,
-        "--run-id", "task6-output-" + failure.id
-      ], io, QuickDependencies(inputPath, failure.operations ?? base))).toBe(1)
+      expect(
+        await fixture.mainWithDependencies(
+          ["--root", root, "--run-id", "task6-output-" + failure.id],
+          io,
+          QuickDependencies(inputPath, failure.operations ?? base)
+        )
+      ).toBe(1)
       expect(stdout).toEqual([])
-      expect(stderr).toEqual([
-        "SEMANTIC_GLOBAL_FIXTURE_EMIT_ERROR " + failure.expected + "\n"
-      ])
+      expect(stderr).toEqual(["SEMANTIC_GLOBAL_FIXTURE_EMIT_ERROR " + failure.expected + "\n"])
       expect(await readFile(resultPath, "utf8")).toBe("prior-result\n")
-      expect((await readdir(dirname(resultPath))).filter((name) => (
-        name.endsWith(".tmp") || name.endsWith(".lock")
-      ))).toEqual([])
+      expect(
+        (await readdir(dirname(resultPath))).filter(
+          (name) => name.endsWith(".tmp") || name.endsWith(".lock")
+        )
+      ).toEqual([])
     }
   })
 
-  test("routes default IO through Main and turns discovery failure into canonical evidence", async () => {
+  test("routes default IO through main and turns discovery failure into canonical evidence", async () => {
     const fixture = await LoadFixtureModule()
     const root = await RepositoryFixture("likego-semantic-global-default-io-")
     const stdout: string[] = []
@@ -997,11 +1199,8 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
       return true
     }) as typeof process.stderr.write
     try {
-      expect(await fixture.Main([])).toBe(1)
-      expect(await fixture.Main([
-        "--root", root,
-        "--run-id", "task6-default-io"
-      ])).toBe(1)
+      expect(await fixture.main([])).toBe(1)
+      expect(await fixture.main(["--root", root, "--run-id", "task6-default-io"])).toBe(1)
     } finally {
       process.stdout.write = originalStdoutWrite
       process.stderr.write = originalStderrWrite
@@ -1009,20 +1208,22 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     expect(stderr).toEqual(["SEMANTIC_GLOBAL_FIXTURE_USAGE invalid arguments\n"])
     expect(stdout).toHaveLength(1)
     const result = JSON.parse(stdout[0]!.slice("LIKEGO_GATE_RESULT=".length))
-    expect(result).toEqual(expect.objectContaining({
-      runId: "task6-default-io",
-      status: "fail",
-      inputsSha256: null,
-      checks: [expect.objectContaining({ id: "GATE_INPUT_ERROR" })]
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        runId: "task6-default-io",
+        status: "fail",
+        inputsSha256: null,
+        checks: [expect.objectContaining({ id: "GATE_INPUT_ERROR" })]
+      })
+    )
   })
 
   test("exits naturally with exact current-run evidence and rolls back a real EPIPE", async () => {
     const fixture = await LoadFixtureModule()
     const root = await RepositoryFixture("likego-semantic-global-child-")
     await CopyCorpus(root)
-    const discovered = await fixture.DiscoverSemanticGlobalFixtureInputs(root)
-    const expectedSnapshot = await SnapshotInputs(root, discovered)
+    const discovered = await fixture.discoverSemanticGlobalFixtureInputs(root)
+    const expectedSnapshot = await snapshotInputs(root, discovered)
     if (expectedSnapshot.Snapshot === null) throw new Error("child corpus must snapshot")
     const child = await SpawnCli(root, "task6-real-ts7-child")
     expect(child.signalCode).toBeNull()
@@ -1047,31 +1248,34 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
         readonly path: string
       }[]
     }
-    expect(result).toEqual(expect.objectContaining({
-      schemaVersion: 1,
-      runId: "task6-real-ts7-child",
-      gate: "boundary-semantic-global-fixtures",
-      mode: "fixture",
-      status: "pass",
-      releaseReadiness: "not-evaluated",
-      inputsSha256: expectedSnapshot.Snapshot.Sha256,
-      subjects: { expected: 35, checked: 35 }
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        schemaVersion: 1,
+        runId: "task6-real-ts7-child",
+        gate: "boundary-semantic-global-fixtures",
+        mode: "fixture",
+        status: "pass",
+        releaseReadiness: "not-evaluated",
+        inputsSha256: expectedSnapshot.Snapshot.Sha256,
+        subjects: { expected: 35, checked: 35 }
+      })
+    )
     expect(result.checks.map((check) => [check.id, check.status, check.path])).toEqual(
       ExpectedCases.map((fixtureCase) => ["FIXTURE_CASE_MATCH", "pass", fixtureCase.path])
     )
-    expect(JSON.parse(await readFile(
-      join(root, ".artifacts/gates/boundary-semantic-global-fixtures.json"),
-      "utf8"
-    ))).toEqual(result)
+    expect(
+      JSON.parse(
+        await readFile(
+          join(root, ".artifacts/gates/boundary-semantic-global-fixtures.json"),
+          "utf8"
+        )
+      )
+    ).toEqual(result)
     expect(await readdir(join(root, ".artifacts/gates/work"))).toEqual([])
 
     const pipeRoot = await RepositoryFixture("likego-semantic-global-epipe-")
     await CopyCorpus(pipeRoot)
-    const canonicalPath = join(
-      pipeRoot,
-      ".artifacts/gates/boundary-semantic-global-fixtures.json"
-    )
+    const canonicalPath = join(pipeRoot, ".artifacts/gates/boundary-semantic-global-fixtures.json")
     await mkdir(dirname(canonicalPath), { recursive: true })
     await Bun.write(canonicalPath, "prior-result\n")
     const piped = await SpawnWithClosedStdout(pipeRoot, "task6-real-epipe")
@@ -1081,9 +1285,11 @@ describe("Task6 semantic free-global and globalThis boundary", () => {
     expect(piped.stderr).toContain("SEMANTIC_GLOBAL_FIXTURE_EMIT_ERROR")
     expect(piped.stderr).toContain("EPIPE")
     expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
-    expect((await readdir(dirname(canonicalPath))).filter((name) => (
-      name.endsWith(".tmp") || name.endsWith(".lock")
-    ))).toEqual([])
+    expect(
+      (await readdir(dirname(canonicalPath))).filter(
+        (name) => name.endsWith(".tmp") || name.endsWith(".lock")
+      )
+    ).toEqual([])
     expect(await readdir(join(pipeRoot, ".artifacts/gates/work"))).toEqual([])
   }, 180_000)
 })

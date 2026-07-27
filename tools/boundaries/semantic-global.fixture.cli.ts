@@ -3,26 +3,20 @@ import { lstat, readdir, realpath } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import type { Project } from "typescript/unstable/async"
 import type { SourceFile } from "typescript/unstable/ast"
+import { nodeProjectSessionOperations, withProjectSessionWithOperations } from "./project-session"
+import { checkSemanticGlobals, type GlobalPolicy } from "./semantic-global"
+import type { BoundaryIssue } from "./module-syntax"
+import type { AtomicWriterOperations } from "../gates/atomic-writer"
+import { evaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus"
 import {
-  NodeProjectSessionOperations,
-  WithProjectSessionWithOperations
-} from "./project-session.ts"
-import {
-  CheckSemanticGlobals,
-  type GlobalPolicy
-} from "./semantic-global.ts"
-import type { BoundaryIssue } from "./module-syntax.ts"
-import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
-import { EvaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus.ts"
-import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout,
   type InputSnapshot,
   type SnapshotFile
-} from "../gates/result.ts"
+} from "../gates/result"
 
 export interface SemanticGlobalFixtureIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -56,8 +50,8 @@ const CasesPath = FamilyRoot + "/cases.json"
 const ExpectedSubjects = 35
 const Decoder = new TextDecoder("utf-8", { fatal: true })
 const DefaultIO: SemanticGlobalFixtureIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function Sha256(value: string | Uint8Array): string {
@@ -96,12 +90,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (
-      name === undefined
-      || value === undefined
-      || value.length === 0
-      || seen.has(name)
-    ) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--root") Root = value
     else if (name === "--run-id" && /^[a-z0-9][a-z0-9_-]{0,95}$/.test(value)) {
@@ -125,24 +115,23 @@ function ParsePolicy(files: readonly SnapshotFile[]): PolicyDocument {
     throw new Error("semantic-global fixture policy must be canonical UTF-8 JSON")
   }
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "allowedFreeGlobals"])
-    || value.schemaVersion !== 1
-    || !Array.isArray(value.allowedFreeGlobals)
-  ) throw new Error("semantic-global fixture policy must use the fixed shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, ["schemaVersion", "allowedFreeGlobals"]) ||
+    value.schemaVersion !== 1 ||
+    !Array.isArray(value.allowedFreeGlobals)
+  )
+    throw new Error("semantic-global fixture policy must use the fixed shape")
   const allowed = value.allowedFreeGlobals
   if (
-    !allowed.every((item) => typeof item === "string" && item.length > 0)
-    || new Set(allowed).size !== allowed.length
+    !allowed.every((item) => typeof item === "string" && item.length > 0) ||
+    new Set(allowed).size !== allowed.length
   ) {
-    throw new Error(
-      "semantic-global fixture policy globals must be unique non-empty strings"
-    )
+    throw new Error("semantic-global fixture policy globals must be unique non-empty strings")
   }
   return { schemaVersion: 1, allowedFreeGlobals: [...allowed] as string[] }
 }
 
-export async function DiscoverSemanticGlobalFixtureInputs(
+export async function discoverSemanticGlobalFixtureInputs(
   root: string
 ): Promise<readonly string[]> {
   const repositoryRoot = await realpath(root)
@@ -184,49 +173,48 @@ function CaseSnapshot(files: readonly SnapshotFile[]): InputSnapshot {
   }
 }
 
-export async function EvaluateSemanticGlobalFixtureCorpus(
+export async function evaluateSemanticGlobalFixtureCorpus(
   snapshot: InputSnapshot,
   repositoryRoot: string
 ): Promise<CorpusEvaluation> {
-  return EvaluateSemanticGlobalFixtureCorpusWithChecker(
+  return evaluateSemanticGlobalFixtureCorpusWithChecker(
     snapshot,
     repositoryRoot,
-    CheckSemanticGlobals
+    checkSemanticGlobals
   )
 }
 
-export async function EvaluateSemanticGlobalFixtureCorpusWithChecker(
+export async function evaluateSemanticGlobalFixtureCorpusWithChecker(
   snapshot: InputSnapshot,
   repositoryRoot: string,
   check: SemanticGlobalChecker
 ): Promise<CorpusEvaluation> {
-  return EvaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
+  return evaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
     const policy = ParsePolicy(files)
-    return WithProjectSessionWithOperations(
+    return withProjectSessionWithOperations(
       CaseSnapshot(files),
       "project",
-      async (session) => check(
-        session.Project,
-        session.SourceFiles,
-        { AllowedFreeGlobals: policy.allowedFreeGlobals }
-      ),
-      NodeProjectSessionOperations(repositoryRoot)
+      async (session) =>
+        check(session.Project, session.SourceFiles, {
+          AllowedFreeGlobals: policy.allowedFreeGlobals
+        }),
+      nodeProjectSessionOperations(repositoryRoot)
     )
   })
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: SemanticGlobalFixtureIO = DefaultIO
 ): Promise<number> {
-  return MainWithDependencies(args, io, {
-    DiscoverInputPaths: DiscoverSemanticGlobalFixtureInputs,
-    Evaluate: EvaluateSemanticGlobalFixtureCorpus,
-    AtomicWriterOperations: NodeAtomicWriterOperations()
+  return mainWithDependencies(args, io, {
+    DiscoverInputPaths: discoverSemanticGlobalFixtureInputs,
+    Evaluate: evaluateSemanticGlobalFixtureCorpus,
+    AtomicWriterOperations: nodeAtomicWriterOperations()
   })
 }
 
-export async function MainWithDependencies(
+export async function mainWithDependencies(
   args: readonly string[],
   io: SemanticGlobalFixtureIO,
   dependencies: SemanticGlobalFixtureDependencies
@@ -243,35 +231,36 @@ export async function MainWithDependencies(
   } catch {
     inputPaths = [""]
   }
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: "boundary-semantic-global-fixtures",
-    mode: "fixture",
-    readinessPolicy: "evaluation-only",
-    expectedSubjects: ExpectedSubjects,
-    inputPaths,
-    toolchain: { bun: Bun.version, typescript: "7.0.2" },
-    runId: parsed.RunId
-  }, async (snapshot) => {
-    const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
-    return {
-      SubjectsChecked: evaluation.SubjectsChecked,
-      Checks: evaluation.Checks
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: "boundary-semantic-global-fixtures",
+      mode: "fixture",
+      readinessPolicy: "evaluation-only",
+      expectedSubjects: ExpectedSubjects,
+      inputPaths,
+      toolchain: { bun: Bun.version, typescript: "7.0.2" },
+      runId: parsed.RunId
+    },
+    async (snapshot) => {
+      const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
+      return {
+        SubjectsChecked: evaluation.SubjectsChecked,
+        Checks: evaluation.Checks
+      }
     }
-  })
+  )
 
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, {
+    await emitGateResultWithDependencies(parsed.Root, result, {
       AtomicWriterOperations: dependencies.AtomicWriterOperations,
       WriteStdout: io.WriteStdout
     })
   } catch (error) {
-    await io.WriteStderr(
-      "SEMANTIC_GLOBAL_FIXTURE_EMIT_ERROR " + ErrorMessage(error) + "\n"
-    )
+    await io.WriteStderr("SEMANTIC_GLOBAL_FIXTURE_EMIT_ERROR " + ErrorMessage(error) + "\n")
     return 1
   }
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

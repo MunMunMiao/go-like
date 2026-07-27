@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/core",
+  "version": "0.0.1",
+  "description": "Kratos-style portable application lifecycle for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./lifecycle": "./src/lifecycle.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/registry": "0.0.1",
+    "@types/node": "26.1.1"
+  },
+  "devDependencies": {},
+  "license": "MIT"
+}

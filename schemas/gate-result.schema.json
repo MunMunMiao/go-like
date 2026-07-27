@@ -51,10 +51,7 @@
       "additionalProperties": { "type": "string" }
     },
     "inputsSha256": {
-      "anyOf": [
-        { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        { "type": "null" }
-      ]
+      "anyOf": [{ "type": "string", "pattern": "^[a-f0-9]{64}$" }, { "type": "null" }]
     },
     "subjects": {
       "type": "object",
@@ -62,10 +59,7 @@
       "required": ["expected", "checked"],
       "properties": {
         "expected": {
-          "anyOf": [
-            { "type": "integer", "minimum": 0 },
-            { "type": "null" }
-          ]
+          "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
         },
         "checked": { "type": "integer", "minimum": 0 }
       }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/nats",
+  "version": "0.0.1",
+  "description": "Lifecycle-only LikeGo Server adapters for official NATS Core Subscriptions and JetStream ConsumerMessages.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./broker": "./src/broker.ts",
+    "./jetstream": "./src/jetstream.ts",
+    "./jetstream/broker": "./src/jetstream-broker.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "smoke:core": "bun test/smoke/core-package-smoke.ts",
+    "smoke:jetstream": "bun test/smoke/jetstream-package-smoke.ts",
+    "e2e:docker:core": "bun test/e2e/core-docker-e2e.ts",
+    "e2e:docker:jetstream": "bun test/e2e/jetstream-docker-e2e.ts"
+  },
+  "dependencies": {
+    "@likego/broker": "0.0.1",
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}

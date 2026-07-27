@@ -40,7 +40,7 @@
 
 **Interfaces:**
 - Consumes: ADR 0001 and ADR 0002.
-- Produces: `VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>`; `VerifyBunRuntime(observedVersion: string): WorkspaceIssue | null`; stable root scripts `build`, `typecheck`, `test`, `test:coverage`, `verify:workspace`, `verify`.
+- Produces: `verifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>`; `verifyBunRuntime(observedVersion: string): WorkspaceIssue | null`; stable root scripts `build`, `typecheck`, `test`, `test:coverage`, `verify:workspace`, `verify`.
 
 - [ ] **Step 1: Add exact Bun and TypeScript bootstrap configuration**
 
@@ -182,7 +182,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
-import { VerifyWorkspace } from "./verify-workspace.ts"
+import { verifyWorkspace } from "./verify-workspace.ts"
 
 const Roots: string[] = []
 
@@ -197,9 +197,9 @@ async function Fixture(manifest: unknown): Promise<string> {
   return root
 }
 
-describe("VerifyWorkspace", () => {
+describe("verifyWorkspace", () => {
   test("accepts the repository root", async () => {
-    expect(await VerifyWorkspace(fileURLToPath(new URL("..", import.meta.url)))).toEqual([])
+    expect(await verifyWorkspace(fileURLToPath(new URL("..", import.meta.url)))).toEqual([])
   })
 
   test("rejects root toolchain and lockfile drift", async () => {
@@ -216,7 +216,7 @@ describe("VerifyWorkspace", () => {
     })
     await Bun.write(join(root, "package-lock.json"), "{}\n")
 
-    expect((await VerifyWorkspace(root)).map((issue) => issue.Code)).toEqual([
+    expect((await verifyWorkspace(root)).map((issue) => issue.Code)).toEqual([
       "ROOT_NAME",
       "ROOT_PRIVATE",
       "ROOT_TYPE",
@@ -254,7 +254,7 @@ describe("VerifyWorkspace", () => {
       }
     }))
 
-    expect((await VerifyWorkspace(root)).map((issue) => issue.Code)).toEqual([
+    expect((await verifyWorkspace(root)).map((issue) => issue.Code)).toEqual([
       "WORKSPACE_NAME",
       "WORKSPACE_VERSION",
       "WORKSPACE_TYPE",
@@ -268,7 +268,7 @@ describe("VerifyWorkspace", () => {
 
 Extend the final suite to nine focused tests covering:
 
-1. `VerifyBunRuntime` rejects an observed version other than `1.3.14` and accepts `1.3.14`; pass the version directly rather than faking the process runtime.
+1. `verifyBunRuntime` rejects an observed version other than `1.3.14` and accepts `1.3.14`; pass the version directly rather than faking the process runtime.
 2. The real repository root passes.
 3. Root toolchain/lock drift emits the deterministic baseline issue order without duplicate dependency issues for the two required dev dependencies.
 4. Invalid workspace manifests and floating dependency specifiers fail.
@@ -313,14 +313,14 @@ export interface WorkspaceIssue {
   readonly Message: string
 }
 
-export function ExactDependencySpecifier(specifier: string): boolean
-export function VerifyBunRuntime(observedVersion: string): WorkspaceIssue | null
-export async function VerifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>
+export function exactDependencySpecifier(specifier: string): boolean
+export function verifyBunRuntime(observedVersion: string): WorkspaceIssue | null
+export async function verifyWorkspace(root: string): Promise<readonly WorkspaceIssue[]>
 ```
 
 Implementation rules:
 
-1. `VerifyBunRuntime` returns `null` only for observed `1.3.14`; otherwise return a stable `BUN_RUNTIME` issue at `Bun.version`. The CLI calls it with the real `Bun.version` at entry.
+1. `verifyBunRuntime` returns `null` only for observed `1.3.14`; otherwise return a stable `BUN_RUNTIME` issue at `Bun.version`. The CLI calls it with the real `Bun.version` at entry.
 2. Parse root `package.json` with `Bun.file(...).json()` and emit all issues in deterministic order.
 3. Compare the workspace array exactly with `packages/*`, `adapters/*`, `examples/*`.
 4. Compare the complete root `scripts` object by exact key/value equality against the six commands in Step 1. Unknown, missing, boolean-valued, Node-runner, or otherwise drifted values produce one `ROOT_SCRIPTS` issue.
@@ -337,10 +337,10 @@ Use small private helpers for JSON object narrowing and deterministic issue crea
 Create `scripts/verify-workspace.cli.ts`:
 
 ```ts
-import { VerifyBunRuntime, VerifyWorkspace } from "./verify-workspace.ts"
+import { verifyBunRuntime, verifyWorkspace } from "./verify-workspace.ts"
 
-const runtimeIssue = VerifyBunRuntime(Bun.version)
-const workspaceIssues = await VerifyWorkspace(process.cwd())
+const runtimeIssue = verifyBunRuntime(Bun.version)
+const workspaceIssues = await verifyWorkspace(process.cwd())
 const issues = runtimeIssue === null ? workspaceIssues : [runtimeIssue, ...workspaceIssues]
 
 if (issues.length > 0) {

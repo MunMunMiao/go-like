@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/store-etcd",
+  "version": "0.0.1",
+  "description": "Portable etcd v3 JSON gateway Store provider using standard Web Fetch for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "test:docker": "bun test/integration/etcd-docker.ts",
+    "test:runtime": "bun test/integration/runtime-matrix.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@likego/store": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": false,
+    "noEmitOnError": true,
+    "outDir": ".artifacts/runtime",
+    "paths": {},
+    "rootDir": "test/runtime",
+    "sourceMap": false,
+    "types": ["bun"]
+  },
+  "include": ["test/runtime/**/*.ts"]
+}

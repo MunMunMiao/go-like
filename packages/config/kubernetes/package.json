@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/config-kubernetes",
+  "version": "0.0.1",
+  "description": "Standard Web Fetch Kubernetes ConfigMap and Secret configuration source for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "test:docker": "bun test/integration/k3s-docker.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/config": "0.0.1",
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1"
+  },
+  "license": "MIT"
+}

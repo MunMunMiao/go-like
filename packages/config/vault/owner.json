@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/config-vault",
+  "resources": [
+    {
+      "id": "kv-v2-poller",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

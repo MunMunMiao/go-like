@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun", "node"],
+    "paths": {
+      "@likego/bullmq": ["./src/index.ts"],
+      "@likego/context": ["../../packages/context/src/index.ts"],
+      "@likego/core": ["../../packages/core/src/index.ts"],
+      "@likego/core/lifecycle": ["../../packages/core/src/lifecycle.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

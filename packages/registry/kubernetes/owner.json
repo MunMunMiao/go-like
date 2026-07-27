@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/registry-kubernetes",
+  "resources": [
+    {
+      "id": "kubernetes-watcher",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

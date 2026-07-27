@@ -3,9 +3,9 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { tmpdir } from "node:os"
-import type { GateEvaluation, InputSnapshot, SnapshotFile } from "../gates/result.ts"
+import type { GateEvaluation, InputSnapshot, SnapshotFile } from "../gates/result"
 
-const ContextContractMarker = "LIKEGO_CONTEXT_TIMING_AFTERFUNC_V1"
+const ContextContractMarker = "LIKEGO_CONTEXT_TIMING_AFTERFUNC_V2"
 const CoverageContractMarker = "LIKEGO_PUBLISHED_JS_BRANCH_AUTHORITY_V1"
 const InputPaths = [
   "docs/adr/0001-kernel-public-api.md",
@@ -22,12 +22,12 @@ afterEach(async () => {
 })
 
 async function LoadRuntimeManifest() {
-  return import("./runtime-manifest.ts")
+  return import("./runtime-manifest")
 }
 
 async function LoadRuntimeManifestCli() {
   await LoadRuntimeManifest()
-  return import("./runtime-manifest.cli.ts")
+  return import("./runtime-manifest.cli")
 }
 
 function Sha256(value: string | Uint8Array): string {
@@ -64,8 +64,8 @@ function ExactMatrix(): Record<string, unknown> {
         Id: "deno-exact",
         Runtime: "deno",
         Channel: "exact",
-        Version: "2.9.3",
-        ImageTag: "denoland/deno:2.9.3"
+        Version: "2.9.4",
+        ImageTag: "denoland/deno:2.9.4"
       }
     ]
   }
@@ -91,7 +91,7 @@ function ExactFiles(): Record<string, string> {
     "config/runtime-matrix.json": `${JSON.stringify(ExactMatrix(), null, 2)}\n`,
     "package.json": `${JSON.stringify(ExactPackage(), null, 2)}\n`,
     "bunfig.toml": "[install]\nexact = true\n",
-    "deno.json": "{\n  \"compilerOptions\": { \"strict\": true }\n}\n"
+    "deno.json": '{\n  "compilerOptions": { "strict": true }\n}\n'
   }
 }
 
@@ -107,7 +107,7 @@ function Snapshot(files: Readonly<Record<string, string>> = ExactFiles()): Input
         Bytes
       }
     })
-    .sort((left, right) => left.Path < right.Path ? -1 : left.Path > right.Path ? 1 : 0)
+    .sort((left, right) => (left.Path < right.Path ? -1 : left.Path > right.Path ? 1 : 0))
   const inventory = snapshotFiles.map((file) => `${file.Path}\0${file.Sha256}\n`).join("")
   return { Sha256: Sha256(inventory), Files: snapshotFiles }
 }
@@ -138,10 +138,10 @@ async function Fixture(files: Readonly<Record<string, string>> = ExactFiles()): 
   return root
 }
 
-describe("ValidateRuntimeMatrix", () => {
+describe("validateRuntimeMatrix", () => {
   test("accepts the exact six-file snapshot and four pinned runtime lanes", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
-    const evaluation = ValidateRuntimeMatrix(Snapshot())
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
+    const evaluation = validateRuntimeMatrix(Snapshot())
 
     expect(evaluation.SubjectsChecked).toBe(4)
     expect(evaluation.ArtifactPaths).toBeUndefined()
@@ -163,7 +163,7 @@ describe("ValidateRuntimeMatrix", () => {
   })
 
   test("rejects missing, extra, and duplicate snapshot inventory without filesystem reads", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const missing = ExactFiles()
     delete missing["deno.json"]
     const extra = { ...ExactFiles(), "unexpected.txt": "unexpected\n" }
@@ -174,16 +174,18 @@ describe("ValidateRuntimeMatrix", () => {
     }
 
     for (const snapshot of [Snapshot(missing), Snapshot(extra), duplicate]) {
-      const evaluation = ValidateRuntimeMatrix(snapshot)
+      const evaluation = validateRuntimeMatrix(snapshot)
       expect(evaluation.SubjectsChecked).toBe(0)
       expect(FailedIds(evaluation)).toEqual(["RUNTIME_INPUT_INVENTORY"])
     }
   })
 
   test("fails closed for missing, extra, and duplicate lane ids", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const cases = [
-      FilesWithJson("config/runtime-matrix.json", (matrix) => { matrix.Lanes.pop() }),
+      FilesWithJson("config/runtime-matrix.json", (matrix) => {
+        matrix.Lanes.pop()
+      }),
       FilesWithJson("config/runtime-matrix.json", (matrix) => {
         matrix.Lanes.push({
           Id: "node-extra",
@@ -198,10 +200,12 @@ describe("ValidateRuntimeMatrix", () => {
       })
     ]
 
-    expect(cases.map((files) => {
-      const evaluation = ValidateRuntimeMatrix(Snapshot(files))
-      return { checked: evaluation.SubjectsChecked, failed: FailedIds(evaluation) }
-    })).toEqual([
+    expect(
+      cases.map((files) => {
+        const evaluation = validateRuntimeMatrix(Snapshot(files))
+        return { checked: evaluation.SubjectsChecked, failed: FailedIds(evaluation) }
+      })
+    ).toEqual([
       { checked: 3, failed: ["RUNTIME_LANE_SET"] },
       { checked: 5, failed: ["RUNTIME_LANE_SET"] },
       { checked: 4, failed: ["RUNTIME_LANE_SET"] }
@@ -209,7 +213,7 @@ describe("ValidateRuntimeMatrix", () => {
   })
 
   test("rejects non-exact versions and wrong runtime, channel, tag, or digest fields", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const cases = [
       ["Version", "1.3"],
       ["Runtime", "node"],
@@ -221,17 +225,17 @@ describe("ValidateRuntimeMatrix", () => {
       const files = FilesWithJson("config/runtime-matrix.json", (matrix) => {
         matrix.Lanes[0][field] = value
       })
-      expect(FailedIds(ValidateRuntimeMatrix(Snapshot(files)))).toContain("RUNTIME_LANE_BUN_EXACT")
+      expect(FailedIds(validateRuntimeMatrix(Snapshot(files)))).toContain("RUNTIME_LANE_BUN_EXACT")
     }
 
     const digest = FilesWithJson("config/runtime-matrix.json", (matrix) => {
       matrix.Lanes[0].ImageDigest = "sha256:deadbeef"
     })
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(digest)))).toEqual(["RUNTIME_MATRIX_FORMAT"])
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(digest)))).toEqual(["RUNTIME_MATRIX_FORMAT"])
   })
 
   test("binds TypeScript and package manager to the exact root toolchain", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const matrixTypeScript = FilesWithJson("config/runtime-matrix.json", (matrix) => {
       matrix.TypeScript = "7.0"
     })
@@ -242,16 +246,19 @@ describe("ValidateRuntimeMatrix", () => {
       packageJson.packageManager = "bun@1.3"
     })
 
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(matrixTypeScript))))
-      .toContain("RUNTIME_TYPESCRIPT_EXACT")
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(packageTypeScript))))
-      .toContain("RUNTIME_TYPESCRIPT_EXACT")
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(packageManager))))
-      .toContain("RUNTIME_PACKAGE_MANAGER_EXACT")
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(matrixTypeScript)))).toContain(
+      "RUNTIME_TYPESCRIPT_EXACT"
+    )
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(packageTypeScript)))).toContain(
+      "RUNTIME_TYPESCRIPT_EXACT"
+    )
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(packageManager)))).toContain(
+      "RUNTIME_PACKAGE_MANAGER_EXACT"
+    )
   })
 
   test("returns deterministic domain failures for legal JSON wrong-type diagnostics", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const cases = [
       { Value: { toString: null, valueOf: null }, Diagnostic: "<object>" },
       { Value: [{ toString: null, valueOf: null }], Diagnostic: "<array>" },
@@ -270,10 +277,10 @@ describe("ValidateRuntimeMatrix", () => {
       let packageManagerEvaluation: GateEvaluation | undefined
 
       expect(() => {
-        typeScriptEvaluation = ValidateRuntimeMatrix(Snapshot(typeScriptFiles))
+        typeScriptEvaluation = validateRuntimeMatrix(Snapshot(typeScriptFiles))
       }).not.toThrow()
       expect(() => {
-        packageManagerEvaluation = ValidateRuntimeMatrix(Snapshot(packageManagerFiles))
+        packageManagerEvaluation = validateRuntimeMatrix(Snapshot(packageManagerFiles))
       }).not.toThrow()
       expect(typeScriptEvaluation).toBeDefined()
       expect(packageManagerEvaluation).toBeDefined()
@@ -283,66 +290,82 @@ describe("ValidateRuntimeMatrix", () => {
 
       expect(typeScriptEvaluation.SubjectsChecked).toBe(4)
       expect(FailedIds(typeScriptEvaluation)).toEqual(["RUNTIME_TYPESCRIPT_EXACT"])
-      expect(typeScriptEvaluation.Checks).toContainEqual(expect.objectContaining({
-        id: "RUNTIME_TYPESCRIPT_EXACT",
-        status: "fail",
-        actual: `7.0.2 / ${Diagnostic}`
-      }))
+      expect(typeScriptEvaluation.Checks).toContainEqual(
+        expect.objectContaining({
+          id: "RUNTIME_TYPESCRIPT_EXACT",
+          status: "fail",
+          actual: `7.0.2 / ${Diagnostic}`
+        })
+      )
       expect(FailedIds(typeScriptEvaluation)).not.toContain("GATE_INTERNAL_ERROR")
 
       expect(packageManagerEvaluation.SubjectsChecked).toBe(4)
       expect(FailedIds(packageManagerEvaluation)).toEqual(["RUNTIME_PACKAGE_MANAGER_EXACT"])
-      expect(packageManagerEvaluation.Checks).toContainEqual(expect.objectContaining({
-        id: "RUNTIME_PACKAGE_MANAGER_EXACT",
-        status: "fail",
-        actual: Diagnostic
-      }))
+      expect(packageManagerEvaluation.Checks).toContainEqual(
+        expect.objectContaining({
+          id: "RUNTIME_PACKAGE_MANAGER_EXACT",
+          status: "fail",
+          actual: Diagnostic
+        })
+      )
       expect(FailedIds(packageManagerEvaluation)).not.toContain("GATE_INTERNAL_ERROR")
     }
   })
 
   test("requires both frozen ADR contract markers", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const missingContext = ExactFiles()
-    missingContext[InputPaths[0]] = missingContext[InputPaths[0]]!.replace(ContextContractMarker, "missing")
+    missingContext[InputPaths[0]] = missingContext[InputPaths[0]]!.replace(
+      ContextContractMarker,
+      "missing"
+    )
     const missingCoverage = ExactFiles()
-    missingCoverage[InputPaths[1]] = missingCoverage[InputPaths[1]]!.replace(CoverageContractMarker, "missing")
+    missingCoverage[InputPaths[1]] = missingCoverage[InputPaths[1]]!.replace(
+      CoverageContractMarker,
+      "missing"
+    )
 
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(missingContext))))
-      .toContain("RUNTIME_ADR_CONTEXT_CONTRACT")
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(missingCoverage))))
-      .toContain("RUNTIME_ADR_COVERAGE_CONTRACT")
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(missingContext)))).toContain(
+      "RUNTIME_ADR_CONTEXT_CONTRACT"
+    )
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(missingCoverage)))).toContain(
+      "RUNTIME_ADR_COVERAGE_CONTRACT"
+    )
   })
 
   test("returns stable format failures for malformed JSON and fixed-shape additions", async () => {
-    const { ValidateRuntimeMatrix } = await LoadRuntimeManifest()
+    const { validateRuntimeMatrix } = await LoadRuntimeManifest()
     const malformedMatrix = { ...ExactFiles(), "config/runtime-matrix.json": "{\n" }
     const malformedPackage = { ...ExactFiles(), "package.json": "{\n" }
     const extraMatrixKey = FilesWithJson("config/runtime-matrix.json", (matrix) => {
       matrix.AllowFloating = true
     })
 
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(malformedMatrix))))
-      .toEqual(["RUNTIME_MATRIX_FORMAT"])
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(malformedPackage))))
-      .toContain("RUNTIME_PACKAGE_FORMAT")
-    expect(FailedIds(ValidateRuntimeMatrix(Snapshot(extraMatrixKey))))
-      .toEqual(["RUNTIME_MATRIX_FORMAT"])
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(malformedMatrix)))).toEqual([
+      "RUNTIME_MATRIX_FORMAT"
+    ])
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(malformedPackage)))).toContain(
+      "RUNTIME_PACKAGE_FORMAT"
+    )
+    expect(FailedIds(validateRuntimeMatrix(Snapshot(extraMatrixKey)))).toEqual([
+      "RUNTIME_MATRIX_FORMAT"
+    ])
   })
 })
 
 describe("runtime-manifest CLI", () => {
   test("emits a current-run canonical PASS for the exact repository contract", async () => {
     const root = await Fixture()
-    const { Main } = await LoadRuntimeManifestCli()
+    const { main } = await LoadRuntimeManifestCli()
     const stdout: string[] = []
     const stderr: string[] = []
-    const exitCode = await Main([
-      "--root", root,
-      "--run-id", "runtime-contract-current"
-    ], {
-      WriteStdout: (value: string) => { stdout.push(value) },
-      WriteStderr: (value: string) => { stderr.push(value) }
+    const exitCode = await main(["--root", root, "--run-id", "runtime-contract-current"], {
+      WriteStdout: (value: string) => {
+        stdout.push(value)
+      },
+      WriteStderr: (value: string) => {
+        stderr.push(value)
+      }
     })
     const canonicalPath = join(root, ".artifacts", "gates", "runtime-contract.json")
     const persisted = JSON.parse(await readFile(canonicalPath, "utf8")) as Record<string, any>
@@ -370,57 +393,83 @@ describe("runtime-manifest CLI", () => {
       expected: 4,
       checked: 4
     })
-    expect(persisted.checks.every((check: Record<string, unknown>) => check.status === "pass")).toBe(true)
+    expect(
+      persisted.checks.every((check: Record<string, unknown>) => check.status === "pass")
+    ).toBe(true)
   })
 
   test("persists a current-run failure when a pinned contract drifts", async () => {
-    const root = await Fixture(FilesWithJson("package.json", (packageJson) => {
-      packageJson.packageManager = "bun@latest"
-    }))
-    const { Main } = await LoadRuntimeManifestCli()
+    const root = await Fixture(
+      FilesWithJson("package.json", (packageJson) => {
+        packageJson.packageManager = "bun@latest"
+      })
+    )
+    const { main } = await LoadRuntimeManifestCli()
     const stdout: string[] = []
     const stderr: string[] = []
 
-    expect(await Main([
-      "--root", root,
-      "--run-id", "runtime-contract-drift"
-    ], {
-      WriteStdout: (value: string) => { stdout.push(value) },
-      WriteStderr: (value: string) => { stderr.push(value) }
-    })).toBe(1)
-    const persisted = JSON.parse(await readFile(
-      join(root, ".artifacts", "gates", "runtime-contract.json"),
-      "utf8"
-    )) as Record<string, any>
+    expect(
+      await main(["--root", root, "--run-id", "runtime-contract-drift"], {
+        WriteStdout: (value: string) => {
+          stdout.push(value)
+        },
+        WriteStderr: (value: string) => {
+          stderr.push(value)
+        }
+      })
+    ).toBe(1)
+    const persisted = JSON.parse(
+      await readFile(join(root, ".artifacts", "gates", "runtime-contract.json"), "utf8")
+    ) as Record<string, any>
     expect(stderr).toEqual([])
     expect(stdout).toHaveLength(1)
     expect(persisted.runId).toBe("runtime-contract-drift")
     expect(persisted.status).toBe("fail")
     expect(persisted.releaseReadiness).toBe("not-evaluated")
-    expect(persisted.checks).toContainEqual(expect.objectContaining({
-      id: "RUNTIME_PACKAGE_MANAGER_EXACT",
-      status: "fail"
-    }))
+    expect(persisted.checks).toContainEqual(
+      expect.objectContaining({
+        id: "RUNTIME_PACKAGE_MANAGER_EXACT",
+        status: "fail"
+      })
+    )
   })
 
   test("rejects invalid arguments and reports emission failures without a result line", async () => {
     const root = await Fixture()
-    const { Main } = await LoadRuntimeManifestCli()
+    const { main } = await LoadRuntimeManifestCli()
     const stdout: string[] = []
     const stderr: string[] = []
 
-    expect(await Main(["--unknown", "value"], {
-      WriteStdout: (value: string) => { stdout.push(value) },
-      WriteStderr: (value: string) => { stderr.push(value) }
-    })).toBe(1)
-    expect(await Main(["--root"], {
-      WriteStdout: (value: string) => { stdout.push(value) },
-      WriteStderr: (value: string) => { stderr.push(value) }
-    })).toBe(1)
-    expect(await Main(["--root", join(root, "package.json")], {
-      WriteStdout: (value: string) => { stdout.push(value) },
-      WriteStderr: (value: string) => { stderr.push(value) }
-    })).toBe(1)
+    expect(
+      await main(["--unknown", "value"], {
+        WriteStdout: (value: string) => {
+          stdout.push(value)
+        },
+        WriteStderr: (value: string) => {
+          stderr.push(value)
+        }
+      })
+    ).toBe(1)
+    expect(
+      await main(["--root"], {
+        WriteStdout: (value: string) => {
+          stdout.push(value)
+        },
+        WriteStderr: (value: string) => {
+          stderr.push(value)
+        }
+      })
+    ).toBe(1)
+    expect(
+      await main(["--root", join(root, "package.json")], {
+        WriteStdout: (value: string) => {
+          stdout.push(value)
+        },
+        WriteStderr: (value: string) => {
+          stderr.push(value)
+        }
+      })
+    ).toBe(1)
 
     expect(stdout).toEqual([])
     expect(stderr.slice(0, 2)).toEqual([
@@ -430,13 +479,13 @@ describe("runtime-manifest CLI", () => {
     expect(stderr[2]).toStartWith("RUNTIME_MANIFEST_EMIT_ERROR ")
   })
 
-  test("renders a hostile runtime-manifest output failure without escaping Main", async () => {
+  test("renders a hostile runtime-manifest output failure without escaping main", async () => {
     const root = await Fixture()
     const gates = join(root, ".artifacts", "gates")
     const canonicalPath = join(gates, "runtime-contract.json")
     await mkdir(gates, { recursive: true })
     await Bun.write(canonicalPath, "prior-result\n")
-    const { Main } = await LoadRuntimeManifestCli()
+    const { main } = await LoadRuntimeManifestCli()
     const hostile = new Error("replaceable message")
     let messageReads = 0
     Object.defineProperty(hostile, "message", {
@@ -444,58 +493,83 @@ describe("runtime-manifest CLI", () => {
         messageReads += 1
         return messageReads === 1
           ? "first message"
-          : { toString: () => { throw new Error("hostile message coercion") } }
+          : {
+              toString: () => {
+                throw new Error("hostile message coercion")
+              }
+            }
       }
     })
     const stderr: string[] = []
 
-    await expect(Main(["--root", root, "--run-id", "hostile-output"], {
-      WriteStdout: () => { throw hostile },
-      WriteStderr: (value) => { stderr.push(value) }
-    })).resolves.toBe(1)
+    await expect(
+      main(["--root", root, "--run-id", "hostile-output"], {
+        WriteStdout: () => {
+          throw hostile
+        },
+        WriteStderr: (value) => {
+          stderr.push(value)
+        }
+      })
+    ).resolves.toBe(1)
     expect(stderr).toEqual(["RUNTIME_MANIFEST_EMIT_ERROR first message\n"])
     expect(messageReads).toBe(1)
     expect(await readFile(canonicalPath, "utf8")).toBe("prior-result\n")
 
-    const unprintable = { toString: () => { throw new Error("hostile runtime stringify") } }
-    await expect(Main(["--root", root, "--run-id", "unprintable-output"], {
-      WriteStdout: () => { throw unprintable },
-      WriteStderr: (value) => { stderr.push(value) }
-    })).resolves.toBe(1)
+    const unprintable = {
+      toString: () => {
+        throw new Error("hostile runtime stringify")
+      }
+    }
+    await expect(
+      main(["--root", root, "--run-id", "unprintable-output"], {
+        WriteStdout: () => {
+          throw unprintable
+        },
+        WriteStderr: (value) => {
+          stderr.push(value)
+        }
+      })
+    ).resolves.toBe(1)
     expect(stderr.at(-1)).toBe("RUNTIME_MANIFEST_EMIT_ERROR unprintable error\n")
   })
 
   test("uses default process IO and generates a run id when omitted", async () => {
     const root = await Fixture()
-    const { Main } = await LoadRuntimeManifestCli()
+    const { main } = await LoadRuntimeManifestCli()
     const stdout: string[] = []
     const stderr: string[] = []
     const originalStdout = process.stdout.write
     const originalStderr = process.stderr.write
-    process.stdout.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stdout.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stdout.push(String(value))
       callback?.()
       return true
     }) as typeof process.stdout.write
-    process.stderr.write = ((value: string | Uint8Array, callback?: (error?: Error | null) => void) => {
+    process.stderr.write = ((
+      value: string | Uint8Array,
+      callback?: (error?: Error | null) => void
+    ) => {
       stderr.push(String(value))
       callback?.()
       return true
     }) as typeof process.stderr.write
 
     try {
-      expect(await Main(["--root", root])).toBe(0)
-      expect(await Main(["--unknown", "value"])).toBe(1)
+      expect(await main(["--root", root])).toBe(0)
+      expect(await main(["--unknown", "value"])).toBe(1)
     } finally {
       process.stdout.write = originalStdout
       process.stderr.write = originalStderr
     }
     expect(stdout).toHaveLength(1)
     expect(stderr).toEqual(["RUNTIME_MANIFEST_USAGE invalid arguments\n"])
-    const persisted = JSON.parse(await readFile(
-      join(root, ".artifacts", "gates", "runtime-contract.json"),
-      "utf8"
-    )) as Record<string, unknown>
+    const persisted = JSON.parse(
+      await readFile(join(root, ".artifacts", "gates", "runtime-contract.json"), "utf8")
+    ) as Record<string, unknown>
     expect(persisted.runId).toMatch(/^[a-z0-9][a-z0-9_-]{0,95}$/)
   })
 })

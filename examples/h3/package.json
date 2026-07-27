@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-h3",
+  "private": true,
+  "description": "Stable H3 Fetch router composed with the LikeGo Node host.",
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "imports": {
+    "#src/*": "./src/*.ts"
+  },
+  "scripts": {
+    "start": "bun run --cwd ../.. build:packages && bun run start:prepared",
+    "start:prepared": "bun build src/main.ts --target=node --outfile=.artifacts/main.mjs && node .artifacts/main.mjs",
+    "e2e:node": "bun run --cwd ../.. build:packages && bun run e2e:node:prepared",
+    "e2e:node:prepared": "tsx test/node-e2e.ts",
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage",
+    "typecheck": "tsc -p tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*",
+    "@likego/h3": "workspace:*",
+    "@likego/web": "workspace:*",
+    "h3": "1.15.11"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/web",
+  "version": "0.0.1",
+  "description": "Portable standard Web handler bridge and managed Node host for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./health": "./src/health.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "smoke:bun": "bun test/runtime/portable-runtime.ts",
+    "smoke:node": "tsx test/runtime/portable-runtime.ts && tsx test/node/smoke/dist-smoke.ts",
+    "smoke:deno": "deno run --sloppy-imports --config ../../deno.json test/runtime/portable-runtime.ts",
+    "e2e:node": "tsx test/e2e/native-e2e.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.0.11",
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@likego/health": "0.0.1",
+    "@types/node": "26.1.1"
+  },
+  "devDependencies": {
+    "@likego/testing": "workspace:*"
+  },
+  "license": "MIT"
+}

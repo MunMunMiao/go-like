@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/winston",
+  "resources": [
+    {
+      "id": "logger",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

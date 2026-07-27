@@ -7,6 +7,11 @@
     "expectedCodes": []
   },
   {
+    "id": "valid-portable-resident",
+    "path": "valid/portable-resident",
+    "expectedCodes": []
+  },
+  {
     "id": "valid-resident-adapter",
     "path": "valid/resident-adapter",
     "expectedCodes": []
@@ -87,6 +92,11 @@
     "expectedCodes": [
       "MANIFEST_RESIDENCY_CONFLICT"
     ]
+  },
+  {
+    "id": "valid-integration-under-packages",
+    "path": "invalid/adapter-under-packages",
+    "expectedCodes": []
   },
   {
     "id": "application-owned-structural-server",

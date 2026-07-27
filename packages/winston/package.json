@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/winston",
+  "version": "0.0.1",
+  "description": "Native Winston lifecycle and request logging adapters for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "smoke:bun": "bun test/smoke/runtime-smoke.ts",
+    "smoke:node": "tsx test/smoke/runtime-smoke.ts"
+  },
+  "dependencies": {
+    "@likego/broker": "0.0.1",
+    "@likego/client": "0.0.1",
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@likego/server": "0.0.1",
+    "@likego/transport": "0.0.1",
+    "@likego/web": "0.0.1",
+    "@types/node": "26.1.1",
+    "winston": "3.19.0"
+  },
+  "license": "MIT"
+}

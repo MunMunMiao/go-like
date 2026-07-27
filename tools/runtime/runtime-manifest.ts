@@ -1,4 +1,4 @@
-import type { GateCheck, GateEvaluation, InputSnapshot, SnapshotFile } from "../gates/result.ts"
+import type { GateCheck, GateEvaluation, InputSnapshot, SnapshotFile } from "../gates/result"
 
 export interface RuntimeLane {
   readonly Id: "bun-exact" | "node-lts" | "node-current" | "deno-exact"
@@ -22,7 +22,7 @@ const InputPaths = [
   "bunfig.toml",
   "deno.json"
 ] as const
-const ContextContractMarker = "LIKEGO_CONTEXT_TIMING_AFTERFUNC_V1"
+const ContextContractMarker = "LIKEGO_CONTEXT_TIMING_AFTERFUNC_V2"
 const CoverageContractMarker = "LIKEGO_PUBLISHED_JS_BRANCH_AUTHORITY_V1"
 const ExpectedTypeScript = "7.0.2"
 const ExpectedPackageManager = "bun@1.3.14"
@@ -52,8 +52,8 @@ const ExpectedLanes: readonly RuntimeLane[] = [
     Id: "deno-exact",
     Runtime: "deno",
     Channel: "exact",
-    Version: "2.9.3",
-    ImageTag: "denoland/deno:2.9.3"
+    Version: "2.9.4",
+    ImageTag: "denoland/deno:2.9.4"
   }
 ]
 const MatrixKeys = new Set(["SchemaVersion", "TypeScript", "Lanes"])
@@ -69,7 +69,12 @@ function Pass(id: string, expected?: string | number, actual?: string | number):
   }
 }
 
-function Fail(id: string, detail: string, expected?: string | number, actual?: string | number): GateCheck {
+function Fail(
+  id: string,
+  detail: string,
+  expected?: string | number,
+  actual?: string | number
+): GateCheck {
   return {
     id,
     status: "fail",
@@ -83,7 +88,10 @@ function IsRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function HasExactKeys(value: Readonly<Record<string, unknown>>, expected: ReadonlySet<string>): boolean {
+function HasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: ReadonlySet<string>
+): boolean {
   const keys = Object.keys(value)
   return keys.length === expected.size && keys.every((key) => expected.has(key))
 }
@@ -97,21 +105,23 @@ function ParseJson(file: SnapshotFile): unknown {
 }
 
 function IsLaneShape(value: unknown): value is Readonly<Record<string, string>> {
-  return IsRecord(value)
-    && HasExactKeys(value, LaneKeys)
-    && [...LaneKeys].every((key) => typeof value[key] === "string")
+  return (
+    IsRecord(value) &&
+    HasExactKeys(value, LaneKeys) &&
+    [...LaneKeys].every((key) => typeof value[key] === "string")
+  )
 }
 
 function ParseMatrix(file: SnapshotFile): RuntimeMatrix | null {
   try {
     const value = ParseJson(file)
     if (
-      !IsRecord(value)
-      || !HasExactKeys(value, MatrixKeys)
-      || value.SchemaVersion !== 1
-      || typeof value.TypeScript !== "string"
-      || !Array.isArray(value.Lanes)
-      || !value.Lanes.every((lane) => IsLaneShape(lane))
+      !IsRecord(value) ||
+      !HasExactKeys(value, MatrixKeys) ||
+      value.SchemaVersion !== 1 ||
+      typeof value.TypeScript !== "string" ||
+      !Array.isArray(value.Lanes) ||
+      !value.Lanes.every((lane) => IsLaneShape(lane))
     ) {
       return null
     }
@@ -158,33 +168,39 @@ function Inventory(snapshot: InputSnapshot): ReadonlyMap<string, SnapshotFile> |
 function LaneSetIsExact(lanes: readonly RuntimeLane[]): boolean {
   if (lanes.length !== ExpectedLanes.length) return false
   const ids = lanes.map((lane) => lane.Id)
-  return new Set(ids).size === ExpectedLanes.length
-    && ExpectedLanes.every((expected) => ids.includes(expected.Id))
+  return (
+    new Set(ids).size === ExpectedLanes.length &&
+    ExpectedLanes.every((expected) => ids.includes(expected.Id))
+  )
 }
 
 function LaneMatches(actual: RuntimeLane, expected: RuntimeLane): boolean {
-  return actual.Id === expected.Id
-    && actual.Runtime === expected.Runtime
-    && actual.Channel === expected.Channel
-    && actual.Version === expected.Version
-    && actual.ImageTag === expected.ImageTag
+  return (
+    actual.Id === expected.Id &&
+    actual.Runtime === expected.Runtime &&
+    actual.Channel === expected.Channel &&
+    actual.Version === expected.Version &&
+    actual.ImageTag === expected.ImageTag
+  )
 }
 
 function LaneCheckId(id: RuntimeLane["Id"]): string {
   return `RUNTIME_LANE_${id.replaceAll("-", "_").toUpperCase()}`
 }
 
-export function ValidateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation {
+export function validateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation {
   const files = Inventory(snapshot)
   if (files === null) {
     return {
       SubjectsChecked: 0,
-      Checks: [Fail(
-        "RUNTIME_INPUT_INVENTORY",
-        "runtime contract snapshot must contain each required input exactly once",
-        InputPaths.length,
-        snapshot.Files.length
-      )]
+      Checks: [
+        Fail(
+          "RUNTIME_INPUT_INVENTORY",
+          "runtime contract snapshot must contain each required input exactly once",
+          InputPaths.length,
+          snapshot.Files.length
+        )
+      ]
     }
   }
 
@@ -197,63 +213,86 @@ export function ValidateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation {
   checks.push(Pass("RUNTIME_MATRIX_FORMAT"))
 
   if (!LaneSetIsExact(matrix.Lanes)) {
-    checks.push(Fail(
-      "RUNTIME_LANE_SET",
-      "runtime lane ids must be complete, unique, and exact",
-      ExpectedLanes.length,
-      matrix.Lanes.length
-    ))
+    checks.push(
+      Fail(
+        "RUNTIME_LANE_SET",
+        "runtime lane ids must be complete, unique, and exact",
+        ExpectedLanes.length,
+        matrix.Lanes.length
+      )
+    )
     return { SubjectsChecked: matrix.Lanes.length, Checks: checks }
   }
   checks.push(Pass("RUNTIME_LANE_SET", ExpectedLanes.length, matrix.Lanes.length))
 
   const packageContract = ParsePackage(files.get("package.json") as SnapshotFile)
   if (packageContract === null) {
-    checks.push(Fail("RUNTIME_PACKAGE_FORMAT", "package.json must contain a devDependencies object"))
+    checks.push(
+      Fail("RUNTIME_PACKAGE_FORMAT", "package.json must contain a devDependencies object")
+    )
     return { SubjectsChecked: matrix.Lanes.length, Checks: checks }
   }
 
   const typeScriptActual = `${RenderDiagnosticValue(matrix.TypeScript)} / ${RenderDiagnosticValue(packageContract.TypeScript)}`
-  const typeScriptExact = matrix.TypeScript === ExpectedTypeScript
-    && packageContract.TypeScript === ExpectedTypeScript
-  checks.push(typeScriptExact
-    ? Pass("RUNTIME_TYPESCRIPT_EXACT", `${ExpectedTypeScript} / ${ExpectedTypeScript}`, typeScriptActual)
-    : Fail(
-        "RUNTIME_TYPESCRIPT_EXACT",
-        "runtime matrix and root TypeScript dependency must be exact",
-        `${ExpectedTypeScript} / ${ExpectedTypeScript}`,
-        typeScriptActual
-      ))
+  const typeScriptExact =
+    matrix.TypeScript === ExpectedTypeScript && packageContract.TypeScript === ExpectedTypeScript
+  checks.push(
+    typeScriptExact
+      ? Pass(
+          "RUNTIME_TYPESCRIPT_EXACT",
+          `${ExpectedTypeScript} / ${ExpectedTypeScript}`,
+          typeScriptActual
+        )
+      : Fail(
+          "RUNTIME_TYPESCRIPT_EXACT",
+          "runtime matrix and root TypeScript dependency must be exact",
+          `${ExpectedTypeScript} / ${ExpectedTypeScript}`,
+          typeScriptActual
+        )
+  )
   checks.push(Pass("RUNTIME_PACKAGE_FORMAT"))
 
-  checks.push(packageContract.PackageManager === ExpectedPackageManager
-    ? Pass("RUNTIME_PACKAGE_MANAGER_EXACT", ExpectedPackageManager, ExpectedPackageManager)
-    : Fail(
-        "RUNTIME_PACKAGE_MANAGER_EXACT",
-        "root packageManager must pin the exact Bun version",
-        ExpectedPackageManager,
-        RenderDiagnosticValue(packageContract.PackageManager)
-      ))
+  checks.push(
+    packageContract.PackageManager === ExpectedPackageManager
+      ? Pass("RUNTIME_PACKAGE_MANAGER_EXACT", ExpectedPackageManager, ExpectedPackageManager)
+      : Fail(
+          "RUNTIME_PACKAGE_MANAGER_EXACT",
+          "root packageManager must pin the exact Bun version",
+          ExpectedPackageManager,
+          RenderDiagnosticValue(packageContract.PackageManager)
+        )
+  )
 
   const contextAdr = Decode(files.get("docs/adr/0001-kernel-public-api.md") as SnapshotFile)
-  checks.push(contextAdr.includes(ContextContractMarker)
-    ? Pass("RUNTIME_ADR_CONTEXT_CONTRACT")
-    : Fail("RUNTIME_ADR_CONTEXT_CONTRACT", "ADR 0001 is missing the frozen Context contract marker"))
-  const coverageAdr = Decode(files.get("docs/adr/0002-build-runtime-and-coverage.md") as SnapshotFile)
-  checks.push(coverageAdr.includes(CoverageContractMarker)
-    ? Pass("RUNTIME_ADR_COVERAGE_CONTRACT")
-    : Fail("RUNTIME_ADR_COVERAGE_CONTRACT", "ADR 0002 is missing the branch authority marker"))
+  checks.push(
+    contextAdr.includes(ContextContractMarker)
+      ? Pass("RUNTIME_ADR_CONTEXT_CONTRACT")
+      : Fail(
+          "RUNTIME_ADR_CONTEXT_CONTRACT",
+          "ADR 0001 is missing the frozen Context contract marker"
+        )
+  )
+  const coverageAdr = Decode(
+    files.get("docs/adr/0002-build-runtime-and-coverage.md") as SnapshotFile
+  )
+  checks.push(
+    coverageAdr.includes(CoverageContractMarker)
+      ? Pass("RUNTIME_ADR_COVERAGE_CONTRACT")
+      : Fail("RUNTIME_ADR_COVERAGE_CONTRACT", "ADR 0002 is missing the branch authority marker")
+  )
 
   for (const expected of ExpectedLanes) {
     const actual = matrix.Lanes.find((lane) => lane.Id === expected.Id) as RuntimeLane
-    checks.push(LaneMatches(actual, expected)
-      ? Pass(LaneCheckId(expected.Id), JSON.stringify(expected), JSON.stringify(actual))
-      : Fail(
-          LaneCheckId(expected.Id),
-          "runtime, channel, version, and image tag must match the frozen lane",
-          JSON.stringify(expected),
-          JSON.stringify(actual)
-        ))
+    checks.push(
+      LaneMatches(actual, expected)
+        ? Pass(LaneCheckId(expected.Id), JSON.stringify(expected), JSON.stringify(actual))
+        : Fail(
+            LaneCheckId(expected.Id),
+            "runtime, channel, version, and image tag must match the frozen lane",
+            JSON.stringify(expected),
+            JSON.stringify(actual)
+          )
+    )
   }
 
   return { SubjectsChecked: matrix.Lanes.length, Checks: checks }

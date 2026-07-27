@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/registry",
+  "version": "0.0.1",
+  "description": "Portable service registration, discovery, watcher, and selector contracts for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./provider": "./src/provider.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native && bun run typecheck:published",
+    "test": "bun test --isolate --no-orphans --path-ignore-patterns=consul --path-ignore-patterns=etcd --path-ignore-patterns=kubernetes --path-ignore-patterns=mdns --path-ignore-patterns=zookeeper test/conformance.test.ts test/errors.test.ts test/options.test.ts test/package-contract.test.ts test/public-api.test.ts test/selector.test.ts test/snapshot.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans --path-ignore-patterns=consul --path-ignore-patterns=etcd --path-ignore-patterns=kubernetes --path-ignore-patterns=mdns --path-ignore-patterns=zookeeper test/conformance.test.ts test/errors.test.ts test/options.test.ts test/package-contract.test.ts test/public-api.test.ts test/selector.test.ts test/snapshot.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "typecheck:published": "tsc -p tsconfig.published.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/metadata": "0.0.1"
+  },
+  "license": "MIT"
+}

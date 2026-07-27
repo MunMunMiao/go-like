@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/web",
+  "resources": [
+    {
+      "id": "node-server",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

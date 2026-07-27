@@ -1,3 +1,3 @@
-import { value } from "./value.js"
+import { value } from "./value"
 
 export const result = value

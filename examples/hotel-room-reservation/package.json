@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-hotel-room-reservation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run --cwd ../.. build:packages && bun run start:prepared",
+    "start:prepared": "bun build src/main.ts --target=node --outfile=.artifacts/main.mjs && node .artifacts/main.mjs",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test": "bun test --isolate --no-orphans test",
+    "test:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*",
+    "@likego/health": "workspace:*",
+    "@likego/web": "workspace:*"
+  },
+  "license": "MIT"
+}

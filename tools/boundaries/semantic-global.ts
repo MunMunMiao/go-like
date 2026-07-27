@@ -1,15 +1,5 @@
-import {
-  dirname,
-  isAbsolute,
-  normalize,
-  relative,
-  resolve,
-  sep
-} from "node:path"
-import type {
-  Project,
-  Symbol as TypeScriptSymbol
-} from "typescript/unstable/async"
+import { dirname, isAbsolute, normalize, relative, resolve, sep } from "node:path"
+import type { Project, Symbol as TypeScriptSymbol } from "typescript/unstable/async"
 import {
   CharacterCodes,
   ModifierFlags,
@@ -39,7 +29,7 @@ import {
   type ShorthandPropertyAssignment,
   type SourceFile
 } from "typescript/unstable/ast"
-import type { BoundaryIssue } from "./module-syntax.ts"
+import type { BoundaryIssue } from "./module-syntax"
 
 export interface GlobalPolicy {
   readonly AllowedFreeGlobals: readonly string[]
@@ -103,7 +93,10 @@ function IsCanonicalAbsolutePath(path: string): boolean {
   return isAbsolute(path) && normalize(path) === path && resolve(path) === path
 }
 
-function AdmitSources(project: Project, sourceFiles: readonly SourceFile[]): {
+function AdmitSources(
+  project: Project,
+  sourceFiles: readonly SourceFile[]
+): {
   readonly PackageRoot: string
   readonly Sources: readonly AdmittedSource[]
 } {
@@ -120,10 +113,10 @@ function AdmitSources(project: Project, sourceFiles: readonly SourceFile[]): {
     const pathFromPackage = relative(packageRoot, sourceFile.fileName)
     const parts = pathFromPackage.split(sep)
     if (
-      pathFromPackage.length === 0
-      || isAbsolute(pathFromPackage)
-      || parts[0] !== "src"
-      || parts.some((part) => part.length === 0 || part === "." || part === "..")
+      pathFromPackage.length === 0 ||
+      isAbsolute(pathFromPackage) ||
+      parts[0] !== "src" ||
+      parts.some((part) => part.length === 0 || part === "." || part === "..")
     ) {
       throw new Error("semantic global source must be a package-relative src child")
     }
@@ -136,11 +129,11 @@ function AdmitSources(project: Project, sourceFiles: readonly SourceFile[]): {
 
 function HasAmbientMarker(node: Node): boolean {
   const fields = node as Node & NodeFields
-  return (node.flags & NodeFlags.Ambient) !== 0
-    || (
-      typeof fields.modifierFlags === "number"
-      && (fields.modifierFlags & ModifierFlags.Ambient) !== 0
-    )
+  return (
+    (node.flags & NodeFlags.Ambient) !== 0 ||
+    (typeof fields.modifierFlags === "number" &&
+      (fields.modifierFlags & ModifierFlags.Ambient) !== 0)
+  )
 }
 
 function IsWithinAmbientDeclaration(node: Node, sourceFile: SourceFile): boolean {
@@ -156,38 +149,41 @@ function IsWithinAmbientDeclaration(node: Node, sourceFile: SourceFile): boolean
 function IsRuntimeClassExtends(node: Node): boolean {
   if (!isExpressionWithTypeArguments(node)) return false
   const heritage = node.parent
-  return isHeritageClause(heritage)
-    && heritage.token === SyntaxKind.ExtendsKeyword
-    && isClassLikeDeclaration(heritage.parent)
+  return (
+    isHeritageClause(heritage) &&
+    heritage.token === SyntaxKind.ExtendsKeyword &&
+    isClassLikeDeclaration(heritage.parent)
+  )
 }
 
 function ShorthandFor(identifier: Identifier): ShorthandPropertyAssignment | null {
   const parent = identifier.parent
   if (
-    isShorthandPropertyAssignment(parent)
-    && (parent as unknown as NodeFields).name === identifier
-  ) return parent
+    isShorthandPropertyAssignment(parent) &&
+    (parent as unknown as NodeFields).name === identifier
+  )
+    return parent
   return null
 }
 
 function IsJsxIntrinsic(identifier: Identifier): boolean {
   const parent = identifier.parent as Node & NodeFields
   const first = identifier.text.charCodeAt(0)
-  return parent.tagName === identifier
-    && (
-      (first >= CharacterCodes.a && first <= CharacterCodes.z)
-      || identifier.text.includes("-")
-    )
+  return (
+    parent.tagName === identifier &&
+    ((first >= CharacterCodes.a && first <= CharacterCodes.z) || identifier.text.includes("-"))
+  )
 }
 
 function IsExcludedIdentifier(identifier: Identifier): boolean {
   const parent = identifier.parent as Node & NodeFields
   if (ShorthandFor(identifier) !== null) return false
   if (
-    parent.name === identifier
-    || parent.propertyName === identifier
-    || parent.label === identifier
-  ) return true
+    parent.name === identifier ||
+    parent.propertyName === identifier ||
+    parent.label === identifier
+  )
+    return true
   return IsJsxIntrinsic(identifier)
 }
 
@@ -197,27 +193,31 @@ function ScanTypeScriptDirectives(sourceFile: SourceFile, Path: string): Boundar
   let token = scanner.scan()
   while (token !== SyntaxKind.EndOfFile) {
     if (
-      token === SyntaxKind.SingleLineCommentTrivia
-      || token === SyntaxKind.MultiLineCommentTrivia
+      token === SyntaxKind.SingleLineCommentTrivia ||
+      token === SyntaxKind.MultiLineCommentTrivia
     ) {
       const text = scanner.getTokenText()
       if (NoCheckSingleLine.test(text) || NoCheckMultiLine.test(text)) {
-        issues.push(Issue(
-          "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
-          Path,
-          "TypeScript @ts-nocheck directive is forbidden"
-        ))
+        issues.push(
+          Issue(
+            "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
+            Path,
+            "TypeScript @ts-nocheck directive is forbidden"
+          )
+        )
       }
     }
     token = scanner.scan()
   }
   for (const directive of scanner.getCommentDirectives() ?? []) {
     void directive
-    issues.push(Issue(
-      "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
-      Path,
-      "TypeScript suppression directive is forbidden"
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_TYPESCRIPT_DIRECTIVE_FORBIDDEN",
+        Path,
+        "TypeScript suppression directive is forbidden"
+      )
+    )
   }
   return issues
 }
@@ -230,38 +230,37 @@ function CollectSource(
   const sourceFile = admitted.SourceFile
   const Path = admitted.Path
   if (sourceFile.isDeclarationFile) {
-    issues.push(Issue(
-      "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
-      Path,
-      "declaration-file ambient authority is forbidden"
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
+        Path,
+        "declaration-file ambient authority is forbidden"
+      )
+    )
     return
   }
 
   for (const reference of sourceFile.typeReferenceDirectives) {
-    issues.push(Issue(
-      "GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN",
-      Path,
-      "triple-slash types reference is forbidden: " + reference.fileName
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_TYPE_REFERENCE_DIRECTIVE_FORBIDDEN",
+        Path,
+        "triple-slash types reference is forbidden: " + reference.fileName
+      )
+    )
   }
   issues.push(...ScanTypeScriptDirectives(sourceFile, Path))
 
   function Visit(node: Node): void {
     if (HasAmbientMarker(node)) {
-      issues.push(Issue(
-        "GLOBAL_AMBIENT_DECLARATION_FORBIDDEN",
-        Path,
-        "ambient declaration is forbidden"
-      ))
+      issues.push(
+        Issue("GLOBAL_AMBIENT_DECLARATION_FORBIDDEN", Path, "ambient declaration is forbidden")
+      )
       return
     }
     if (isJSDocNodeKind(node.kind) || (node.flags & NodeFlags.JSDoc) !== 0) return
-    if (
-      isImportDeclaration(node)
-      || isImportEqualsDeclaration(node)
-      || isExportDeclaration(node)
-    ) return
+    if (isImportDeclaration(node) || isImportEqualsDeclaration(node) || isExportDeclaration(node))
+      return
     if (isExpressionWithTypeArguments(node)) {
       if (IsRuntimeClassExtends(node)) Visit(node.expression)
       return
@@ -323,7 +322,10 @@ async function ClassifySymbol(
   const kinds = new Set<SymbolClassification>()
   for (const handle of symbol.declarations) {
     const declaration = await handle.resolve(context.Project)
-    if (declaration === undefined) { kinds.add("unresolved"); continue }
+    if (declaration === undefined) {
+      kinds.add("unresolved")
+      continue
+    }
     const sourceFile = declaration.getSourceFile()
     if (await SourceDefaultLibrary(sourceFile, context)) {
       kinds.add("default-library")
@@ -331,9 +333,11 @@ async function ClassifySymbol(
     }
     const kind: SymbolClassification = IsWithinAmbientDeclaration(declaration, sourceFile)
       ? "ambient"
-      : await SourceExternalLibrary(sourceFile, context)
+      : (await SourceExternalLibrary(sourceFile, context))
         ? "external"
-        : context.AdmittedFiles.has(sourceFile.fileName) ? "local" : "unresolved"
+        : context.AdmittedFiles.has(sourceFile.fileName)
+          ? "local"
+          : "unresolved"
     kinds.add(kind)
   }
   if (kinds.size !== 1) return "mixed"
@@ -342,12 +346,13 @@ async function ClassifySymbol(
 
 function IsWrapper(parent: Node, child: Node): boolean {
   return (
-    isParenthesizedExpression(parent)
-    || isAsExpression(parent)
-    || isSatisfiesExpression(parent)
-    || isNonNullExpression(parent)
-    || isTypeAssertion(parent)
-  ) && parent.expression === child
+    (isParenthesizedExpression(parent) ||
+      isAsExpression(parent) ||
+      isSatisfiesExpression(parent) ||
+      isNonNullExpression(parent) ||
+      isTypeAssertion(parent)) &&
+    parent.expression === child
+  )
 }
 
 function PeelParentWrappers(node: Node): Node {
@@ -359,21 +364,18 @@ function PeelParentWrappers(node: Node): Node {
 function PeelExpressionWrappers(node: Node): Node {
   let current = node
   while (
-    isParenthesizedExpression(current)
-    || isAsExpression(current)
-    || isSatisfiesExpression(current)
-    || isNonNullExpression(current)
-    || isTypeAssertion(current)
-  ) current = current.expression
+    isParenthesizedExpression(current) ||
+    isAsExpression(current) ||
+    isSatisfiesExpression(current) ||
+    isNonNullExpression(current) ||
+    isTypeAssertion(current)
+  )
+    current = current.expression
   return current
 }
 
 function EscapeIssue(Path: string): BoundaryIssue {
-  return Issue(
-    "GLOBAL_THIS_ESCAPE_FORBIDDEN",
-    Path,
-    "globalThis may not be aliased or escaped"
-  )
+  return Issue("GLOBAL_THIS_ESCAPE_FORBIDDEN", Path, "globalThis may not be aliased or escaped")
 }
 
 function QueueGlobalThisProperty(
@@ -383,10 +385,11 @@ function QueueGlobalThisProperty(
 ): void {
   const origin = PeelParentWrappers(candidate.Identifier)
   const parent = origin.parent
-  const access = (
-    isPropertyAccessExpression(parent)
-    || isElementAccessExpression(parent)
-  ) && parent.expression === origin ? parent : null
+  const access =
+    (isPropertyAccessExpression(parent) || isElementAccessExpression(parent)) &&
+    parent.expression === origin
+      ? parent
+      : null
   if (access === null) {
     issues.push(EscapeIssue(candidate.Path))
     return
@@ -394,11 +397,13 @@ function QueueGlobalThisProperty(
   if (isPropertyAccessExpression(access)) {
     const Name = access.name.text
     if (Name === "eval" || Name === "Function") {
-      issues.push(Issue(
-        "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
-        candidate.Path,
-        "dynamic code globalThis property is forbidden: " + Name
-      ))
+      issues.push(
+        Issue(
+          "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
+          candidate.Path,
+          "dynamic code globalThis property is forbidden: " + Name
+        )
+      )
       return
     }
     pending.push({
@@ -411,20 +416,24 @@ function QueueGlobalThisProperty(
   }
   const selector = PeelExpressionWrappers(access.argumentExpression)
   if (!isStringLiteral(selector)) {
-    issues.push(Issue(
-      "GLOBAL_THIS_COMPUTED_ACCESS_FORBIDDEN",
-      candidate.Path,
-      "globalThis computed access must use one string literal"
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_THIS_COMPUTED_ACCESS_FORBIDDEN",
+        candidate.Path,
+        "globalThis computed access must use one string literal"
+      )
+    )
     return
   }
   const Name = selector.text
   if (Name === "eval" || Name === "Function") {
-    issues.push(Issue(
-      "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
-      candidate.Path,
-      "dynamic code globalThis property is forbidden: " + Name
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
+        candidate.Path,
+        "dynamic code globalThis property is forbidden: " + Name
+      )
+    )
     return
   }
   pending.push({
@@ -436,12 +445,14 @@ function QueueGlobalThisProperty(
 }
 
 function CompareIssues(left: BoundaryIssue, right: BoundaryIssue): number {
-  return CompareCodeUnits(left.Code, right.Code)
-    || CompareCodeUnits(left.Path, right.Path)
-    || CompareCodeUnits(left.Message, right.Message)
+  return (
+    CompareCodeUnits(left.Code, right.Code) ||
+    CompareCodeUnits(left.Path, right.Path) ||
+    CompareCodeUnits(left.Message, right.Message)
+  )
 }
 
-export async function CheckSemanticGlobals(
+export async function checkSemanticGlobals(
   project: Project,
   sourceFiles: readonly SourceFile[],
   policy: GlobalPolicy
@@ -452,14 +463,17 @@ export async function CheckSemanticGlobals(
   for (const source of admitted.Sources) CollectSource(source, candidates, issues)
 
   const checker = project.checker
-  const ordinarySymbols = candidates.length === 0
-    ? []
-    : await checker.getSymbolAtLocation(candidates.map((candidate) => candidate.Identifier))
-  const symbols = await Promise.all(candidates.map(async (candidate, index) => (
-    candidate.Shorthand === null
-      ? ordinarySymbols[index]
-      : await checker.getShorthandAssignmentValueSymbol(candidate.Shorthand)
-  )))
+  const ordinarySymbols =
+    candidates.length === 0
+      ? []
+      : await checker.getSymbolAtLocation(candidates.map((candidate) => candidate.Identifier))
+  const symbols = await Promise.all(
+    candidates.map(async (candidate, index) =>
+      candidate.Shorthand === null
+        ? ordinarySymbols[index]
+        : await checker.getShorthandAssignmentValueSymbol(candidate.Shorthand)
+    )
+  )
   const context: ClassificationContext = {
     Project: project,
     AdmittedFiles: new Set(admitted.Sources.map((source) => source.SourceFile.fileName)),
@@ -491,25 +505,31 @@ export async function CheckSemanticGlobals(
     }
     if (classification === "default-library" || classification === "standard-intrinsic") {
       if (name === "eval" || name === "Function") {
-        issues.push(Issue(
-          "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
-          candidate.Path,
-          "dynamic code global is forbidden: " + name
-        ))
+        issues.push(
+          Issue(
+            "GLOBAL_DYNAMIC_CODE_FORBIDDEN",
+            candidate.Path,
+            "dynamic code global is forbidden: " + name
+          )
+        )
       } else if (!allowed.has(name)) {
-        issues.push(Issue(
-          "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
-          candidate.Path,
-          "free global identifier is forbidden: " + name
-        ))
+        issues.push(
+          Issue(
+            "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
+            candidate.Path,
+            "free global identifier is forbidden: " + name
+          )
+        )
       }
       continue
     }
-    issues.push(Issue(
-      "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
-      candidate.Path,
-      "free global identifier is forbidden: " + name
-    ))
+    issues.push(
+      Issue(
+        "GLOBAL_FREE_IDENTIFIER_FORBIDDEN",
+        candidate.Path,
+        "free global identifier is forbidden: " + name
+      )
+    )
   }
 
   if (pending.length > 0) {
@@ -523,11 +543,13 @@ export async function CheckSemanticGlobals(
       const receiverTypes = await checker.getTypeAtLocation(
         missing.map(({ property }) => property.Receiver)
       )
-      const fallbackSymbols = await Promise.all(missing.map(async ({ property }, index) => (
-        receiverTypes[index] === undefined
-          ? undefined
-          : checker.getPropertyOfType(receiverTypes[index]!, property.Name)
-      )))
+      const fallbackSymbols = await Promise.all(
+        missing.map(async ({ property }, index) =>
+          receiverTypes[index] === undefined
+            ? undefined
+            : checker.getPropertyOfType(receiverTypes[index]!, property.Name)
+        )
+      )
       for (let index = 0; index < missing.length; index += 1) {
         selectorSymbols[missing[index]!.index] = fallbackSymbols[index]
       }
@@ -538,17 +560,17 @@ export async function CheckSemanticGlobals(
     for (let index = 0; index < pending.length; index += 1) {
       const property = pending[index]!
       if (
-        !allowed.has(property.Name)
-        || (
-          selectorClassifications[index] !== "default-library"
-          && selectorClassifications[index] !== "standard-intrinsic"
-        )
+        !allowed.has(property.Name) ||
+        (selectorClassifications[index] !== "default-library" &&
+          selectorClassifications[index] !== "standard-intrinsic")
       ) {
-        issues.push(Issue(
-          "GLOBAL_THIS_PROPERTY_FORBIDDEN",
-          property.Path,
-          "globalThis property is forbidden or unproven: " + property.Name
-        ))
+        issues.push(
+          Issue(
+            "GLOBAL_THIS_PROPERTY_FORBIDDEN",
+            property.Path,
+            "globalThis property is forbidden or unproven: " + property.Name
+          )
+        )
       }
     }
   }

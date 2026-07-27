@@ -1,10 +1,12 @@
 # LikeGo Pre-kernel Verification Gates Implementation Plan
 
+> 历史记录：本计划已由 `2026-07-19-likego-package-transport-web.md` 取代，仅保留为实现证据；其中 TypeScript 运行时值标识符已同步为当前 `camelCase` 约定。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 `@likego/context` 生产代码出现前，建立可机器审计、无空跑成功、可复现的 Context/runtime 契约、manifest、portable boundary、distribution、coverage 与 exact-runtime branch 自检门禁。
 
-**Architecture:** 所有 gate 共享一个 fail-closed result protocol。每次运行先把完整输入 inventory 固化为同一份内容 snapshot，再由 evaluator 消费该 snapshot；status、readiness、result path 与退出码只有 `RunGate` 一个权威。Fixture gate 只验证门禁本身，repository package-admission gate 在真实 package/source 为零时失败；Node/Deno branch 只用 exact-digest Docker 内的原生 coverage。
+**Architecture:** 所有 gate 共享一个 fail-closed result protocol。每次运行先把完整输入 inventory 固化为同一份内容 snapshot，再由 evaluator 消费该 snapshot；status、readiness、result path 与退出码只有 `runGate` 一个权威。Fixture gate 只验证门禁本身，repository package-admission gate 在真实 package/source 为零时失败；Node/Deno branch 只用 exact-digest Docker 内的原生 coverage。
 
 **Tech Stack:** Bun `1.3.14`、`@types/bun` `1.3.14`、TypeScript `7.0.2` async API、Ajv `8.20.0`、JSON Schema 2020-12、Node `24.18.0` / `26.5.0` native test coverage、Deno `2.9.3` native coverage、Docker Compose。
 
@@ -133,12 +135,12 @@ export interface GateResult {
   readonly artifacts: readonly { readonly kind: string; readonly path: string; readonly sha256: string }[]
 }
 
-export async function SnapshotInputs(
+export async function snapshotInputs(
   root: string,
   paths: readonly string[],
 ): Promise<{ readonly Snapshot: InputSnapshot | null; readonly Checks: readonly GateCheck[] }>
 
-export async function RunGate(
+export async function runGate(
   options: {
     readonly root: string
     readonly gate: string
@@ -152,7 +154,7 @@ export async function RunGate(
   evaluate: (snapshot: InputSnapshot) => Promise<GateEvaluation>,
 ): Promise<GateResult>
 
-export async function EmitGateResult(root: string, result: GateResult): Promise<string>
+export async function emitGateResult(root: string, result: GateResult): Promise<string>
 ```
 
 - [ ] **Step 0: Establish the declared test dependency**
@@ -189,9 +191,9 @@ Expected RED: module-not-found for `tools/gates/result.ts`; Ajv/schema/toolchain
 
 - [ ] **Step 2: Implement snapshot and single-authority derivation**
 
-`SnapshotInputs` must realpath the root and each regular input exactly once; reject missing paths, directories, lexical root escape, realpath/symlink escape, duplicate canonical lexical paths and duplicate real paths. It sorts canonical `/`-separated paths and hashes `path + NUL + fileSha256 + LF`. Bytes stored in `SnapshotFile` are the only bytes evaluator may parse.
+`snapshotInputs` must realpath the root and each regular input exactly once; reject missing paths, directories, lexical root escape, realpath/symlink escape, duplicate canonical lexical paths and duplicate real paths. It sorts canonical `/`-separated paths and hashes `path + NUL + fileSha256 + LF`. Bytes stored in `SnapshotFile` are the only bytes evaluator may parse.
 
-`RunGate` is the sole status/readiness authority:
+`runGate` is the sole status/readiness authority:
 
 - derive fail iff any check fails or a stage creates a failed check;
 - pass requires `subjects.checked > 0`, at least one pass check, no fail check, and exact expected/checked equality when expected is non-null;
@@ -242,7 +244,7 @@ Set exact project selectors:
 }
 ```
 
-Preserve existing compiler options. CLI modules export a testable `Main` and guard side effects with `import.meta.main` so root tests can cover them.
+Preserve existing compiler options. CLI modules export a testable `main` and guard side effects with `import.meta.main` so root tests can cover them.
 
 Delete the existing top-level `files` key from both tsconfig files; the shown `include`/`exclude` arrays are the complete source selectors, not additions to the old explicit file list.
 
@@ -286,7 +288,7 @@ export interface RuntimeMatrix {
   readonly TypeScript: "7.0.2"
   readonly Lanes: readonly RuntimeLane[]
 }
-export function ValidateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation
+export function validateRuntimeMatrix(snapshot: InputSnapshot): GateEvaluation
 ```
 
 Exact lanes: Bun `1.3.14`; Node LTS `24.18.0`; Node current `26.5.0`; Deno `2.9.3`. Exact tags: `oven/bun:1.3.14`, `node:24.18.0-bookworm-slim`, `node:26.5.0-bookworm-slim`, `denoland/deno:2.9.3`. No digest is recorded in this task.
@@ -350,14 +352,14 @@ export interface CorpusEvaluation {
   readonly SubjectsChecked: number
   readonly Checks: readonly GateCheck[]
 }
-export function EvaluateFixtureCorpus(
+export function evaluateFixtureCorpus(
   snapshot: InputSnapshot,
   familyRoot: string,
   validate: (caseFiles: readonly SnapshotFile[]) => readonly ManifestIssue[],
 ): CorpusEvaluation
-export function FindBunDiscoveredFixturePaths(root: string): Promise<readonly string[]>
-export function ValidateOfficialPackage(files: readonly SnapshotFile[]): readonly ManifestIssue[]
-export function CheckOfficialManifests(snapshot: InputSnapshot): GateEvaluation
+export function findBunDiscoveredFixturePaths(root: string): Promise<readonly string[]>
+export function validateOfficialPackage(files: readonly SnapshotFile[]): readonly ManifestIssue[]
+export function checkOfficialManifests(snapshot: InputSnapshot): GateEvaluation
 ```
 
 - [ ] **Step 1: Write `cases.json`, schemas and RED tests**
@@ -370,7 +372,7 @@ The same test file recursively scans every current/future payload under `tools/*
 
 - [ ] **Step 2: Implement exact corpus meta-semantics**
 
-`EvaluateFixtureCorpus` consumes listed snapshot files only. Actual negative codes are sorted and compared as a multiset; exact match produces a passing `FIXTURE_CASE_MATCH` check. Any inventory or code mismatch produces `FIXTURE_INVENTORY_MISMATCH`. PASS requires expected equals checked and both greater than zero.
+`evaluateFixtureCorpus` consumes listed snapshot files only. Actual negative codes are sorted and compared as a multiset; exact match produces a passing `FIXTURE_CASE_MATCH` check. Any inventory or code mismatch produces `FIXTURE_INVENTORY_MISMATCH`. PASS requires expected equals checked and both greater than zero.
 
 - [ ] **Step 3: Implement manifest cross-field rules**
 
@@ -414,12 +416,12 @@ export interface SessionIssue {
   readonly Path: string
   readonly Message: string
 }
-export async function WithProjectSession<T>(
+export async function withProjectSession<T>(
   snapshot: InputSnapshot,
   projectPrefix: string,
   use: (session: ProjectSession) => Promise<T>,
 ): Promise<T>
-export async function AnalyzeProjectSession(
+export async function analyzeProjectSession(
   snapshot: InputSnapshot,
   projectPrefix: string,
 ): Promise<{ readonly SourceFilesChecked: number; readonly Issues: readonly SessionIssue[] }>
@@ -463,7 +465,7 @@ export interface ModulePolicy {
   readonly PackageRoot: string
   readonly AllowedWorkspaceDependencies: readonly string[]
 }
-export function CheckModuleSyntax(
+export function checkModuleSyntax(
   sourceFiles: readonly import("typescript/unstable/ast").SourceFile[],
   policy: ModulePolicy,
 ): readonly BoundaryIssue[]
@@ -500,7 +502,7 @@ Gate id `boundary-module-syntax-fixtures`, evaluation-only. Input includes cases
 export interface GlobalPolicy {
   readonly AllowedFreeGlobals: readonly string[]
 }
-export async function CheckSemanticGlobals(
+export async function checkSemanticGlobals(
   project: import("typescript/unstable/async").Project,
   sourceFiles: readonly import("typescript/unstable/ast").SourceFile[],
   policy: GlobalPolicy,
@@ -562,7 +564,7 @@ Fixture mode input inventory is policy plus all three family `cases.json` and ev
 
 - [ ] **Step 3: Implement one-snapshot repository admission**
 
-Discovery builds an input path list containing policy, every discovered portable package `package.json`, self-contained tsconfig and every entry below `src`; non-regular entries and regular non-`.ts` payloads fail instead of being silently skipped. `RunGate` snapshots the discovered file set once. Harden snapshot input admission to reject stable lexical or parent symlinks. Evaluator materializes only those bytes and uses explicit-root workspace project sessions without another glob/read.
+Discovery builds an input path list containing policy, every discovered portable package `package.json`, self-contained tsconfig and every entry below `src`; non-regular entries and regular non-`.ts` payloads fail instead of being silently skipped. `runGate` snapshots the discovered file set once. Harden snapshot input admission to reject stable lexical or parent symlinks. Evaluator materializes only those bytes and uses explicit-root workspace project sessions without another glob/read.
 
 The Task 4 extension stages the target plus its exact dependency closure, validates all program source authority, but returns/counts only target `src`. It preserves every old isolated-session API. Package configs forbid external config/type/plugin authority and have exact non-wildcard `paths` mappings from every closure package name to that package's snapshotted `src/index.ts`. Reject undeclared/third-party/self/unknown/duplicate/cyclic dependencies and misdirected paths before TS analysis.
 
@@ -731,7 +733,7 @@ Exclusions are exact paths with non-empty reason; stale paths fail. Bun machine 
 - `--tools --lcov coverage/lcov.info`: inventory every non-test `scripts/**/*.ts` and `tools/**/*.ts`, excluding fixture payload and only ADR-permitted generated/declaration/static-barrel paths; evaluation-only;
 - repository `--lcov <per-package-lcov>`: inventories `packages/*/src/**/*.ts` / `adapters/*/src/**/*.ts`; package-admission, zero production source fails `COVERAGE_SOURCE_ZERO`.
 
-For tool mode, every CLI must be importable/testable through `Main` so its lines enter root LCOV; exclusions cannot hide ordinary implementation or CLI wrappers. Refactor the existing workspace CLI behind an `import.meta.main` guard and injectable/testable `Main`, preserve its subprocess behavior, and cover both success/failure paths so `scripts/verify-workspace.cli.ts` joins the real LCOV inventory. The gate rejects zero tooling sources, missing/extra SF records and any stale exclusion.
+For tool mode, every CLI must be importable/testable through `main` so its lines enter root LCOV; exclusions cannot hide ordinary implementation or CLI wrappers. Refactor the existing workspace CLI behind an `import.meta.main` guard and injectable/testable `main`, preserve its subprocess behavior, and cover both success/failure paths so `scripts/verify-workspace.cli.ts` joins the real LCOV inventory. The gate rejects zero tooling sources, missing/extra SF records and any stale exclusion.
 
 - [ ] **Step 4: Verify actual Bun inventory and commit**
 

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/nats",
+  "resources": [
+    {
+      "id": "broker-subscription",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "consumer-messages",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "jetstream-broker-subscription",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    },
+    {
+      "id": "subscription",
+      "owner": "application-owned",
+      "exposure": "native-borrowed",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

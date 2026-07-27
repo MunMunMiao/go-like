@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/cache-redis",
+  "resources": [
+    {
+      "id": "redis-client",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout
-} from "../gates/result.ts"
-import { ValidateRuntimeMatrix } from "./runtime-manifest.ts"
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout
+} from "../gates/result"
+import { validateRuntimeMatrix } from "./runtime-manifest"
 
 export interface RuntimeManifestIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -26,8 +26,8 @@ const InputPaths = [
   "deno.json"
 ] as const
 const DefaultIO: RuntimeManifestIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function ParseArguments(args: readonly string[]): ParsedArguments | null {
@@ -37,7 +37,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (name === undefined || value === undefined || value.length === 0 || seen.has(name)) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--root") {
       Root = value
@@ -62,7 +63,7 @@ function ErrorMessage(error: unknown): string {
   }
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: RuntimeManifestIO = DefaultIO
 ): Promise<number> {
@@ -72,20 +73,23 @@ export async function Main(
     return 1
   }
 
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: "runtime-contract",
-    mode: "repository",
-    readinessPolicy: "evaluation-only",
-    expectedSubjects: 4,
-    inputPaths: InputPaths,
-    toolchain: { bun: Bun.version, typescript: "7.0.2" },
-    ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
-  }, async (snapshot) => ValidateRuntimeMatrix(snapshot))
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: "runtime-contract",
+      mode: "repository",
+      readinessPolicy: "evaluation-only",
+      expectedSubjects: 4,
+      inputPaths: InputPaths,
+      toolchain: { bun: Bun.version, typescript: "7.0.2" },
+      ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
+    },
+    async (snapshot) => validateRuntimeMatrix(snapshot)
+  )
 
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, {
-      AtomicWriterOperations: NodeAtomicWriterOperations(),
+    await emitGateResultWithDependencies(parsed.Root, result, {
+      AtomicWriterOperations: nodeAtomicWriterOperations(),
       WriteStdout: io.WriteStdout
     })
   } catch (error) {
@@ -95,4 +99,4 @@ export async function Main(
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/broker-memory",
+  "resources": [
+    {
+      "id": "memory-broker-subscription",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

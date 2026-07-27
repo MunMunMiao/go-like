@@ -3,20 +3,20 @@ import { lstat, rm, symlink } from "node:fs/promises"
 import { dirname, join, relative } from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import {
-  NodeProjectSessionOperations,
-  WithProjectSessionWithOperations,
+  nodeProjectSessionOperations,
+  withProjectSessionWithOperations,
   type ProjectSessionOperations
-} from "./project-session.ts"
+} from "./project-session"
 import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  SnapshotInputs,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  snapshotInputs,
+  writeProcessStderr,
+  writeProcessStdout,
   type InputSnapshot,
   type SnapshotFile
-} from "../gates/result.ts"
+} from "../gates/result"
 
 interface ProbeCase {
   readonly scenario: ProbeScenario
@@ -69,9 +69,7 @@ export interface ProjectSessionProbeResult {
 export interface ProjectSessionProbeExecution {
   readonly ExitCode: 0 | 7
   readonly Result: ProjectSessionProbeResult
-  readonly Failure:
-    | { readonly Thrown: false }
-    | { readonly Thrown: true; readonly Value: unknown }
+  readonly Failure: { readonly Thrown: false } | { readonly Thrown: true; readonly Value: unknown }
 }
 
 export interface ProjectSessionProbeIO {
@@ -118,8 +116,8 @@ const Scenarios = [
 ] as const
 type ProbeScenario = (typeof Scenarios)[number]
 const DefaultIO: ProjectSessionProbeIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 const NodeReadbackOperations: ProjectSessionProbeReadbackOperations = {
   Lstat: lstat
@@ -153,7 +151,8 @@ const NormalUpdate = { kind: "normal", path: "" } as const
 const DelegateCleanup = { snapshot: "delegate", api: "delegate", remove: "delegate" } as const
 const AllCleanupOrder = ["snapshot.dispose", "api.close", "remove-staging"] as const
 const FailGate = { exitCode: 1, status: "fail", checkIds: ["GATE_INTERNAL_ERROR"] } as const
-const OverlongMaterializationPath = "project/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/value.ts"
+const OverlongMaterializationPath =
+  "project/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/value.ts"
 
 function Sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex")
@@ -173,8 +172,10 @@ function HasExactKeys(value: Readonly<Record<string, unknown>>, keys: readonly s
 }
 
 function IsStringArray(value: unknown, allowed?: ReadonlySet<string>): value is readonly string[] {
-  return Array.isArray(value)
-    && value.every((item) => typeof item === "string" && (allowed === undefined || allowed.has(item)))
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "string" && (allowed === undefined || allowed.has(item)))
+  )
 }
 
 function IsProbeScenario(value: string): value is ProbeScenario {
@@ -259,7 +260,10 @@ function ExpectedActions(scenario: ProbeScenario): ProbeDescriptor["actions"] {
     })
   }
   if (scenario === "project-count-zero") {
-    return Actions("return-value", NormalStage, { kind: "project-count-zero", path: "project/missing/tsconfig.json" })
+    return Actions("return-value", NormalStage, {
+      kind: "project-count-zero",
+      path: "project/missing/tsconfig.json"
+    })
   }
   if (scenario === "project-count-multiple") {
     return Actions("return-value", NormalStage, {
@@ -301,25 +305,34 @@ function ExpectedLifecycle(scenario: ProbeScenario): ProbeDescriptor["expected"]
     return Lifecycle(7, "aggregate-error", AllCleanupOrder, ["api.close"], "absent")
   }
   if (scenario === "remove-before") {
-    return Lifecycle(7, "aggregate-error", AllCleanupOrder, ["remove-staging"], "retained-then-harness-removed")
+    return Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["remove-staging"],
+      "retained-then-harness-removed"
+    )
   }
   if (scenario === "remove-after") {
     return Lifecycle(7, "aggregate-error", AllCleanupOrder, ["remove-staging"], "absent")
   }
   if (scenario === "primary-plus-all-cleanups") {
-    return Lifecycle(7, "aggregate-error", AllCleanupOrder, [
-      "primary",
-      "snapshot.dispose",
-      "api.close",
-      "remove-staging"
-    ], "absent")
+    return Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["primary", "snapshot.dispose", "api.close", "remove-staging"],
+      "absent"
+    )
   }
   if (scenario === "value-plus-all-cleanups") {
-    return Lifecycle(7, "aggregate-error", AllCleanupOrder, [
-      "snapshot.dispose",
-      "api.close",
-      "remove-staging"
-    ], "absent")
+    return Lifecycle(
+      7,
+      "aggregate-error",
+      AllCleanupOrder,
+      ["snapshot.dispose", "api.close", "remove-staging"],
+      "absent"
+    )
   }
   return Lifecycle(7, "primary-error", AllCleanupOrder, ["primary"], "absent")
 }
@@ -346,35 +359,37 @@ function ParseJson(file: SnapshotFile): unknown {
 function ParseProbeCases(file: SnapshotFile): readonly ProbeCase[] {
   const value = ParseJson(file)
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "cases"])
-    || value.schemaVersion !== 1
-    || !Array.isArray(value.cases)
-    || value.cases.length === 0
-  ) throw new Error("probe inventory must use the fixed non-empty shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, ["schemaVersion", "cases"]) ||
+    value.schemaVersion !== 1 ||
+    !Array.isArray(value.cases) ||
+    value.cases.length === 0
+  )
+    throw new Error("probe inventory must use the fixed non-empty shape")
   const cases: { readonly scenario: string; readonly path: string }[] = []
   const scenarios = new Set<string>()
   const paths = new Set<string>()
   for (const item of value.cases) {
     if (
-      !IsRecord(item)
-      || !HasExactKeys(item, ["scenario", "path"])
-      || typeof item.scenario !== "string"
-      || !/^[a-z][a-z0-9-]*$/.test(item.scenario)
-      || typeof item.path !== "string"
-      || item.path !== `${item.scenario}.json`
-      || scenarios.has(item.scenario)
-      || paths.has(item.path)
-    ) throw new Error("probe inventory entry is invalid or duplicated")
+      !IsRecord(item) ||
+      !HasExactKeys(item, ["scenario", "path"]) ||
+      typeof item.scenario !== "string" ||
+      !/^[a-z][a-z0-9-]*$/.test(item.scenario) ||
+      typeof item.path !== "string" ||
+      item.path !== `${item.scenario}.json` ||
+      scenarios.has(item.scenario) ||
+      paths.has(item.path)
+    )
+      throw new Error("probe inventory entry is invalid or duplicated")
     scenarios.add(item.scenario)
     paths.add(item.path)
     cases.push({ scenario: item.scenario, path: item.path })
   }
-  if (
-    scenarios.size !== Scenarios.length
-    || Scenarios.some((scenario) => !scenarios.has(scenario))
-  ) throw new Error("probe inventory must contain the canonical scenario set")
-  const canonical = new Map<string, ProbeScenario>(Scenarios.map((scenario) => [scenario, scenario]))
+  if (scenarios.size !== Scenarios.length || Scenarios.some((scenario) => !scenarios.has(scenario)))
+    throw new Error("probe inventory must contain the canonical scenario set")
+  const canonical = new Map<string, ProbeScenario>(
+    Scenarios.map((scenario) => [scenario, scenario])
+  )
   return cases.map((item) => ({
     scenario: canonical.get(item.scenario) as ProbeScenario,
     path: item.path
@@ -384,32 +399,41 @@ function ParseProbeCases(file: SnapshotFile): readonly ProbeCase[] {
 function ParseProbeDescriptor(file: SnapshotFile): ProbeDescriptor {
   const value = ParseJson(file)
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "scenario", "projectPrefix", "virtualFiles", "actions", "expected"])
-    || value.schemaVersion !== 1
-    || typeof value.scenario !== "string"
-    || !/^[a-z][a-z0-9-]*$/.test(value.scenario)
-    || typeof value.projectPrefix !== "string"
-    || value.projectPrefix.length === 0
-    || !Array.isArray(value.virtualFiles)
-    || value.virtualFiles.length === 0
-    || !IsRecord(value.actions)
-    || !HasExactKeys(value.actions, ["stage", "update", "callback", "cleanup"])
-    || !IsRecord(value.expected)
-    || !HasExactKeys(value.expected, ["lifecycle", "gate"])
-  ) throw new Error("probe descriptor must use the fixed root shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, [
+      "schemaVersion",
+      "scenario",
+      "projectPrefix",
+      "virtualFiles",
+      "actions",
+      "expected"
+    ]) ||
+    value.schemaVersion !== 1 ||
+    typeof value.scenario !== "string" ||
+    !/^[a-z][a-z0-9-]*$/.test(value.scenario) ||
+    typeof value.projectPrefix !== "string" ||
+    value.projectPrefix.length === 0 ||
+    !Array.isArray(value.virtualFiles) ||
+    value.virtualFiles.length === 0 ||
+    !IsRecord(value.actions) ||
+    !HasExactKeys(value.actions, ["stage", "update", "callback", "cleanup"]) ||
+    !IsRecord(value.expected) ||
+    !HasExactKeys(value.expected, ["lifecycle", "gate"])
+  )
+    throw new Error("probe descriptor must use the fixed root shape")
 
   const virtualPaths = new Set<string>()
   for (const virtualFile of value.virtualFiles) {
     if (
-      !IsRecord(virtualFile)
-      || !HasExactKeys(virtualFile, ["path", "utf8"])
-      || typeof virtualFile.path !== "string"
-      || virtualFile.path.length === 0
-      || typeof virtualFile.utf8 !== "string"
-      || Decoder.decode(Encoder.encode(virtualFile.utf8)) !== virtualFile.utf8
-      || virtualPaths.has(virtualFile.path)
-    ) throw new Error("probe virtual file must use canonical UTF-8 fields")
+      !IsRecord(virtualFile) ||
+      !HasExactKeys(virtualFile, ["path", "utf8"]) ||
+      typeof virtualFile.path !== "string" ||
+      virtualFile.path.length === 0 ||
+      typeof virtualFile.utf8 !== "string" ||
+      Decoder.decode(Encoder.encode(virtualFile.utf8)) !== virtualFile.utf8 ||
+      virtualPaths.has(virtualFile.path)
+    )
+      throw new Error("probe virtual file must use canonical UTF-8 fields")
     virtualPaths.add(virtualFile.path)
   }
 
@@ -420,52 +444,67 @@ function ParseProbeDescriptor(file: SnapshotFile): ProbeDescriptor {
   const lifecycle = value.expected.lifecycle
   const gate = value.expected.gate
   if (
-    !IsRecord(stage)
-    || !HasExactKeys(stage, ["kind", "path", "targetPath"])
-    || typeof stage.kind !== "string"
-    || !new Set(["normal", "materialization-failure", "source-realpath-escape"]).has(stage.kind)
-    || typeof stage.path !== "string"
-    || typeof stage.targetPath !== "string"
-    || !IsRecord(update)
-    || !HasExactKeys(update, ["kind", "path"])
-    || typeof update.kind !== "string"
-    || !new Set([
+    !IsRecord(stage) ||
+    !HasExactKeys(stage, ["kind", "path", "targetPath"]) ||
+    typeof stage.kind !== "string" ||
+    !new Set(["normal", "materialization-failure", "source-realpath-escape"]).has(stage.kind) ||
+    typeof stage.path !== "string" ||
+    typeof stage.targetPath !== "string" ||
+    !IsRecord(update) ||
+    !HasExactKeys(update, ["kind", "path"]) ||
+    typeof update.kind !== "string" ||
+    !new Set([
       "normal",
       "throw-before-snapshot",
       "throw-after-snapshot",
       "project-count-zero",
       "project-count-multiple",
       "project-identity"
-    ]).has(update.kind)
-    || typeof update.path !== "string"
-    || !IsRecord(callback)
-    || !HasExactKeys(callback, ["kind"])
-    || typeof callback.kind !== "string"
-    || !new Set(["return-value", "throw-error", "throw-undefined"]).has(callback.kind)
-    || !IsRecord(cleanup)
-    || !HasExactKeys(cleanup, ["snapshot", "api", "remove"])
-    || typeof cleanup.snapshot !== "string"
-    || !new Set(["delegate", "delegate-then-throw"]).has(cleanup.snapshot)
-    || typeof cleanup.api !== "string"
-    || !new Set(["delegate", "delegate-then-throw"]).has(cleanup.api)
-    || typeof cleanup.remove !== "string"
-    || !new Set(["delegate", "delegate-then-throw", "throw-before-delegate"]).has(cleanup.remove)
-    || !IsRecord(lifecycle)
-    || !HasExactKeys(lifecycle, ["exitCode", "outcome", "cleanupOrder", "errorOrder", "stageReadback"])
-    || !Number.isInteger(lifecycle.exitCode)
-    || typeof lifecycle.outcome !== "string"
-    || !new Set(["success", "primary-error", "aggregate-error"]).has(lifecycle.outcome)
-    || !IsStringArray(lifecycle.cleanupOrder, new Set(["snapshot.dispose", "api.close", "remove-staging"]))
-    || !IsStringArray(lifecycle.errorOrder, new Set(["primary", "snapshot.dispose", "api.close", "remove-staging"]))
-    || typeof lifecycle.stageReadback !== "string"
-    || !new Set(["absent", "retained-then-harness-removed", "not-acquired"]).has(lifecycle.stageReadback)
-    || !IsRecord(gate)
-    || !HasExactKeys(gate, ["exitCode", "status", "checkIds"])
-    || !Number.isInteger(gate.exitCode)
-    || (gate.status !== "pass" && gate.status !== "fail")
-    || !IsStringArray(gate.checkIds)
-    || gate.checkIds.length === 0
-  ) throw new Error("probe descriptor actions or expectations are invalid")
+    ]).has(update.kind) ||
+    typeof update.path !== "string" ||
+    !IsRecord(callback) ||
+    !HasExactKeys(callback, ["kind"]) ||
+    typeof callback.kind !== "string" ||
+    !new Set(["return-value", "throw-error", "throw-undefined"]).has(callback.kind) ||
+    !IsRecord(cleanup) ||
+    !HasExactKeys(cleanup, ["snapshot", "api", "remove"]) ||
+    typeof cleanup.snapshot !== "string" ||
+    !new Set(["delegate", "delegate-then-throw"]).has(cleanup.snapshot) ||
+    typeof cleanup.api !== "string" ||
+    !new Set(["delegate", "delegate-then-throw"]).has(cleanup.api) ||
+    typeof cleanup.remove !== "string" ||
+    !new Set(["delegate", "delegate-then-throw", "throw-before-delegate"]).has(cleanup.remove) ||
+    !IsRecord(lifecycle) ||
+    !HasExactKeys(lifecycle, [
+      "exitCode",
+      "outcome",
+      "cleanupOrder",
+      "errorOrder",
+      "stageReadback"
+    ]) ||
+    !Number.isInteger(lifecycle.exitCode) ||
+    typeof lifecycle.outcome !== "string" ||
+    !new Set(["success", "primary-error", "aggregate-error"]).has(lifecycle.outcome) ||
+    !IsStringArray(
+      lifecycle.cleanupOrder,
+      new Set(["snapshot.dispose", "api.close", "remove-staging"])
+    ) ||
+    !IsStringArray(
+      lifecycle.errorOrder,
+      new Set(["primary", "snapshot.dispose", "api.close", "remove-staging"])
+    ) ||
+    typeof lifecycle.stageReadback !== "string" ||
+    !new Set(["absent", "retained-then-harness-removed", "not-acquired"]).has(
+      lifecycle.stageReadback
+    ) ||
+    !IsRecord(gate) ||
+    !HasExactKeys(gate, ["exitCode", "status", "checkIds"]) ||
+    !Number.isInteger(gate.exitCode) ||
+    (gate.status !== "pass" && gate.status !== "fail") ||
+    !IsStringArray(gate.checkIds) ||
+    gate.checkIds.length === 0
+  )
+    throw new Error("probe descriptor actions or expectations are invalid")
   return value as unknown as ProbeDescriptor
 }
 
@@ -486,19 +525,21 @@ function AdmitProbeDescriptor(descriptor: ProbeDescriptor, scenario: ProbeScenar
   if (stage.kind === "source-realpath-escape") {
     const sourcePrefix = `${descriptor.projectPrefix}/src/`
     if (
-      !virtualPaths.has(stage.path)
-      || !virtualPaths.has(stage.targetPath)
-      || !stage.path.startsWith(sourcePrefix)
-      || !stage.targetPath.startsWith(`${descriptor.projectPrefix}/`)
-      || stage.targetPath.startsWith(sourcePrefix)
-      || stage.path === stage.targetPath
-    ) throw new Error("probe source escape action must be self-contained and leave src")
+      !virtualPaths.has(stage.path) ||
+      !virtualPaths.has(stage.targetPath) ||
+      !stage.path.startsWith(sourcePrefix) ||
+      !stage.targetPath.startsWith(`${descriptor.projectPrefix}/`) ||
+      stage.targetPath.startsWith(sourcePrefix) ||
+      stage.path === stage.targetPath
+    )
+      throw new Error("probe source escape action must be self-contained and leave src")
   }
   const update = descriptor.actions.update
   if (
-    (update.kind === "project-count-multiple" || update.kind === "project-identity")
-    && !virtualPaths.has(update.path)
-  ) throw new Error("probe alternate config must be a virtual file")
+    (update.kind === "project-count-multiple" || update.kind === "project-identity") &&
+    !virtualPaths.has(update.path)
+  )
+    throw new Error("probe alternate config must be a virtual file")
 
   const contract = {
     projectPrefix: descriptor.projectPrefix,
@@ -507,7 +548,9 @@ function AdmitProbeDescriptor(descriptor: ProbeDescriptor, scenario: ProbeScenar
     expected: descriptor.expected
   }
   if (!isDeepStrictEqual(contract, ExpectedContract(scenario))) {
-    throw new Error("probe descriptor input, actions and expected outcome do not match its scenario")
+    throw new Error(
+      "probe descriptor input, actions and expected outcome do not match its scenario"
+    )
   }
 }
 
@@ -515,13 +558,18 @@ function RequireSnapshotIntegrity(snapshot: InputSnapshot): void {
   const paths = new Set<string>()
   const files = [...snapshot.Files].sort((left, right) => CompareCodeUnits(left.Path, right.Path))
   for (const file of files) {
-    if (paths.has(file.Path) || !(file.Bytes instanceof Uint8Array) || Sha256(file.Bytes) !== file.Sha256) {
+    if (
+      paths.has(file.Path) ||
+      !(file.Bytes instanceof Uint8Array) ||
+      Sha256(file.Bytes) !== file.Sha256
+    ) {
       throw new Error("probe snapshot file integrity is invalid")
     }
     paths.add(file.Path)
   }
   const inventory = files.map((file) => `${file.Path}\0${file.Sha256}\n`).join("")
-  if (Sha256(inventory) !== snapshot.Sha256) throw new Error("probe snapshot inventory hash is invalid")
+  if (Sha256(inventory) !== snapshot.Sha256)
+    throw new Error("probe snapshot inventory hash is invalid")
 }
 
 function SelectProbe(snapshot: InputSnapshot, scenario: string): ProbeDescriptor {
@@ -543,15 +591,17 @@ function SelectProbe(snapshot: InputSnapshot, scenario: string): ProbeDescriptor
 }
 
 function VirtualSnapshot(descriptor: ProbeDescriptor): InputSnapshot {
-  const Files = descriptor.virtualFiles.map((file) => {
-    const Bytes = Encoder.encode(file.utf8)
-    return {
-      Path: file.path,
-      RealPath: `/project-session-probe/${file.path}`,
-      Sha256: Sha256(Bytes),
-      Bytes
-    }
-  }).sort((left, right) => CompareCodeUnits(left.Path, right.Path))
+  const Files = descriptor.virtualFiles
+    .map((file) => {
+      const Bytes = Encoder.encode(file.utf8)
+      return {
+        Path: file.path,
+        RealPath: `/project-session-probe/${file.path}`,
+        Sha256: Sha256(Bytes),
+        Bytes
+      }
+    })
+    .sort((left, right) => CompareCodeUnits(left.Path, right.Path))
   return {
     Sha256: Sha256(Files.map((file) => `${file.Path}\0${file.Sha256}\n`).join("")),
     Files
@@ -604,7 +654,7 @@ async function ReadStageState(
   if (!stageExists && !nonceExists) return "absent"
   if (removeBefore && stageExists && nonceExists) {
     await base.RemoveStaging(stagedRoot)
-    if (await Exists(stagedRoot, readback) || await Exists(nonce, readback)) {
+    if ((await Exists(stagedRoot, readback)) || (await Exists(nonce, readback))) {
       throw new Error("project session probe harness cleanup readback failed")
     }
     return "retained-then-harness-removed"
@@ -612,12 +662,12 @@ async function ReadStageState(
   throw new Error("project session probe stage readback is partial or unexpected")
 }
 
-export async function EvaluateProjectSessionProbe(
+export async function evaluateProjectSessionProbe(
   snapshot: InputSnapshot,
   scenario: string,
   repositoryRoot: string
 ): Promise<ProjectSessionProbeExecution> {
-  return EvaluateProjectSessionProbeWithReadbackOperations(
+  return evaluateProjectSessionProbeWithReadbackOperations(
     snapshot,
     scenario,
     repositoryRoot,
@@ -625,7 +675,7 @@ export async function EvaluateProjectSessionProbe(
   )
 }
 
-export async function EvaluateProjectSessionProbeWithReadbackOperations(
+export async function evaluateProjectSessionProbeWithReadbackOperations(
   snapshot: InputSnapshot,
   scenario: string,
   repositoryRoot: string,
@@ -633,7 +683,7 @@ export async function EvaluateProjectSessionProbeWithReadbackOperations(
 ): Promise<ProjectSessionProbeExecution> {
   const descriptor = SelectProbe(snapshot, scenario)
   const input = VirtualSnapshot(descriptor)
-  const base = NodeProjectSessionOperations(repositoryRoot)
+  const base = nodeProjectSessionOperations(repositoryRoot)
   const cleanupOrder: string[] = []
   const primaryFault = new Error("project session probe primary")
   const snapshotFault = new Error("project session probe snapshot cleanup")
@@ -695,7 +745,7 @@ export async function EvaluateProjectSessionProbeWithReadbackOperations(
   let failure: unknown
   let thrown = false
   try {
-    await WithProjectSessionWithOperations(
+    await withProjectSessionWithOperations(
       input,
       descriptor.projectPrefix,
       async () => {
@@ -740,9 +790,10 @@ export async function EvaluateProjectSessionProbeWithReadbackOperations(
       cleanupOrder: expected.cleanupOrder,
       errorOrder: expected.errorOrder,
       stageReadback: expected.stageReadback
-    })
-    || (thrown ? 7 : 0) !== expected.exitCode
-  ) throw new Error("project session probe actual lifecycle differs from descriptor expectation")
+    }) ||
+    (thrown ? 7 : 0) !== expected.exitCode
+  )
+    throw new Error("project session probe actual lifecycle differs from descriptor expectation")
 
   return thrown
     ? { ExitCode: 7, Result: result, Failure: { Thrown: true, Value: failure } }
@@ -758,7 +809,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (name === undefined || value === undefined || value.length === 0 || seen.has(name)) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--mode" && (value === "lifecycle" || value === "gate")) Mode = value
     else if (name === "--scenario" && IsProbeScenario(value)) Scenario = value
@@ -767,14 +819,13 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
     else return null
   }
   if (
-    Mode === undefined
-    || Scenario === undefined
-    || (Mode === "lifecycle" && RunId !== undefined)
-    || (Mode === "gate" && RunId === undefined)
-  ) return null
-  return RunId === undefined
-    ? { Mode, Scenario, Root }
-    : { Mode, Scenario, Root, RunId }
+    Mode === undefined ||
+    Scenario === undefined ||
+    (Mode === "lifecycle" && RunId !== undefined) ||
+    (Mode === "gate" && RunId === undefined)
+  )
+    return null
+  return RunId === undefined ? { Mode, Scenario, Root } : { Mode, Scenario, Root, RunId }
 }
 
 function ErrorMessage(error: unknown): string {
@@ -789,7 +840,7 @@ function ErrorMessage(error: unknown): string {
   }
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: ProjectSessionProbeIO = DefaultIO
 ): Promise<number> {
@@ -799,26 +850,29 @@ export async function Main(
     return 1
   }
   if (parsed.Mode === "gate") {
-    const result = await RunGate({
-      root: parsed.Root,
-      gate: "boundary-project-session-probe",
-      mode: "runtime-probe",
-      readinessPolicy: "evaluation-only",
-      expectedSubjects: 1,
-      inputPaths: [ProbeCasesPath, `${ProbeRoot}/${parsed.Scenario}.json`],
-      toolchain: { bun: Bun.version, typescript: "7.0.2" },
-      runId: parsed.RunId as string
-    }, async (snapshot) => {
-      const execution = await EvaluateProjectSessionProbe(snapshot, parsed.Scenario, parsed.Root)
-      if (execution.Failure.Thrown) throw execution.Failure.Value
-      return {
-        SubjectsChecked: 1,
-        Checks: [{ id: "PROJECT_SESSION_PROBE_PASS", status: "pass" }]
+    const result = await runGate(
+      {
+        root: parsed.Root,
+        gate: "boundary-project-session-probe",
+        mode: "runtime-probe",
+        readinessPolicy: "evaluation-only",
+        expectedSubjects: 1,
+        inputPaths: [ProbeCasesPath, `${ProbeRoot}/${parsed.Scenario}.json`],
+        toolchain: { bun: Bun.version, typescript: "7.0.2" },
+        runId: parsed.RunId as string
+      },
+      async (snapshot) => {
+        const execution = await evaluateProjectSessionProbe(snapshot, parsed.Scenario, parsed.Root)
+        if (execution.Failure.Thrown) throw execution.Failure.Value
+        return {
+          SubjectsChecked: 1,
+          Checks: [{ id: "PROJECT_SESSION_PROBE_PASS", status: "pass" }]
+        }
       }
-    })
+    )
     try {
-      await EmitGateResultWithDependencies(parsed.Root, result, {
-        AtomicWriterOperations: NodeAtomicWriterOperations(),
+      await emitGateResultWithDependencies(parsed.Root, result, {
+        AtomicWriterOperations: nodeAtomicWriterOperations(),
         WriteStdout: io.WriteStdout
       })
     } catch (error) {
@@ -828,18 +882,20 @@ export async function Main(
     return result.status === "pass" ? 0 : 1
   }
 
-  const inputs = await SnapshotInputs(parsed.Root, [
+  const inputs = await snapshotInputs(parsed.Root, [
     ProbeCasesPath,
     `${ProbeRoot}/${parsed.Scenario}.json`
   ])
   if (inputs.Snapshot === null) {
-    await io.WriteStderr("PROJECT_SESSION_PROBE_INPUT_ERROR required inputs could not be snapshotted\n")
+    await io.WriteStderr(
+      "PROJECT_SESSION_PROBE_INPUT_ERROR required inputs could not be snapshotted\n"
+    )
     return 1
   }
 
   let execution: ProjectSessionProbeExecution
   try {
-    execution = await EvaluateProjectSessionProbe(inputs.Snapshot, parsed.Scenario, parsed.Root)
+    execution = await evaluateProjectSessionProbe(inputs.Snapshot, parsed.Scenario, parsed.Root)
   } catch (error) {
     await io.WriteStderr(`PROJECT_SESSION_PROBE_EXECUTION_ERROR ${ErrorMessage(error)}\n`)
     return 1
@@ -853,4 +909,4 @@ export async function Main(
   return execution.ExitCode
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

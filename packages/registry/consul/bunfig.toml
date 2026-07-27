@@ -1,0 +1,13 @@
+[test]
+root = "test"
+timeout = 10000
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = [
+  "../../context/**",
+  "../../core/**",
+  "../src/**",
+  "../../../tools/**",
+  "test/**"
+]
+coverageThreshold = { functions = 1.0 }

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "@likego/transport-http",
+  "resources": [
+    {
+      "id": "http-listener",
+      "owner": "likego-owned",
+      "exposure": "managed-private",
+      "stopContract": "likego-owned"
+    }
+  ]
+}

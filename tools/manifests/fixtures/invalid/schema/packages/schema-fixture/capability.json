@@ -39,12 +39,11 @@
     {
       "runtime": "deno",
       "lane": "exact",
-      "minimumVersion": "2.9.3",
+      "minimumVersion": "2.9.4",
       "testedVersions": [
-        "2.9.3"
+        "2.9.4"
       ],
       "terminalObservability": "not-applicable"
     }
-  ],
-  "unexpected": true
+  ]
 }

@@ -1,16 +1,18 @@
 import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout,
   type GateMode,
   type ReadinessPolicy
-} from "../gates/result.ts"
-import { EvaluateFixtureCorpus } from "../gates/fixture-corpus.ts"
-import { CheckOfficialManifests, ValidateOfficialPackage } from "./validate.ts"
-import { lstat, readFile, readdir } from "node:fs/promises"
+} from "../gates/result"
+import { evaluateFixtureCorpus } from "../gates/fixture-corpus"
+import { checkOfficialManifests, validateOfficialPackage } from "./validate"
+import { readFile, readdir } from "node:fs/promises"
 import { join, relative, resolve, sep } from "node:path"
+
+import { discoverWorkspaces } from "../workspaces/discovery"
 
 export interface ManifestCheckIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -26,6 +28,7 @@ interface ParsedArguments {
 interface InputInventory {
   readonly Paths: readonly string[]
   readonly ExpectedSubjects: number
+  readonly SubjectDirectories: readonly string[]
 }
 
 interface GateContract {
@@ -43,8 +46,8 @@ const SharedPaths = [
 ] as const
 const ManifestNames = ["package.json", "capability.json", "owner.json"] as const
 const DefaultIO: ManifestCheckIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function CompareCodeUnits(left: string, right: string): number {
@@ -59,7 +62,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (name === undefined || value === undefined || value.length === 0 || seen.has(name)) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--root") Root = value
     else if (name === "--mode" && (value === "fixture" || value === "repository")) Mode = value
@@ -76,16 +80,6 @@ function IsRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function IsMissing(error: unknown): boolean {
   return IsRecord(error) && error.code === "ENOENT"
-}
-
-async function PathExists(path: string): Promise<boolean> {
-  try {
-    await lstat(path)
-    return true
-  } catch (error) {
-    if (IsMissing(error)) return false
-    throw error
-  }
 }
 
 async function FilesBelow(root: string, directoryPath: string): Promise<readonly string[]> {
@@ -126,31 +120,30 @@ async function FixtureSubjectCount(root: string): Promise<number> {
 async function FixtureInventory(root: string): Promise<InputInventory> {
   const discovered = await FilesBelow(root, FamilyRoot)
   const Paths = [...new Set([...SharedPaths, CasesPath, ...discovered])].sort(CompareCodeUnits)
-  return { Paths, ExpectedSubjects: await FixtureSubjectCount(root) }
+  return { Paths, ExpectedSubjects: await FixtureSubjectCount(root), SubjectDirectories: [] }
 }
 
 async function RepositoryInventory(root: string): Promise<InputInventory> {
-  const paths = [...SharedPaths] as string[]
-  let packages = 0
-  for (const officialRoot of ["packages", "adapters"] as const) {
-    let entries
-    try {
-      entries = await readdir(join(root, officialRoot), { withFileTypes: true })
-    } catch (error) {
-      if (IsMissing(error)) continue
-      throw error
+  const paths = ["package.json", ...SharedPaths] as string[]
+  const subjectDirectories: string[] = []
+  for (const workspace of await discoverWorkspaces(root)) {
+    if (workspace.private) continue
+    subjectDirectories.push(workspace.root)
+    for (const manifestName of ManifestNames) {
+      paths.push(`${workspace.root}/${manifestName}`)
     }
-    for (const entry of entries.sort((left, right) => CompareCodeUnits(left.name, right.name))) {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
-      const packagePath = `${officialRoot}/${entry.name}/package.json`
-      if (!await PathExists(join(root, packagePath))) continue
-      packages += 1
-      for (const manifestName of ManifestNames) {
-        paths.push(`${officialRoot}/${entry.name}/${manifestName}`)
-      }
+    for (const path of await FilesBelow(root, `${workspace.root}/src`)) {
+      paths.push(path)
+    }
+    for (const path of await FilesBelow(root, `${workspace.root}/test`)) {
+      paths.push(path)
     }
   }
-  return { Paths: [...new Set(paths)].sort(CompareCodeUnits), ExpectedSubjects: packages }
+  return {
+    Paths: [...new Set(paths)].sort(CompareCodeUnits),
+    ExpectedSubjects: subjectDirectories.length,
+    SubjectDirectories: Object.freeze(subjectDirectories)
+  }
 }
 
 function ContractFor(mode: "fixture" | "repository"): GateContract {
@@ -171,7 +164,7 @@ function ErrorMessage(error: unknown): string {
   }
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: ManifestCheckIO = DefaultIO
 ): Promise<number> {
@@ -183,32 +176,38 @@ export async function Main(
 
   let inventory: InputInventory
   try {
-    inventory = parsed.Mode === "fixture"
-      ? await FixtureInventory(parsed.Root)
-      : await RepositoryInventory(parsed.Root)
+    inventory =
+      parsed.Mode === "fixture"
+        ? await FixtureInventory(parsed.Root)
+        : await RepositoryInventory(parsed.Root)
   } catch (error) {
     await io.WriteStderr(`MANIFEST_DISCOVERY_ERROR ${ErrorMessage(error)}\n`)
     return 1
   }
   const contract = ContractFor(parsed.Mode)
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: contract.Gate,
-    mode: contract.Mode,
-    readinessPolicy: contract.ReadinessPolicy,
-    expectedSubjects: inventory.ExpectedSubjects,
-    inputPaths: inventory.Paths,
-    toolchain: { bun: Bun.version, typescript: "7.0.2" },
-    ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
-  }, async (snapshot) => {
-    if (parsed.Mode === "repository") return CheckOfficialManifests(snapshot)
-    const corpus = EvaluateFixtureCorpus(snapshot, FamilyRoot, ValidateOfficialPackage)
-    return { SubjectsChecked: corpus.SubjectsChecked, Checks: corpus.Checks }
-  })
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: contract.Gate,
+      mode: contract.Mode,
+      readinessPolicy: contract.ReadinessPolicy,
+      expectedSubjects: inventory.ExpectedSubjects,
+      inputPaths: inventory.Paths,
+      toolchain: { bun: Bun.version, typescript: "7.0.2" },
+      ...(parsed.RunId === undefined ? {} : { runId: parsed.RunId })
+    },
+    async (snapshot) => {
+      if (parsed.Mode === "repository") {
+        return checkOfficialManifests(snapshot, inventory.SubjectDirectories)
+      }
+      const corpus = evaluateFixtureCorpus(snapshot, FamilyRoot, validateOfficialPackage)
+      return { SubjectsChecked: corpus.SubjectsChecked, Checks: corpus.Checks }
+    }
+  )
 
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, {
-      AtomicWriterOperations: NodeAtomicWriterOperations(),
+    await emitGateResultWithDependencies(parsed.Root, result, {
+      AtomicWriterOperations: nodeAtomicWriterOperations(),
       WriteStdout: io.WriteStdout
     })
   } catch (error) {
@@ -218,4 +217,4 @@ export async function Main(
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

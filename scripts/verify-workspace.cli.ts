@@ -1,7 +1,7 @@
-import { VerifyBunRuntime, VerifyWorkspace } from "./verify-workspace.ts"
+import { verifyBunRuntime, verifyWorkspace } from "./verify-workspace"
 
-const runtimeIssue = VerifyBunRuntime(Bun.version)
-const workspaceIssues = await VerifyWorkspace(process.cwd())
+const runtimeIssue = verifyBunRuntime(Bun.version)
+const workspaceIssues = await verifyWorkspace(process.cwd())
 const issues = runtimeIssue === null ? workspaceIssues : [runtimeIssue, ...workspaceIssues]
 
 if (issues.length > 0) {
@@ -10,5 +10,5 @@ if (issues.length > 0) {
   }
   process.exitCode = 1
 } else {
-  console.log("LIKEGO_WORKSPACE_RESULT={\"valid\":true}")
+  console.log('LIKEGO_WORKSPACE_RESULT={"valid":true}')
 }

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 2,
+  "package": "@likego/web",
+  "packageKind": "hybrid",
+  "stability": "provisional",
+  "releaseBlocking": true,
+  "exports": {
+    ".": {
+      "kind": "portable",
+      "residency": "non-resident",
+      "ownerResources": [],
+      "capabilities": ["web"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "not-applicable"
+        }
+      ]
+    },
+    "./health": {
+      "kind": "portable",
+      "residency": "non-resident",
+      "ownerResources": [],
+      "capabilities": ["health", "web"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "not-applicable"
+        }
+      ]
+    },
+    "./node": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["node-server"],
+      "capabilities": ["server", "web"],
+      "runtimes": [
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    }
+  }
+}

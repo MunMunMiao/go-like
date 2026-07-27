@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "package": "@likego/nats",
+  "packageKind": "integration",
+  "stability": "provisional",
+  "releaseBlocking": true,
+  "exports": {
+    ".": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["subscription"],
+      "capabilities": ["broker", "nats-core", "server"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./broker": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["broker-subscription"],
+      "capabilities": ["broker", "nats-core", "server"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./jetstream": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["consumer-messages"],
+      "capabilities": ["broker", "nats-jetstream", "server"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./jetstream/broker": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["jetstream-broker-subscription"],
+      "capabilities": ["broker", "nats-jetstream", "server"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    }
+  }
+}

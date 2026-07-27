@@ -34,7 +34,7 @@
         "MODULE_SPECIFIER_HASH_FORBIDDEN"
       ]
     },
-    { "id": "invalid-relative-missing-js", "path": "invalid/relative-missing-js", "expectedCodes": ["MODULE_RELATIVE_JS_EXTENSION_REQUIRED"] },
+    { "id": "invalid-relative-extension-present", "path": "invalid/relative-extension-present", "expectedCodes": ["MODULE_RELATIVE_EXTENSION_FORBIDDEN"] },
     { "id": "invalid-relative-package-escape", "path": "invalid/relative-package-escape", "expectedCodes": ["MODULE_RELATIVE_PACKAGE_ESCAPE"] },
     { "id": "invalid-relative-target-missing", "path": "invalid/relative-target-missing", "expectedCodes": ["MODULE_RELATIVE_TARGET_MISSING"] },
     { "id": "invalid-disallowed-workspace", "path": "invalid/disallowed-workspace", "expectedCodes": ["MODULE_BARE_DEPENDENCY_DISALLOWED"] },

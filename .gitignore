@@ -6,5 +6,8 @@ dist/
 *.tsbuildinfo
 *.log
 .DS_Store
+.idea/
 .artifacts/
+doc/.vitepress/cache/
+doc/.vitepress/dist/
 reports/

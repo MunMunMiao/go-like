@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/broker-rabbitmq",
+  "version": "0.0.1",
+  "description": "RabbitMQ AMQP 0-9-1 Broker provider for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:docker": "bun test/e2e/rabbitmq-docker-e2e.ts"
+  },
+  "dependencies": {
+    "@likego/broker": "0.0.1",
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@types/node": "26.1.1",
+    "amqplib": "2.0.1"
+  },
+  "license": "MIT"
+}

@@ -4,19 +4,19 @@ import { readFileSync } from "node:fs"
 import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises"
 import { isAbsolute, join, normalize, relative, resolve, sep } from "node:path"
 import {
-  NodeAtomicWriterOperations,
-  WriteCanonicalFile,
+  nodeAtomicWriterOperations,
+  writeCanonicalFile,
   type AtomicDirectoryIdentity,
   type AtomicWriterOperations
-} from "./atomic-writer.ts"
+} from "./atomic-writer"
 
 export {
-  NodeAtomicWriterOperations,
-  WriteCanonicalFile,
+  nodeAtomicWriterOperations,
+  writeCanonicalFile,
   type AtomicDirectoryIdentity,
   type AtomicFileHandle,
   type AtomicWriterOperations
-} from "./atomic-writer.ts"
+} from "./atomic-writer"
 
 export type GateMode = "fixture" | "repository" | "runtime-probe"
 export type ReadinessPolicy = "evaluation-only" | "package-admission"
@@ -64,7 +64,11 @@ export interface GateResult {
   readonly inputsSha256: string | null
   readonly subjects: { readonly expected: number | null; readonly checked: number }
   readonly checks: readonly GateCheck[]
-  readonly artifacts: readonly { readonly kind: string; readonly path: string; readonly sha256: string }[]
+  readonly artifacts: readonly {
+    readonly kind: string
+    readonly path: string
+    readonly sha256: string
+  }[]
 }
 
 export interface RunGateOptions {
@@ -176,15 +180,20 @@ function FailedCheck(id: string, detail: string): GateCheck {
 
 function IsInside(root: string, candidate: string): boolean {
   const pathFromRoot = relative(root, candidate)
-  return pathFromRoot === ""
-    || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== ".." && !isAbsolute(pathFromRoot))
+  return (
+    pathFromRoot === "" ||
+    (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== ".." && !isAbsolute(pathFromRoot))
+  )
 }
 
 function CompareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
-function CanonicalLexicalPath(root: string, inputPath: string): { readonly Absolute: string; readonly Path: string } {
+function CanonicalLexicalPath(
+  root: string,
+  inputPath: string
+): { readonly Absolute: string; readonly Path: string } {
   if (inputPath.length === 0 || isAbsolute(inputPath)) {
     throw new Error(`input path must be a non-empty relative path: ${inputPath}`)
   }
@@ -204,7 +213,7 @@ async function SnapshotInputsWithRoot(
   knownRootRealPath: string | null = null
 ): Promise<InternalSnapshotResult> {
   try {
-    const rootRealPath = knownRootRealPath ?? await realpath(root)
+    const rootRealPath = knownRootRealPath ?? (await realpath(root))
     const rootStat = await stat(rootRealPath)
     if (!rootStat.isDirectory()) {
       throw new Error("gate root must be a directory")
@@ -228,7 +237,9 @@ async function SnapshotInputsWithRoot(
         throw new Error(`duplicate input real path: ${canonical.Path}`)
       }
       if (inputRealPath !== canonical.Absolute) {
-        throw new Error(`resolved input path differs from its canonical lexical path: ${canonical.Path}`)
+        throw new Error(
+          `resolved input path differs from its canonical lexical path: ${canonical.Path}`
+        )
       }
       realPaths.add(inputRealPath)
 
@@ -260,7 +271,7 @@ async function SnapshotInputsWithRoot(
   }
 }
 
-export async function SnapshotInputs(
+export async function snapshotInputs(
   root: string,
   paths: readonly string[]
 ): Promise<{ readonly Snapshot: InputSnapshot | null; readonly Checks: readonly GateCheck[] }> {
@@ -277,25 +288,32 @@ function IsReadinessPolicy(value: unknown): value is ReadinessPolicy {
 }
 
 function IsStringRecord(value: unknown): value is Readonly<Record<string, string>> {
-  return typeof value === "object"
-    && value !== null
-    && !Array.isArray(value)
-    && Object.values(value).every((item) => typeof item === "string")
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((item) => typeof item === "string")
+  )
 }
 
 function IsObjectRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-function HasOnlyKeys(value: Readonly<Record<string, unknown>>, allowed: ReadonlySet<string>): boolean {
+function HasOnlyKeys(
+  value: Readonly<Record<string, unknown>>,
+  allowed: ReadonlySet<string>
+): boolean {
   return Object.keys(value).every((key) => allowed.has(key))
 }
 
 function IsCheckValue(value: unknown): value is string | number | boolean | null {
-  return value === null
-    || typeof value === "string"
-    || typeof value === "boolean"
-    || (typeof value === "number" && Number.isFinite(value))
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  )
 }
 
 function NormalizeCheck(value: unknown): GateCheck {
@@ -379,13 +397,15 @@ function AdmitRunGateOptions(value: unknown): RunGateAdmission {
   }
 
   const requestedRunId = value.runId
-  const invalidRequestedRunId = requestedRunId !== undefined
-    && (typeof requestedRunId !== "string" || !RunIdPattern.test(requestedRunId))
-  const runId = requestedRunId === undefined
-    ? generatedRunId
-    : typeof requestedRunId === "string" && RunIdPattern.test(requestedRunId)
-      ? requestedRunId
-      : generatedRunId
+  const invalidRequestedRunId =
+    requestedRunId !== undefined &&
+    (typeof requestedRunId !== "string" || !RunIdPattern.test(requestedRunId))
+  const runId =
+    requestedRunId === undefined
+      ? generatedRunId
+      : typeof requestedRunId === "string" && RunIdPattern.test(requestedRunId)
+        ? requestedRunId
+        : generatedRunId
   if (invalidRequestedRunId) {
     return { Options: null, RunId: runId, Error: "invalid run id" }
   }
@@ -403,8 +423,8 @@ function AdmitRunGateOptions(value: unknown): RunGateAdmission {
     }
   }
   if (
-    value.expectedSubjects !== null
-    && (!Number.isInteger(value.expectedSubjects) || (value.expectedSubjects as number) < 0)
+    value.expectedSubjects !== null &&
+    (!Number.isInteger(value.expectedSubjects) || (value.expectedSubjects as number) < 0)
   ) {
     return {
       Options: null,
@@ -415,7 +435,10 @@ function AdmitRunGateOptions(value: unknown): RunGateAdmission {
   if (typeof value.root !== "string" || value.root.length === 0) {
     return { Options: null, RunId: runId, Error: "root must be a non-empty string" }
   }
-  if (!Array.isArray(value.inputPaths) || !value.inputPaths.every((path) => typeof path === "string")) {
+  if (
+    !Array.isArray(value.inputPaths) ||
+    !value.inputPaths.every((path) => typeof path === "string")
+  ) {
     return { Options: null, RunId: runId, Error: "inputPaths must be an array of strings" }
   }
   if (!IsStringRecord(value.toolchain)) {
@@ -518,7 +541,7 @@ async function HashArtifacts(
   }))
 }
 
-export async function RunGate(
+export async function runGate(
   options: unknown,
   evaluate: (snapshot: InputSnapshot) => Promise<GateEvaluation>
 ): Promise<GateResult> {
@@ -566,8 +589,8 @@ export async function RunGate(
     checks.push(FailedCheck("GATE_NO_PASS_CHECK", "gate must produce at least one passing check"))
   }
   if (
-    gateOptions.expectedSubjects !== null
-    && gateOptions.expectedSubjects !== evaluation.SubjectsChecked
+    gateOptions.expectedSubjects !== null &&
+    gateOptions.expectedSubjects !== evaluation.SubjectsChecked
   ) {
     checks.push({
       id: "GATE_SUBJECT_COUNT_MISMATCH",
@@ -579,7 +602,10 @@ export async function RunGate(
 
   let artifacts: readonly ArtifactResult[] = []
   try {
-    artifacts = await HashArtifacts(snapshotResult.RootRealPath as string, evaluation.ArtifactPaths ?? [])
+    artifacts = await HashArtifacts(
+      snapshotResult.RootRealPath as string,
+      evaluation.ArtifactPaths ?? []
+    )
   } catch (error) {
     checks.push(FailedCheck("GATE_ARTIFACT_ERROR", ErrorMessage(error)))
   }
@@ -599,10 +625,10 @@ function SemanticResultError(result: GateResult): string | null {
   const started = new Date(result.startedAt)
   const completed = new Date(result.completedAt)
   if (
-    Number.isNaN(started.valueOf())
-    || started.toISOString() !== result.startedAt
-    || Number.isNaN(completed.valueOf())
-    || completed.toISOString() !== result.completedAt
+    Number.isNaN(started.valueOf()) ||
+    started.toISOString() !== result.startedAt ||
+    Number.isNaN(completed.valueOf()) ||
+    completed.toISOString() !== result.completedAt
   ) {
     return "timestamps must be real canonical UTC millisecond instants"
   }
@@ -619,12 +645,12 @@ function SemanticResultError(result: GateResult): string | null {
   const nullInputStageChecks = result.checks.filter((check) => NullInputStageCheckIds.has(check.id))
   if (result.inputsSha256 === null) {
     if (
-      result.status !== "fail"
-      || result.subjects.checked !== 0
-      || result.artifacts.length !== 0
-      || result.checks.length !== 1
-      || nullInputStageChecks.length !== 1
-      || nullInputStageChecks[0]?.status !== "fail"
+      result.status !== "fail" ||
+      result.subjects.checked !== 0 ||
+      result.artifacts.length !== 0 ||
+      result.checks.length !== 1 ||
+      nullInputStageChecks.length !== 1 ||
+      nullInputStageChecks[0]?.status !== "fail"
     ) {
       return "null inputsSha256 requires one protocol/input failure with zero checked subjects and no artifacts"
     }
@@ -632,10 +658,11 @@ function SemanticResultError(result: GateResult): string | null {
     return "protocol/input failure checks require null inputsSha256"
   }
 
-  const derivedPass = result.subjects.checked > 0
-    && result.checks.some((check) => check.status === "pass")
-    && !result.checks.some((check) => check.status === "fail")
-    && (result.subjects.expected === null || result.subjects.expected === result.subjects.checked)
+  const derivedPass =
+    result.subjects.checked > 0 &&
+    result.checks.some((check) => check.status === "pass") &&
+    !result.checks.some((check) => check.status === "fail") &&
+    (result.subjects.expected === null || result.subjects.expected === result.subjects.checked)
   const derivedStatus: GateStatus = derivedPass ? "pass" : "fail"
   if (result.status !== derivedStatus) {
     return `status must be ${derivedStatus} for the recorded subjects and checks`
@@ -650,8 +677,8 @@ function SemanticResultError(result: GateResult): string | null {
   if (result.mode === "repository") {
     const admissionReadiness = result.status === "pass" ? "ready" : "not-ready"
     if (
-      result.releaseReadiness !== "not-evaluated"
-      && result.releaseReadiness !== admissionReadiness
+      result.releaseReadiness !== "not-evaluated" &&
+      result.releaseReadiness !== admissionReadiness
     ) {
       return `repository ${result.status} result has contradictory readiness`
     }
@@ -685,7 +712,10 @@ async function EnsureResultDirectory(path: string): Promise<void> {
   }
 }
 
-async function PrepareCanonicalResultPath(root: string, gate: string): Promise<PreparedCanonicalResult> {
+async function PrepareCanonicalResultPath(
+  root: string,
+  gate: string
+): Promise<PreparedCanonicalResult> {
   try {
     const rootRealPath = await realpath(root)
     const rootInformation = await stat(rootRealPath)
@@ -723,13 +753,15 @@ async function PrepareCanonicalResultPath(root: string, gate: string): Promise<P
   }
 }
 
-export async function EmitGateResultWithDependencies(
+export async function emitGateResultWithDependencies(
   root: string,
   result: GateResult,
   dependencies: GateEmissionDependencies
 ): Promise<string> {
   if (!ValidateGateResultSchema(result)) {
-    throw new Error(`GATE_RESULT_SCHEMA_ERROR ${GateResultAjv.errorsText(ValidateGateResultSchema.errors)}`)
+    throw new Error(
+      `GATE_RESULT_SCHEMA_ERROR ${GateResultAjv.errorsText(ValidateGateResultSchema.errors)}`
+    )
   }
   const semanticError = SemanticResultError(result)
   if (semanticError !== null) {
@@ -737,7 +769,7 @@ export async function EmitGateResultWithDependencies(
   }
   const prepared = await PrepareCanonicalResultPath(root, result.gate)
   const compact = JSON.stringify(result)
-  const receipt = await WriteCanonicalFile(
+  const receipt = await writeCanonicalFile(
     prepared.CanonicalPath,
     `${compact}\n`,
     { Gate: result.gate, RunId: result.runId, Directory: prepared.Directory },
@@ -770,7 +802,9 @@ async function WriteProcessStream(stream: ProcessWritable, value: string): Promi
       if (errorThrown) reject(error)
       else resolve()
     }
-    const OnError = (error: unknown) => { Finish(true, error) }
+    const OnError = (error: unknown) => {
+      Finish(true, error)
+    }
     stream.once("error", OnError)
     try {
       stream.write(value, (error) => {
@@ -783,17 +817,17 @@ async function WriteProcessStream(stream: ProcessWritable, value: string): Promi
   })
 }
 
-export async function WriteProcessStdout(value: string): Promise<void> {
+export async function writeProcessStdout(value: string): Promise<void> {
   await WriteProcessStream(process.stdout as unknown as ProcessWritable, value)
 }
 
-export async function WriteProcessStderr(value: string): Promise<void> {
+export async function writeProcessStderr(value: string): Promise<void> {
   await WriteProcessStream(process.stderr as unknown as ProcessWritable, value)
 }
 
-export async function EmitGateResult(root: string, result: GateResult): Promise<string> {
-  return EmitGateResultWithDependencies(root, result, {
-    AtomicWriterOperations: NodeAtomicWriterOperations(),
-    WriteStdout: WriteProcessStdout
+export async function emitGateResult(root: string, result: GateResult): Promise<string> {
+  return emitGateResultWithDependencies(root, result, {
+    AtomicWriterOperations: nodeAtomicWriterOperations(),
+    WriteStdout: writeProcessStdout
   })
 }

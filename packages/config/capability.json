@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "package": "@likego/config",
+  "packageKind": "hybrid",
+  "stability": "provisional",
+  "releaseBlocking": true,
+  "exports": {
+    ".": {
+      "kind": "portable",
+      "residency": "resident",
+      "ownerResources": ["source-watcher"],
+      "capabilities": ["config"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./env": {
+      "kind": "portable",
+      "residency": "non-resident",
+      "ownerResources": [],
+      "capabilities": ["config", "config-env"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "not-applicable"
+        }
+      ]
+    },
+    "./file": {
+      "kind": "portable",
+      "residency": "resident",
+      "ownerResources": ["watch-subscription"],
+      "capabilities": ["config", "config-file"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./node": {
+      "kind": "integration",
+      "residency": "resident",
+      "ownerResources": ["node-file-watcher"],
+      "capabilities": ["config-file", "node-filesystem"],
+      "runtimes": [
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "observable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "observable"
+        }
+      ]
+    },
+    "./yaml": {
+      "kind": "portable",
+      "residency": "non-resident",
+      "ownerResources": [],
+      "capabilities": ["config", "config-yaml"],
+      "runtimes": [
+        {
+          "runtime": "bun",
+          "lane": "exact",
+          "minimumVersion": "1.3.14",
+          "testedVersions": ["1.3.14"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "lts",
+          "minimumVersion": "24.18.0",
+          "testedVersions": ["24.18.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "node",
+          "lane": "current",
+          "minimumVersion": "26.5.0",
+          "testedVersions": ["26.5.0"],
+          "terminalObservability": "not-applicable"
+        },
+        {
+          "runtime": "deno",
+          "lane": "exact",
+          "minimumVersion": "2.9.4",
+          "testedVersions": ["2.9.4"],
+          "terminalObservability": "not-applicable"
+        }
+      ]
+    }
+  }
+}

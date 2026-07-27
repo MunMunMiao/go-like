@@ -2,20 +2,20 @@ import { createHash } from "node:crypto"
 import { lstat, readdir, realpath } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import {
-  AnalyzeProjectSessionWithOperations,
-  NodeProjectSessionOperations
-} from "./project-session.ts"
-import { EvaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus.ts"
-import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
+  analyzeProjectSessionWithOperations,
+  nodeProjectSessionOperations
+} from "./project-session"
+import { evaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus"
+import type { AtomicWriterOperations } from "../gates/atomic-writer"
 import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout,
   type InputSnapshot,
   type SnapshotFile
-} from "../gates/result.ts"
+} from "../gates/result"
 
 export interface ProjectSessionFixtureIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -37,8 +37,8 @@ const FamilyRoot = "tools/boundaries/fixtures/project-session"
 const CasesPath = `${FamilyRoot}/cases.json`
 const ExpectedSubjects = 9
 const DefaultIO: ProjectSessionFixtureIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function Sha256(value: string | Uint8Array): string {
@@ -68,7 +68,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (name === undefined || value === undefined || value.length === 0 || seen.has(name)) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--root") Root = value
     else if (name === "--run-id" && /^[a-z0-9][a-z0-9_-]{0,95}$/.test(value)) RunId = value
@@ -77,7 +78,9 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   return Root === undefined || RunId === undefined ? null : { Root, RunId }
 }
 
-export async function DiscoverProjectSessionFixtureInputs(root: string): Promise<readonly string[]> {
+export async function discoverProjectSessionFixtureInputs(
+  root: string
+): Promise<readonly string[]> {
   const repositoryRoot = await realpath(root)
   const familyRoot = join(repositoryRoot, ...FamilyRoot.split("/"))
   const familyInformation = await lstat(familyRoot)
@@ -96,7 +99,9 @@ export async function DiscoverProjectSessionFixtureInputs(root: string): Promise
       } else if (entry.isFile()) {
         paths.push(relative(repositoryRoot, absolute).split(sep).join("/"))
       } else {
-        throw new Error("project-session fixture inventory entries must be regular files or directories")
+        throw new Error(
+          "project-session fixture inventory entries must be regular files or directories"
+        )
       }
     }
   }
@@ -113,44 +118,44 @@ function CaseSnapshot(files: readonly SnapshotFile[]): InputSnapshot {
   }
 }
 
-export async function EvaluateProjectSessionFixtureCorpus(
+export async function evaluateProjectSessionFixtureCorpus(
   snapshot: InputSnapshot,
   repositoryRoot: string
 ): Promise<CorpusEvaluation> {
-  return EvaluateProjectSessionFixtureCorpusWithAnalyzer(
+  return evaluateProjectSessionFixtureCorpusWithAnalyzer(
     snapshot,
     repositoryRoot,
-    AnalyzeProjectSessionWithOperations
+    analyzeProjectSessionWithOperations
   )
 }
 
-export async function EvaluateProjectSessionFixtureCorpusWithAnalyzer(
+export async function evaluateProjectSessionFixtureCorpusWithAnalyzer(
   snapshot: InputSnapshot,
   repositoryRoot: string,
-  analyze: typeof AnalyzeProjectSessionWithOperations
+  analyze: typeof analyzeProjectSessionWithOperations
 ): Promise<CorpusEvaluation> {
-  return EvaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
+  return evaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
     const result = await analyze(
       CaseSnapshot(files),
       "project",
-      NodeProjectSessionOperations(repositoryRoot)
+      nodeProjectSessionOperations(repositoryRoot)
     )
     return result.Issues
   })
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: ProjectSessionFixtureIO = DefaultIO
 ): Promise<number> {
-  return MainWithDependencies(args, io, {
-    DiscoverInputPaths: DiscoverProjectSessionFixtureInputs,
-    Evaluate: EvaluateProjectSessionFixtureCorpus,
-    AtomicWriterOperations: NodeAtomicWriterOperations()
+  return mainWithDependencies(args, io, {
+    DiscoverInputPaths: discoverProjectSessionFixtureInputs,
+    Evaluate: evaluateProjectSessionFixtureCorpus,
+    AtomicWriterOperations: nodeAtomicWriterOperations()
   })
 }
 
-export async function MainWithDependencies(
+export async function mainWithDependencies(
   args: readonly string[],
   io: ProjectSessionFixtureIO,
   dependencies: ProjectSessionFixtureDependencies
@@ -167,25 +172,28 @@ export async function MainWithDependencies(
   } catch {
     inputPaths = [""]
   }
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: "boundary-project-session-fixtures",
-    mode: "fixture",
-    readinessPolicy: "evaluation-only",
-    expectedSubjects: ExpectedSubjects,
-    inputPaths,
-    toolchain: { bun: Bun.version, typescript: "7.0.2" },
-    runId: parsed.RunId
-  }, async (snapshot) => {
-    const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
-    return {
-      SubjectsChecked: evaluation.SubjectsChecked,
-      Checks: evaluation.Checks
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: "boundary-project-session-fixtures",
+      mode: "fixture",
+      readinessPolicy: "evaluation-only",
+      expectedSubjects: ExpectedSubjects,
+      inputPaths,
+      toolchain: { bun: Bun.version, typescript: "7.0.2" },
+      runId: parsed.RunId
+    },
+    async (snapshot) => {
+      const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
+      return {
+        SubjectsChecked: evaluation.SubjectsChecked,
+        Checks: evaluation.Checks
+      }
     }
-  })
+  )
 
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, {
+    await emitGateResultWithDependencies(parsed.Root, result, {
       AtomicWriterOperations: dependencies.AtomicWriterOperations,
       WriteStdout: io.WriteStdout
     })
@@ -196,4 +204,4 @@ export async function MainWithDependencies(
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/create",
+  "version": "0.0.1",
+  "description": "Minimal Node CLI for creating a runnable LikeGo internal unary service.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "create-likego": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=24.18.0"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "test": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage && bun test/coverage-contract.ts",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false"
+  },
+  "dependencies": {
+    "@likego/core": "0.0.1",
+    "@likego/server": "0.0.1",
+    "@likego/transport": "0.0.1",
+    "@likego/transport-http": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}

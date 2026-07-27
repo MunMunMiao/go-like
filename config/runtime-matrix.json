@@ -27,8 +27,8 @@
       "Id": "deno-exact",
       "Runtime": "deno",
       "Channel": "exact",
-      "Version": "2.9.3",
-      "ImageTag": "denoland/deno:2.9.3"
+      "Version": "2.9.4",
+      "ImageTag": "denoland/deno:2.9.4"
     }
   ]
 }

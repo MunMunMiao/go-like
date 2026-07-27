@@ -1,2 +1,2 @@
-import { Buffer, process } from "./value.js"
+import { Buffer, process } from "./value"
 export const value = Buffer + process

@@ -2,26 +2,19 @@ import { createHash } from "node:crypto"
 import { lstat, readdir, realpath } from "node:fs/promises"
 import { join, relative, sep } from "node:path"
 import type { SourceFile } from "typescript/unstable/ast"
+import { nodeProjectSessionOperations, withProjectSessionWithOperations } from "./project-session"
+import { checkModuleSyntax, type BoundaryIssue, type ModulePolicy } from "./module-syntax"
+import type { AtomicWriterOperations } from "../gates/atomic-writer"
+import { evaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus"
 import {
-  NodeProjectSessionOperations,
-  WithProjectSessionWithOperations
-} from "./project-session.ts"
-import {
-  CheckModuleSyntax,
-  type BoundaryIssue,
-  type ModulePolicy
-} from "./module-syntax.ts"
-import type { AtomicWriterOperations } from "../gates/atomic-writer.ts"
-import { EvaluateAsyncFixtureCorpus, type CorpusEvaluation } from "../gates/fixture-corpus.ts"
-import {
-  EmitGateResultWithDependencies,
-  NodeAtomicWriterOperations,
-  RunGate,
-  WriteProcessStderr,
-  WriteProcessStdout,
+  emitGateResultWithDependencies,
+  nodeAtomicWriterOperations,
+  runGate,
+  writeProcessStderr,
+  writeProcessStdout,
   type InputSnapshot,
   type SnapshotFile
-} from "../gates/result.ts"
+} from "../gates/result"
 
 export interface ModuleSyntaxFixtureIO {
   readonly WriteStdout: (value: string) => void | Promise<void>
@@ -54,8 +47,8 @@ const CasesPath = `${FamilyRoot}/cases.json`
 const ExpectedSubjects = 20
 const Decoder = new TextDecoder("utf-8", { fatal: true })
 const DefaultIO: ModuleSyntaxFixtureIO = {
-  WriteStdout: WriteProcessStdout,
-  WriteStderr: WriteProcessStderr
+  WriteStdout: writeProcessStdout,
+  WriteStderr: writeProcessStderr
 }
 
 function Sha256(value: string | Uint8Array): string {
@@ -94,7 +87,8 @@ function ParseArguments(args: readonly string[]): ParsedArguments | null {
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]
     const value = args[index + 1]
-    if (name === undefined || value === undefined || value.length === 0 || seen.has(name)) return null
+    if (name === undefined || value === undefined || value.length === 0 || seen.has(name))
+      return null
     seen.add(name)
     if (name === "--root") Root = value
     else if (name === "--run-id" && /^[a-z0-9][a-z0-9_-]{0,95}$/.test(value)) RunId = value
@@ -113,20 +107,22 @@ function ParsePolicy(files: readonly SnapshotFile[]): PolicyDocument {
     throw new Error("module-syntax fixture policy must be canonical UTF-8 JSON")
   }
   if (
-    !IsRecord(value)
-    || !HasExactKeys(value, ["schemaVersion", "allowedWorkspaceDependencies"])
-    || value.schemaVersion !== 1
-    || !Array.isArray(value.allowedWorkspaceDependencies)
-  ) throw new Error("module-syntax fixture policy must use the fixed shape")
+    !IsRecord(value) ||
+    !HasExactKeys(value, ["schemaVersion", "allowedWorkspaceDependencies"]) ||
+    value.schemaVersion !== 1 ||
+    !Array.isArray(value.allowedWorkspaceDependencies)
+  )
+    throw new Error("module-syntax fixture policy must use the fixed shape")
   const allowed = value.allowedWorkspaceDependencies
   if (
-    !allowed.every((item) => typeof item === "string" && item.length > 0)
-    || new Set(allowed).size !== allowed.length
-  ) throw new Error("module-syntax fixture policy dependencies must be unique non-empty strings")
+    !allowed.every((item) => typeof item === "string" && item.length > 0) ||
+    new Set(allowed).size !== allowed.length
+  )
+    throw new Error("module-syntax fixture policy dependencies must be unique non-empty strings")
   return { schemaVersion: 1, allowedWorkspaceDependencies: [...allowed] as string[] }
 }
 
-export async function DiscoverModuleSyntaxFixtureInputs(root: string): Promise<readonly string[]> {
+export async function discoverModuleSyntaxFixtureInputs(root: string): Promise<readonly string[]> {
   const repositoryRoot = await realpath(root)
   const familyRoot = join(repositoryRoot, ...FamilyRoot.split("/"))
   const familyInformation = await lstat(familyRoot)
@@ -145,7 +141,9 @@ export async function DiscoverModuleSyntaxFixtureInputs(root: string): Promise<r
       } else if (entry.isFile()) {
         paths.push(relative(repositoryRoot, absolute).split(sep).join("/"))
       } else {
-        throw new Error("module-syntax fixture inventory entries must be regular files or directories")
+        throw new Error(
+          "module-syntax fixture inventory entries must be regular files or directories"
+        )
       }
     }
   }
@@ -157,6 +155,7 @@ export async function DiscoverModuleSyntaxFixtureInputs(root: string): Promise<r
 function CaseSnapshot(files: readonly SnapshotFile[]): InputSnapshot {
   const Files = files
     .filter((file) => file.Path.startsWith("project/"))
+    .map(MaterializeProjectSource)
     .sort((left, right) => CompareCodeUnits(left.Path, right.Path))
   return {
     Sha256: Sha256(Files.map((file) => `${file.Path}\0${file.Sha256}\n`).join("")),
@@ -164,44 +163,57 @@ function CaseSnapshot(files: readonly SnapshotFile[]): InputSnapshot {
   }
 }
 
-export async function EvaluateModuleSyntaxFixtureCorpus(
+/** Materializes inert committed fixture source as TypeScript only inside the isolated staging project. */
+function MaterializeProjectSource(file: SnapshotFile): SnapshotFile {
+  const suffix = ".source"
+  if (!file.Path.endsWith(suffix)) return file
+  return {
+    Path: `${file.Path.slice(0, -suffix.length)}.ts`,
+    RealPath: file.RealPath,
+    Sha256: file.Sha256,
+    Bytes: file.Bytes
+  }
+}
+
+export async function evaluateModuleSyntaxFixtureCorpus(
   snapshot: InputSnapshot,
   repositoryRoot: string
 ): Promise<CorpusEvaluation> {
-  return EvaluateModuleSyntaxFixtureCorpusWithChecker(snapshot, repositoryRoot, CheckModuleSyntax)
+  return evaluateModuleSyntaxFixtureCorpusWithChecker(snapshot, repositoryRoot, checkModuleSyntax)
 }
 
-export async function EvaluateModuleSyntaxFixtureCorpusWithChecker(
+export async function evaluateModuleSyntaxFixtureCorpusWithChecker(
   snapshot: InputSnapshot,
   repositoryRoot: string,
   check: ModuleSyntaxChecker
 ): Promise<CorpusEvaluation> {
-  return EvaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
+  return evaluateAsyncFixtureCorpus(snapshot, FamilyRoot, async (files) => {
     const policy = ParsePolicy(files)
-    return WithProjectSessionWithOperations(
+    return withProjectSessionWithOperations(
       CaseSnapshot(files),
       "project",
-      async (session) => check(session.SourceFiles, {
-        PackageRoot: join(session.StagedRoot, "project"),
-        AllowedWorkspaceDependencies: policy.allowedWorkspaceDependencies
-      }),
-      NodeProjectSessionOperations(repositoryRoot)
+      async (session) =>
+        check(session.SourceFiles, {
+          PackageRoot: join(session.StagedRoot, "project"),
+          AllowedWorkspaceDependencies: policy.allowedWorkspaceDependencies
+        }),
+      nodeProjectSessionOperations(repositoryRoot)
     )
   })
 }
 
-export async function Main(
+export async function main(
   args: readonly string[],
   io: ModuleSyntaxFixtureIO = DefaultIO
 ): Promise<number> {
-  return MainWithDependencies(args, io, {
-    DiscoverInputPaths: DiscoverModuleSyntaxFixtureInputs,
-    Evaluate: EvaluateModuleSyntaxFixtureCorpus,
-    AtomicWriterOperations: NodeAtomicWriterOperations()
+  return mainWithDependencies(args, io, {
+    DiscoverInputPaths: discoverModuleSyntaxFixtureInputs,
+    Evaluate: evaluateModuleSyntaxFixtureCorpus,
+    AtomicWriterOperations: nodeAtomicWriterOperations()
   })
 }
 
-export async function MainWithDependencies(
+export async function mainWithDependencies(
   args: readonly string[],
   io: ModuleSyntaxFixtureIO,
   dependencies: ModuleSyntaxFixtureDependencies
@@ -218,25 +230,28 @@ export async function MainWithDependencies(
   } catch {
     inputPaths = [""]
   }
-  const result = await RunGate({
-    root: parsed.Root,
-    gate: "boundary-module-syntax-fixtures",
-    mode: "fixture",
-    readinessPolicy: "evaluation-only",
-    expectedSubjects: ExpectedSubjects,
-    inputPaths,
-    toolchain: { bun: Bun.version, typescript: "7.0.2" },
-    runId: parsed.RunId
-  }, async (snapshot) => {
-    const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
-    return {
-      SubjectsChecked: evaluation.SubjectsChecked,
-      Checks: evaluation.Checks
+  const result = await runGate(
+    {
+      root: parsed.Root,
+      gate: "boundary-module-syntax-fixtures",
+      mode: "fixture",
+      readinessPolicy: "evaluation-only",
+      expectedSubjects: ExpectedSubjects,
+      inputPaths,
+      toolchain: { bun: Bun.version, typescript: "7.0.2" },
+      runId: parsed.RunId
+    },
+    async (snapshot) => {
+      const evaluation = await dependencies.Evaluate(snapshot, parsed.Root)
+      return {
+        SubjectsChecked: evaluation.SubjectsChecked,
+        Checks: evaluation.Checks
+      }
     }
-  })
+  )
 
   try {
-    await EmitGateResultWithDependencies(parsed.Root, result, {
+    await emitGateResultWithDependencies(parsed.Root, result, {
       AtomicWriterOperations: dependencies.AtomicWriterOperations,
       WriteStdout: io.WriteStdout
     })
@@ -247,4 +262,4 @@ export async function MainWithDependencies(
   return result.status === "pass" ? 0 : 1
 }
 
-if (import.meta.main) process.exitCode = await Main(process.argv.slice(2))
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2))
