@@ -1,0 +1,9 @@
+# Configuración, registro, caché y almacenamiento
+
+Estos cuatro dominios suelen aparecer juntos en operaciones, pero no sirven para lo mismo. `@likego/config` fusiona fuentes en instantáneas inmutables y conserva el último estado válido; `@likego/registry` publica nodos y descubre endpoints vivos; `@likego/cache` guarda valores de bytes desechables con TTL opcional; `@likego/store` ofrece registros duraderos con `Context`, revisiones, TTL, CAS, prefijos y paginación estable.
+
+La configuración puede venir del entorno, archivos, Consul, etcd o Vault KV v2 mediante `@likego/config-vault`. El registro admite mDNS, Consul, etcd, Kubernetes EndpointSlice y ZooKeeper. Para caché están `@likego/cache-memory` y `@likego/cache-redis`. Los Store disponibles usan un snapshot local de un solo dueño, Consul KV, etcd KV o Vault KV v2 mediante `@likego/store-vault`. Cada implementación se publica aparte, así que no arrastras un backend que no has elegido.
+
+Los proveedores reciben dirección, credenciales y capacidades del host de forma explícita. Los proveedores HTTP portables usan un Fetch inyectado, no variables globales del runtime. Los tokens solo viajan en headers y no aparecen en errores públicos. Ante huecos como una compactación de etcd o un `410 Gone` de Kubernetes, el watch toma una instantánea nueva antes de continuar. Los watches de ZooKeeper también se rearman tras una entrega de un solo uso o la expiración de la sesión. Si la cancelación llega después de enviar un `multi`, el proveedor espera el resultado real y revierte el estado exacto; si el resultado sigue siendo ambiguo, cierra la sesión y restaura los owners de registro aceptados anteriormente.
+
+El Store de archivos vale para poco estado local, no para escritores multiproceso. El registro describe disponibilidad efímera, no datos duraderos del negocio. Mantener esas fronteras evita promesas que el backend nunca podría cumplir.

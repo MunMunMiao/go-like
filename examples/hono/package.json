@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-hono",
+  "private": true,
+  "description": "Hono Fetch router composed with the LikeGo Node host.",
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts"
+  },
+  "imports": {
+    "#src/*": "./src/*.ts"
+  },
+  "scripts": {
+    "start": "bun run --cwd ../.. build && bun run start:prepared",
+    "start:prepared": "bun build src/main.ts --target=node --outfile=.artifacts/main.mjs && node .artifacts/main.mjs",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test",
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage",
+    "test:e2e": "tsx test/node-e2e.ts"
+  },
+  "dependencies": {
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*",
+    "@likego/hono": "workspace:*",
+    "@likego/web": "workspace:*",
+    "hono": "4.12.32"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}

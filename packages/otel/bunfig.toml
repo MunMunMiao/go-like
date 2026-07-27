@@ -1,0 +1,14 @@
+[test]
+timeout = 10000
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = [
+  "../client/**",
+  "../context/**",
+  "../core/**",
+  "../metadata/**",
+  "../registry/**",
+  "../resilience/**",
+  "../transport/**",
+  "test/**"
+]

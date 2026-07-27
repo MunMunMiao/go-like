@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"],
+    "paths": {
+      "@likego/pino": ["./src/index.ts"],
+      "@likego/broker": ["../../packages/broker/src/index.ts"],
+      "@likego/client": ["../../packages/client/src/index.ts"],
+      "@likego/context": ["../../packages/context/src/index.ts"],
+      "@likego/core": ["../../packages/core/src/index.ts"],
+      "@likego/core/lifecycle": ["../../packages/core/src/lifecycle.ts"],
+      "@likego/server": ["../../packages/server/src/index.ts"],
+      "@likego/transport": ["../../packages/transport/src/index.ts"],
+      "@likego/transport/headers": ["../../packages/transport/src/headers.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

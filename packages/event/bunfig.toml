@@ -1,0 +1,5 @@
+[test]
+root = "test"
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coveragePathIgnorePatterns = ["../broker/**", "../context/**", "../core/**", "test/**"]

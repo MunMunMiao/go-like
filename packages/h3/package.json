@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/h3",
+  "version": "0.0.1",
+  "description": "Thin H3 native application bridge for LikeGo Web handlers.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test",
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@likego/web": "0.0.1"
+  },
+  "peerDependencies": {
+    "h3": "1.15.11"
+  },
+  "license": "MIT"
+}

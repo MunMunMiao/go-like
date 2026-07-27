@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/health",
+  "version": "0.0.1",
+  "description": "Portable liveness and readiness probes for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test",
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e:runtimes": "bun test/e2e/package-runtime.ts && tsx test/e2e/package-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/package-runtime.ts"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1"
+  },
+  "license": "MIT"
+}

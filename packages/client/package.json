@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/client",
+  "version": "0.0.1",
+  "description": "Portable unary clients composing LikeGo discovery, selection, and transport.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test",
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@likego/metadata": "0.0.1",
+    "@likego/registry": "0.0.1",
+    "@likego/resilience": "0.0.1",
+    "@likego/transport": "0.0.1"
+  },
+  "license": "MIT"
+}

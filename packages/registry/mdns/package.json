@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/registry-mdns",
+  "version": "0.0.1",
+  "description": "Portable mDNS Registry provider and explicit Node multicast host for LikeGo.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test",
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun test/e2e/docker-e2e.ts",
+    "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && deno run --sloppy-imports --config ../../../deno.json test/e2e/portable-runtime.ts && tsx test/e2e/node-runtime.ts"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@likego/registry": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1"
+  },
+  "license": "MIT"
+}
