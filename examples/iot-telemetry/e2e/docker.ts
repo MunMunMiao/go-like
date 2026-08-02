@@ -12,6 +12,15 @@ import {
 } from "@nats-io/jetstream"
 import { connect, nanos, type NatsConnection, type Status } from "@nats-io/transport-node"
 
+import { errorSummary } from "../../../e2e/harness/diagnostics"
+import {
+  closeOwnedDockerContext,
+  createContainer,
+  createVolume,
+  ownedDockerContextFromEnvironment,
+  scenarioDockerEnvironment,
+  type OwnedDockerContext
+} from "../../../e2e/harness/owned-docker"
 import { deadLetterTelemetrySubject, rawTelemetrySubjects } from "../src/nats"
 import { newTelemetryPolicy } from "../src/telemetry"
 import { newTelemetryServer } from "../src/worker"
@@ -24,14 +33,9 @@ const RawStream = "TELEMETRY_RAW"
 const ValidatedStream = "TELEMETRY_VALIDATED"
 const DeadLetterStream = "TELEMETRY_DLQ"
 const ConsumerName = "telemetry-validator-v1"
+const DockerKnownSecrets: readonly string[] = Object.freeze([])
 const RunId = crypto.randomUUID()
-const Owner = process.env.LIKEGO_E2E_OWNER
-if (Owner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(Owner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-}
-const OwnerLabel = `io.likego.e2e.owner=${Owner}`
 const NatsContainer = `likego-iot-nats-${RunId}`
-const NatsVolume = `likego-iot-nats-${RunId}`
 
 interface CommandResult {
   readonly stdout: string
@@ -49,8 +53,16 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 /** Runs Docker without a shell and captures its complete result. */
-async function docker(args: readonly string[], allowFailure = false): Promise<CommandResult> {
-  const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" })
+async function docker(
+  ownedDocker: OwnedDockerContext,
+  args: readonly string[],
+  allowFailure = false
+): Promise<CommandResult> {
+  const child = Bun.spawn(["docker", ...args], {
+    env: scenarioDockerEnvironment(ownedDocker),
+    stdout: "pipe",
+    stderr: "pipe"
+  })
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -62,9 +74,20 @@ async function docker(args: readonly string[], allowFailure = false): Promise<Co
     exitCode
   })
   if (exitCode !== 0 && !allowFailure) {
-    throw new Error(`docker ${args.join(" ")} failed (${exitCode}): ${result.stderr}`)
+    throw new Error(`Docker operation failed with exit code ${exitCode}`)
   }
   return result
+}
+
+/** Produces one bounded diagnostic without retaining raw secrets or stacks. */
+function safeErrorSummary(error: unknown): string {
+  return errorSummary(error, { knownSecrets: DockerKnownSecrets }, 1_024)
+}
+
+/** Wraps a failure without retaining its raw cause. */
+function safeFailure(summary: string, error: unknown): Error {
+  const diagnostic = safeErrorSummary(error)
+  return new Error(diagnostic.length === 0 ? summary : `${summary}: ${diagnostic}`)
 }
 
 /** Reserves a fixed loopback port so Docker restart preserves the client endpoint. */
@@ -116,9 +139,9 @@ async function connectNats(port: number): Promise<NatsConnection> {
       await Bun.sleep(50)
     }
   }
-  throw new Error("NATS container never accepted an official client connection", {
-    cause: lastError
-  })
+  throw new Error(
+    `NATS container never accepted an official client connection: ${safeErrorSummary(lastError)}`
+  )
 }
 
 /** Closes one application-owned official connection. */
@@ -137,19 +160,6 @@ async function stopWorker(app: App, running: Promise<void>): Promise<number> {
   await app.stop()
   await running
   return Math.round(performance.now() - started)
-}
-
-/** Removes all containers and volumes carrying this run's unique owner label. */
-async function cleanupDocker(): Promise<void> {
-  const containers = await docker(
-    ["ps", "--all", "--quiet", "--filter", `label=${OwnerLabel}`],
-    true
-  )
-  const containerIds = containers.stdout.split("\n").filter((value) => value.length > 0)
-  if (containerIds.length > 0) await docker(["rm", "--force", ...containerIds], true)
-  const volumes = await docker(["volume", "ls", "--quiet", "--filter", `label=${OwnerLabel}`], true)
-  const volumeNames = volumes.stdout.split("\n").filter((value) => value.length > 0)
-  if (volumeNames.length > 0) await docker(["volume", "rm", "--force", ...volumeNames], true)
 }
 
 /** Creates the three explicit file-backed streams. */
@@ -225,6 +235,7 @@ async function verifySdkPin(): Promise<void> {
 
 /** Executes the raw, validated, DLQ, redelivery, reconnect, and drain contracts. */
 async function main(): Promise<void> {
+  const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
   let connection: NatsConnection | null = null
   let statusTask: Promise<void> | null = null
   let workerApp: App | null = null
@@ -245,26 +256,27 @@ async function main(): Promise<void> {
   try {
     phase = "verify SDK pin"
     await verifySdkPin()
-    await cleanupDocker()
     phase = "create fixed-digest NATS resource"
     const port = allocateHostPort()
-    await docker(["volume", "create", "--label", OwnerLabel, NatsVolume])
-    await docker([
-      "run",
-      "--detach",
-      "--name",
-      NatsContainer,
-      "--label",
-      OwnerLabel,
-      "--publish",
-      `127.0.0.1:${port}:4222`,
-      "--mount",
-      `source=${NatsVolume},target=/data`,
-      NatsImage,
-      "-js",
-      "-sd",
-      "/data"
-    ])
+    const natsVolume = await createVolume(ownedDocker, [], {
+      knownSecrets: DockerKnownSecrets
+    })
+    await createContainer(
+      ownedDocker,
+      [
+        "--name",
+        NatsContainer,
+        "--publish",
+        `127.0.0.1:${port}:4222`,
+        "--mount",
+        `source=${natsVolume.id},target=/data`,
+        NatsImage,
+        "-js",
+        "-sd",
+        "/data"
+      ],
+      { knownSecrets: DockerKnownSecrets }
+    )
 
     phase = "connect and provision JetStream"
     connection = await connectNats(port)
@@ -273,8 +285,10 @@ async function main(): Promise<void> {
       for await (const status of connection.status()) statuses.push(status.type)
     })()
     void statusTask.catch(() => {})
-    serverVersion = (await docker(["exec", NatsContainer, "nats-server", "--version"])).stdout
-    imageId = (await docker(["inspect", "--format", "{{.Image}}", NatsContainer])).stdout
+    serverVersion = (await docker(ownedDocker, ["exec", NatsContainer, "nats-server", "--version"]))
+      .stdout
+    imageId = (await docker(ownedDocker, ["inspect", "--format", "{{.Image}}", NatsContainer]))
+      .stdout
     assert(serverVersion.includes(ExpectedNatsVersion), `unexpected NATS: ${serverVersion}`)
     const client = jetstream(connection)
     const manager = await jetstreamManager(connection)
@@ -322,8 +336,7 @@ async function main(): Promise<void> {
       const deadLetterInfo = await manager.streams.info(DeadLetterStream)
       const consumerInfo = await manager.consumers.info(RawStream, ConsumerName)
       throw new Error(
-        `first delivery readback: validated=${validatedInfo.state.messages}, dlq=${deadLetterInfo.state.messages}, pending=${consumerInfo.num_ack_pending}, redelivered=${consumerInfo.num_redelivered}`,
-        { cause: error }
+        `first delivery readback: validated=${validatedInfo.state.messages}, dlq=${deadLetterInfo.state.messages}, pending=${consumerInfo.num_ack_pending}, redelivered=${consumerInfo.num_redelivered}; diagnostic=${safeErrorSummary(error)}`
       )
     }
     const validated = await manager.streams.getMessage(ValidatedStream, { seq: 1 })
@@ -384,9 +397,9 @@ async function main(): Promise<void> {
     )
 
     phase = "restart NATS under the live subscription"
-    await docker(["stop", "--timeout", "1", NatsContainer])
+    await docker(ownedDocker, ["stop", "--timeout", "1", NatsContainer])
     await waitUntil("official disconnect status", () => statuses.includes("disconnect"))
-    await docker(["start", NatsContainer])
+    await docker(ownedDocker, ["start", NatsContainer])
     await waitUntil(
       "reconnected JetStream API",
       async () => {
@@ -416,7 +429,7 @@ async function main(): Promise<void> {
     if (statusTask !== null) await statusTask
     statusTask = null
 
-    await docker(["restart", NatsContainer])
+    await docker(ownedDocker, ["restart", NatsContainer])
     connection = await connectNats(port)
     const restartedManager = await jetstreamManager(connection)
     const persistentConsumer = await restartedManager.consumers.info(RawStream, ConsumerName)
@@ -437,7 +450,7 @@ async function main(): Promise<void> {
     const program = Bun.spawn(["bun", "run", "start:prepared"], {
       cwd: `${import.meta.dir}/..`,
       env: {
-        ...process.env,
+        ...scenarioDockerEnvironment(ownedDocker),
         NATS_URL: `nats://127.0.0.1:${port}`
       },
       detached: true,
@@ -456,6 +469,7 @@ async function main(): Promise<void> {
       programOutput += decoder.decode()
     })()
     const errorTask = new Response(program.stderr).text()
+    void errorTask.catch(() => {})
     let outputJoined = false
     let forced = false
     let terminationTimeout: ReturnType<typeof setTimeout> | null = null
@@ -500,10 +514,7 @@ async function main(): Promise<void> {
       outputJoined = true
       clearTimeout(terminationTimeout)
       if (forced) throw new Error("start:prepared did not stop after SIGTERM")
-      assert(
-        exitCode === 0 || exitCode === 143,
-        `start:prepared exited ${exitCode}: ${(await errorTask).trim()}`
-      )
+      assert(exitCode === 0 || exitCode === 143, `start:prepared exited ${exitCode}`)
     } finally {
       if (terminationTimeout !== null) clearTimeout(terminationTimeout)
       if (!outputJoined) {
@@ -517,50 +528,40 @@ async function main(): Promise<void> {
         await program.exited
       }
       await outputTask
+      await errorTask
     }
     await waitUntil("start:prepared subscription release", async () => {
       return (await restartedManager.consumers.info(RawStream, ConsumerName)).num_waiting === 0
     })
   } catch (error) {
-    primary = new Error(`iot-telemetry E2E failed during ${phase}`, { cause: error })
+    primary = safeFailure(`iot-telemetry E2E failed during ${phase}`, error)
   } finally {
     if (workerApp !== null && workerRun !== null) {
       try {
         await stopWorker(workerApp, workerRun)
       } catch (error) {
-        cleanupFailures.push(error)
+        cleanupFailures.push(safeFailure("telemetry worker cleanup failed", error))
       }
     }
     try {
       await closeNats(connection)
     } catch (error) {
-      cleanupFailures.push(error)
+      cleanupFailures.push(safeFailure("NATS cleanup failed", error))
     }
     if (statusTask !== null) {
       try {
         await statusTask
       } catch (error) {
-        cleanupFailures.push(error)
+        cleanupFailures.push(safeFailure("NATS status cleanup failed", error))
       }
     }
-    await cleanupDocker()
+    try {
+      await closeOwnedDockerContext(ownedDocker)
+    } catch (error) {
+      cleanupFailures.push(safeFailure("Owned Docker context cleanup failed", error))
+    }
   }
 
-  const remainingContainers = await docker(
-    ["ps", "--all", "--quiet", "--filter", `label=${OwnerLabel}`],
-    true
-  )
-  const remainingVolumes = await docker(
-    ["volume", "ls", "--quiet", "--filter", `label=${OwnerLabel}`],
-    true
-  )
-  if (remainingContainers.stdout !== "" || remainingVolumes.stdout !== "") {
-    cleanupFailures.push(
-      new Error(
-        `Docker resources leaked: containers=${remainingContainers.stdout}, volumes=${remainingVolumes.stdout}`
-      )
-    )
-  }
   if (primary !== null || cleanupFailures.length > 0) {
     const failures = primary === null ? cleanupFailures : [primary, ...cleanupFailures]
     throw new AggregateError(failures, "iot-telemetry Docker scenario failed")

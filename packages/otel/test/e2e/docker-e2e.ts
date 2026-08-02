@@ -27,7 +27,7 @@ interface CommandResult {
 }
 
 async function command(arguments_: readonly string[]): Promise<CommandResult> {
-  const process = Bun.spawn(arguments_, { stdout: "pipe", stderr: "pipe" })
+  const process = Bun.spawn(Array.from(arguments_), { stdout: "pipe", stderr: "pipe" })
   const [exitCode, stdout, stderr] = await Promise.all([
     process.exited,
     new Response(process.stdout).text(),
@@ -91,7 +91,7 @@ function addFailure(failures: unknown[], failure: unknown): void {
 
 /** Observes official trace export results without changing exporter configuration. */
 function observedTraceExporter(exporter: OTLPTraceExporter, failures: Error[]): SpanExporter {
-  return Object.freeze({
+  return Object.freeze<SpanExporter>({
     export(spans, complete): void {
       exporter.export(spans, (result) => {
         if (result.error instanceof Error) failures.push(result.error)
@@ -109,7 +109,7 @@ function observedMetricExporter(
   exporter: OTLPMetricExporter,
   failures: Error[]
 ): PushMetricExporter {
-  return Object.freeze({
+  return Object.freeze<PushMetricExporter>({
     export(metrics, complete): void {
       exporter.export(metrics, (result) => {
         if (result.error instanceof Error) failures.push(result.error)

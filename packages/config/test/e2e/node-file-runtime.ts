@@ -3,11 +3,12 @@ import { mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import { type ConfigSourceWatcher } from "@likego/config"
 import { background, withTimeout } from "@likego/context"
 import { fileSource } from "@likego/config/file"
 import { newNodeFileCapability } from "@likego/config/node"
 
-async function nextWithin(watcher) {
+async function nextWithin(watcher: ConfigSourceWatcher): Promise<void> {
   const [ctx, cancel] = withTimeout(background(), 2_000)
   try {
     await watcher.next(ctx)
@@ -16,12 +17,15 @@ async function nextWithin(watcher) {
   }
 }
 
-async function stop(watcher) {
+async function stop(watcher: ConfigSourceWatcher | null): Promise<void> {
   if (watcher === null) return
   await watcher.stop(background())
 }
 
-async function notifyWith(watcher, write) {
+async function notifyWith(
+  watcher: ConfigSourceWatcher,
+  write: (attempt: number) => Promise<void>
+): Promise<number> {
   const changed = nextWithin(watcher)
   let value = 0
   for (; value < 20; value += 1) {
@@ -41,17 +45,18 @@ async function notifyWith(watcher, write) {
 const directory = await mkdtemp(join(tmpdir(), "likego-config-node-runtime-"))
 const path = join(directory, "config.json")
 const replacement = join(directory, ".config.next")
-let watcher = null
+let watcher: ConfigSourceWatcher | null = null
 try {
   await writeFile(path, '{"generation":1}')
   const source = fileSource(newNodeFileCapability(), path)
   const initial = await source.load(background())
-  watcher = await source.watch?.(background(), initial.revision)
-  if (watcher === undefined) throw new Error("Node config runtime watcher is missing")
+  const ordinaryWatcher = await source.watch?.(background(), initial.revision)
+  if (ordinaryWatcher === undefined) throw new Error("Node config runtime watcher is missing")
+  watcher = ordinaryWatcher
 
   const ordinaryGeneration =
     2 +
-    (await notifyWith(watcher, async (attempt) => {
+    (await notifyWith(ordinaryWatcher, async (attempt) => {
       await writeFile(path, `{"generation":${2 + attempt}}`)
     }))
   const ordinary = await source.load(background())
@@ -60,13 +65,15 @@ try {
   await stop(watcher)
   watcher = null
 
-  watcher = await source.watch?.(background(), ordinary.revision)
-  if (watcher === undefined) throw new Error("Node config replacement watcher is missing")
+  const replacementWatcher = await source.watch?.(background(), ordinary.revision)
+  if (replacementWatcher === undefined)
+    throw new Error("Node config replacement watcher is missing")
+  watcher = replacementWatcher
 
   const changedGeneration =
     ordinaryGeneration +
     1 +
-    (await notifyWith(watcher, async (attempt) => {
+    (await notifyWith(replacementWatcher, async (attempt) => {
       await writeFile(replacement, `{"generation":${ordinaryGeneration + 1 + attempt}}`)
       await rename(replacement, path)
     }))

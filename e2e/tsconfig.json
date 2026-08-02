@@ -6,5 +6,5 @@
     "types": ["bun"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["fixtures/published-consumer/**"]
+  "exclude": ["fixtures/published-consumer/**", "load/k6-http.ts"]
 }

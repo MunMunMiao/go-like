@@ -622,8 +622,7 @@ async function runSentinelFailover(): Promise<SentinelEvidence> {
             sentinelRootNodes,
             nodeAddressMap,
             nodeClientOptions: { password: Password },
-            passthroughClientErrorEvents: true,
-            scanInterval: 100
+            passthroughClientErrorEvents: true
           }),
         prefix: `${Prefix}sentinel:`,
         commandTimeoutMs: 5_000

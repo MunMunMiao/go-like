@@ -23,6 +23,13 @@ import {
 import { newHTTPTransport } from "@likego/transport-http"
 import { newNodeHTTPTransport } from "@likego/transport-http/node"
 
+import {
+  closeOwnedDockerContext,
+  createContainer,
+  ownedDockerContextFromEnvironment,
+  scenarioDockerEnvironment,
+  type OwnedDockerContext
+} from "../../../e2e/harness/owned-docker"
 import { newCatalogHandler } from "../src/http"
 import { newPricingHandler } from "../src/pricing"
 
@@ -31,11 +38,6 @@ const ConsulImage =
 const RedisImage =
   "redis:8.8.1-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb"
 const RunId = crypto.randomUUID()
-const Owner = process.env.LIKEGO_E2E_OWNER
-if (Owner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(Owner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-}
-const OwnerLabel = `io.likego.e2e.owner=${Owner}`
 const ConsulName = `likego-commerce-consul-${RunId}`
 const RedisName = `likego-commerce-redis-${RunId}`
 
@@ -46,20 +48,34 @@ interface CommandResult {
 }
 
 /** Runs one argv-safe Docker command and captures its complete outcome. */
-async function docker(args: readonly string[], allowFailure = false): Promise<CommandResult> {
-  const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" })
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text()
-  ])
-  const result = Object.freeze({
-    stdout: stdout.trim(),
-    stderr: stderr.trim(),
-    exitCode
-  })
-  if (exitCode !== 0 && !allowFailure) {
-    throw new Error(`docker ${args.join(" ")} failed (${exitCode}): ${result.stderr}`)
+async function docker(
+  ownedDocker: OwnedDockerContext,
+  operation: string,
+  args: readonly string[],
+  allowFailure = false
+): Promise<CommandResult> {
+  let result: CommandResult
+  try {
+    const child = Bun.spawn(["docker", ...args], {
+      env: scenarioDockerEnvironment(ownedDocker),
+      stdout: "pipe",
+      stderr: "pipe"
+    })
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text()
+    ])
+    result = Object.freeze({
+      stdout: stdout.trim(),
+      stderr: stderr.trim(),
+      exitCode
+    })
+  } catch {
+    throw new Error(`Docker ${operation} did not complete`)
+  }
+  if (result.exitCode !== 0 && !allowFailure) {
+    throw new Error(`Docker ${operation} failed (${result.exitCode})`)
   }
   return result
 }
@@ -70,20 +86,33 @@ function pause(milliseconds: number): Promise<void> {
 }
 
 /** Returns one random host port currently mapped by Docker. */
-async function mappedPort(container: string, internalPort: number): Promise<number> {
-  const result = await docker(["port", container, `${internalPort}/tcp`])
+async function mappedPort(
+  ownedDocker: OwnedDockerContext,
+  container: string,
+  internalPort: number
+): Promise<number> {
+  const result = await docker(ownedDocker, "read container port", [
+    "port",
+    container,
+    `${internalPort}/tcp`
+  ])
   const match = /:([0-9]+)$/u.exec(result.stdout.split("\n")[0] ?? "")
-  if (match?.[1] === undefined) throw new Error(`invalid Docker port mapping: ${result.stdout}`)
+  if (match?.[1] === undefined) throw new Error("invalid Docker port mapping")
   return Number(match[1])
 }
 
 /** Polls real Consul and Redis processes until both are ready. */
-async function waitForServices(consul: string): Promise<void> {
+async function waitForServices(ownedDocker: OwnedDockerContext, consul: string): Promise<void> {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     try {
       const leader = await fetch(`${consul}/v1/status/leader`)
-      const redis = await docker(["exec", RedisName, "redis-cli", "PING"], true)
+      const redis = await docker(
+        ownedDocker,
+        "probe Redis readiness",
+        ["exec", RedisName, "redis-cli", "PING"],
+        true
+      )
       if (leader.ok && (await leader.text()).length > 2 && redis.stdout === "PONG") return
     } catch {
       // Docker publishes ports before both processes necessarily accept traffic.
@@ -131,21 +160,9 @@ async function stopApp(app: App, running: Promise<void>): Promise<void> {
   await running
 }
 
-/** Removes every container carrying this run's unique owner label and proves none remain. */
-async function cleanupContainers(): Promise<number> {
-  const listed = await docker(["ps", "--all", "--quiet", "--filter", `label=${OwnerLabel}`])
-  const ids = listed.stdout.split("\n").filter((value) => value.length > 0)
-  if (ids.length > 0) await docker(["rm", "--force", ...ids])
-  const remaining = await docker(["ps", "--all", "--quiet", "--filter", `label=${OwnerLabel}`])
-  const residualContainers = remaining.stdout.split("\n").filter((value) => value.length > 0).length
-  if (residualContainers !== 0) {
-    throw new Error(`Docker resources leaked: ${remaining.stdout}`)
-  }
-  return residualContainers
-}
-
 /** Executes the real registration, discovery, transport, cache, and Hono scenario. */
 async function main(): Promise<void> {
+  const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
   let pricingApp: App | null = null
   let pricingRun: Promise<void> | null = null
   let catalogApp: App | null = null
@@ -154,57 +171,73 @@ async function main(): Promise<void> {
   let consulAddress = ""
   let primary: { readonly value: unknown } | null = null
   const cleanupFailures: unknown[] = []
-  let residualContainers = -1
   let consulVersion = "unobserved"
   let redisVersion = "unobserved"
   let pricingCalls = 0
   try {
-    await cleanupContainers()
-    await docker([
-      "run",
-      "--detach",
-      "--name",
-      ConsulName,
-      "--label",
-      OwnerLabel,
-      "--tmpfs",
-      "/consul/data:rw,noexec,nosuid,size=64m",
-      "--publish",
-      "127.0.0.1::8500",
-      ConsulImage,
-      "agent",
-      "-dev",
-      "-client=0.0.0.0",
-      "-log-level=warn"
-    ])
-    await docker([
-      "run",
-      "--detach",
-      "--name",
-      RedisName,
-      "--label",
-      OwnerLabel,
-      "--publish",
-      "127.0.0.1::6379",
-      RedisImage,
-      "redis-server",
-      "--save",
-      "",
-      "--appendonly",
-      "no"
-    ])
-    consulAddress = `http://127.0.0.1:${await mappedPort(ConsulName, 8500)}`
-    const redisUrl = `redis://127.0.0.1:${await mappedPort(RedisName, 6379)}`
-    await waitForServices(consulAddress)
+    await createContainer(
+      ownedDocker,
+      [
+        "--name",
+        ConsulName,
+        "--tmpfs",
+        "/consul/data:rw,noexec,nosuid,size=64m",
+        "--publish",
+        "127.0.0.1::8500",
+        ConsulImage,
+        "agent",
+        "-dev",
+        "-client=0.0.0.0",
+        "-log-level=warn"
+      ],
+      { knownSecrets: [] }
+    )
+    await createContainer(
+      ownedDocker,
+      [
+        "--name",
+        RedisName,
+        "--publish",
+        "127.0.0.1::6379",
+        RedisImage,
+        "redis-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no"
+      ],
+      { knownSecrets: [] }
+    )
+    consulAddress = `http://127.0.0.1:${await mappedPort(ownedDocker, ConsulName, 8500)}`
+    const redisUrl = `redis://127.0.0.1:${await mappedPort(ownedDocker, RedisName, 6379)}`
+    await waitForServices(ownedDocker, consulAddress)
 
-    const consulReference = await docker(["inspect", "--format", "{{.Config.Image}}", ConsulName])
-    const redisReference = await docker(["inspect", "--format", "{{.Config.Image}}", RedisName])
+    const consulReference = await docker(ownedDocker, "inspect Consul image", [
+      "inspect",
+      "--format",
+      "{{.Config.Image}}",
+      ConsulName
+    ])
+    const redisReference = await docker(ownedDocker, "inspect Redis image", [
+      "inspect",
+      "--format",
+      "{{.Config.Image}}",
+      RedisName
+    ])
     if (consulReference.stdout !== ConsulImage || redisReference.stdout !== RedisImage) {
       throw new Error("Docker image references drifted from the exact pinned digests")
     }
     consulVersion =
-      (await docker(["exec", ConsulName, "consul", "version"])).stdout.split("\n")[0] ?? "missing"
-    const redisInfo = await docker(["exec", RedisName, "redis-cli", "INFO", "server"])
+      (
+        await docker(ownedDocker, "read Consul version", ["exec", ConsulName, "consul", "version"])
+      ).stdout.split("\n")[0] ?? "missing"
+    const redisInfo = await docker(ownedDocker, "read Redis version", [
+      "exec",
+      RedisName,
+      "redis-cli",
+      "INFO",
+      "server"
+    ])
     redisVersion =
       redisInfo.stdout
         .split("\n")
@@ -271,11 +304,17 @@ async function main(): Promise<void> {
     const firstBody = await first.text()
     if (first.status !== 200 || !firstBody.includes('"amountMinor":1299') || pricingCalls !== 1) {
       throw new Error(
-        `first Hono request failed: status=${first.status}, pricingCalls=${pricingCalls}, body=${firstBody}`
+        `first Hono request failed: status=${first.status}, pricingCalls=${pricingCalls}`
       )
     }
     const redisKey = `${cachePrefix}price:v1:USD:sku-001`
-    const cached = await docker(["exec", RedisName, "redis-cli", "EXISTS", redisKey])
+    const cached = await docker(ownedDocker, "read Redis cache key", [
+      "exec",
+      RedisName,
+      "redis-cli",
+      "EXISTS",
+      redisKey
+    ])
     if (cached.stdout !== "1") throw new Error("first Pricing response was not present in Redis")
 
     const second = await handler(
@@ -302,19 +341,25 @@ async function main(): Promise<void> {
     const portNumber = programPort.port
     programPort.stop(true)
     if (portNumber === undefined) throw new Error("Bun did not allocate the program port")
-    const program = Bun.spawn(["bun", "run", "start:prepared"], {
-      cwd: `${import.meta.dir}/..`,
-      env: {
-        ...process.env,
-        HOST: "127.0.0.1",
-        PORT: String(portNumber),
-        CONSUL_HTTP_ADDR: consulAddress,
-        REDIS_URL: redisUrl
-      },
-      detached: true,
-      stdout: "pipe",
-      stderr: "pipe"
-    })
+    const program = (() => {
+      try {
+        return Bun.spawn(["bun", "run", "start:prepared"], {
+          cwd: `${import.meta.dir}/..`,
+          env: {
+            ...scenarioDockerEnvironment(ownedDocker),
+            HOST: "127.0.0.1",
+            PORT: String(portNumber),
+            CONSUL_HTTP_ADDR: consulAddress,
+            REDIS_URL: redisUrl
+          },
+          detached: true,
+          stdout: "pipe",
+          stderr: "pipe"
+        })
+      } catch {
+        throw new Error("start:prepared command did not start")
+      }
+    })()
     let programOutput = ""
     const outputTask = (async (): Promise<void> => {
       const reader = program.stdout.getReader()
@@ -326,7 +371,7 @@ async function main(): Promise<void> {
       }
       programOutput += decoder.decode()
     })()
-    const errorTask = new Response(program.stderr).text()
+    const errorTask = new Response(program.stderr).arrayBuffer()
     let outputJoined = false
     let forced = false
     let terminationTimeout: ReturnType<typeof setTimeout> | null = null
@@ -345,7 +390,7 @@ async function main(): Promise<void> {
         await pause(25)
       }
       if (!body.includes('"amountMinor":1299')) {
-        throw new Error(`start:prepared catalog probe failed: ${body}`)
+        throw new Error("start:prepared catalog probe failed")
       }
       process.kill(-program.pid, "SIGTERM")
       terminationTimeout = setTimeout(() => {
@@ -362,7 +407,8 @@ async function main(): Promise<void> {
       clearTimeout(terminationTimeout)
       if (forced) throw new Error("start:prepared did not stop after SIGTERM")
       if (exitCode !== 0 && exitCode !== 143) {
-        throw new Error(`start:prepared exited ${exitCode}: ${(await errorTask).trim()}`)
+        await errorTask
+        throw new Error(`start:prepared exited ${exitCode}`)
       }
     } finally {
       if (terminationTimeout !== null) clearTimeout(terminationTimeout)
@@ -417,7 +463,7 @@ async function main(): Promise<void> {
       }
     }
     try {
-      residualContainers = await cleanupContainers()
+      await closeOwnedDockerContext(ownedDocker)
     } catch (error) {
       cleanupFailures.push(error)
     }

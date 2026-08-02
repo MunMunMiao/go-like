@@ -48,6 +48,80 @@ test("runCommand passes one child-only Docker owner without mutating the parent"
   expect(getEventListeners(controller.signal, "abort")).toHaveLength(listenerBaseline)
 })
 
+test("runCommand exposes only sanitized stream callbacks", async () => {
+  const secret = "run-command-stream-callback-secret"
+  let streamed = ""
+  const result = await runCommand(import.meta.dir, {
+    cwd: ".",
+    command: [process.execPath, fixture("diagnostics.ts"), "failure"],
+    environment: { LIKEGO_E2E_CANARY: secret },
+    knownSecrets: [secret],
+    timeoutMs: 2_000,
+    onStdout(value) {
+      streamed += value
+    },
+    onStderr(value) {
+      streamed += value
+    }
+  })
+  expect(result.exitCode).toBe(17)
+  expect(streamed).not.toContain(secret)
+  expect(streamed).toContain("<redacted>")
+})
+
+test("runCommand redacts captured and forwarded output before exposing it", async () => {
+  const secret = "run-command-canary-secret"
+  const capture = await runCommand(import.meta.dir, {
+    cwd: ".",
+    command: [process.execPath, fixture("diagnostics.ts"), "failure"],
+    environment: { LIKEGO_E2E_CANARY: secret },
+    knownSecrets: [secret],
+    timeoutMs: 2_000
+  })
+  expect(capture).toMatchObject({
+    exitCode: 17,
+    signal: null,
+    termination: "exit",
+    timedOut: false,
+    abortReason: null,
+    containment: "not-claimed",
+    residual: "zero-observed"
+  })
+  expect(`${capture.stdout}${capture.stderr}`).not.toContain(secret)
+  expect(capture.stdout).toContain("token=<redacted>")
+  expect(capture.stderr).toContain("-eLIKEGO_TOKEN=<redacted>")
+
+  const forwarded = await runCommand(import.meta.dir, {
+    cwd: ".",
+    command: [process.execPath, fixture("forward-diagnostics.ts")],
+    environment: { LIKEGO_E2E_CANARY: secret },
+    knownSecrets: [secret],
+    timeoutMs: 5_000
+  })
+  expect(forwarded.exitCode).toBe(0)
+  expect(`${forwarded.stdout}${forwarded.stderr}`).not.toContain(secret)
+  expect(forwarded.stdout).toContain("RESULT=")
+  expect(forwarded.stdout).toContain("<redacted>")
+})
+
+test("runCommand records signal termination without manufacturing an exit code", async () => {
+  if (process.platform === "win32") return
+  const result = await runCommand(import.meta.dir, {
+    cwd: ".",
+    command: ["/bin/sh", "-c", "kill -TERM $$"],
+    timeoutMs: 2_000
+  })
+  expect(result).toMatchObject({
+    exitCode: null,
+    signal: "SIGTERM",
+    termination: "signal",
+    timedOut: false,
+    abortReason: null,
+    containment: "not-claimed",
+    residual: "zero-observed"
+  })
+})
+
 test("runCommand preserves an in-flight abort reason and terminates the complete tree", async () => {
   const directory = await mkdtemp(join(tmpdir(), "likego-e2e-abort-tree-"))
   const processIdPath = join(directory, "descendant.pid")
@@ -108,7 +182,14 @@ test("runCommand terminates a descendant that inherits stdout and ignores SIGTER
     })
     const match = /DESCENDANT_PID=(\d+)/.exec(result.stdout)
     descendantPid = match === null ? null : Number(match[1])
-    expect(result.timedOut).toBe(true)
+    expect(result).toMatchObject({
+      signal: null,
+      termination: "timeout",
+      timedOut: true,
+      abortReason: null,
+      containment: "not-claimed",
+      residual: "zero-observed"
+    })
     expect(result.stdout).toContain("DESCENDANT_READY")
     expect(descendantPid).not.toBeNull()
     expect(performance.now() - startedAt).toBeLessThan(8_000)

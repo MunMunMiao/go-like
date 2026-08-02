@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test/unit",
     "test:unit:coverage": "bun test --isolate --no-orphans test/unit --coverage --coverage-dir .artifacts/coverage",
-    "test:e2e": "tsx test/e2e/docker-e2e.ts"
+    "test:e2e": "bun ../../e2e/example-task.ts -- bunx --no-install tsx test/e2e/docker-e2e.ts"
   },
   "dependencies": {
     "@likego/client": "workspace:*",

@@ -19,7 +19,7 @@
   },
   "scripts": {
     "build": "bun x --bun tsdown --config-loader native",
-    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false && tsc -p tsconfig.e2e.json --pretty false && tsc -p tsconfig.e2e.deno.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
     "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
     "test:e2e": "tsx test/e2e/native-e2e.ts",

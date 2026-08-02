@@ -11,6 +11,14 @@ import { newNodeFileStoreHost } from "@likego/store-file/node"
 import { Queue, Worker, type Job, type Processor, type WorkerOptions } from "bullmq"
 import { Cron } from "croner"
 
+import { errorSummary, sanitizeArgv } from "../../../../e2e/harness/diagnostics"
+import {
+  closeOwnedDockerContext,
+  createContainer,
+  ownedDockerContextFromEnvironment,
+  scenarioDockerEnvironment,
+  type OwnedDockerContext
+} from "../../../../e2e/harness/owned-docker"
 import { readCheckpoint } from "../../src/checkpoint"
 import { processReport, type ReportOutcome } from "../../src/processor"
 import { reportWindow, type ReportJob } from "../../src/report-window"
@@ -44,17 +52,35 @@ function asError(value: unknown, message: string): Error {
 }
 
 /** Runs one command without a shell and returns all output. */
-async function command(args: string[], allowFailure = false): Promise<CommandResult> {
-  const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text()
-  ])
-  if (!allowFailure && exitCode !== 0) {
-    throw new Error(`${args.join(" ")} failed (${exitCode}): ${stderr.trim()}`)
+async function command(
+  ownedDocker: OwnedDockerContext,
+  args: string[],
+  allowFailure = false
+): Promise<CommandResult> {
+  const commandArgs = args.slice()
+  const operation = sanitizeArgv(commandArgs).join(" ")
+  let result: CommandResult
+  try {
+    const child = Bun.spawn(commandArgs, {
+      env: scenarioDockerEnvironment(ownedDocker),
+      stdout: "pipe",
+      stderr: "pipe"
+    })
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text()
+    ])
+    result = Object.freeze({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode })
+  } catch (value) {
+    throw new Error(`${operation} failed: ${errorSummary(value)}`)
   }
-  return Object.freeze({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode })
+  if (!allowFailure && result.exitCode !== 0) {
+    throw new Error(
+      `${operation} failed (${result.exitCode}): ${errorSummary(result.stderr || result.stdout)}`
+    )
+  }
+  return result
 }
 
 /** Reserves and releases one random loopback port. */
@@ -149,6 +175,7 @@ async function waitForJobState(
 
 /** Crashes one independent raw Worker only after it owns the Redis job lock. */
 async function crashRawWorker(
+  ownedDocker: OwnedDockerContext,
   port: number,
   queueName: string,
   prefix: string,
@@ -156,7 +183,11 @@ async function crashRawWorker(
 ): Promise<number> {
   const child = Bun.spawn(
     ["bun", `${import.meta.dir}/stalled-child.ts`, "127.0.0.1", String(port), queueName, prefix],
-    { stdout: "pipe", stderr: "pipe" }
+    {
+      env: scenarioDockerEnvironment(ownedDocker),
+      stdout: "pipe",
+      stderr: "pipe"
+    }
   )
   const timeout = setTimeout(() => child.kill(), 10_000)
   const [exitCode, stdout, stderr] = await Promise.all([
@@ -165,14 +196,17 @@ async function crashRawWorker(
     new Response(child.stderr).text()
   ])
   clearTimeout(timeout)
-  assert(exitCode === 17, `raw Worker exit was ${exitCode}: ${stderr.trim()}`)
+  assert(exitCode === 17, `raw Worker exit was ${exitCode}: ${errorSummary(stderr)}`)
   assert(stdout.includes(`BATCH_STALLED_LOCKED=${jobId}`), "raw Worker never acquired the lock")
   return exitCode
 }
 
 /** Counts persistent connections after subtracting the transient redis-cli connection. */
-async function persistentRedisConnections(container: string): Promise<number> {
-  const result = await command([
+async function persistentRedisConnections(
+  ownedDocker: OwnedDockerContext,
+  container: string
+): Promise<number> {
+  const result = await command(ownedDocker, [
     "docker",
     "exec",
     container,
@@ -213,24 +247,15 @@ async function stopServer(managed: RunningServer): Promise<void> {
 
 /** Runs the fixed-digest Redis reporting workflow. */
 async function run(): Promise<void> {
-  const owner = process.env.LIKEGO_E2E_OWNER
-  if (owner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(owner)) {
-    throw new Error("invalid LIKEGO_E2E_OWNER")
-  }
-  const ownerLabel = `io.likego.e2e.owner=${owner}`
-  const container = `${owner}-redis`
+  const container = `likego-batch-redis-${crypto.randomUUID()}`
   const port = allocateHostPort()
   const queueName = `reports-${crypto.randomUUID()}`
   const prefix = `likego-${crypto.randomUUID()}`
   const checkpointDirectory = await mkdtemp(join(tmpdir(), "likego-batch-reporting-"))
   const cleanupErrors: Error[] = []
   const shutdownOrder: string[] = []
-  const versions = await installedVersions()
-  assert(versions.bullmq === "5.81.2", `unexpected BullMQ ${versions.bullmq}`)
-  assert(versions.croner === "10.0.1", `unexpected Croner ${versions.croner}`)
 
   let primary: Error | null = null
-  let containerPresent = false
   let queue: Queue<ReportJob, ReportOutcome, string> | null = null
   let store: ReturnType<typeof newFileStore> | null = null
   let storeServer: RunningServer | null = null
@@ -250,15 +275,14 @@ async function run(): Promise<void> {
   let finalCheckpoint = -1
   let persistentAfterStop = -1
 
+  const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
   try {
-    await command([
-      "docker",
-      "run",
-      "--detach",
+    const versions = await installedVersions()
+    assert(versions.bullmq === "5.81.2", `unexpected BullMQ ${versions.bullmq}`)
+    assert(versions.croner === "10.0.1", `unexpected Croner ${versions.croner}`)
+    await createContainer(ownedDocker, [
       "--name",
       container,
-      "--label",
-      ownerLabel,
       "--publish",
       `127.0.0.1:${port}:6379`,
       RedisImage,
@@ -268,14 +292,15 @@ async function run(): Promise<void> {
       "--appendonly",
       "no"
     ])
-    containerPresent = true
-    redisVersion = (await command(["docker", "exec", container, "redis-server", "--version"]))
-      .stdout
+    redisVersion = (
+      await command(ownedDocker, ["docker", "exec", container, "redis-server", "--version"])
+    ).stdout
     assert(redisVersion.includes(`v=${ExpectedRedisVersion}`), `unexpected Redis: ${redisVersion}`)
-    redisImageId = (await command(["docker", "inspect", "--format", "{{.Image}}", container]))
-      .stdout
+    redisImageId = (
+      await command(ownedDocker, ["docker", "inspect", "--format", "{{.Image}}", container])
+    ).stdout
     const expectedImageId = (
-      await command(["docker", "image", "inspect", "--format", "{{.Id}}", RedisImage])
+      await command(ownedDocker, ["docker", "image", "inspect", "--format", "{{.Id}}", RedisImage])
     ).stdout
     assert(redisImageId === expectedImageId, "container did not use the pinned Redis image")
 
@@ -374,7 +399,7 @@ async function run(): Promise<void> {
     nowMs = Date.UTC(2026, 6, 23, 1)
     await scheduledCron.trigger()
     const stalledJobId = `report-${reportWindow(SecondStart).id}`
-    rawWorkerExitCode = await crashRawWorker(port, queueName, prefix, stalledJobId)
+    rawWorkerExitCode = await crashRawWorker(ownedDocker, port, queueName, prefix, stalledJobId)
     await waitForJobState(queue, stalledJobId, "active")
     await Bun.sleep(750)
 
@@ -446,7 +471,7 @@ async function run(): Promise<void> {
     const program = Bun.spawn(["bun", "run", "start:prepared"], {
       cwd: `${import.meta.dir}/../..`,
       env: {
-        ...process.env,
+        ...scenarioDockerEnvironment(ownedDocker),
         REDIS_URL: `redis://127.0.0.1:${port}`,
         CRON_SCHEDULE: "*/1 * * * * *",
         CHECKPOINT_DIR: join(checkpointDirectory, "program"),
@@ -482,7 +507,7 @@ async function run(): Promise<void> {
           30_000
         )
       } catch (error) {
-        throw new Error(`start:prepared output=${JSON.stringify(programOutput)}`, { cause: error })
+        throw new Error(`start:prepared failed: ${errorSummary(error)}`)
       }
       process.kill(-program.pid, "SIGTERM")
       terminationTimeout = setTimeout(() => {
@@ -500,7 +525,7 @@ async function run(): Promise<void> {
       if (forced) throw new Error("start:prepared did not stop after SIGTERM")
       assert(
         exitCode === 0 || exitCode === 143,
-        `start:prepared exited ${exitCode}: ${(await errorTask).trim()}`
+        `start:prepared exited ${exitCode}: ${errorSummary(await errorTask)}`
       )
     } finally {
       if (terminationTimeout !== null) clearTimeout(terminationTimeout)
@@ -516,53 +541,41 @@ async function run(): Promise<void> {
       }
       await outputTask
     }
-    persistentAfterStop = await persistentRedisConnections(container)
+    persistentAfterStop = await persistentRedisConnections(ownedDocker, container)
     assert(persistentAfterStop === 0, "start:prepared left persistent Redis connections")
   } catch (value) {
     primary = asError(value, "batch E2E failed with a non-Error value")
-  }
-
-  for (const [name, managed] of [
-    ["scheduler", cronServer],
-    ["worker", workerServer],
-    ["store", storeServer]
-  ] as const) {
-    if (managed === null) continue
+  } finally {
+    for (const [name, managed] of [
+      ["scheduler", cronServer],
+      ["worker", workerServer],
+      ["store", storeServer]
+    ] as const) {
+      if (managed === null) continue
+      try {
+        await stopServer(managed)
+      } catch (value) {
+        cleanupErrors.push(asError(value, `${name} cleanup failed`))
+      }
+    }
+    if (queue !== null) {
+      try {
+        await queue.close()
+      } catch (value) {
+        cleanupErrors.push(asError(value, "Queue cleanup failed"))
+      }
+    }
     try {
-      await stopServer(managed)
+      await closeOwnedDockerContext(ownedDocker)
     } catch (value) {
-      cleanupErrors.push(asError(value, `${name} cleanup failed`))
+      cleanupErrors.push(asError(value, "Owned Docker context cleanup failed"))
+    }
+    try {
+      await rm(checkpointDirectory, { recursive: true, force: true })
+    } catch (value) {
+      cleanupErrors.push(asError(value, "checkpoint directory cleanup failed"))
     }
   }
-  if (queue !== null) {
-    try {
-      await queue.close()
-    } catch (value) {
-      cleanupErrors.push(asError(value, "Queue cleanup failed"))
-    }
-  }
-  if (containerPresent) {
-    const removed = await command(["docker", "rm", "--force", container], true)
-    if (removed.exitCode !== 0)
-      cleanupErrors.push(new Error(`container cleanup: ${removed.stderr}`))
-    containerPresent = false
-  }
-  try {
-    await rm(checkpointDirectory, { recursive: true, force: true })
-  } catch (value) {
-    cleanupErrors.push(asError(value, "checkpoint directory cleanup failed"))
-  }
-  const residualResult = await command([
-    "docker",
-    "ps",
-    "--all",
-    "--quiet",
-    "--filter",
-    `label=${ownerLabel}`
-  ])
-  const residualContainers =
-    residualResult.stdout.length === 0 ? 0 : residualResult.stdout.split("\n").length
-  if (residualContainers !== 0) cleanupErrors.push(new Error("owner-labeled containers remain"))
   if (primary !== null || cleanupErrors.length > 0) {
     const failures = primary === null ? cleanupErrors : [primary, ...cleanupErrors]
     throw failures.length === 1 ? failures[0]! : new AggregateError(failures, "batch E2E failed")

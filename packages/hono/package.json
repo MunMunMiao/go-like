@@ -21,7 +21,8 @@
     "build": "bun x --bun tsdown --config-loader native",
     "typecheck": "tsc -p tsconfig.test.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test",
-    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e:bridge-dist": "bun test/e2e/bridge-dist-e2e.ts"
   },
   "dependencies": {
     "@likego/web": "0.0.1"

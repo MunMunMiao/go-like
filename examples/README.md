@@ -48,6 +48,8 @@ bun run test:unit
 bun run test:e2e:examples
 ```
 
+Examples E2E 的输入由 runner 每次从 immediate `examples/*/package.json` 动态生成，而不是维护另一份静态目录清单。每个 example 必须在同一变更中提供非空 `test:e2e` wrapper、明确的 tsconfig owner 和必要文档；wrapper 的注册、ACK、结果与 cleanup 任一失败都会使 aggregate 非零。直接运行 workspace E2E 前先从仓库根目录执行一次 `bun run build`，并准备该案例声明的 runtime 与 Docker prerequisite。
+
 ## 验证层级
 
 - `core`：用最小可运行代码证明一个独立业务不变量和标准 Web API 边界。

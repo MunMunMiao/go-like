@@ -34,7 +34,7 @@ async function startService(label: string): Promise<{
     })
   )
   const running = server.start(background())
-  void running.catch(() => {})
+  void running.catch((error) => unhandled.push(error))
   return { endpoint: await server.endpoint(background()), running, server }
 }
 
@@ -75,7 +75,7 @@ const server = newNodeServer(
   nodeShutdownTimeout(5_000)
 )
 const running = server.start(background())
-void running.catch(() => {})
+void running.catch((error) => unhandled.push(error))
 const [firstService, secondService] = await Promise.all([startService("a"), startService("b")])
 process.stdout.write(
   `${ReadyMarker}${JSON.stringify({

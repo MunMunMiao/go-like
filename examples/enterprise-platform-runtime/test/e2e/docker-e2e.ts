@@ -43,15 +43,44 @@ import { createHealthHandler } from "@likego/web/health"
 import { hostname, newNodeServer, port } from "@likego/web/node"
 import { context } from "@opentelemetry/api"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
-import { W3CTraceContextPropagator } from "@opentelemetry/core"
+import { ExportResultCode, W3CTraceContextPropagator, type ExportResult } from "@opentelemetry/core"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
-import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
-import { BatchSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace"
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+  type InstrumentType,
+  type PushMetricExporter,
+  type ResourceMetrics
+} from "@opentelemetry/sdk-metrics"
+import {
+  BatchSpanProcessor,
+  TracerProvider,
+  type ReadableSpan,
+  type SpanExporter
+} from "@opentelemetry/sdk-trace"
 import pino from "pino"
 import { Counter, Registry } from "prom-client"
 
+import {
+  boundedTail,
+  createStreamingRedactor,
+  errorSummary,
+  sanitizeArgv
+} from "../../../../e2e/harness/diagnostics"
+import {
+  closeOwnedDockerContext,
+  createContainer,
+  ownedDockerContextFromEnvironment,
+  scenarioDockerEnvironment,
+  type OwnedDockerContext
+} from "../../../../e2e/harness/owned-docker"
+import type {
+  CommandDefinition as SupervisedCommandDefinition,
+  CommandResult as SupervisedCommandResult,
+  ProcessSupervisor
+} from "../../../../e2e/harness/process"
 import { runtimeConfigSchema } from "#src/config"
 import { echoEndpointName, echoServiceName, newEchoHandler } from "#src/echo"
 import { newManagementHandler } from "#src/management"
@@ -72,6 +101,238 @@ interface CommandResult {
   readonly exitCode: number
 }
 
+type SupervisedFailure = SupervisedCommandResult["cleanupFailures"][number]
+
+/** Builds the child environment without exposing its values to diagnostics. */
+function inheritedEnvironment(
+  overrides: Readonly<Record<string, string | undefined>> = Object.freeze({})
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = { ...process.env }
+  for (const [name, value] of Object.entries(overrides)) {
+    if (value === undefined) delete environment[name]
+    else environment[name] = value
+  }
+  return environment
+}
+
+/** Runs Docker CLI children inside the scenario's already-supervised process boundary. */
+const inheritedBoundaryRunner: ProcessSupervisor["run"] = async function runInheritedCommand(
+  root: string,
+  definition: SupervisedCommandDefinition
+): Promise<SupervisedCommandResult> {
+  const startedAt = performance.now()
+  const knownSecrets = Object.freeze([...(definition.knownSecrets ?? [])])
+  const sanitizer = Object.freeze({ knownSecrets })
+  const operation = "Owned Docker inherited-boundary subprocess"
+  const cleanupFailures: SupervisedFailure[] = []
+  const result = (values: {
+    readonly exitCode: number | null
+    readonly signal: string | null
+    readonly termination: SupervisedCommandResult["termination"]
+    readonly timedOut: boolean
+    readonly abortReason: string | null
+    readonly stdout?: string | undefined
+    readonly stderr?: string | undefined
+  }): SupervisedCommandResult =>
+    Object.freeze({
+      exitCode: values.exitCode,
+      signal: values.signal,
+      termination: values.termination,
+      timedOut: values.timedOut,
+      abortReason: values.abortReason,
+      durationMs: Math.round(performance.now() - startedAt),
+      stdout: values.stdout ?? "",
+      stderr: values.stderr ?? "",
+      cleanupFailures: Object.freeze(cleanupFailures.slice()),
+      containment: "not-claimed",
+      residual: cleanupFailures.length === 0 ? "zero-observed" : "inconclusive"
+    })
+  const safeSummary = (value: unknown, fallback: string): string =>
+    errorSummary(value, sanitizer) || fallback
+  const appendOutput = (current: string, value: string): string =>
+    boundedTail(`${current}${value}`, 64 * 1024)
+  const cleanupFailure = (value: unknown): void => {
+    cleanupFailures.push(
+      Object.freeze({
+        code: "inherited-boundary-termination-failed",
+        category: "process-cleanup",
+        summary: `${operation}: ${safeSummary(value, "termination failed")}`
+      })
+    )
+  }
+
+  const command = Object.freeze(definition.command.slice())
+  const environment = Object.freeze({ ...(definition.environment ?? {}) })
+  const executable = command[0]
+  if (executable === undefined || executable.length === 0) {
+    return result({
+      exitCode: null,
+      signal: null,
+      termination: "supervisor-error",
+      timedOut: false,
+      abortReason: `${operation}: command argv is empty`
+    })
+  }
+  if (definition.signal?.aborted === true) {
+    return result({
+      exitCode: null,
+      signal: null,
+      termination: "abort",
+      timedOut: false,
+      abortReason: safeSummary(definition.signal.reason, "command was aborted before spawn")
+    })
+  }
+
+  const stdoutRedactor = createStreamingRedactor(sanitizer)
+  const stderrRedactor = createStreamingRedactor(sanitizer)
+  let child: ReturnType<typeof spawn>
+  try {
+    child = spawn(executable, command.slice(1), {
+      cwd: resolve(root, definition.cwd),
+      env: inheritedEnvironment(environment),
+      detached: false,
+      stdio: ["ignore", "pipe", "pipe"]
+    })
+  } catch (value) {
+    return result({
+      exitCode: null,
+      signal: null,
+      termination: "supervisor-error",
+      timedOut: false,
+      abortReason: `${operation}: ${safeSummary(value, "spawn failed")}`
+    })
+  }
+
+  let stdout = ""
+  let stderr = ""
+  let processFailure: unknown = null
+  let outputFailure: unknown = null
+  let requestedTermination: "abort" | "supervisor-error" | "timeout" | null = null
+  let escalation: ReturnType<typeof setTimeout> | null = null
+  let terminationFailure: unknown = null
+
+  const requestTermination = (termination: "abort" | "supervisor-error" | "timeout"): void => {
+    if (requestedTermination !== null) return
+    requestedTermination = termination
+    try {
+      child.kill("SIGTERM")
+    } catch (value) {
+      terminationFailure ??= value
+    }
+    escalation = setTimeout(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return
+      try {
+        child.kill("SIGKILL")
+      } catch (value) {
+        terminationFailure ??= value
+      }
+    }, 2_000)
+  }
+  const forward = (stream: "stdout" | "stderr", value: string): void => {
+    if (value.length === 0) return
+    try {
+      if (stream === "stdout") {
+        stdout = appendOutput(stdout, value)
+        definition.onStdout?.(value)
+        if (definition.forwardOutput === true) process.stdout.write(value)
+      } else {
+        stderr = appendOutput(stderr, value)
+        definition.onStderr?.(value)
+        if (definition.forwardOutput === true) process.stderr.write(value)
+      }
+    } catch (value) {
+      outputFailure ??= value
+      requestTermination("supervisor-error")
+    }
+  }
+  if (child.stdout === null || child.stderr === null) {
+    requestTermination("supervisor-error")
+    await new Promise<void>((resolvePromise) => child.once("close", () => resolvePromise()))
+    if (escalation !== null) clearTimeout(escalation)
+    if (terminationFailure !== null) cleanupFailure(terminationFailure)
+    return result({
+      exitCode: null,
+      signal: null,
+      termination: "supervisor-error",
+      timedOut: false,
+      abortReason: `${operation}: subprocess pipes were unavailable`
+    })
+  }
+  child.stdout.on("data", (value: Buffer) => {
+    try {
+      forward("stdout", stdoutRedactor.write(value))
+    } catch (failure) {
+      outputFailure ??= failure
+      requestTermination("supervisor-error")
+    }
+  })
+  child.stderr.on("data", (value: Buffer) => {
+    try {
+      forward("stderr", stderrRedactor.write(value))
+    } catch (failure) {
+      outputFailure ??= failure
+      requestTermination("supervisor-error")
+    }
+  })
+  const closed = new Promise<{
+    readonly code: number | null
+    readonly signal: string | null
+  }>((resolvePromise) => {
+    child.once("error", (value) => {
+      processFailure = value
+    })
+    child.once("close", (code, signal) => resolvePromise({ code, signal }))
+  })
+  const timeout = setTimeout(() => requestTermination("timeout"), definition.timeoutMs)
+  const onAbort = (): void => requestTermination("abort")
+  definition.signal?.addEventListener("abort", onAbort, { once: true })
+  const abortState = (): boolean => definition.signal?.aborted === true
+  if (abortState()) onAbort()
+  const closedResult = await closed
+  clearTimeout(timeout)
+  if (escalation !== null) clearTimeout(escalation)
+  definition.signal?.removeEventListener("abort", onAbort)
+  if (terminationFailure !== null) cleanupFailure(terminationFailure)
+  try {
+    forward("stdout", stdoutRedactor.end())
+    forward("stderr", stderrRedactor.end())
+  } catch (value) {
+    outputFailure ??= value
+  }
+
+  const supervisorFailure = outputFailure ?? processFailure
+  const terminationRequest = (): "abort" | "supervisor-error" | "timeout" | null =>
+    requestedTermination
+  const requested = terminationRequest()
+  const termination: SupervisedCommandResult["termination"] =
+    requested === "abort" || requested === "timeout"
+      ? requested
+      : supervisorFailure !== null || requested === "supervisor-error"
+        ? "supervisor-error"
+        : closedResult.signal === null
+          ? "exit"
+          : "signal"
+  const cleanupRecorded = cleanupFailures.length > 0
+  const abortReason =
+    termination === "abort"
+      ? safeSummary(definition.signal?.reason, "command was aborted")
+      : termination === "supervisor-error"
+        ? `${operation}: ${safeSummary(supervisorFailure, "subprocess supervision failed")}`
+        : null
+  return result({
+    exitCode: termination === "exit" && !cleanupRecorded ? closedResult.code : null,
+    signal: termination === "signal" && !cleanupRecorded ? closedResult.signal : null,
+    termination: cleanupRecorded ? "supervisor-error" : termination,
+    timedOut: termination === "timeout",
+    abortReason:
+      cleanupRecorded && abortReason === null
+        ? `${operation}: subprocess cleanup failed`
+        : abortReason,
+    stdout,
+    stderr
+  })
+}
+
 /** Throws when one real integration invariant is false. */
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -83,27 +344,43 @@ function asError(value: unknown, message: string): Error {
 }
 
 /** Runs one argv-only command and captures complete output. */
-async function command(args: readonly string[], allowFailure = false): Promise<CommandResult> {
-  const executable = args[0]
+async function command(
+  ownedDocker: OwnedDockerContext,
+  args: readonly string[],
+  allowFailure = false
+): Promise<CommandResult> {
+  const commandArgs = args.slice()
+  const executable = commandArgs[0]
   if (executable === undefined) throw new TypeError("command requires an executable")
-  const child = spawn(executable, args.slice(1), { stdio: ["ignore", "pipe", "pipe"] })
-  child.stdout.setEncoding("utf8")
-  child.stderr.setEncoding("utf8")
-  let stdout = ""
-  let stderr = ""
-  child.stdout.on("data", (value: string) => {
-    stdout += value
-  })
-  child.stderr.on("data", (value: string) => {
-    stderr += value
-  })
-  const exitCode = await new Promise<number>((resolvePromise, reject) => {
-    child.once("error", reject)
-    child.once("close", (code) => resolvePromise(code ?? -1))
-  })
-  const result = Object.freeze({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode })
-  if (!allowFailure && exitCode !== 0) {
-    throw new Error(`${args.join(" ")} failed (${exitCode}): ${result.stderr}`)
+  const operation = sanitizeArgv(commandArgs).join(" ")
+  let result: CommandResult
+  try {
+    const child = spawn(executable, commandArgs.slice(1), {
+      env: inheritedEnvironment(scenarioDockerEnvironment(ownedDocker)),
+      stdio: ["ignore", "pipe", "pipe"]
+    })
+    child.stdout.setEncoding("utf8")
+    child.stderr.setEncoding("utf8")
+    let stdout = ""
+    let stderr = ""
+    child.stdout.on("data", (value: string) => {
+      stdout += value
+    })
+    child.stderr.on("data", (value: string) => {
+      stderr += value
+    })
+    const exitCode = await new Promise<number>((resolvePromise, reject) => {
+      child.once("error", reject)
+      child.once("close", (code) => resolvePromise(code ?? -1))
+    })
+    result = Object.freeze({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode })
+  } catch (value) {
+    throw new Error(`${operation} failed: ${errorSummary(value)}`)
+  }
+  if (!allowFailure && result.exitCode !== 0) {
+    throw new Error(
+      `${operation} failed (${result.exitCode}): ${errorSummary(result.stderr || result.stdout)}`
+    )
   }
   return result
 }
@@ -154,10 +431,17 @@ async function waitUntil(
 }
 
 /** Reads one container's exact pinned image ID. */
-async function verifyImage(container: string, reference: string): Promise<string> {
-  const actual = (await command(["docker", "inspect", "--format", "{{.Image}}", container])).stdout
-  const expected = (await command(["docker", "image", "inspect", "--format", "{{.Id}}", reference]))
-    .stdout
+async function verifyImage(
+  ownedDocker: OwnedDockerContext,
+  container: string,
+  reference: string
+): Promise<string> {
+  const actual = (
+    await command(ownedDocker, ["docker", "inspect", "--format", "{{.Image}}", container])
+  ).stdout
+  const expected = (
+    await command(ownedDocker, ["docker", "image", "inspect", "--format", "{{.Id}}", reference])
+  ).stdout
   assert(actual === expected, `${container} did not use its pinned digest`)
   return actual
 }
@@ -184,18 +468,71 @@ async function stopApp(app: App, running: Promise<void>): Promise<void> {
   await running
 }
 
+interface TelemetryEvidence {
+  readonly spanNames: Set<string>
+  readonly metricNames: Set<string>
+}
+
+/** Records only successful Collector acknowledgements, without reading container logs. */
+function observedTraceExporter(
+  exporter: OTLPTraceExporter,
+  evidence: TelemetryEvidence
+): SpanExporter {
+  return Object.freeze({
+    export(spans: ReadableSpan[], complete: (result: ExportResult) => void): void {
+      exporter.export(spans, (result) => {
+        if (result.code === ExportResultCode.SUCCESS) {
+          for (const span of spans) evidence.spanNames.add(span.name)
+        }
+        complete(result)
+      })
+    },
+    forceFlush(): Promise<void> {
+      return exporter.forceFlush()
+    },
+    shutdown(): Promise<void> {
+      return exporter.shutdown()
+    }
+  })
+}
+
+/** Records metric names only after the Collector acknowledges the corresponding OTLP batch. */
+function observedMetricExporter(
+  exporter: OTLPMetricExporter,
+  evidence: TelemetryEvidence
+): PushMetricExporter {
+  return Object.freeze({
+    export(metrics: ResourceMetrics, complete: (result: ExportResult) => void): void {
+      exporter.export(metrics, (result) => {
+        if (result.code === ExportResultCode.SUCCESS) {
+          for (const scope of metrics.scopeMetrics) {
+            for (const metric of scope.metrics) evidence.metricNames.add(metric.descriptor.name)
+          }
+        }
+        complete(result)
+      })
+    },
+    forceFlush(): Promise<void> {
+      return exporter.forceFlush()
+    },
+    shutdown(): Promise<void> {
+      return exporter.shutdown()
+    },
+    selectAggregation(instrumentType: InstrumentType) {
+      return exporter.selectAggregation(instrumentType)
+    },
+    selectAggregationTemporality(instrumentType: InstrumentType) {
+      return exporter.selectAggregationTemporality(instrumentType)
+    }
+  })
+}
+
 /** Executes the real Consul, Vault, Collector, transport, and operations scenario. */
 async function run(): Promise<void> {
   const runId = crypto.randomUUID()
-  const owner = process.env.LIKEGO_E2E_OWNER
-  if (owner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(owner)) {
-    throw new Error("invalid LIKEGO_E2E_OWNER")
-  }
-  const ownerLabel = `io.likego.e2e.owner=${owner}`
   const consulContainer = `likego-enterprise-consul-${runId}`
   const vaultContainer = `likego-enterprise-vault-${runId}`
   const collectorContainer = `likego-enterprise-otel-${runId}`
-  const containers = [consulContainer, vaultContainer, collectorContainer]
   const usedPorts = new Set<number>()
   const consulPort = await allocatePort(usedPorts)
   const vaultPort = await allocatePort(usedPorts)
@@ -212,58 +549,51 @@ async function run(): Promise<void> {
   let app: App | null = null
   let appRun: Promise<void> | null = null
   let client: Client | null = null
-  const contextManager = new AsyncLocalStorageContextManager().enable()
 
+  const ownedDocker = await ownedDockerContextFromEnvironment(process.env, {
+    runner: inheritedBoundaryRunner
+  })
+  let contextManager: AsyncLocalStorageContextManager | null = null
   try {
+    contextManager = new AsyncLocalStorageContextManager().enable()
     context.disable()
     assert(
       context.setGlobalContextManager(contextManager),
       "OpenTelemetry context manager was rejected"
     )
+    await createContainer(ownedDocker, [
+      "--name",
+      consulContainer,
+      "--tmpfs",
+      "/consul/data:rw,noexec,nosuid,size=64m",
+      "--publish",
+      `127.0.0.1:${consulPort}:8500`,
+      ConsulImage,
+      "agent",
+      "-dev",
+      "-client=0.0.0.0",
+      "-log-level=warn"
+    ])
     await Promise.all([
-      command([
-        "docker",
-        "run",
-        "--detach",
-        "--name",
-        consulContainer,
-        "--label",
-        ownerLabel,
-        "--tmpfs",
-        "/consul/data:rw,noexec,nosuid,size=64m",
-        "--publish",
-        `127.0.0.1:${consulPort}:8500`,
-        ConsulImage,
-        "agent",
-        "-dev",
-        "-client=0.0.0.0",
-        "-log-level=warn"
-      ]),
-      command([
-        "docker",
-        "run",
-        "--detach",
-        "--name",
-        vaultContainer,
-        "--label",
-        ownerLabel,
-        "--env",
-        `VAULT_DEV_ROOT_TOKEN_ID=${vaultToken}`,
-        "--publish",
-        `127.0.0.1:${vaultPort}:8200`,
-        VaultImage,
-        "server",
-        "-dev",
-        "-dev-listen-address=0.0.0.0:8200"
-      ]),
-      command([
-        "docker",
-        "run",
-        "--detach",
+      createContainer(
+        ownedDocker,
+        [
+          "--name",
+          vaultContainer,
+          "--env",
+          `VAULT_DEV_ROOT_TOKEN_ID=${vaultToken}`,
+          "--publish",
+          `127.0.0.1:${vaultPort}:8200`,
+          VaultImage,
+          "server",
+          "-dev",
+          "-dev-listen-address=0.0.0.0:8200"
+        ],
+        { knownSecrets: [vaultToken] }
+      ),
+      createContainer(ownedDocker, [
         "--name",
         collectorContainer,
-        "--label",
-        ownerLabel,
         "--publish",
         `127.0.0.1:${collectorPort}:4318`,
         "--volume",
@@ -275,23 +605,32 @@ async function run(): Promise<void> {
     await Promise.all([
       waitUntil("Consul readiness", async () => (await fetch(`${consulAddress}/v1/agent/self`)).ok),
       waitUntil("Vault readiness", async () => (await fetch(`${vaultAddress}/v1/sys/health`)).ok),
-      waitUntil("Collector readiness", async () => {
-        const logs = await command(["docker", "logs", collectorContainer], true)
-        return `${logs.stdout}\n${logs.stderr}`.includes("Everything is ready")
+      waitUntil("Collector OTLP HTTP listener", async () => {
+        const response = await fetch(collectorAddress)
+        await response.arrayBuffer()
+        return true
       })
     ])
 
     await Promise.all([
-      verifyImage(consulContainer, ConsulImage),
-      verifyImage(vaultContainer, VaultImage),
-      verifyImage(collectorContainer, CollectorImage)
+      verifyImage(ownedDocker, consulContainer, ConsulImage),
+      verifyImage(ownedDocker, vaultContainer, VaultImage),
+      verifyImage(ownedDocker, collectorContainer, CollectorImage)
     ])
-    const consulVersion = (await command(["docker", "exec", consulContainer, "consul", "version"]))
-      .stdout
-    const vaultVersion = (await command(["docker", "exec", vaultContainer, "vault", "version"]))
-      .stdout
+    const consulVersion = (
+      await command(ownedDocker, ["docker", "exec", consulContainer, "consul", "version"])
+    ).stdout
+    const vaultVersion = (
+      await command(ownedDocker, ["docker", "exec", vaultContainer, "vault", "version"])
+    ).stdout
     const collectorVersion = (
-      await command(["docker", "exec", collectorContainer, "/otelcol-contrib", "--version"])
+      await command(ownedDocker, [
+        "docker",
+        "exec",
+        collectorContainer,
+        "/otelcol-contrib",
+        "--version"
+      ])
     ).stdout
     assert(consulVersion.includes("v2.0.2"), `unexpected Consul version: ${consulVersion}`)
     assert(vaultVersion.includes("v2.0.3"), `unexpected Vault version: ${vaultVersion}`)
@@ -307,15 +646,22 @@ async function run(): Promise<void> {
       "service.name": "likego-enterprise-platform",
       "deployment.environment.name": "e2e"
     })
+    const telemetryEvidence: TelemetryEvidence = {
+      spanNames: new Set<string>(),
+      metricNames: new Set<string>()
+    }
     const tracerProvider = new TracerProvider({
       resource,
       spanProcessors: [
         new BatchSpanProcessor({
-          exporter: new OTLPTraceExporter({
-            url: `${collectorAddress}/v1/traces`,
-            timeoutMillis: 2_000,
-            keepAlive: false
-          }),
+          exporter: observedTraceExporter(
+            new OTLPTraceExporter({
+              url: `${collectorAddress}/v1/traces`,
+              timeoutMillis: 2_000,
+              keepAlive: false
+            }),
+            telemetryEvidence
+          ),
           scheduledDelayMillis: 100,
           exportTimeoutMillis: 2_000,
           maxQueueSize: 64,
@@ -327,11 +673,14 @@ async function run(): Promise<void> {
       resource,
       readers: [
         new PeriodicExportingMetricReader({
-          exporter: new OTLPMetricExporter({
-            url: `${collectorAddress}/v1/metrics`,
-            timeoutMillis: 2_000,
-            keepAlive: false
-          }),
+          exporter: observedMetricExporter(
+            new OTLPMetricExporter({
+              url: `${collectorAddress}/v1/metrics`,
+              timeoutMillis: 2_000,
+              keepAlive: false
+            }),
+            telemetryEvidence
+          ),
           exportIntervalMillis: 500,
           exportTimeoutMillis: 500
         })
@@ -471,15 +820,13 @@ async function run(): Promise<void> {
     )
     assert(handlerCalls === 2, `business handler ran ${handlerCalls} times instead of twice`)
 
-    await waitUntil("Collector trace and metric", async () => {
-      const logs = await command(["docker", "logs", collectorContainer], true)
-      const combined = `${logs.stdout}\n${logs.stderr}`
-      return (
-        combined.includes(`likego.client ${echoServiceName}/${echoEndpointName}`) &&
-        combined.includes(`likego.server ${echoServiceName}/${echoEndpointName}`) &&
-        combined.includes("enterprise.calls")
+    await waitUntil("Collector trace and metric acknowledgements", () =>
+      Boolean(
+        telemetryEvidence.spanNames.has(`likego.client ${echoServiceName}/${echoEndpointName}`) &&
+        telemetryEvidence.spanNames.has(`likego.server ${echoServiceName}/${echoEndpointName}`) &&
+        telemetryEvidence.metricNames.has("enterprise.calls")
       )
-    })
+    )
 
     await stopApp(app, appRun)
     app = null
@@ -493,10 +840,13 @@ async function run(): Promise<void> {
     assert(!logText.includes(vaultToken), "bootstrap token leaked into structured logs")
 
     const programPort = await allocatePort(usedPorts)
+    const programKnownSecrets = Object.freeze([vaultToken])
+    const programStdoutRedactor = createStreamingRedactor({ knownSecrets: programKnownSecrets })
+    const programStderrRedactor = createStreamingRedactor({ knownSecrets: programKnownSecrets })
     const program = spawn("bun", ["run", "start:prepared"], {
       cwd: resolve(Here, "../.."),
       env: {
-        ...process.env,
+        ...scenarioDockerEnvironment(ownedDocker),
         HOST: "127.0.0.1",
         PORT: String(programPort),
         CONSUL_HTTP_ADDR: consulAddress,
@@ -515,10 +865,13 @@ async function run(): Promise<void> {
     let programOutput = ""
     let programError = ""
     program.stdout.on("data", (value: string) => {
-      programOutput += value
+      programOutput = boundedTail(
+        `${programOutput}${programStdoutRedactor.write(value)}`,
+        64 * 1024
+      )
     })
     program.stderr.on("data", (value: string) => {
-      programError += value
+      programError = boundedTail(`${programError}${programStderrRedactor.write(value)}`, 64 * 1024)
     })
     const programExited = new Promise<number>((resolvePromise, reject) => {
       program.once("error", reject)
@@ -558,10 +911,14 @@ async function run(): Promise<void> {
       const exitCode = await programExited
       programJoined = true
       clearTimeout(terminationTimeout)
+      programOutput += programStdoutRedactor.end()
+      programError += programStderrRedactor.end()
       if (forced) throw new Error("start:prepared did not stop after SIGTERM")
       assert(
         exitCode === 0 || exitCode === 143,
-        `start:prepared exited ${exitCode}: ${programError.trim()}`
+        `start:prepared exited ${exitCode}: ${errorSummary(programError, {
+          knownSecrets: programKnownSecrets
+        })}`
       )
     } finally {
       if (terminationTimeout !== null) clearTimeout(terminationTimeout)
@@ -572,6 +929,8 @@ async function run(): Promise<void> {
           // The process group already exited.
         }
         await programExited.catch(() => {})
+        programOutput += programStdoutRedactor.end()
+        programError += programStderrRedactor.end()
       }
     }
     await waitUntil(
@@ -605,22 +964,12 @@ async function run(): Promise<void> {
       }
     }
     context.disable()
-    contextManager.disable()
-    for (const container of containers) {
-      const removed = await command(["docker", "rm", "--force", "--volumes", container], true)
-      if (removed.exitCode !== 0 && !removed.stderr.includes("No such container")) {
-        cleanupErrors.push(new Error(`${container} cleanup failed`))
-      }
+    contextManager?.disable()
+    try {
+      await closeOwnedDockerContext(ownedDocker)
+    } catch (value) {
+      cleanupErrors.push(asError(value, "Owned Docker context cleanup failed"))
     }
-    const residual = await command([
-      "docker",
-      "ps",
-      "--all",
-      "--quiet",
-      "--filter",
-      `label=${ownerLabel}`
-    ])
-    if (residual.stdout !== "") cleanupErrors.push(new Error("owner-labeled containers remain"))
     try {
       await rm(temporary, { recursive: true, force: true })
     } catch (value) {

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-example-task-cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "bun scenario.ts pass"
+  }
+}

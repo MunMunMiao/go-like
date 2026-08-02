@@ -15,87 +15,48 @@ import { createServer as createHTTPServer } from "node:http"
 import { mkdir, readdir } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 
-import { newDockerOwner, runCommand, verifyDockerOwnerCleanup } from "./suites"
+import { collectCleanupFailure, type CleanupFailure, finalizeWithCleanup } from "./harness/cleanup"
+import { boundedTail, errorSummary, redactText } from "./harness/diagnostics"
+import { newDockerOwner, verifyDockerOwnerCleanup } from "./harness/docker-owner"
+import { runCommand, type CommandResult } from "./harness/process"
+import {
+  createTempDirectory,
+  createTempSubdirectory,
+  removeTempDirectory,
+  verifyTempDirectory,
+  type TempDirectory
+} from "./harness/temp"
+import {
+  ConcurrentShutdownRequests,
+  evaluateSoakResult,
+  LongSoakDurationMs,
+  parseSoakResultJson,
+  type SoakResult,
+  type SoakSample
+} from "./soak-evaluator"
 
-const LongSoakDurationMs = 60 * 60 * 1_000
-const ConcurrentShutdownRequests = 8
-const SampleCoverageToleranceMs = 5_000
-const SampleDensityLimitMs = 15_000
-const K6Image =
+export {
+  evaluateSoakResult,
+  parseSoakResult,
+  parseSoakResultJson,
+  SoakResultShapeError
+} from "./soak-evaluator"
+export type { SoakEvaluation, SoakResult, SoakSample } from "./soak-evaluator"
+
+export const K6Image =
   "grafana/k6:2.1.0@sha256:65c920dc067d5e2e00befbf982af6ad6ad0117034e8b1c65817c7975c52d4669"
+export const K6Version = "2.1.0"
+export const K6Workload = "/scripts/k6-http.ts"
 const Decoder = new TextDecoder()
 const Root = resolve(import.meta.dir, "..")
 
-export interface SoakSample {
-  readonly atMs: number
-  readonly rssBytes: number
-  readonly heapUsedBytes: number
-  readonly activeHandles: number
-  readonly fdCount: number | null
-}
-
-export interface SoakResult {
-  readonly startedAt: string
-  readonly finishedAt: string
-  readonly requestedDurationMs: number
-  readonly durationMs: number
-  readonly environment: {
-    readonly arch: string
-    readonly bunVersion: string
-    readonly dockerVersion: string
-    readonly k6Image: string
-    readonly k6Version: string
-    readonly nodeVersion: string
-    readonly platform: string
-  }
-  readonly load: {
-    readonly requests: number
-    readonly failedRequests: number
-    readonly checksFailed: number
-    readonly droppedIterations: number
-    readonly p50Ms: number
-    readonly p95Ms: number
-    readonly p99Ms: number
-  }
-  readonly runtime: {
-    readonly calls: number
-    readonly dials: number
-    readonly unexpectedErrors: number
-    readonly unhandledRejections: number
-    readonly runnerSamples: readonly SoakSample[]
-    readonly webHostSamples: readonly SoakSample[]
-  }
-  readonly scenarios: {
-    readonly standardFetchHttp: boolean
-    readonly clientPoolReuse: boolean
-    readonly endpointChurn: boolean
-    readonly shutdownUnderLoad: {
-      readonly admittedRequests: number
-      readonly drainedRequests: number
-      readonly rejectedAfterStop: boolean
-    }
-    readonly rabbitConfirmInterruption: boolean
-    readonly redisFailover: boolean
-  }
-  readonly cleanup: {
-    readonly serverTerminal: boolean
-    readonly clientClosed: boolean
-    readonly portRebind: boolean
-    readonly residualContainers: number
-    readonly residualNetworks: number
-    readonly residualVolumes: number
-  }
-}
-
-export interface SoakEvaluation {
-  readonly issues: readonly string[]
-}
-
 interface CommandOutput {
-  readonly exitCode: number
+  readonly exitCode: number | null
   readonly stdout: string
   readonly stderr: string
   readonly timedOut: boolean
+  readonly termination: "exit" | "signal" | "timeout" | "abort" | "supervisor-error"
+  readonly cleanupFailures?: CommandResult["cleanupFailures"] | undefined
 }
 
 interface WebHostResult {
@@ -110,8 +71,77 @@ interface WebHost {
   readonly serviceEndpoints: readonly [string, string]
   readonly result: Promise<WebHostResult>
   readonly send: (command: "release" | "stop") => Promise<void>
-  readonly terminate: () => Promise<void>
+  readonly terminate: () => void
+  readonly waitForTermination: () => Promise<void>
   readonly waitForAdmissions: (count: number) => Promise<void>
+}
+
+export interface SoakCleanupActions {
+  readonly probeStop: (() => void | Promise<void>) | null
+  readonly probeWait: (() => void | Promise<void>) | null
+  readonly samplerStop: (() => void | Promise<void>) | null
+  readonly samplerWait: (() => void | Promise<void>) | null
+  readonly client: (() => void | Promise<void>) | null
+  readonly webRelease: (() => void | Promise<void>) | null
+  readonly webStop: (() => void | Promise<void>) | null
+  readonly webResult: (() => void | Promise<void>) | null
+  readonly webTerminate: (() => void | Promise<void>) | null
+  readonly webTerminateWait: (() => void | Promise<void>) | null
+  readonly docker: () => void | Promise<void>
+  readonly temp: (() => void | Promise<void>) | null
+  readonly listeners: () => void | Promise<void>
+  readonly observer: () => void | Promise<void>
+}
+
+/** Runs short-lifecycle cleanup in dependency order without hiding later failures. */
+export async function collectSoakCleanupFailures(
+  actions: SoakCleanupActions
+): Promise<readonly CleanupFailure[]> {
+  const failures: CleanupFailure[] = []
+  if (actions.probeStop !== null)
+    await collectCleanupFailure(failures, "client probe stop", actions.probeStop)
+  if (actions.probeWait !== null)
+    await collectCleanupFailure(failures, "client probe wait", actions.probeWait)
+  if (actions.samplerStop !== null)
+    await collectCleanupFailure(failures, "resource sampler stop", actions.samplerStop)
+  if (actions.samplerWait !== null)
+    await collectCleanupFailure(failures, "resource sampler wait", actions.samplerWait)
+  if (actions.client !== null) {
+    await collectCleanupFailure(failures, "client cleanup", actions.client)
+  }
+  const failuresBeforeWeb = failures.length
+  let gracefulWebAction = false
+  if (actions.webRelease !== null) {
+    gracefulWebAction = true
+    await collectCleanupFailure(failures, "Node Web host release", actions.webRelease)
+  }
+  if (actions.webStop !== null) {
+    gracefulWebAction = true
+    await collectCleanupFailure(failures, "Node Web host stop", actions.webStop)
+  }
+  if (actions.webResult !== null) {
+    gracefulWebAction = true
+    await collectCleanupFailure(failures, "Node Web host terminal wait", actions.webResult)
+  }
+  if (!gracefulWebAction || failures.length > failuresBeforeWeb) {
+    if (actions.webTerminate !== null) {
+      await collectCleanupFailure(failures, "Node Web host force terminate", actions.webTerminate)
+    }
+    if (actions.webTerminateWait !== null) {
+      await collectCleanupFailure(
+        failures,
+        "Node Web host force termination wait",
+        actions.webTerminateWait
+      )
+    }
+  }
+  await collectCleanupFailure(failures, "Docker owner cleanup", actions.docker)
+  if (actions.temp !== null) {
+    await collectCleanupFailure(failures, "soak stage cleanup", actions.temp)
+  }
+  await collectCleanupFailure(failures, "signal listener cleanup", actions.listeners)
+  await collectCleanupFailure(failures, "unhandled rejection observer cleanup", actions.observer)
+  return Object.freeze(failures)
 }
 
 const WebAdmittedMarker = "LIKEGO_SOAK_WEB_DRAIN_ADMITTED="
@@ -136,184 +166,6 @@ function nonempty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0
 }
 
-function median(values: readonly number[]): number {
-  const ordered = values.toSorted((left, right) => left - right)
-  const middle = Math.floor(ordered.length / 2)
-  return ordered.length % 2 === 0
-    ? ((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2
-    : (ordered[middle] ?? 0)
-}
-
-function sustainedGrowth(
-  samples: readonly SoakSample[],
-  field: keyof SoakSample,
-  minimumGrowth: number,
-  minimumRecentGrowth: number
-): boolean {
-  const firstAt = samples[0]?.atMs
-  const lastAt = samples.at(-1)?.atMs
-  if (!finite(firstAt) || !finite(lastAt) || lastAt - firstAt < 60_000) return false
-  const values = samples.map((sample) => sample[field])
-  if (values.some((value) => !finite(value))) return false
-  const numbers = values as number[]
-  if (numbers.length < 4) return false
-  const window = Math.max(2, Math.floor(numbers.length / 4))
-  const late = numbers.slice(-window)
-  const middle = Math.floor(late.length / 2)
-  const totalGrowth = median(late) - median(numbers.slice(0, window))
-  if (minimumRecentGrowth === 0) return totalGrowth > minimumGrowth
-  const recentGrowth = median(late.slice(middle)) - median(late.slice(0, middle))
-  return (
-    totalGrowth > minimumGrowth &&
-    (recentGrowth > minimumRecentGrowth || totalGrowth > minimumGrowth * 2 + minimumRecentGrowth)
-  )
-}
-
-function evaluateSamples(
-  samples: readonly SoakSample[],
-  label: string,
-  requestedDurationMs: number,
-  durationMs: number,
-  platform: string,
-  issues: string[]
-): void {
-  if (
-    (platform === "linux" || platform === "darwin") &&
-    samples.some((sample) => sample.fdCount === null)
-  ) {
-    issues.push(`${label}.fdCount is required on ${platform}`)
-  }
-
-  const times = samples.map((entry) => entry.atMs)
-  const firstAt = times[0]
-  const lastAt = times.at(-1)
-  if (
-    times.length < 3 ||
-    !times.every((atMs, index) => index === 0 || atMs > (times[index - 1] ?? atMs)) ||
-    !finite(firstAt) ||
-    !finite(lastAt) ||
-    !finite(requestedDurationMs, 1) ||
-    !finite(durationMs, 1) ||
-    firstAt > SampleCoverageToleranceMs ||
-    lastAt - firstAt < requestedDurationMs - SampleCoverageToleranceMs ||
-    lastAt > durationMs
-  ) {
-    issues.push(`${label} must strictly cover the requested load interval`)
-  }
-  if (
-    finite(requestedDurationMs, LongSoakDurationMs) &&
-    times.some(
-      (atMs, index) => index > 0 && atMs - (times[index - 1] ?? atMs) > SampleDensityLimitMs
-    )
-  ) {
-    issues.push(`${label} must sample the requested load interval at least every 15 seconds`)
-  }
-
-  const steady = samples.slice(Math.floor(samples.length / 2))
-  const growth = [
-    ["rssBytes", 8 * 1024 * 1024, 1024 * 1024],
-    ["heapUsedBytes", 8 * 1024 * 1024, 1024 * 1024],
-    ["activeHandles", 4, 0],
-    ["fdCount", 4, 0]
-  ] as const
-  for (const [field, minimum, recentMinimum] of growth) {
-    if (sustainedGrowth(steady, field, minimum, recentMinimum)) {
-      issues.push(`${label}.${field} grows without a stable bound`)
-    }
-  }
-}
-
-/** Evaluates the thresholds measured by the current soak run. */
-export function evaluateSoakResult(result: SoakResult): SoakEvaluation {
-  const issues: string[] = []
-  const startedAt = Date.parse(result.startedAt)
-  const finishedAt = Date.parse(result.finishedAt)
-  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || finishedAt < startedAt) {
-    issues.push("startedAt and finishedAt must describe an ordered interval")
-  }
-  if (
-    Number.isFinite(startedAt) &&
-    Number.isFinite(finishedAt) &&
-    Math.abs(finishedAt - startedAt - result.durationMs) > 5_000
-  ) {
-    issues.push("durationMs must match the measured UTC interval")
-  }
-  if (result.durationMs < result.requestedDurationMs) {
-    issues.push("durationMs must cover requestedDurationMs")
-  }
-
-  const load = result.load
-  if (load.requests < 1) issues.push("load.requests must be positive")
-  if (load.failedRequests !== 0) issues.push("load.failedRequests must equal 0")
-  if (load.checksFailed !== 0) issues.push("load.checksFailed must equal 0")
-  if (load.droppedIterations !== 0) {
-    issues.push("load.droppedIterations must equal 0")
-  }
-  if (load.p50Ms > load.p95Ms || load.p95Ms > load.p99Ms) {
-    issues.push("load latency quantiles must satisfy p50 <= p95 <= p99")
-  }
-
-  const runtime = result.runtime
-  if (runtime.calls < 1) issues.push("runtime.calls must be positive")
-  if (runtime.dials < 1) issues.push("runtime.dials must be positive")
-  if (runtime.calls <= runtime.dials) {
-    issues.push("runtime.calls must exceed runtime.dials")
-  }
-  if (runtime.unexpectedErrors !== 0) {
-    issues.push("runtime.unexpectedErrors must equal 0")
-  }
-  if (runtime.unhandledRejections !== 0) {
-    issues.push("runtime.unhandledRejections must equal 0")
-  }
-  evaluateSamples(
-    runtime.runnerSamples,
-    "runtime.runnerSamples",
-    result.requestedDurationMs,
-    result.durationMs,
-    result.environment.platform,
-    issues
-  )
-  evaluateSamples(
-    runtime.webHostSamples,
-    "runtime.webHostSamples",
-    result.requestedDurationMs,
-    result.durationMs,
-    result.environment.platform,
-    issues
-  )
-
-  const scenarios = result.scenarios
-  for (const field of ["standardFetchHttp", "clientPoolReuse", "endpointChurn"] as const) {
-    if (!scenarios[field]) issues.push(`scenarios.${field} must equal true`)
-  }
-  const shutdown = scenarios.shutdownUnderLoad
-  if (
-    shutdown.admittedRequests < ConcurrentShutdownRequests ||
-    shutdown.drainedRequests !== shutdown.admittedRequests ||
-    !shutdown.rejectedAfterStop
-  ) {
-    issues.push("scenarios.shutdownUnderLoad must prove concurrent drain and rejected admission")
-  }
-  const longRun =
-    result.requestedDurationMs >= LongSoakDurationMs && result.durationMs >= LongSoakDurationMs
-  if (longRun) {
-    if (!scenarios.rabbitConfirmInterruption) {
-      issues.push("scenarios.rabbitConfirmInterruption must equal true")
-    }
-    if (!scenarios.redisFailover) issues.push("scenarios.redisFailover must equal true")
-  }
-
-  const cleanup = result.cleanup
-  for (const field of ["serverTerminal", "clientClosed", "portRebind"] as const) {
-    if (!cleanup[field]) issues.push(`cleanup.${field} must equal true`)
-  }
-  for (const field of ["residualContainers", "residualNetworks", "residualVolumes"] as const) {
-    if (cleanup[field] !== 0) issues.push(`cleanup.${field} must equal 0`)
-  }
-
-  return Object.freeze({ issues: Object.freeze(issues) })
-}
-
 function duration(value: string): number {
   const match = /^(\d+)(ms|s|m)$/u.exec(value)
   if (match?.[1] === undefined || match[2] === undefined) {
@@ -326,10 +178,6 @@ function duration(value: string): number {
     throw new RangeError("--duration must be a positive safe duration")
   }
   return milliseconds
-}
-
-function errorValue(value: unknown, message: string): Error {
-  return value instanceof Error ? value : new Error(message, { cause: value })
 }
 
 async function within<T>(promise: Promise<T>, milliseconds: number, label: string): Promise<T> {
@@ -351,9 +199,26 @@ async function within<T>(promise: Promise<T>, milliseconds: number, label: strin
   })
 }
 
-function checked(result: CommandOutput, label: string): CommandOutput {
-  if (result.timedOut || result.exitCode !== 0) {
-    throw new Error(`${label} failed: ${(result.stderr || result.stdout).slice(-4_000)}`)
+export function checked(
+  result: CommandOutput,
+  label: string,
+  knownSecrets: readonly string[] = []
+): CommandOutput {
+  if (
+    result.timedOut ||
+    result.termination !== "exit" ||
+    result.exitCode !== 0 ||
+    (result.cleanupFailures?.length ?? 0) > 0
+  ) {
+    const output = boundedTail(redactText(result.stderr || result.stdout, { knownSecrets }), 4_000)
+    const cleanup = redactText(
+      result.cleanupFailures?.map((failure) => failure.summary).join("; ") ?? "",
+      { knownSecrets }
+    )
+    const diagnostics = [output, cleanup].filter((value) => value.length > 0).join("; ")
+    throw new Error(
+      `${label} failed: termination=${result.termination} exit=${String(result.exitCode)}${diagnostics.length > 0 ? `: ${diagnostics}` : ""}`
+    )
   }
   return result
 }
@@ -369,17 +234,86 @@ async function version(command: readonly string[], signal: AbortSignal): Promise
   return (await commandOutput(command, signal)).replace(/^v/u, "")
 }
 
+export function parseK6Version(output: string): string {
+  const match = /^k6 v([0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/u.exec(output.trim())
+  if (match?.[1] === undefined) {
+    throw new Error(`cannot parse k6 version: ${boundedTail(redactText(output), 1_000)}`)
+  }
+  if (match[1] !== K6Version) {
+    throw new Error(`expected k6 ${K6Version}, received ${match[1]}`)
+  }
+  return match[1]
+}
+
+export function k6VersionCommand(owner: string): readonly string[] {
+  return Object.freeze([
+    "docker",
+    "run",
+    "--rm",
+    "--label",
+    `io.likego.e2e.owner=${owner}`,
+    K6Image,
+    "version"
+  ])
+}
+
+export function k6RunCommand(
+  root: string,
+  owner: string,
+  container: string,
+  requestedDurationMs: number,
+  endpointPort: string,
+  resultsPath: string
+): readonly string[] {
+  return Object.freeze([
+    "docker",
+    "run",
+    "--rm",
+    "--name",
+    container,
+    "--label",
+    `io.likego.e2e.owner=${owner}`,
+    "--add-host",
+    "host.docker.internal:host-gateway",
+    "--env",
+    `LIKEGO_SOAK_DURATION=${requestedDurationMs}ms`,
+    "--env",
+    `LIKEGO_SOAK_URL=http://host.docker.internal:${endpointPort}/`,
+    "--volume",
+    `${join(root, "e2e/load/k6-http.ts")}:${K6Workload}:ro`,
+    "--volume",
+    `${resultsPath}:/results`,
+    K6Image,
+    "run",
+    "--quiet",
+    "--summary-export=/results/k6-summary.json",
+    K6Workload
+  ])
+}
+
+export async function preflightK6(
+  owner: string,
+  signal: AbortSignal,
+  runner: typeof runCommand = runCommand
+): Promise<string> {
+  const output = checked(
+    await runner(Root, {
+      command: k6VersionCommand(owner),
+      cwd: ".",
+      signal,
+      timeoutMs: 30_000
+    }),
+    "k6 version"
+  ).stdout
+  return parseK6Version(output)
+}
+
 async function environment(owner: string, signal: AbortSignal): Promise<SoakResult["environment"]> {
-  const [dockerVersion, k6Output, nodeVersion] = await Promise.all([
+  const k6Version = await preflightK6(owner, signal)
+  const [dockerVersion, nodeVersion] = await Promise.all([
     version(["docker", "version", "--format", "{{.Server.Version}}"], signal),
-    version(
-      ["docker", "run", "--rm", "--label", `io.likego.e2e.owner=${owner}`, K6Image, "version"],
-      signal
-    ),
     version(["node", "--version"], signal)
   ])
-  const k6Version = /k6 v?([0-9]+\.[0-9]+\.[0-9]+)/u.exec(k6Output)?.[1]
-  if (k6Version === undefined) throw new Error(`cannot parse k6 version: ${k6Output}`)
   return Object.freeze({
     arch: process.arch,
     bunVersion: Bun.version,
@@ -481,6 +415,7 @@ async function startWebHost(): Promise<WebHost> {
   const lines: string[] = []
   const child = Bun.spawn(["node", "--import", "tsx", "e2e/load/web-host.ts"], {
     cwd: Root,
+    env: { ...process.env, TSX_TSCONFIG_PATH: "e2e/tsconfig.json" },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe"
@@ -563,7 +498,10 @@ async function startWebHost(): Promise<WebHost> {
     }
     return await within(result.promise, 1_000, "Node Web host result")
   })()
-  void terminal.catch(() => {})
+  void terminal.catch((error) => {
+    ready.reject(error)
+    result.reject(error)
+  })
   const readyState = await within(
     Promise.race([
       ready.promise,
@@ -583,10 +521,16 @@ async function startWebHost(): Promise<WebHost> {
       child.stdin.write(`${command}\n`)
       await child.stdin.flush()
     },
-    async terminate(): Promise<void> {
-      try {
-        child.kill("SIGTERM")
-      } catch {}
+    terminate(): void {
+      if (child.exitCode === null) {
+        try {
+          child.kill("SIGTERM")
+        } catch (error) {
+          if (child.exitCode === null) throw error
+        }
+      }
+    },
+    async waitForTermination(): Promise<void> {
       await within(
         child.exited.then(() => undefined),
         10_000,
@@ -650,7 +594,7 @@ function optionalMetric(summary: unknown, name: string, field: string): number {
   return selected
 }
 
-async function loadMetrics(path: string): Promise<SoakResult["load"]> {
+export async function loadMetrics(path: string): Promise<SoakResult["load"]> {
   const summary: unknown = await Bun.file(path).json()
   const requests = metric(summary, "http_reqs", "count")
   return Object.freeze({
@@ -695,7 +639,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
   const dockerOwner = newDockerOwner("soak-http")
   const outputPath = resolve(Root, output)
   const artifactRoot = dirname(outputPath)
-  const summaryPath = join(artifactRoot, "k6-summary.json")
+  const summaryArtifactPath = join(artifactRoot, "k6-summary.json")
   const k6Container = `likego-soak-${crypto.randomUUID().slice(0, 12)}`
   const runnerSamples: SoakSample[] = []
   const webHostSamples: SoakSample[] = []
@@ -739,9 +683,17 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
   let probeStop = false
   let probeRunning: Promise<void> | null = null
   let probeEndpoints = new Set<string>()
+  let stageDirectory: TempDirectory | null = null
+  let stageRoot: string | null = null
+  let completed: SoakResult | null = null
+  let primary: unknown | null = null
 
   try {
     await mkdir(artifactRoot, { recursive: true })
+    stageDirectory = await createTempDirectory("likego-soak-")
+    stageRoot = await createTempSubdirectory(stageDirectory, ["results"])
+    await verifyTempDirectory(stageDirectory)
+    const summaryPath = join(stageRoot, "k6-summary.json")
     const runtimeEnvironment = await environment(dockerOwner, interrupted.signal)
     web = await startWebHost()
     const endpoint = localURL(web.endpoint)
@@ -820,33 +772,16 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
       }
     })()
 
-    const k6Duration = `${requestedDurationMs}ms`
     const k6 = await runCommand(Root, {
       cwd: ".",
-      command: [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
+      command: k6RunCommand(
+        Root,
+        dockerOwner,
         k6Container,
-        "--label",
-        `io.likego.e2e.owner=${dockerOwner}`,
-        "--add-host",
-        "host.docker.internal:host-gateway",
-        "--env",
-        `LIKEGO_SOAK_DURATION=${k6Duration}`,
-        "--env",
-        `LIKEGO_SOAK_URL=http://host.docker.internal:${endpoint.port}/`,
-        "--volume",
-        `${join(Root, "e2e/load/k6-http.js")}:/scripts/k6-http.js:ro`,
-        "--volume",
-        `${artifactRoot}:/results`,
-        K6Image,
-        "run",
-        "--quiet",
-        "--summary-export=/results/k6-summary.json",
-        "/scripts/k6-http.js"
-      ],
+        requestedDurationMs,
+        endpoint.port,
+        stageRoot
+      ),
       signal: interrupted.signal,
       timeoutMs: requestedDurationMs + 2 * 60_000
     })
@@ -854,9 +789,12 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
       join(artifactRoot, "k6.log"),
       `${k6.stdout}${k6.stderr.length > 0 ? `\n${k6.stderr}` : ""}\n`
     )
+    checked(k6, "k6 HTTP short lifecycle")
     probeStop = true
     samplerStop.resolve()
     await Promise.all([probeRunning, sampling])
+    probeRunning = null
+    sampling = null
     const finalSampleAt = Math.round(performance.now() - loadStarted)
     const [finalRunnerSample, finalWebHostSample] = await Promise.all([
       sampleRunner(finalSampleAt),
@@ -907,7 +845,6 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
       webHostSamples: Object.freeze(webHostSamples)
     })
     await Bun.write(join(artifactRoot, "runtime.json"), `${JSON.stringify(runtime, null, 2)}\n`)
-    checked(k6, "k6 HTTP soak")
 
     if (requestedDurationMs >= LongSoakDurationMs) {
       await runProviderScenario(
@@ -927,6 +864,8 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     }
 
     await verifyDockerOwnerCleanup(Root, dockerOwner, performance.now() + 60_000)
+    const load = await loadMetrics(summaryPath)
+    await Bun.write(summaryArtifactPath, await Bun.file(summaryPath).text())
     const durationMs = Math.round(performance.now() - monotonicStarted)
     const result: SoakResult = Object.freeze({
       startedAt,
@@ -934,7 +873,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
       requestedDurationMs,
       durationMs,
       environment: runtimeEnvironment,
-      load: await loadMetrics(summaryPath),
+      load,
       runtime,
       scenarios: Object.freeze({
         standardFetchHttp: true,
@@ -953,48 +892,75 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
         residualVolumes: 0
       })
     })
-    const evaluation = evaluateSoakResult(result)
-    await Bun.write(outputPath, `${JSON.stringify(result, null, 2)}\n`)
+    const resultJson = `${JSON.stringify(result, null, 2)}\n`
+    await Bun.write(outputPath, resultJson)
+    const evaluation = evaluateSoakResult(parseSoakResultJson(resultJson))
     if (evaluation.issues.length > 0) {
       throw new Error(`soak thresholds failed: ${evaluation.issues.join("; ")}`)
     }
-    return result
-  } finally {
-    probeStop = true
-    samplerStop?.resolve()
-    if (probeRunning !== null) {
-      try {
-        await within(probeRunning, 5_000, "client probe cleanup")
-      } catch {}
-    }
-    if (sampling !== null) {
-      try {
-        await within(sampling, 5_000, "resource sampler cleanup")
-      } catch {}
-    }
-    if (!clientClosed && client !== null) {
-      try {
-        await client.close(background())
-      } catch {}
-    }
-    if (!serverTerminal && web !== null) {
-      try {
-        await web.send("release")
-        await web.send("stop")
-        await within(web.result, 15_000, "Node Web host cleanup")
-      } catch {
-        try {
-          await web.terminate()
-        } catch {}
-      }
-    }
-    try {
-      await verifyDockerOwnerCleanup(Root, dockerOwner, performance.now() + 60_000)
-    } catch {}
-    process.off("SIGINT", onSigint)
-    process.off("SIGTERM", onSigterm)
-    process.off("unhandledRejection", recordUnhandled)
+    completed = result
+  } catch (error) {
+    primary = error
   }
+
+  const activeProbe = probeRunning
+  const activeSampling = sampling
+  const activeSamplerStop = samplerStop
+  const activeClient = clientClosed ? null : client
+  const activeWeb = serverTerminal ? null : web
+  const activeStage = stageDirectory
+  const cleanupFailures = await collectSoakCleanupFailures({
+    probeStop:
+      activeProbe === null
+        ? null
+        : () => {
+            probeStop = true
+          },
+    probeWait:
+      activeProbe === null ? null : () => within(activeProbe, 5_000, "client probe cleanup"),
+    samplerStop:
+      activeSampling === null || activeSamplerStop === null
+        ? null
+        : () => activeSamplerStop.resolve(),
+    samplerWait:
+      activeSampling === null
+        ? null
+        : () => within(activeSampling, 5_000, "resource sampler cleanup"),
+    client:
+      activeClient === null
+        ? null
+        : async () => {
+            await activeClient.close(background())
+            clientClosed = true
+          },
+    webRelease: activeWeb === null ? null : () => activeWeb.send("release"),
+    webStop: activeWeb === null ? null : () => activeWeb.send("stop"),
+    webResult:
+      activeWeb === null
+        ? null
+        : async () => {
+            const result = await within(activeWeb.result, 15_000, "Node Web host cleanup")
+            serverTerminal = result.serverTerminal
+          },
+    webTerminate: activeWeb === null ? null : () => activeWeb.terminate(),
+    webTerminateWait: activeWeb === null ? null : () => activeWeb.waitForTermination(),
+    docker: () => verifyDockerOwnerCleanup(Root, dockerOwner, performance.now() + 60_000),
+    temp: activeStage === null ? null : () => removeTempDirectory(activeStage),
+    listeners: () => {
+      process.off("SIGINT", onSigint)
+      process.off("SIGTERM", onSigterm)
+    },
+    observer: () => {
+      process.off("unhandledRejection", recordUnhandled)
+    }
+  })
+  finalizeWithCleanup(
+    primary,
+    cleanupFailures,
+    "LikeGo short lifecycle failed and cleanup also failed"
+  )
+  if (completed === null) throw new Error("LikeGo short lifecycle completed without a result")
+  return completed
 }
 
 async function main(): Promise<void> {
@@ -1017,9 +983,10 @@ if (import.meta.main) {
     await main()
   } catch (error) {
     if (process.exitCode === 130 || process.exitCode === 143) {
-      process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+      process.stderr.write(`${errorSummary(error)}\n`)
     } else {
-      throw error
+      process.stderr.write(`${errorSummary(error)}\n`)
+      process.exitCode = 1
     }
   }
 }
