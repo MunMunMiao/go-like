@@ -87,6 +87,8 @@ interface SelectionTracker {
   issued: number
   feedbackCalls: number
   duplicateFeedbackCalls: number
+  probeSnapshot: boolean
+  snapshot: string
 }
 
 interface TransportTracker {
@@ -204,13 +206,16 @@ function trackedSelector(
   base: Selector,
   selections: string[],
   outcomes: SelectionOutcome[],
-  tracker: SelectionTracker
+  tracker: SelectionTracker,
+  snapshotObserved: Error
 ): Selector {
   return Object.freeze({
     select(
       ctx: Context,
       instances: readonly ServiceInstance[]
     ): readonly [ServiceEndpoint, SelectionDone] {
+      tracker.snapshot = instances.map((instance) => instance.id).join(",")
+      if (tracker.probeSnapshot) throw snapshotObserved
       const selected = base.select(ctx, instances)
       selections.push(selected[0].instance.id)
       tracker.issued += 1
@@ -454,8 +459,11 @@ const nodeState: NodeState = {
 const selectionTracker: SelectionTracker = {
   issued: 0,
   feedbackCalls: 0,
-  duplicateFeedbackCalls: 0
+  duplicateFeedbackCalls: 0,
+  probeSnapshot: false,
+  snapshot: ""
 }
+const clientSnapshotObserved = new Error("client discovery snapshot observed")
 const transportTracker: TransportTracker = {
   binds: 0,
   dialedClients: 0,
@@ -645,7 +653,8 @@ try {
     newRoundRobinSelector(),
     selections,
     feedbackOutcomes,
-    selectionTracker
+    selectionTracker,
+    clientSnapshotObserved
   )
   client = newClient(withDiscovery(registry), withSelector(selector), withTransport(transport))
   const roundRobin: string[] = []
@@ -671,6 +680,30 @@ try {
   const replacement = await nextSnapshot(watcher)
   const watcherAfterDeregister = replacement.map((instance) => instance.id).join(",")
   ensure(watcherAfterDeregister === "b", "Consul watcher did not converge to node b")
+  const clientSnapshotDeadline = Date.now() + 10_000
+  selectionTracker.probeSnapshot = true
+  try {
+    while (selectionTracker.snapshot !== "b") {
+      try {
+        await client.call(background(), {
+          service: ServiceName,
+          endpoint: OperationEndpoint,
+          message: RequestMessage
+        })
+      } catch (value) {
+        if (value !== clientSnapshotObserved) throw value
+      }
+      if (selectionTracker.snapshot === "b") break
+      if (Date.now() >= clientSnapshotDeadline) {
+        throw new Error(
+          `Client discovery snapshot remained ${selectionTracker.snapshot || "empty"}; expected b`
+        )
+      }
+      await Bun.sleep(10)
+    }
+  } finally {
+    selectionTracker.probeSnapshot = false
+  }
   const postDeregister = await client.call(background(), {
     service: ServiceName,
     endpoint: OperationEndpoint,

@@ -190,8 +190,8 @@ test("Node host aggregates injected write and file-close failures and still rele
       throw closeFailure
     }
   )
-  const io = injectedIO(async function openFile(_path, flags): Promise<NodeFileStoreFile> {
-    return flags === "wx" ? lock : candidate
+  const io = injectedIO(async function openFile(path): Promise<NodeFileStoreFile> {
+    return path.endsWith(LockName) ? lock : candidate
   })
   const handle = await newNodeFileStoreHostWithIO(io).acquire(background(), "controlled")
   const failure = await handle
@@ -205,8 +205,8 @@ test("Node host aggregates injected write and file-close failures and still rele
 test("Node host normalizes non-Error write failures and serial queue continues", async () => {
   const lock = injectedFile()
   let writes = 0
-  const io = injectedIO(async function openFile(_path, flags): Promise<NodeFileStoreFile> {
-    if (flags === "wx") return lock
+  const io = injectedIO(async function openFile(path): Promise<NodeFileStoreFile> {
+    if (path.endsWith(LockName)) return lock
     writes += 1
     if (writes === 1) {
       return injectedFile(undefined, async function syncFailed(): Promise<void> {

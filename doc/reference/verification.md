@@ -13,7 +13,7 @@ Coverage is an optional unit-test report:
 bun run test:unit:coverage
 ```
 
-The hosted CI intentionally runs only installation, formatting, type checking, building, and unit tests:
+The `Verify` workflow runs installation, formatting, type checking, building, and unit tests:
 
 ```sh
 bun install --frozen-lockfile
@@ -22,6 +22,20 @@ bun run typecheck
 bun run build
 bun run test:unit
 ```
+
+Repository rules must require `Verify / Bun 1.3.14` on `main`; a workflow file cannot replace that external merge control. The
+manual `Release` workflow checks out the exact dispatch SHA from `main`, repeats the Verify commands, and additionally runs:
+
+```sh
+bun run audit
+bun run doc:build
+bun e2e/run.ts --scope runtimes
+bun e2e/run.ts --scope published
+```
+
+Release builds packages once before invoking the two direct E2E scopes. These bounded, non-Docker lanes verify the exact runtime
+consumers and packed tarballs immediately before the irreversible publish step. Provider, example, Docker, and soak scopes remain
+separate evidence and are not silently implied by a successful release workflow.
 
 Run E2E locally on a machine with the required runtimes and Docker:
 

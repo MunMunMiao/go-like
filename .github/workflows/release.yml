@@ -2,10 +2,14 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: Use the one-time 0.0.1 npm bootstrap path
+        required: true
+        default: false
+        type: boolean
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
 concurrency:
   group: release
@@ -13,19 +17,28 @@ concurrency:
 
 jobs:
   release:
-    name: Publish packages
+    name: Validate and publish packages
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     environment: npm
     permissions:
       contents: write
       id-token: write
+    env:
+      NPM_CONFIG_PROVENANCE: "true"
 
     steps:
-      - name: Check out main
+      - name: Require a main branch dispatch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Release must be dispatched from main, not $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -38,6 +51,13 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.5.0
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.4
 
       - name: Set up npm
         run: npm install --global npm@12.0.1
@@ -57,18 +77,54 @@ jobs:
       - name: Run unit tests
         run: bun run test:unit
 
-      - name: Publish with npm trusted publishing and provenance
-        env:
-          NPM_CONFIG_PROVENANCE: "true"
+      - name: Audit dependencies
+        run: bun run audit
+
+      - name: Build documentation
+        run: bun run doc:build
+
+      - name: Test runtime consumers
+        run: bun e2e/run.ts --scope runtimes
+
+      - name: Test published tarballs
+        run: bun e2e/run.ts --scope published
+
+      - name: Validate 0.0.1 bootstrap manifests
+        if: ${{ inputs.bootstrap }}
         run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bun -e '
+            const paths = Bun.spawnSync(["git", "ls-files", "packages/**/package.json"]).stdout.toString().trim().split("\n").filter(Boolean)
+            if (paths.length === 0) throw new Error("No package manifests found")
+            for (const path of paths) {
+              const manifest = await Bun.file(path).json()
+              if (!manifest.private && (!manifest.name?.startsWith("@likego/") || manifest.version !== "0.0.1")) {
+                throw new Error(`Bootstrap accepts only @likego/*@0.0.1: ${path}`)
+              }
+            }
+          '
+
+      - name: Publish with npm trusted publishing
+        if: ${{ !inputs.bootstrap }}
+        run: bun run changeset publish
+
+      - name: Bootstrap 0.0.1 packages
+        if: ${{ inputs.bootstrap }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::The npm environment has no temporary NPM_BOOTSTRAP_TOKEN"
+            exit 1
+          fi
+          npm whoami >/dev/null
           bun run changeset publish
 
       - name: Reconcile and push release tags
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           bun run changeset tag
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
           git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $auth"

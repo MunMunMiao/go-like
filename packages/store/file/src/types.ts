@@ -22,7 +22,7 @@ export interface FileStoreDirectory {
   close(ctx: Context): Promise<void>
   /** Reads one provider-owned file or returns null when it does not exist. */
   read(ctx: Context, name: string): Promise<Uint8Array | null>
-  /** Replaces one provider-owned file with the supplied complete bytes. */
+  /** Exclusively creates one provider-owned candidate with the supplied complete bytes. */
   write(ctx: Context, name: string, bytes: Uint8Array): Promise<void>
   /** Atomically replaces one provider-owned target with one provider-owned source. */
   rename(ctx: Context, source: string, target: string): Promise<void>

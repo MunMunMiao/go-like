@@ -25,7 +25,7 @@ export interface NodeFileStoreFile {
 /** Supplies the narrow Node filesystem boundary used by deterministic host tests. */
 export interface NodeFileStoreIO {
   mkdir(path: string): Promise<void>
-  open(path: string, flags: "w" | "wx", mode: number): Promise<NodeFileStoreFile>
+  open(path: string, flags: "wx", mode: number): Promise<NodeFileStoreFile>
   readFile(path: string): Promise<Uint8Array>
   rename(source: string, target: string): Promise<void>
   unlink(path: string): Promise<void>
@@ -38,7 +38,7 @@ const DefaultIO: NodeFileStoreIO = Object.freeze({
     await nativeMkdir(path, { recursive: true })
   },
   /** Opens one real Node file with the exact provider-owned flags and mode. */
-  async open(path: string, flags: "w" | "wx", mode: number): Promise<NodeFileStoreFile> {
+  async open(path: string, flags: "wx", mode: number): Promise<NodeFileStoreFile> {
     return await nativeOpen(path, flags, mode)
   },
   /** Reads one complete real Node file. */
@@ -251,7 +251,7 @@ function directoryHandle(
         let primary: Error | null = null
         const cleanup: Error[] = []
         try {
-          file = await io.open(path, "w", 0o600)
+          file = await io.open(path, "wx", 0o600)
           await file.writeFile(bytes)
           await file.sync()
           checkContext(ctx)

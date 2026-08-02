@@ -1,4 +1,4 @@
-import { readFile, readdir, stat, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, stat, symlink, unlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 
 import { expect, test } from "bun:test"
@@ -110,8 +110,54 @@ test("failed rename leaves the last complete snapshot readable and stale temp is
     const recoveredHandle = await startStore(recovered)
     expect(await recovered.read(background(), "stable")).not.toBeNull()
     expect(await recovered.read(background(), "unstable")).toBeNull()
+    await recovered.write(background(), { key: "recovered", value: new Uint8Array([3]) })
+    expect(await recovered.read(background(), "recovered")).not.toBeNull()
     await stopStore(recoveredHandle)
     await expect(stat(join(directory, TempName))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+})
+
+test("startup safely removes a stale temp symlink", async () => {
+  await withTempDirectory(async (root) => {
+    const directory = join(root, "store")
+    const target = join(root, "protected")
+    await mkdir(directory)
+    await writeFile(target, "protected")
+    await symlink(target, join(directory, TempName))
+
+    const store = newFileStore(newNodeFileStoreHost(), directory)
+    const handle = await startStore(store)
+    await store.write(background(), { key: "recovered", value: new Uint8Array([1]) })
+    expect(await readFile(target, "utf8")).toBe("protected")
+    await stopStore(handle)
+    await expect(stat(join(directory, TempName))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+})
+
+test("candidate writes never follow an attacker-provided temp symlink", async () => {
+  await withTempDirectory(async (root) => {
+    const directory = join(root, "store")
+    const target = join(root, "protected")
+    await mkdir(directory)
+    await writeFile(target, "protected")
+
+    const store = newFileStore(newNodeFileStoreHost(), directory)
+    const handle = await startStore(store)
+    try {
+      await symlink(target, join(directory, TempName))
+      const result = await store
+        .write(background(), { key: "unsafe", value: new Uint8Array([1]) })
+        .catch((failure: unknown) => failure)
+
+      expect(await readFile(target, "utf8")).toBe("protected")
+      expect(result).toMatchObject({ code: "EEXIST" })
+
+      await unlink(join(directory, TempName))
+      await store.write(background(), { key: "safe", value: new Uint8Array([2]) })
+      expect(await store.read(background(), "safe")).not.toBeNull()
+    } finally {
+      await stopStore(handle)
+    }
   })
 })
 

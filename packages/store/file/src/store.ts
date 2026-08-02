@@ -606,6 +606,7 @@ export function newFileStore(host: FileStoreHost, directory: string): FileStore 
         )
         admitted = captureDirectory(rawDirectory)
         directoryHandle = admitted
+        await admitted.remove.call(admitted.receiver, ctx, TempName)
         const bytes = await admitted.read.call(admitted.receiver, ctx, SnapshotName)
         if (bytes !== null) {
           const loaded = await decodeSnapshot(bytes)

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { lstat, unlink } from "node:fs/promises"
-import { dirname, join, resolve } from "node:path"
+import { join, resolve } from "node:path"
 
 const Root = resolve(import.meta.dir, "..")
 const FixtureCwd = resolve(Root, "e2e/fixtures/example-task-cli")
@@ -78,7 +78,6 @@ function fixtureEnvironment(
   for (const key of Object.keys(environment)) {
     if (key === "DOCKER_CONFIG" || key.startsWith("DOCKER_")) delete environment[key]
   }
-  environment.PATH = dirname(process.execPath)
   return Object.freeze(environment)
 }
 
@@ -121,11 +120,17 @@ async function runDirectCli(selected: DirectCliCase): Promise<DirectCliObservati
       ]),
       deadline
     ])
+    const marker = Bun.file(markerPath)
+    if (!(await marker.exists())) {
+      throw new Error(
+        `direct CLI fixture exited ${exitCode} without running its scenario\nstdout:\n${stdout}\nstderr:\n${stderr}`
+      )
+    }
     return Object.freeze({
       exitCode,
       stdout,
       stderr,
-      marker: await Bun.file(markerPath).text(),
+      marker: await marker.text(),
       evidence: parseEvidence(stdout)
     })
   } finally {

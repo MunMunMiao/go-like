@@ -93,6 +93,7 @@ test("cancellation after temp write never commits and graceful stop removes the 
 test("shutdown preserves ordered remove and close cleanup failures", async () => {
   const removeFailure = new Error("remove failed")
   const closeFailure = new Error("close failed")
+  let removes = 0
   const host: FileStoreHost = {
     async acquire() {
       return {
@@ -105,6 +106,8 @@ test("shutdown preserves ordered remove and close cleanup failures", async () =>
         async write() {},
         async rename() {},
         async remove() {
+          removes += 1
+          if (removes === 1) return false
           throw removeFailure
         }
       }
@@ -114,6 +117,7 @@ test("shutdown preserves ordered remove and close cleanup failures", async () =>
   const failure = await handle.store.stop(background()).catch((value: unknown) => value)
   if (!(failure instanceof AggregateError)) throw new Error("expected aggregate shutdown failure")
   expect(failure.errors).toEqual([removeFailure, closeFailure])
+  expect(removes).toBe(2)
   await expect(handle.running).rejects.toBe(failure)
 })
 
