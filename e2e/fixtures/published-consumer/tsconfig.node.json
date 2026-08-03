@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": ".",
+    "outDir": "compiled/node",
+    "sourceMap": false,
+    "declaration": false,
+    "noEmit": false,
+    // ponytail: fixed NATS declarations fail TS 7 lib checking; staged trace and runtime gates retain the package boundary.
+    "skipLibCheck": true
+  },
+  "files": ["portable.ts", "node.ts"]
+}

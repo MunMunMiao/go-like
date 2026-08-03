@@ -1,0 +1,135 @@
+services:
+  capture:
+    image: docker.io/nicolaka/netshoot:v0.16@sha256:b09d9b21381f47a79b3cbcb30da25266dc17186ea00ae65e99fdc51396f48e70
+    entrypoint: ["tcpdump"]
+    command: ["-i", "eth0", "-U", "-w", "/artifacts/ipv4.pcap", "udp", "port", "5353"]
+    cap_add: ["NET_ADMIN", "NET_RAW"]
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"
+    volumes:
+      - type: bind
+        source: ${LIKEGO_ARTIFACTS}
+        target: /artifacts
+    networks: [mdns]
+  observer:
+    image: node:24.18.1-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7
+    working_dir: /workspace
+    command:
+      [
+        "node",
+        "--import",
+        "./packages/registry/mdns/test/e2e/loader.ts",
+        "./packages/registry/mdns/test/e2e/observer.ts"
+      ]
+    environment:
+      LIKEGO_ARTIFACTS: /artifacts
+      LIKEGO_FAMILY: ipv4
+      LIKEGO_MODE: ${LIKEGO_MODE:-normal}
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"
+    volumes:
+      - type: bind
+        source: ${LIKEGO_ROOT}
+        target: /workspace
+        read_only: true
+      - type: bind
+        source: ${LIKEGO_ARTIFACTS}
+        target: /artifacts
+    networks: [mdns]
+  publisher:
+    image: node:24.18.1-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7
+    working_dir: /workspace
+    command:
+      [
+        "node",
+        "--import",
+        "./packages/registry/mdns/test/e2e/loader.ts",
+        "./packages/registry/mdns/test/e2e/publisher.ts"
+      ]
+    environment:
+      LIKEGO_ARTIFACTS: /artifacts
+      LIKEGO_FAMILY: ipv4
+      LIKEGO_MODE: ${LIKEGO_MODE:-normal}
+    depends_on: [observer, capture]
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"
+    volumes:
+      - type: bind
+        source: ${LIKEGO_ROOT}
+        target: /workspace
+        read_only: true
+      - type: bind
+        source: ${LIKEGO_ARTIFACTS}
+        target: /artifacts
+    networks: [mdns]
+  cooperator:
+    image: node:24.18.1-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7
+    working_dir: /workspace
+    command:
+      [
+        "node",
+        "--import",
+        "./packages/registry/mdns/test/e2e/loader.ts",
+        "./packages/registry/mdns/test/e2e/publisher.ts"
+      ]
+    environment:
+      LIKEGO_ARTIFACTS: /artifacts
+      LIKEGO_FAMILY: ipv4
+      LIKEGO_MODE: normal
+      LIKEGO_ROLE: cooperator
+    depends_on: [publisher]
+    network_mode: service:publisher
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"
+    volumes:
+      - type: bind
+        source: ${LIKEGO_ROOT}
+        target: /workspace
+        read_only: true
+      - type: bind
+        source: ${LIKEGO_ARTIFACTS}
+        target: /artifacts
+  collider:
+    image: node:24.18.1-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7
+    working_dir: /workspace
+    command:
+      [
+        "node",
+        "--import",
+        "./packages/registry/mdns/test/e2e/loader.ts",
+        "./packages/registry/mdns/test/e2e/publisher.ts"
+      ]
+    environment:
+      LIKEGO_ARTIFACTS: /artifacts
+      LIKEGO_FAMILY: ipv4
+      LIKEGO_MODE: normal
+      LIKEGO_ROLE: collider
+    depends_on: [publisher]
+    network_mode: service:publisher
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"
+    volumes:
+      - type: bind
+        source: ${LIKEGO_ROOT}
+        target: /workspace
+        read_only: true
+      - type: bind
+        source: ${LIKEGO_ARTIFACTS}
+        target: /artifacts
+networks:
+  mdns:
+    internal: false
+    labels:
+      likego.suite: registry-mdns
+      likego.run: ${LIKEGO_RUN}
+      io.likego.e2e.owner: "${LIKEGO_E2E_OWNER:?required}"

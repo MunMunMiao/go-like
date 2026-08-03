@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // H3 declarations reference optional host types that are not part of this Fetch-only example.
+    "skipLibCheck": true,
+    "types": ["bun", "node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

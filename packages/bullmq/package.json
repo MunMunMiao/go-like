@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/bullmq",
+  "version": "0.0.1",
+  "description": "Lifecycle-only Servers for application-configured BullMQ Workers.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun test/e2e/docker-e2e.ts",
+    "test:e2e:runtimes": "tsx test/e2e/package-runtime.ts"
+  },
+  "dependencies": {
+    "@likego/context": "0.0.1",
+    "@likego/core": "0.0.1",
+    "@types/node": "26.1.2",
+    "bullmq": "6.0.6",
+    "ioredis": "6.0.0"
+  },
+  "license": "MIT"
+}

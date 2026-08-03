@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-payments-ledger",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run --cwd ../.. build && bun run start:prepared",
+    "start:prepared": "bun src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
+  },
+  "dependencies": {
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*",
+    "@likego/web": "workspace:*",
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0"
+  },
+  "license": "MIT"
+}

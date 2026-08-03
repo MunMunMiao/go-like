@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "paths": {
+      "@likego/*": ["./authoring-stubs/likego.d.ts"]
+    }
+  },
+  "files": ["authoring-stubs/likego.d.ts", "portable.ts", "node.ts", "bun.ts", "deno.ts"]
+}

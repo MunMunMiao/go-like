@@ -1,0 +1,6 @@
+[test]
+timeout = 30000
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["../../packages/**", "test/**"]
+coverageReporter = ["text", "lcov"]
+coverageDir = ".artifacts/coverage"

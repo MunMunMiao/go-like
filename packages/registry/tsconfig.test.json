@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": [".artifacts/**", "consul/**", "dist/**", "mdns/**", "test/published-types.ts"]
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/event",
+  "version": "0.0.1",
+  "description": "Minimal typed codec projection over LikeGo Broker.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@likego/broker": "0.0.1",
+    "@likego/context": "0.0.1"
+  },
+  "license": "MIT"
+}

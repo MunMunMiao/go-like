@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@likego/example-saas-tenant-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run --cwd ../.. build && bun run start:prepared",
+    "start:prepared": "bun build src/main.ts --target=node --outfile=.artifacts/main.mjs && node .artifacts/main.mjs",
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
+  },
+  "dependencies": {
+    "@likego/cache": "workspace:*",
+    "@likego/cache-redis": "workspace:*",
+    "@likego/config": "workspace:*",
+    "@likego/config-consul": "workspace:*",
+    "@likego/context": "workspace:*",
+    "@likego/core": "workspace:*",
+    "@likego/pino": "workspace:*",
+    "@likego/resilience": "workspace:*",
+    "@likego/store-consul": "workspace:*",
+    "@likego/web": "workspace:*",
+    "hono": "4.12.34",
+    "pino": "10.3.1"
+  },
+  "devDependencies": {
+    "@likego/cache-memory": "workspace:*",
+    "@types/node": "26.1.2"
+  },
+  "license": "MIT"
+}

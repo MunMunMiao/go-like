@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": false,
+    "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo",
+    "paths": {
+      "@likego/cache": ["../src/index.ts"],
+      "@likego/context": ["../../context/src/index.ts"],
+      "@likego/core": ["../../core/src/index.ts"],
+      "@likego/core/lifecycle": ["../../core/src/lifecycle.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": ".." }, { "path": "../../context" }, { "path": "../../core" }]
+}

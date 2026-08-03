@@ -1,0 +1,7 @@
+[test]
+root = "test"
+timeout = 30000
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coverageDir = ".artifacts/coverage"
+coveragePathIgnorePatterns = ["../../context/**", "../../core/**", "../src/**", "test/**"]
