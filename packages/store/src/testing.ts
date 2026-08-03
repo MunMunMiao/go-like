@@ -1,6 +1,6 @@
 import { background, cause, withCancel, withTimeout, type Context } from "@likego/context"
 
-import { expiresIn, ifRevision, limit, prefix, cursor as resume } from "./options"
+import { expiresIn, ifAbsent, ifRevision, limit, prefix, cursor as resume } from "./options"
 import type { Store, StoreRecord, StoreRecordInput } from "./types"
 
 /** Defines one runner-neutral executable Store conformance case. */
@@ -435,10 +435,17 @@ function casCase(subject: CapturedSubject): StoreConformanceCase {
     async run(): Promise<void> {
       await withStore(subject, ["conformance/cas"], async (store) => {
         const key = "conformance/cas"
-        const initial = await bounded(subject.convergenceTimeoutMs, (ctx) =>
-          store.write(ctx, input(key))
-        )
+        const initial = subject.limits.cas
+          ? await bounded(subject.convergenceTimeoutMs, (ctx) =>
+              store.write(ctx, input(key), ifAbsent())
+            )
+          : await bounded(subject.convergenceTimeoutMs, (ctx) => store.write(ctx, input(key)))
         if (!subject.limits.cas) {
+          await rejectsTypeError(() =>
+            bounded(subject.convergenceTimeoutMs, (ctx) =>
+              store.write(ctx, input(`${key}/absent`), ifAbsent())
+            )
+          )
           await rejectsTypeError(() =>
             bounded(subject.convergenceTimeoutMs, (ctx) =>
               store.write(ctx, input(key), ifRevision(initial.revision))
@@ -452,6 +459,13 @@ function casCase(subject: CapturedSubject): StoreConformanceCase {
           await bounded(subject.convergenceTimeoutMs, (ctx) => store.delete(ctx, key))
           return
         }
+        await rejectsCode(
+          () =>
+            bounded(subject.convergenceTimeoutMs, (ctx) =>
+              store.write(ctx, input(key, new Uint8Array([2])), ifAbsent())
+            ),
+          "LIKEGO_STORE_CONFLICT"
+        )
         const stale = `stale:${initial.revision}`
         await rejectsCode(
           () =>
@@ -530,9 +544,40 @@ function sharedWriterCase(subject: CapturedSubject): StoreConformanceCase {
       let primary: Error | null = null
       try {
         const key = "conformance/shared"
-        const initial = await bounded(subject.convergenceTimeoutMs, (ctx) =>
-          first.write(ctx, input(key))
-        )
+        let initial: StoreRecord
+        if (subject.limits.cas) {
+          const attempts = await Promise.allSettled([
+            bounded(subject.convergenceTimeoutMs, (ctx) =>
+              first.write(ctx, input(key, new Uint8Array([1])), ifAbsent())
+            ),
+            bounded(subject.convergenceTimeoutMs, (ctx) =>
+              second.write(ctx, input(key, new Uint8Array([2])), ifAbsent())
+            )
+          ])
+          const successes = attempts.filter((result) => result.status === "fulfilled")
+          const failures = attempts.filter((result) => result.status === "rejected")
+          ensure(successes.length === 1, "concurrent ifAbsent admitted more than one writer")
+          ensure(failures.length === 1, "concurrent ifAbsent did not reject one writer")
+          const success = successes[0]
+          const failure = failures[0]
+          ensure(
+            success?.status === "fulfilled" && failure?.status === "rejected",
+            "ifAbsent settlement was invalid"
+          )
+          ensure(
+            isObjectLike(failure.reason) &&
+              "code" in failure.reason &&
+              failure.reason.code === "LIKEGO_STORE_CONFLICT" &&
+              "expectedRevision" in failure.reason &&
+              failure.reason.expectedRevision === null,
+            "concurrent ifAbsent did not expose an absence conflict"
+          )
+          initial = success.value
+        } else {
+          initial = await bounded(subject.convergenceTimeoutMs, (ctx) =>
+            first.write(ctx, input(key))
+          )
+        }
         await waitForRecord(second, key, initial.revision, subject.convergenceTimeoutMs)
         const updated = subject.limits.cas
           ? await bounded(subject.convergenceTimeoutMs, (ctx) =>

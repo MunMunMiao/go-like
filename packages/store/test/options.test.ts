@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test"
 
-import { cursor, expiresIn, ifRevision, limit, prefix } from "../src/index"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "../src/index"
 import { deleteOptions, listOptions, writeOptions } from "../src/provider"
 
 test("functional options are immutable, ordered, and last-wins", () => {
   const write = writeOptions(expiresIn(10), ifRevision("one"), expiresIn(20), ifRevision("two"))
+  const absent = writeOptions(ifRevision("one"), ifAbsent())
+  const revision = writeOptions(ifAbsent(), ifRevision("two"))
   const deleted = deleteOptions(ifRevision("one"), ifRevision("two"))
   const listed = listOptions(
     prefix("a"),
@@ -15,13 +17,15 @@ test("functional options are immutable, ordered, and last-wins", () => {
     cursor("two")
   )
 
-  expect(write).toEqual({ expiresInMs: 20, ifRevision: "two" })
+  expect(write).toEqual({ expiresInMs: 20, ifAbsent: false, ifRevision: "two" })
+  expect(absent).toEqual({ expiresInMs: null, ifAbsent: true, ifRevision: null })
+  expect(revision).toEqual({ expiresInMs: null, ifAbsent: false, ifRevision: "two" })
   expect(deleted).toEqual({ ifRevision: "two" })
   expect(listed).toEqual({ prefix: "b", limit: 2, cursor: "two" })
   expect(Object.isFrozen(write)).toBe(true)
   expect(Object.isFrozen(deleted)).toBe(true)
   expect(Object.isFrozen(listed)).toBe(true)
-  expect(writeOptions()).toEqual({ expiresInMs: null, ifRevision: null })
+  expect(writeOptions()).toEqual({ expiresInMs: null, ifAbsent: false, ifRevision: null })
   expect(deleteOptions()).toEqual({ ifRevision: null })
   expect(listOptions()).toEqual({ prefix: "", limit: null, cursor: null })
   expect(prefix("💡")({ prefix: "", limit: null, cursor: null }).prefix).toBe("💡")
@@ -44,6 +48,17 @@ test("option constructors and reducer outputs fail closed", () => {
   expect(() => deleteOptions(() => null as never)).toThrow("delete options")
   expect(() => listOptions(() => null as never)).toThrow("list options")
   expect(() => writeOptions(() => ({ expiresInMs: 0, ifRevision: null }))).toThrow(RangeError)
+  expect(() =>
+    writeOptions(() => ({ expiresInMs: null, ifAbsent: true, ifRevision: "one" }))
+  ).toThrow(TypeError)
+  expect(() =>
+    writeOptions(() => ({ expiresInMs: null, ifAbsent: "yes", ifRevision: null }) as never)
+  ).toThrow(TypeError)
+  expect(writeOptions(() => ({ expiresInMs: null, ifRevision: null }))).toEqual({
+    expiresInMs: null,
+    ifAbsent: false,
+    ifRevision: null
+  })
   expect(() => deleteOptions(() => ({ ifRevision: "" }))).toThrow(TypeError)
   expect(() => listOptions(() => ({ prefix: "", limit: 0, cursor: null }))).toThrow(RangeError)
 })

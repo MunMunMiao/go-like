@@ -245,7 +245,7 @@ export function createConsulStore(construction: ConsulStoreOptions): ConsulStore
       const config = writeOptions(
         ...reducers /* likego-typed-spread: forwards exact ordered Store options. */
       )
-      if (config.expiresInMs !== null && config.ifRevision !== null) {
+      if (config.expiresInMs !== null && (config.ifAbsent === true || config.ifRevision !== null)) {
         throw newConsulStoreUnsupportedCombinationError("ttl-cas")
       }
       if (
@@ -263,6 +263,20 @@ export function createConsulStore(construction: ConsulStoreOptions): ConsulStore
       const payload = writePayload(record, marker, expiresAt)
       const current = await queryExact(ctx, options, "write", key)
       const visibleCurrent = current === null || expired(current) ? null : current
+      if (config.ifAbsent === true) {
+        if (visibleCurrent !== null) {
+          throw newStoreConflictError(key, null, visibleCurrent.record.revision)
+        }
+        if (current !== null && !(await deleteRow(ctx, options, key, current))) {
+          const actual = await queryExact(ctx, options, "write", key)
+          if (actual !== null) throw newStoreConflictError(key, null, actual.record.revision)
+        }
+        const mode: MutationMode = Object.freeze({ kind: "cas", revision: "0" })
+        const written = await writeMutation(ctx, options, key, payload, mode, null)
+        if (written !== null) return written.record
+        const actual = await queryExact(ctx, options, "write", key)
+        throw newStoreConflictError(key, null, actual?.record.revision ?? null)
+      }
       if (config.ifRevision !== null) {
         const actual = visibleCurrent?.record.revision ?? null
         if (actual !== config.ifRevision) {

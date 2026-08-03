@@ -84,7 +84,7 @@ async function waitForVault(address: string): Promise<void> {
 }
 
 /** Writes one complete real KV v2 data object through Vault's HTTP API. */
-async function writeSecret(address: string, release: number): Promise<void> {
+async function writeSecret(address: string, release: number): Promise<number> {
   const response = await fetch(`${address}/v1/secret/data/applications/orders/config`, {
     method: "POST",
     headers: {
@@ -93,8 +93,35 @@ async function writeSecret(address: string, release: number): Promise<void> {
     },
     body: JSON.stringify({ data: { release, feature: { enabled: release > 1 } } })
   })
+  if (!response.ok) {
+    await response.arrayBuffer()
+    throw new Error(`Vault KV v2 write failed with HTTP ${response.status}`)
+  }
+  const payload: unknown = await response.json()
+  if (payload === null || typeof payload !== "object") {
+    throw new Error("Vault KV v2 write omitted its version")
+  }
+  const data = Object.getOwnPropertyDescriptor(payload, "data")?.value
+  if (data === null || typeof data !== "object") {
+    throw new Error("Vault KV v2 write omitted its version")
+  }
+  const version = Object.getOwnPropertyDescriptor(data, "version")?.value
+  if (!Number.isSafeInteger(version) || Number(version) < 1) {
+    throw new Error("Vault KV v2 write returned an invalid version")
+  }
+  return Number(version)
+}
+
+/** Permanently removes one real KV v2 key's metadata and complete version history. */
+async function deleteSecretMetadata(address: string): Promise<void> {
+  const response = await fetch(`${address}/v1/secret/metadata/applications/orders/config`, {
+    method: "DELETE",
+    headers: { "X-Vault-Token": Token }
+  })
   await response.arrayBuffer()
-  if (!response.ok) throw new Error(`Vault KV v2 write failed with HTTP ${response.status}`)
+  if (!response.ok) {
+    throw new Error(`Vault KV v2 metadata delete failed with HTTP ${response.status}`)
+  }
 }
 
 /** Runs the isolated real-container KV v2 load, poll, change, and owner-drain scenario. */
@@ -127,7 +154,9 @@ async function main(): Promise<void> {
       "-dev-listen-address=0.0.0.0:8200"
     ])
     await waitForVault(address)
-    await writeSecret(address, 1)
+    if ((await writeSecret(address, 1)) !== 1) {
+      throw new Error("initial Vault KV v2 version was not one")
+    }
 
     const requests: string[] = []
     const webFetch: VaultFetch = async function fetchVault(request) {
@@ -164,7 +193,7 @@ async function main(): Promise<void> {
       throw new Error("invalid Vault token did not fail through the HTTP boundary")
     }
     const first = await source.load(background())
-    if (first.revision !== "1" || first.value.release !== 1) {
+    if (first.revision === null || first.value.release !== 1) {
       throw new Error("initial real Vault KV v2 snapshot was incorrect")
     }
     if (source.watch === undefined) throw new Error("Vault source watch capability is missing")
@@ -172,16 +201,44 @@ async function main(): Promise<void> {
     const [nextContext, cancelNext] = withTimeout(background(), 10_000)
     try {
       const next = watch.next(nextContext)
-      await writeSecret(address, 2)
+      await deleteSecretMetadata(address)
+      if ((await writeSecret(address, 2)) !== 1) {
+        throw new Error("recreated Vault KV v2 metadata did not reset to version one")
+      }
       await waitForContext(nextContext, next)
     } finally {
       cancelNext()
     }
-    const second = await source.load(background())
-    if (second.revision !== "2" || second.value.release !== 2) {
-      throw new Error("updated real Vault KV v2 snapshot was incorrect")
+    const recreated = await source.load(background())
+    if (
+      recreated.revision === null ||
+      recreated.revision === first.revision ||
+      recreated.value.release !== 2
+    ) {
+      throw new Error("same-version recreated Vault KV v2 snapshot was not detected")
     }
     await watch.stop(background())
+
+    const ordinaryWatch = await source.watch(background(), recreated.revision)
+    const [ordinaryContext, cancelOrdinary] = withTimeout(background(), 10_000)
+    try {
+      const next = ordinaryWatch.next(ordinaryContext)
+      if ((await writeSecret(address, 3)) !== 2) {
+        throw new Error("ordinary Vault KV v2 update did not advance to version two")
+      }
+      await waitForContext(ordinaryContext, next)
+    } finally {
+      cancelOrdinary()
+    }
+    const second = await source.load(background())
+    if (
+      second.revision === null ||
+      second.revision === recreated.revision ||
+      second.value.release !== 3
+    ) {
+      throw new Error("ordinary updated real Vault KV v2 snapshot was incorrect")
+    }
+    await ordinaryWatch.stop(background())
   } catch (error) {
     primary = error
   } finally {

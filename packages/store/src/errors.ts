@@ -24,18 +24,23 @@ function detail(value: string, name: string): string {
   return value
 }
 
-/** Creates one immutable compare-and-swap conflict with provider-opaque revisions. */
+/** Creates one immutable conditional-write conflict with provider-opaque revisions. */
 export function newStoreConflictError(
   key: string,
-  expectedRevision: string,
+  expectedRevision: string | null,
   actualRevision: string | null
 ): StoreConflictError {
   const validKey = detail(key, "Store conflict key")
-  const validExpected = detail(expectedRevision, "Store expected revision")
+  const validExpected =
+    expectedRevision === null ? null : detail(expectedRevision, "Store expected revision")
   const validActual =
     actualRevision === null ? null : detail(actualRevision, "Store actual revision")
+  const message =
+    validExpected === null
+      ? `Store conditional write conflict for key ${validKey}`
+      : `Store compare-and-swap conflict for key ${validKey}`
   return Object.freeze(
-    Object.assign(new Error(`Store compare-and-swap conflict for key ${validKey}`), {
+    Object.assign(new Error(message), {
       name: StoreConflictErrorName,
       code: StoreConflictErrorCode,
       key: validKey,

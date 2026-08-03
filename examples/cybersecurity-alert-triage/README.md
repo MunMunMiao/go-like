@@ -8,7 +8,7 @@
 ## 主要演示
 
 - Core hook 在 HTTP Server 启动前加载 Config，并在停止后关闭 Config。
-- etcd 模式从一个精确 KV key 读取规则、注册当前 App，并持久化分诊结果后 fresh readback。
+- etcd 模式从一个精确 KV key 读取规则、注册当前 App，并以原子 create-if-absent 持久化分诊结果后 fresh readback。
 - Health readiness 作为告警接纳前的 fail-closed 门禁。
 - `@likego/context` 作为分诊和告警台账操作的首个参数。
 - 标准 Fetch Handler 与规则服务、Config、运行入口分离。
@@ -51,8 +51,8 @@ bun run --filter @likego/example-cybersecurity-alert-triage test:unit
 bun run test:e2e:examples
 ```
 
-`test:e2e` 使用固定 digest 的真实 etcd 3.7.1，验证 Config 读取、Registry 注册/注销、Store 写入与
-fresh readback，并检查 owner-labeled 容器零残留。默认启动仍使用固定 Config source 和内存台账，不连接
+`test:e2e` 使用固定 digest 的真实 etcd 3.7.1，验证 Config 读取、Registry 注册/注销、跨 ledger 重启重放、
+冲突事实并发时仅一个原子写入成功与 fresh readback，并检查 owner-labeled 容器零残留。默认启动仍使用固定 Config source 和内存台账，不连接
 SIEM、EDR 或身份系统。
 
 ## 直接运行

@@ -66,6 +66,7 @@ describe("Vault Store construction boundaries", () => {
       "http://user@vault.test",
       "http://vault.test/path",
       "http://vault.test?x=1",
+      "http://vault.test#",
       "http://vault.test#x"
     ]) {
       expect(() => captureOptions({ ...base, address: address as string })).toThrow(TypeError)

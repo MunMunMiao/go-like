@@ -10,6 +10,7 @@ import type {
 const MaximumSafeInteger = Number.MAX_SAFE_INTEGER
 const DefaultWriteOptions: WriteOptions = Object.freeze({
   expiresInMs: null,
+  ifAbsent: false,
   ifRevision: null
 })
 const DefaultDeleteOptions: DeleteOptions = Object.freeze({ ifRevision: null })
@@ -49,11 +50,20 @@ function snapshotWriteOptions(value: WriteOptions): WriteOptions {
   if (typeof value !== "object" || value === null) {
     throw new TypeError("Store write options must be an object")
   }
+  const absent = value.ifAbsent ?? false
+  if (typeof absent !== "boolean") {
+    throw new TypeError("Store ifAbsent must be a boolean")
+  }
+  const revision =
+    value.ifRevision === null ? null : exactString(value.ifRevision, "Store ifRevision", true)
+  if (absent && revision !== null) {
+    throw new TypeError("Store ifAbsent and ifRevision are mutually exclusive")
+  }
   return Object.freeze({
     expiresInMs:
       value.expiresInMs === null ? null : positiveInteger(value.expiresInMs, "Store expiresInMs"),
-    ifRevision:
-      value.ifRevision === null ? null : exactString(value.ifRevision, "Store ifRevision", true)
+    ifAbsent: absent,
+    ifRevision: revision
   })
 }
 
@@ -85,7 +95,20 @@ export function expiresIn(valueMs: number): WriteOption {
   const captured = positiveInteger(valueMs, "Store expiresInMs")
   /** Applies the captured lifetime to one write option snapshot. */
   function apply(options: WriteOptions): WriteOptions {
-    return Object.freeze({ expiresInMs: captured, ifRevision: options.ifRevision })
+    return Object.freeze({
+      expiresInMs: captured,
+      ifAbsent: options.ifAbsent === true,
+      ifRevision: options.ifRevision
+    })
+  }
+  return apply
+}
+
+/** Admits a write only while no provider-visible record exists at its key. */
+export function ifAbsent(): WriteOption {
+  /** Selects absence as the write condition and clears any earlier revision condition. */
+  function apply(options: WriteOptions): WriteOptions {
+    return Object.freeze({ expiresInMs: options.expiresInMs, ifAbsent: true, ifRevision: null })
   }
   return apply
 }
@@ -99,7 +122,11 @@ export function ifRevision(revision: string): WriteOption & DeleteOption {
   function apply(options: DeleteOptions): DeleteOptions
   function apply(options: WriteOptions | DeleteOptions): WriteOptions | DeleteOptions {
     if ("expiresInMs" in options) {
-      return Object.freeze({ expiresInMs: options.expiresInMs, ifRevision: captured })
+      return Object.freeze({
+        expiresInMs: options.expiresInMs,
+        ifAbsent: false,
+        ifRevision: captured
+      })
     }
     return Object.freeze({ ifRevision: captured })
   }

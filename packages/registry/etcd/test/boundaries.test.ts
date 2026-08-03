@@ -75,6 +75,7 @@ test("retry classification is exact", () => {
 
 test("provider option and rollback errors cover remaining validation boundaries", () => {
   expect(() => etcdOrigin("ftp://etcd.example")).toThrow("HTTP or HTTPS")
+  expect(() => etcdOrigin("https://etcd.example#")).toThrow("origin")
   expect(() =>
     captureOptions({
       fetch: unusedFetch,

@@ -25,6 +25,8 @@ export interface StorePage {
 /** Captures one write call's immutable effective options. */
 export interface WriteOptions {
   readonly expiresInMs: number | null
+  /** When true, admits the write only while no visible record exists. Omitted means false. */
+  readonly ifAbsent?: boolean
   readonly ifRevision: string | null
 }
 
@@ -49,12 +51,13 @@ export type DeleteOption = (options: DeleteOptions) => DeleteOptions
 /** Reduces one immutable list option snapshot to its next candidate. */
 export type ListOption = (options: ListOptions) => ListOptions
 
-/** Describes a stable compare-and-swap conflict without interpreting provider revisions. */
+/** Describes a stable conditional-write conflict without interpreting provider revisions. */
 export interface StoreConflictError extends Error {
   readonly name: "StoreConflictError"
   readonly code: "LIKEGO_STORE_CONFLICT"
   readonly key: string
-  readonly expectedRevision: string
+  /** Null means the caller expected the key to be absent. */
+  readonly expectedRevision: string | null
   readonly actualRevision: string | null
 }
 

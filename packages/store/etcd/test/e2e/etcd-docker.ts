@@ -1,5 +1,5 @@
 import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit, prefix } from "@likego/store"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
 
 import { encodeText, prefixRangeEnd } from "../../src/codec"
 import { newEtcdStore, type EtcdStore } from "../../src/index"
@@ -198,6 +198,28 @@ try {
   const namespace = `integration/${crypto.randomUUID()}/`
   const persistentKey = `${namespace}persistent`
   const store = newEtcdStore({ fetch, address })
+  const absentKey = `${namespace}if-absent`
+  const peer = newEtcdStore({ fetch, address })
+  const absentAttempts = await Promise.allSettled([
+    store.write(background(), { key: absentKey, value: new Uint8Array([1]) }, ifAbsent()),
+    peer.write(background(), { key: absentKey, value: new Uint8Array([2]) }, ifAbsent())
+  ])
+  const absentSuccesses = absentAttempts.filter((result) => result.status === "fulfilled")
+  const absentFailures = absentAttempts.filter((result) => result.status === "rejected")
+  const absentFailure = absentFailures[0]
+  ensure(absentSuccesses.length === 1, "concurrent ifAbsent admitted multiple writers")
+  ensure(
+    absentFailures.length === 1 &&
+      absentFailure?.status === "rejected" &&
+      typeof absentFailure.reason === "object" &&
+      absentFailure.reason !== null &&
+      "code" in absentFailure.reason &&
+      absentFailure.reason.code === "LIKEGO_STORE_CONFLICT" &&
+      "expectedRevision" in absentFailure.reason &&
+      absentFailure.reason.expectedRevision === null,
+    "concurrent ifAbsent did not return an absence conflict"
+  )
+  await store.delete(background(), absentKey)
   const initial = await store.write(background(), {
     key: persistentKey,
     value: new TextEncoder().encode("first"),

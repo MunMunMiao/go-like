@@ -45,7 +45,7 @@ ack/nak/term 仍由应用通过 provider 原生对象决定。
 ## 显式请求指标
 
 `newRequestMetrics(meter)` 使用应用提供的官方 `Meter` 创建固定的
-`likego_requests_total` Counter 与 `likego_request_duration_seconds` Histogram。Client 与 unary
+`likego.request.completed` Counter（unit `{request}`）与 `likego.request.duration` Histogram（unit `s`）。Client 与 unary
 Server 共享低基数的 `component`、`operation`、`outcome` 属性；指标记录失败不会替换业务结果。
 `measureClient(...)` 包住完整 raw 或 typed 调用，所以 typed response decode/validation 失败会记录为失败，
 不会被提前标记成功。

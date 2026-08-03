@@ -59,6 +59,7 @@ describe("construction options", () => {
       "http://user@example.test",
       "http://example.test/path",
       "http://example.test?",
+      "http://example.test#",
       "http://example.test#fragment"
     ]) {
       expect(() => capture({ fetch: async () => new Response("{}"), address })).toThrow(TypeError)

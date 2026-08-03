@@ -27,6 +27,9 @@ test("snapshots one Kratos-style service instance defensively", () => {
   expect(Object.isFrozen(snapshot)).toBeTrue()
   expect(Object.isFrozen(snapshot.metadata)).toBeTrue()
   expect(Object.isFrozen(snapshot.endpoints)).toBeTrue()
+  expect(
+    snapshotServiceInstance({ ...input, endpoints: ["https://example.test/rpc?"] }).endpoints
+  ).toEqual(["https://example.test/rpc?"])
 })
 
 test("snapshots complete replacement arrays", () => {
@@ -86,6 +89,7 @@ test("rejects malformed service instances", () => {
     { ...valid, endpoints: [""] },
     { ...valid, endpoints: ["relative"] },
     { ...valid, endpoints: ["https://user:secret@example.test"] },
+    { ...valid, endpoints: ["https://example.test/#"] },
     { ...valid, endpoints: ["https://example.test/#fragment"] },
     { ...valid, metadata: [] },
     { ...valid, metadata: new Map() },

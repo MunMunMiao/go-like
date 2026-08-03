@@ -42,7 +42,8 @@ Vault 的普通 `DELETE data/{path}` 会删除请求到达时的最新版本；�
 ## 能力边界
 
 - Vault 不支持 TTL；`expiresIn(...)` 在 I/O 前以 `TypeError` fail closed。
-- Vault 不支持 write/delete CAS；`ifRevision(...)` 在 I/O 前以 `TypeError` fail closed。
+- 本 provider 不支持条件 write/delete；`ifAbsent()` 与 `ifRevision(...)` 都在 I/O 前以 `TypeError`
+  fail closed，不会退化为 read-then-write。
 - 不同 Store 实例可共享 Vault；普通 write 是 Vault 的 last-write-wins。
 - key 上限为 1,024 UTF-8 bytes，value 上限为 1 MiB，单页 limit 上限为 1,000。
 - LIST 不是 Vault 服务端快照。首个分页调用会完成一次 LIST+GET 全量采集，再把不可变结果放入本进程；

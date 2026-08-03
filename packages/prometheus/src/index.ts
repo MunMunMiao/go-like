@@ -90,13 +90,16 @@ function contextOutcome(ctx: Context): RequestOutcome {
   }
 }
 
-/** Reads one reserved routing header without exposing other request metadata. */
+/** Reads one unique reserved routing header without exposing other request metadata. */
 function routeField(headers: Readonly<Record<string, string>>, expected: string): string {
-  const name = expected.toLowerCase()
+  const normalized = expected.toLowerCase()
+  let found: string | null = null
   for (const key of Object.keys(headers)) {
-    if (key.toLowerCase() === name) return headers[key] ?? UnknownRoute
+    if (key.toLowerCase() !== normalized) continue
+    if (found !== null) return UnknownRoute
+    found = headers[key] ?? ""
   }
-  return UnknownRoute
+  return found === null || found.length === 0 ? UnknownRoute : found
 }
 
 /** Creates one bounded server operation from the reserved service and endpoint headers. */
@@ -278,7 +281,7 @@ export function measureBroker<PublishOptions, PublishResult, SubscribeOptions, N
       message: BrokerMessage,
       options?: PublishOptions
     ): Promise<PublishResult> {
-      const complete = startMeasurement(metrics, "broker", `publish ${topic}`)
+      const complete = startMeasurement(metrics, "broker", "publish")
       try {
         const result =
           options === undefined
@@ -305,7 +308,7 @@ export function measureBroker<PublishOptions, PublishResult, SubscribeOptions, N
         eventContext: Context,
         event: BrokerEvent<NativeEvent>
       ): Promise<void> {
-        const complete = startMeasurement(metrics, "broker", `consume ${topic}`)
+        const complete = startMeasurement(metrics, "broker", "consume")
         try {
           await handler(eventContext, event)
           complete("success")

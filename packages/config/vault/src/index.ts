@@ -67,6 +67,8 @@ type VaultQuery = (signal: AbortSignal | null) => Promise<QueryResult>
 
 const UnsafeKeys = new Set(["__proto__", "constructor", "prototype"])
 const WatcherStopped = Object.freeze(new Error("Vault watcher has stopped"))
+const RevisionSchemaVersion = 1
+const VaultTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/u
 
 /** Converts one operation result into an owner-drain neutral barrier. */
 function ignoreOperationValue(): void {}
@@ -262,6 +264,44 @@ function discardBody(response: Response): void {
   void Promise.resolve(body.cancel()).catch(ignoreBodyCancellationFailure)
 }
 
+/** Reports whether one value is a canonical Vault RFC3339Nano timestamp. */
+function isVaultTimestamp(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    isWellFormed(value) &&
+    VaultTimestamp.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
+
+/** Encodes one version-specific Vault secret generation as an opaque revision token. */
+function encodeRevision(version: number, createdTime: string): string {
+  return JSON.stringify([RevisionSchemaVersion, version, createdTime])
+}
+
+/** Accepts current generation tokens and legacy decimal versions for one safe resync. */
+function isRevision(value: string): boolean {
+  if (/^[1-9][0-9]*$/u.test(value)) return true
+  if (value.length > 256) return false
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return false
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 3) return false
+  const schema = parsed[0]
+  const version = parsed[1]
+  const createdTime = parsed[2]
+  return (
+    schema === RevisionSchemaVersion &&
+    Number.isSafeInteger(version) &&
+    Number(version) >= 1 &&
+    isVaultTimestamp(createdTime) &&
+    JSON.stringify(parsed) === value
+  )
+}
+
 /** Parses and validates one complete Vault KV v2 read response. */
 function parseResponse(text: string): QueryResult {
   let envelope: unknown
@@ -274,10 +314,16 @@ function parseResponse(text: string): QueryResult {
   const value = property(data, "data")
   const metadata = property(data, "metadata")
   const version = property(metadata, "version")
-  if (!isJsonConfigObject(value) || !Number.isSafeInteger(version) || Number(version) < 1) {
+  const createdTime = property(metadata, "created_time")
+  if (
+    !isJsonConfigObject(value) ||
+    !Number.isSafeInteger(version) ||
+    Number(version) < 1 ||
+    !isVaultTimestamp(createdTime)
+  ) {
     throw newProtocolError()
   }
-  return Object.freeze({ value, revision: String(version) })
+  return Object.freeze({ value, revision: encodeRevision(Number(version), createdTime) })
 }
 
 /** Encodes one strict slash-separated Vault route without URL-normalized dot segments. */
@@ -309,8 +355,8 @@ function vaultOrigin(address: string): URL {
     origin.username !== "" ||
     origin.password !== "" ||
     (origin.pathname !== "" && origin.pathname !== "/") ||
-    origin.search !== "" ||
-    origin.hash !== ""
+    origin.href.includes("?") ||
+    origin.href.includes("#")
   ) {
     throw new TypeError("Vault address must be an origin without credentials or route components")
   }
@@ -376,8 +422,8 @@ function createWatcher(
   retryInitialMs: number,
   retryMaximumMs: number
 ): ConfigSourceWatcher {
-  if (revision !== null && !/^[1-9][0-9]*$/.test(revision)) {
-    throw new TypeError("Vault watcher revision must be a positive decimal integer")
+  if (revision !== null && !isRevision(revision)) {
+    throw new TypeError("Vault watcher revision must be a valid opaque token")
   }
   let current = revision
   let active: Promise<void> | null = null

@@ -23,6 +23,8 @@ const record = await store.read(background(), "orders/1001")
   revision，避免翻页期间的新写入改变结果集。
 - write/delete 都使用 etcd transaction compare，失败分支返回当前 KV。响应可能丢失时执行 exact
   readback；无法证明结果时返回 `LIKEGO_ETCD_STORE_UNCERTAIN`，不会猜测成功。
+- `ifAbsent()` 使用同一 transaction 的 `VERSION == 0` compare；两个 client 并发创建同 key 时只有一个
+  transaction 能进入 success 分支。
 - TTL 使用每条记录独立 lease。客户端生命周期不撤销业务 TTL；显式 delete 或覆盖会主动撤销已废弃
   lease。lease 在提交前丢失返回 `LIKEGO_ETCD_STORE_LEASE_LOST`。
 - 历史分页 revision 被 compact 后返回 `LIKEGO_ETCD_STORE_COMPACTED`。HTTP 错误只保留 status 与数字
@@ -46,7 +48,7 @@ const record = await store.read(background(), "orders/1001")
 | key            | 非空、well-formed UTF-16，最多 1,024 UTF-8 bytes          |
 | value          | 最多 524,288 bytes                                        |
 | TTL            | 1,000 至 2,147,483,647 ms                                 |
-| CAS            | write 与 delete 均支持                                    |
+| CAS            | `ifAbsent()`、revision write 与 revision delete 均支持    |
 | shared writers | 支持，依赖 etcd linearizable range 与 transaction compare |
 | pagination     | 每页最多 1,000 条；cursor 绑定 prefix 与 MVCC revision    |
 
@@ -60,5 +62,8 @@ Docker E2E 固定使用：
 bun run test:e2e:suites -- --suite store-etcd-docker
 ```
 
-测试覆盖 CRUD、prefix pagination、txn CAS、lease 到期、delete 主动 revoke、新客户端持久数据、同一
+测试覆盖并发 `ifAbsent()`、CRUD、prefix pagination、txn CAS、lease 到期、delete 主动 revoke、新客户端持久数据、同一
 容器 restart 后恢复，以及 key、lease、container 零残留。
+
+etcd transaction 的原子 compare 语义：
+https://etcd.io/docs/v3.6/learning/api/#transaction

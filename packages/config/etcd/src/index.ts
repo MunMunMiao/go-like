@@ -338,8 +338,8 @@ function etcdOrigin(address: string): URL {
     origin.username !== "" ||
     origin.password !== "" ||
     (origin.pathname !== "" && origin.pathname !== "/") ||
-    origin.search !== "" ||
-    origin.hash !== ""
+    origin.href.includes("?") ||
+    origin.href.includes("#")
   ) {
     throw new TypeError(
       "etcd address must be an origin without credentials, path, query, or fragment"

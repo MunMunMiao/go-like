@@ -189,4 +189,27 @@ describe("tenant API", () => {
     await cache.put(background(), "unrelated", new Uint8Array([1]), expiresIn(1_000))
     expect(await cache.get(background(), "unrelated")).not.toBeNull()
   })
+
+  test("keeps a hostile identity failure from replacing the unavailable response", async () => {
+    const { config, cache } = await fixture()
+    const handler = newTenantHandler({
+      config,
+      cache,
+      logger: pino({ enabled: false }),
+      resolveTenant() {
+        const failure = Object.create(null)
+        Object.defineProperty(failure, "code", {
+          get() {
+            throw new Error("hostile error getter")
+          }
+        })
+        throw failure
+      }
+    })
+
+    const response = await handler(new Request("http://example.test/v1/tenant/config"))
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toMatchObject({ error: "identity_unavailable" })
+  })
 })

@@ -18,8 +18,8 @@
 |   1 | `commerce-catalog`              | 电商         | 缓存失效时仍须从 Pricing 获取权威价格      | Web、Cache、Client、Resilience、Health；Redis/Consul/HTTP providers         | production  |
 |   2 | `saas-tenant-api`               | 多租户 SaaS  | 配置、缓存和限流状态不得跨租户泄漏         | Web/Hono、Cache、Resilience；Consul/Redis/Pino providers                    | production  |
 |   3 | `payments-ledger`               | 支付         | 分录借贷平衡且幂等键只能生效一次           | Web、Core、标准 JSON 与显式业务校验                                         | production  |
-|   4 | `iot-telemetry`                 | 物联网       | 重投和重连后至多产生一个业务结果           | Broker、NATS、标准 JSON 与显式业务校验                                      | production  |
-|   5 | `batch-reporting`               | 数据报表     | 从检查点恢复不得重复提交完成分片           | Croner、BullMQ、File Store                                                  | production  |
+|   4 | `iot-telemetry`                 | 物联网       | 稳定事件标识供下游幂等收敛重复             | Broker、NATS、标准 JSON 与显式业务校验                                      | production  |
+|   5 | `batch-reporting`               | 数据报表     | 重跑保持窗口标识且输出必须幂等             | Croner、BullMQ、File Store                                                  | production  |
 |   6 | `enterprise-platform-runtime`   | 企业基础平台 | App 统一停止配置、服务与遥测组件           | Vault Config、Consul Registry、HTTP Transport、Health、OTel/Pino/Prometheus | production  |
 |   7 | `retail-inventory-reservation`  | 全渠道零售   | 并发预占不得超卖且请求重试不得重复扣减     | Web、Cache、Memory Cache、Core                                              | integration |
 |   8 | `marketplace-order-fulfillment` | 平台电商     | 履约事件只能合法迁移且重投结果必须幂等     | Web、Core                                                                   | integration |

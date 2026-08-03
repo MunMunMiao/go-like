@@ -8,6 +8,7 @@ test("root exports only caller-facing Store options", () => {
   expect(Object.keys(Store).sort()).toEqual([
     "cursor",
     "expiresIn",
+    "ifAbsent",
     "ifRevision",
     "limit",
     "prefix"

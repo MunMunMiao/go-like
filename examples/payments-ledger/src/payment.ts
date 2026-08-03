@@ -69,8 +69,13 @@ export function paymentFailure(code: PaymentFailure["code"], message: string): P
 
 /** Reports whether one unknown failure belongs to the public payment error contract. */
 export function isPaymentFailure(value: unknown): value is PaymentFailure {
-  if (!(value instanceof Error) || !("code" in value)) return false
-  return value.code === "IDEMPOTENCY_CONFLICT" || value.code === "PAYMENT_VALIDATION"
+  try {
+    if (!(value instanceof Error)) return false
+    if (!("code" in value)) return false
+    return value.code === "IDEMPOTENCY_CONFLICT" || value.code === "PAYMENT_VALIDATION"
+  } catch {
+    return false
+  }
 }
 
 /** Validates one bounded ledger identifier. */

@@ -147,7 +147,9 @@ export function createStore(construction: VaultStoreOptions): VaultStore {
     checkContext(ctx)
     const config = writeOptions.apply(undefined, writeReducers(arguments))
     if (config.expiresInMs !== null) throw new TypeError("Vault Store does not support TTL")
-    if (config.ifRevision !== null) throw new TypeError("Vault Store does not support CAS")
+    if (config.ifAbsent === true || config.ifRevision !== null) {
+      throw new TypeError("Vault Store does not support CAS")
+    }
     const record = snapshotStoreRecordInput(rawRecord)
     physicalKey(record.key)
     return (await writeVault(ctx, options, record)).record

@@ -1188,7 +1188,8 @@ test("validates public structural boundaries and passive failure ownership", asy
     "not-an-absolute-url",
     "http://orders",
     "memory://user:pass@orders",
-    "memory://orders#x"
+    "memory://orders#x",
+    "memory://orders#"
   ]) {
     expect(await rejected(transport.listen(background(), address))).toBeInstanceOf(TypeError)
   }

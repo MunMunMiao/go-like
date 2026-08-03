@@ -95,6 +95,7 @@ describe("Consul Store construction options", () => {
       "http://user@consul.test",
       "http://consul.test/v1",
       "http://consul.test?dc=one",
+      "http://consul.test#",
       "http://consul.test#fragment"
     ]) {
       expect(() => consulOrigin(address as never)).toThrow(TypeError)

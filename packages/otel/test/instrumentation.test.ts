@@ -683,6 +683,50 @@ describe("explicit OpenTelemetry instrumentation", () => {
     }
   })
 
+  test("isolates a throwing Context error reader from the original traced failure", async () => {
+    const exporter = new InMemorySpanExporter()
+    const provider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter })]
+    })
+    const tracer = provider.getTracer("likego-hostile-context-test")
+    const failure = new Error("business failure")
+    const contextFailure = new Error("Context inspection failed")
+    const hostileContext: LikegoContext = Object.freeze({
+      deadline: background().deadline,
+      done: background().done,
+      err(): never {
+        throw contextFailure
+      },
+      value: background().value
+    })
+    const client = traceClient(
+      {
+        async call() {
+          throw failure
+        },
+        async close() {}
+      },
+      tracer
+    )
+
+    try {
+      await expect(
+        client.call(hostileContext, {
+          service: "catalog",
+          endpoint: "Read",
+          message: { header: {}, body: new Uint8Array() }
+        })
+      ).rejects.toBe(failure)
+      await provider.forceFlush()
+
+      const span = spanNamed(exporter.getFinishedSpans(), "likego.client catalog/Read")
+      expect(span.attributes["likego.outcome"]).toBe("transport_error")
+      expect(span.status.code).toBe(SpanStatusCode.ERROR)
+    } finally {
+      await provider.shutdown()
+    }
+  })
+
   test("omits malformed and oversized error identifiers from spans", async () => {
     const exporter = new InMemorySpanExporter()
     const provider = new TracerProvider({

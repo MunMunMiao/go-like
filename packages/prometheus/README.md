@@ -47,11 +47,11 @@ operation 采用稳定的低基数名称：
 
 - Client 与内部 Server：`service/endpoint`。
 - Web：仅 HTTP method，不包含 URL。
-- Broker：`publish <topic>` 或 `consume <topic>`。
+- Broker：仅 `publish` 或 `consume`。
 
-Broker topic 会直接成为 label 的一部分，因此必须是稳定 topic；不要把订单号、用户 ID 或其他动态值拼进
-topic。Client 按逻辑 call 计量一次，不因内部 retry 重复计数。Web 在 Response header 可用时完成计量；
-服务端 `5xx` 记为 `failure`，其他 Response 记为 `success`，请求取消优先记为 `canceled`。
+Broker topic 不进入 label；动态 subject 不会按消息、订单或租户放大时间序列。Client 按逻辑 call 计量一次，
+不因内部 retry 重复计数。Web 在 Response header 可用时完成计量；服务端 `5xx` 记为 `failure`，其他
+Response 记为 `success`，请求取消优先记为 `canceled`。
 
 v1 适配器有意不封装 `collectDefaultMetrics()`。部分默认 collector 会创建驻留的原生 observer 或事件循环
 monitor，而上游辅助函数并未暴露清理 handle。若应用明确愿意拥有该进程级生命周期，可以直接调用官方函数。

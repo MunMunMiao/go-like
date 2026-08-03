@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { newConfig, objectSource, schema, source as configSource } from "@likego/config"
-import { background } from "@likego/context"
+import { background, type Context } from "@likego/context"
 import { newProbeRegistry } from "@likego/health"
 import { createHealthHandler } from "@likego/web/health"
 
@@ -106,4 +106,28 @@ test("management routes metrics and preserves health status", async () => {
   ready = false
   expect((await handler(new Request("http://localhost/readyz"))).status).toBe(503)
   expect((await handler(new Request("http://localhost/missing"))).status).toBe(404)
+})
+
+test("management propagates request cancellation to the internal service call", async () => {
+  let observed: AbortSignal | null | undefined
+  const handler = newManagementHandler(
+    async () => new Response(null, { status: 404 }),
+    async () => new Response("metric 1\n"),
+    {
+      async call(ctx: Context) {
+        observed = ctx.done()
+        return { header: {}, body: new TextEncoder().encode("pong:1") }
+      },
+      async close() {
+        return
+      }
+    }
+  )
+  const controller = new AbortController()
+  const request = new Request("http://localhost/call", { signal: controller.signal })
+  controller.abort(new Error("caller disconnected"))
+
+  await handler(request)
+
+  expect(observed?.aborted).toBe(true)
 })

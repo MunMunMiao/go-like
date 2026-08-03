@@ -39,6 +39,7 @@ root，因此 root 外的 Consul KV 不会进入结果。当前 root 内被查�
 | root               | `<root>/<logical-key>`；默认 `likego/store`，root 外 KV 永不混入            |
 | value              | LikeGo versioned JSON envelope；二进制 value 使用标准 base64                |
 | revision           | KV `ModifyIndex` 的十进制字符串，不解释其业务含义                           |
+| create if absent   | `PUT /v1/kv/:key?cas=0`                                                     |
 | write CAS          | `PUT /v1/kv/:key?cas=<ModifyIndex>`                                         |
 | delete             | 先 exact read，再以 `DELETE ...?cas=<ModifyIndex>` 删除                     |
 | prefix/list        | 强一致 `GET ...?recurse=true`；cursor 绑定 `X-Consul-Index`，变更后拒绝续页 |
@@ -63,11 +64,14 @@ Conflicting flags: acquire=<session>&cas=<ModifyIndex>
 
 因此 v1 不伪造原子性，也不偷偷改用 transaction API：
 
-- `expiresIn(...)` 与 `ifRevision(...)` 同时使用会在 I/O 前返回
+- `expiresIn(...)` 与 `ifAbsent()` 或 `ifRevision(...)` 同时使用会在 I/O 前返回
   `ConsulStoreUnsupportedCombinationError`，combination 为 `ttl-cas`；
 - 对当前由 TTL Session 持有的 record 做普通 CAS write 同样 fail closed，combination 为
   `cas-existing-ttl`，避免 CAS 更新后仍被旧 Session 延迟删除；
-- 普通 persistent CAS、TTL 非 CAS write 和 CAS delete 均完整支持。
+- 普通 persistent `ifAbsent()`/CAS、TTL 非 CAS write 和 CAS delete 均完整支持。
+
+`ifAbsent()` 直接使用 Consul 官方定义的 `cas=0`，不会先读后写：
+https://developer.hashicorp.com/consul/api-docs/kv#create-update-key
 
 ## 所有权与凭据边界
 
@@ -93,7 +97,7 @@ bun run --filter @likego/store-consul build
 bun run test:e2e:suites -- --suite store-consul-docker
 ```
 
-真实协议测试固定使用：
+真实协议测试固定使用，并以两个独立 Store client 并发验证同 key 的 `ifAbsent()` 只有一个成功：
 
 ```text
 hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2

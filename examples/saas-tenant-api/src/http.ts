@@ -61,11 +61,17 @@ function failure(status: number, code: string, id: string, retryAfterMs?: number
 
 /** Normalizes an internal error into one secret-free diagnostic class. */
 function errorCode(value: unknown): string {
-  if (value !== null && typeof value === "object" && "code" in value) {
-    const code = value.code
-    if (typeof code === "string" && isTenantToken(code)) return code
+  if (value !== null && typeof value === "object") {
+    try {
+      const code = "code" in value ? value.code : null
+      if (typeof code === "string" && isTenantToken(code)) return code
+      const name = "name" in value ? value.name : null
+      if (typeof name === "string" && isTenantToken(name)) return name
+    } catch {
+      return "UnknownError"
+    }
   }
-  return value instanceof Error ? value.name : "UnknownError"
+  return "UnknownError"
 }
 
 /** Creates the Hono public handler around Config, Redis-compatible Cache, limiter, and Pino. */

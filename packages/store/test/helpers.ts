@@ -72,7 +72,13 @@ export function memoryStore(backend = memoryBackend(), limits = memoryLimits()):
       if (selected.ifRevision !== null && !limits.cas) {
         throw new TypeError("Memory Store does not support CAS")
       }
+      if (selected.ifAbsent === true && !limits.cas) {
+        throw new TypeError("Memory Store does not support CAS")
+      }
       const current = purge(input.key)
+      if (selected.ifAbsent === true && current !== null) {
+        throw newStoreConflictError(input.key, null, current.revision)
+      }
       if (selected.ifRevision !== null && current?.revision !== selected.ifRevision) {
         throw newStoreConflictError(input.key, selected.ifRevision, current?.revision ?? null)
       }

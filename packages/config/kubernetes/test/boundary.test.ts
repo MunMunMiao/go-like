@@ -72,6 +72,8 @@ describe("Kubernetes configuration protocol boundaries", () => {
       { ...base, fetch: true },
       { ...base, address: 1 },
       { ...base, address: "https://user@kubernetes.example" },
+      { ...base, address: "https://kubernetes.example?" },
+      { ...base, address: "https://kubernetes.example#" },
       { ...base, namespace: "Orders" },
       { ...base, kind: "Pod" },
       { ...base, name: "-invalid" },

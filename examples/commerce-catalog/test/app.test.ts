@@ -12,6 +12,7 @@ import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@li
 import { executor, newHTTPTransport } from "@likego/transport-http"
 import { expect, test } from "bun:test"
 
+import { findAmountMinor } from "../src/catalog"
 import { newCatalogHandler } from "../src/http"
 import { decodePricingRequest, newPricingHandler, type PricingClient } from "../src/pricing"
 
@@ -168,6 +169,10 @@ test("rejects prototype-sensitive products at the Pricing service boundary", () 
       })
     )
   ).toThrow("price is unavailable")
+})
+
+test("does not read inherited currency properties from the price table", () => {
+  expect(findAmountMinor("sku-001", "constructor")).toBeNull()
 })
 
 test.each([{}, { productId: "sku-001" }, { currency: "USD" }, { productId: 1, currency: "USD" }])(

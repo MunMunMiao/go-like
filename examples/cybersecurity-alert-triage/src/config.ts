@@ -2,10 +2,15 @@ import { newConfig, source, objectSource, type Config, type ConfigObject } from 
 import { etcdSource } from "@likego/config-etcd"
 import type { Context } from "@likego/context"
 import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
-import type { Store } from "@likego/store"
+import { ifAbsent, type Store, type StoreRecord } from "@likego/store"
 import { newEtcdStore } from "@likego/store-etcd"
 
-import { validateTriageRules, type TriageDecision, type TriageRules } from "./service"
+import {
+  validateSecurityAlert,
+  validateTriageRules,
+  type TriageDecision,
+  type TriageRules
+} from "./service"
 
 export interface AlertTriageLedger {
   record(ctx: Context, decision: TriageDecision): Promise<TriageDecision>
@@ -16,6 +21,8 @@ export interface TriageEtcdOptions {
   readonly configKey: string
 }
 
+const DecisionDecoder = new TextDecoder("utf-8", { fatal: true })
+
 /** Compares all alert facts that are bound to one immutable alert identity. */
 function sameAlert(left: TriageDecision, right: TriageDecision): boolean {
   return (
@@ -25,6 +32,104 @@ function sameAlert(left: TriageDecision, right: TriageDecision): boolean {
     left.malwareConfidence === right.malwareConfidence &&
     left.privileged === right.privileged
   )
+}
+
+/** Compares the immutable decision fields written by the authoritative first caller. */
+function sameDecision(left: TriageDecision, right: TriageDecision): boolean {
+  return sameAlert(left, right) && left.severity === right.severity && left.queue === right.queue
+}
+
+/** Decodes one bounded, persisted decision without trusting provider-owned bytes. */
+function storedDecision(bytes: Uint8Array): TriageDecision {
+  let value: unknown
+  try {
+    if (bytes.byteLength === 0 || bytes.byteLength > 4_096) throw new Error("invalid size")
+    value = JSON.parse(DecisionDecoder.decode(bytes))
+  } catch {
+    throw new Error("stored etcd alert decision is invalid")
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("stored etcd alert decision is invalid")
+  }
+  const alertId = Reflect.get(value, "alertId")
+  const source = Reflect.get(value, "source")
+  const failedAttempts = Reflect.get(value, "failedAttempts")
+  const malwareConfidence = Reflect.get(value, "malwareConfidence")
+  const privileged = Reflect.get(value, "privileged")
+  const severity = Reflect.get(value, "severity")
+  const queue = Reflect.get(value, "queue")
+  if (
+    typeof alertId !== "string" ||
+    (source !== "endpoint" && source !== "identity" && source !== "network") ||
+    typeof failedAttempts !== "number" ||
+    typeof malwareConfidence !== "number" ||
+    typeof privileged !== "boolean" ||
+    (severity !== "critical" &&
+      severity !== "high" &&
+      severity !== "low" &&
+      severity !== "medium") ||
+    (queue !== "immediate-response" && queue !== "investigation" && queue !== "review") ||
+    (severity === "critical"
+      ? queue !== "immediate-response"
+      : severity === "high"
+        ? queue !== "investigation"
+        : queue !== "review")
+  ) {
+    throw new Error("stored etcd alert decision is invalid")
+  }
+  const alert = Object.freeze({
+    alertId,
+    source,
+    failedAttempts,
+    malwareConfidence,
+    privileged
+  })
+  try {
+    validateSecurityAlert(alert)
+  } catch {
+    throw new Error("stored etcd alert decision is invalid")
+  }
+  const hasNumericSignal = failedAttempts > 0 || malwareConfidence > 0
+  if (
+    (severity !== "critical" && (privileged || malwareConfidence === 100)) ||
+    (severity === "low" && hasNumericSignal) ||
+    (severity === "medium" && !hasNumericSignal) ||
+    (severity === "critical" && !privileged && failedAttempts < 2 && malwareConfidence === 0)
+  ) {
+    throw new Error("stored etcd alert decision is invalid")
+  }
+  return Object.freeze({ ...alert, severity, queue })
+}
+
+/** Recognizes only the absence conflict produced by an ifAbsent Store write. */
+function isStoreAbsenceConflict(value: unknown): boolean {
+  try {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      Reflect.get(value, "code") === "LIKEGO_STORE_CONFLICT" &&
+      Reflect.get(value, "expectedRevision") === null
+    )
+  } catch {
+    return false
+  }
+}
+
+/** Creates one stable business conflict without exposing ledger diagnostics. */
+function alertIdConflict(): Error & { readonly code: "ALERT_ID_CONFLICT" } {
+  return Object.assign(new Error("alertId already used by different alert facts"), {
+    code: "ALERT_ID_CONFLICT" as const
+  })
+}
+
+/** Reports whether one failure is the alert identity conflict owned by this ledger. */
+export function isAlertIdConflict(value: unknown): boolean {
+  try {
+    if (!(value instanceof Error)) return false
+    return "code" in value && value.code === "ALERT_ID_CONFLICT"
+  } catch {
+    return false
+  }
 }
 
 /** Creates the immutable SOC rule source and LikeGo Config lifecycle. */
@@ -81,7 +186,7 @@ export function newMemoryAlertTriageLedger(): AlertTriageLedger {
       const current = decisions.get(decision.alertId)
       if (current !== undefined) {
         if (!sameAlert(current, decision)) {
-          throw new Error("alertId already used by different alert facts")
+          throw alertIdConflict()
         }
         return current
       }
@@ -91,9 +196,8 @@ export function newMemoryAlertTriageLedger(): AlertTriageLedger {
   })
 }
 
-/** Mirrors accepted process-local decisions into real etcd Store records. */
+/** Atomically admits immutable alert decisions into real etcd Store records. */
 export function newEtcdAlertTriageLedger(options: TriageEtcdOptions): AlertTriageLedger {
-  const primary = newMemoryAlertTriageLedger()
   const store: Store = newEtcdStore({
     fetch(request) {
       return fetch(request)
@@ -103,22 +207,47 @@ export function newEtcdAlertTriageLedger(options: TriageEtcdOptions): AlertTriag
   const encoder = new TextEncoder()
   return Object.freeze({
     async record(ctx: Context, decision: TriageDecision): Promise<TriageDecision> {
-      const accepted = await primary.record(ctx, decision)
-      const written = await store.write(ctx, {
-        key: `security-alerts/${accepted.alertId}`,
-        value: encoder.encode(JSON.stringify(accepted)),
-        metadata: Object.freeze({ severity: accepted.severity, queue: accepted.queue })
-      })
+      const key = `security-alerts/${decision.alertId}`
+      let written: StoreRecord
+      try {
+        written = await store.write(
+          ctx,
+          {
+            key,
+            value: encoder.encode(JSON.stringify(decision)),
+            metadata: Object.freeze({
+              severity: decision.severity,
+              queue: decision.queue
+            })
+          },
+          ifAbsent()
+        )
+      } catch (error) {
+        if (!isStoreAbsenceConflict(error)) throw error
+        const current = await store.read(ctx, key)
+        if (current === null) throw new Error("etcd alert decision conflict readback failed")
+        const stored = storedDecision(current.value)
+        if (
+          current.metadata.severity !== stored.severity ||
+          current.metadata.queue !== stored.queue
+        ) {
+          throw new Error("stored etcd alert decision is invalid")
+        }
+        if (!sameAlert(stored, decision)) throw alertIdConflict()
+        return stored
+      }
       const fresh = await store.read(ctx, written.key)
       if (
         fresh === null ||
         fresh.revision !== written.revision ||
-        fresh.metadata.severity !== accepted.severity ||
-        fresh.metadata.queue !== accepted.queue
+        fresh.metadata.severity !== decision.severity ||
+        fresh.metadata.queue !== decision.queue
       ) {
         throw new Error("etcd alert decision readback failed")
       }
-      return accepted
+      const stored = storedDecision(fresh.value)
+      if (!sameDecision(stored, decision)) throw new Error("etcd alert decision readback failed")
+      return stored
     }
   })
 }

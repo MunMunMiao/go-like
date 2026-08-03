@@ -218,6 +218,9 @@ export function newMemoryStoreAtRevision(
       const expiresAt = expiry(now, resolved.expiresInMs)
       const expired = expiredKeys(now)
       const current = isExpired(input.key, expired) ? undefined : records.get(input.key)
+      if (resolved.ifAbsent === true && current !== undefined) {
+        throw newStoreConflictError(input.key, null, current.revision)
+      }
       if (resolved.ifRevision !== null && current?.revision !== resolved.ifRevision) {
         throw newStoreConflictError(input.key, resolved.ifRevision, current?.revision ?? null)
       }

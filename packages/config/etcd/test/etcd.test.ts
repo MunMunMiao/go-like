@@ -256,6 +256,12 @@ describe("etcd configuration source", () => {
       etcdSource({ fetch: async () => rangeResponse("1"), address: "http://etcd/path", key: "key" })
     ).toThrow("origin")
     expect(() =>
+      etcdSource({ fetch: async () => rangeResponse("1"), address: "http://etcd?", key: "key" })
+    ).toThrow("origin")
+    expect(() =>
+      etcdSource({ fetch: async () => rangeResponse("1"), address: "http://etcd#", key: "key" })
+    ).toThrow("origin")
+    expect(() =>
       etcdSource({ fetch: async () => rangeResponse("1"), address: "http://etcd", key: "" })
     ).toThrow("non-empty")
   })

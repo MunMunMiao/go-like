@@ -1,5 +1,5 @@
 import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit } from "@likego/store"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit } from "@likego/store"
 
 import { physicalKey } from "../../src/codec"
 import { newVaultStore, type VaultFetch, type VaultStore } from "../../src/index"
@@ -208,6 +208,12 @@ async function main(): Promise<void> {
         ifRevision("1")
       )
       throw new Error("Vault CAS unexpectedly succeeded")
+    } catch (value) {
+      if (!(value instanceof TypeError)) throw value
+    }
+    try {
+      await primaryStore.write(background(), { key: "absent", value: Uint8Array.of(1) }, ifAbsent())
+      throw new Error("Vault ifAbsent unexpectedly succeeded")
     } catch (value) {
       if (!(value instanceof TypeError)) throw value
     }

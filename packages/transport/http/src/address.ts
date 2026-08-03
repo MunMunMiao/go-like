@@ -26,7 +26,7 @@ function absoluteTarget(value: string, requireSecure: boolean): HTTPDialTarget {
   if (parsed.username !== "" || parsed.password !== "") {
     throw new TypeError("HTTP dial URL must not contain credentials")
   }
-  if (parsed.hash !== "") throw new TypeError("HTTP dial URL must not contain a fragment")
+  if (parsed.href.includes("#")) throw new TypeError("HTTP dial URL must not contain a fragment")
   return Object.freeze({ href: parsed.href, origin: parsed.origin })
 }
 

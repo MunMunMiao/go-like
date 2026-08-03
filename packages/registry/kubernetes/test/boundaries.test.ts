@@ -52,6 +52,7 @@ test("constructor options are captured, canonicalized, and validated without I/O
     "https://user@kubernetes.example",
     "https://kubernetes.example/path",
     "https://kubernetes.example?query",
+    "https://kubernetes.example#",
     "not a URL"
   ]) {
     expect(() => kubernetesOrigin(address)).toThrow(TypeError)

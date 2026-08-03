@@ -7,6 +7,10 @@ test("normalizes absolute HTTP URLs without losing path or query", () => {
     href: "https://example.test:8443/a/b?x=1",
     origin: "https://example.test:8443"
   })
+  expect(normalizeHTTPDialTarget("https://example.test/a/b?", false)).toEqual({
+    href: "https://example.test/a/b?",
+    origin: "https://example.test"
+  })
 })
 
 test("normalizes authority targets with secure-driven scheme", () => {
@@ -27,6 +31,7 @@ test("rejects unsafe dial targets before any network operation", () => {
     "ftp://example.test:21",
     "http://user:secret@example.test",
     "http://example.test/#fragment",
+    "http://example.test/#",
     "example.test:80/path",
     "example.test:80?x=1",
     "example.test:80#x"

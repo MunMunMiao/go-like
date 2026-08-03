@@ -178,8 +178,8 @@ test("records Client and unary Server outcomes through the official metrics SDK"
   expect(await successful(background(), emptyMessage)).toBe(emptyMessage)
 
   await provider.forceFlush()
-  const total = metricNamed(exporter, "likego_requests_total")
-  const duration = metricNamed(exporter, "likego_request_duration_seconds")
+  const total = metricNamed(exporter, "likego.request.completed")
+  const duration = metricNamed(exporter, "likego.request.duration")
   for (const metric of [total, duration]) {
     expect(hasAttributes(metric, "client", "catalog/Get", "success")).toBe(true)
     expect(hasAttributes(metric, "client", "catalog/Fail", "failure")).toBe(true)
@@ -192,6 +192,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
     expect(hasAttributes(metric, "server", "unknown/unknown", "success")).toBe(true)
   }
   expect(total.dataPoints.every((point) => point.value === 1)).toBe(true)
+  expect(total.descriptor.unit).toBe("{request}")
   expect(duration.descriptor.unit).toBe("s")
   await provider.shutdown()
 })

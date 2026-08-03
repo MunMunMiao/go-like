@@ -1,6 +1,5 @@
 import type { Client } from "@likego/client"
-import { background } from "@likego/context"
-import type { Handler } from "@likego/web"
+import { contextHandler, type Handler } from "@likego/web"
 
 import { echoEndpointName, echoServiceName } from "./echo"
 
@@ -13,12 +12,12 @@ export function newManagementHandler(
 ): Handler {
   if (typeof onCallError !== "function") throw new TypeError("onCallError must be a function")
 
-  return async function managementHandler(request): Promise<Response> {
+  return contextHandler(async function managementHandler(ctx, request): Promise<Response> {
     const path = new URL(request.url).pathname
     if (path === "/metrics") return await metrics(request)
     if (path !== "/call") return await health(request)
     try {
-      const response = await client.call(background(), {
+      const response = await client.call(ctx, {
         service: echoServiceName,
         endpoint: echoEndpointName,
         message: Object.freeze({ header: Object.freeze({}), body: new Uint8Array() })
@@ -28,5 +27,5 @@ export function newManagementHandler(
       onCallError(error)
       return Response.json({ code: "internal_call_failed" }, { status: 503 })
     }
-  }
+  })
 }

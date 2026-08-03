@@ -2,6 +2,7 @@ import type { Context } from "@likego/context"
 import { contextHandler, type Handler } from "@likego/web"
 
 import type { AlertSource, SecurityAlert, TriageAlert } from "./service"
+import { isAlertIdConflict } from "./config"
 
 /** Decodes one untrusted security alert request. */
 function securityAlertFrom(value: unknown): SecurityAlert {
@@ -44,17 +45,17 @@ export function newSecurityTriageHandler(triage: TriageAlert): Handler {
     ) {
       return Response.json({ code: "not_found" }, { status: 404 })
     }
+    let alert: SecurityAlert
     try {
-      return Response.json(await triage(ctx, securityAlertFrom(await request.json())), {
-        status: 201
-      })
+      alert = securityAlertFrom(await request.json())
+    } catch {
+      return Response.json({ code: "invalid_security_alert" }, { status: 400 })
+    }
+    try {
+      return Response.json(await triage(ctx, alert), { status: 201 })
     } catch (error) {
-      if (error instanceof TypeError || error instanceof RangeError) {
-        return Response.json({ code: "invalid_security_alert" }, { status: 400 })
-      }
-      const message = error instanceof Error ? error.message : "security triage failed"
-      const status = message.includes("different alert") ? 409 : 503
-      return Response.json({ code: "security_triage_rejected", message }, { status })
+      const status = isAlertIdConflict(error) ? 409 : 503
+      return Response.json({ code: "security_triage_rejected" }, { status })
     }
   })
 }

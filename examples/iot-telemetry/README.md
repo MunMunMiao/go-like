@@ -74,8 +74,8 @@ Raw v1 示例：
 }
 ```
 
-交付语义是 at-least-once。Validated 事件使用稳定 `eventId`，下游仍必须幂等；示例不声称
-exactly-once。
+交付语义是 at-least-once。Validated 事件使用稳定 `eventId`，但 JetStream 的 `Nats-Msg-Id`
+只在配置的滚动 duplicate window 内去重；下游仍必须持久幂等，示例不声称 exactly-once。
 
 ## LikeGo 能力
 

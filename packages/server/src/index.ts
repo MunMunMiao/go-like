@@ -98,8 +98,8 @@ function advertiseAuthority(value: string): URL {
     authority.username.length > 0 ||
     authority.password.length > 0 ||
     authority.pathname.length > 0 ||
-    authority.search.length > 0 ||
-    authority.hash.length > 0
+    authority.href.includes("?") ||
+    authority.href.includes("#")
   ) {
     throw new TypeError("server advertise must be an absolute endpoint, host, or host:port")
   }
@@ -109,7 +109,11 @@ function advertiseAuthority(value: string): URL {
 /** Validates one explicit advertise endpoint or authority. */
 function advertiseValue(value: unknown): string {
   const selected = text(value, "advertise")
-  if (absoluteEndpoint(selected) === null) advertiseAuthority(selected)
+  const endpoint = absoluteEndpoint(selected)
+  if (endpoint === null) advertiseAuthority(selected)
+  else if (endpoint.username !== "" || endpoint.password !== "" || endpoint.href.includes("#")) {
+    throw new TypeError("server advertise endpoint must not contain credentials or a fragment")
+  }
   return selected
 }
 

@@ -6,17 +6,32 @@ import {
   type ConfigObject,
   type ConfigSourceWatcher
 } from "@likego/config"
-import { background, withCancelCause } from "@likego/context"
+import { background, withCancelCause, withTimeout } from "@likego/context"
 
 import { vaultSource, type VaultFetch, type VaultSourceOptions } from "../src/index"
 import { deferred, flush } from "./helpers"
 
+/** Mirrors the documented opaque generation token without reaching into provider internals. */
+function revisionToken(
+  version: number,
+  createdTime = `2026-08-03T00:00:00.${String(version).padStart(9, "0")}Z`
+): string {
+  return JSON.stringify([1, version, createdTime])
+}
+
 /** Creates one valid KV v2 JSON response. */
-function kvResponse(version: number, value: ConfigObject, status = 200): Response {
-  return new Response(JSON.stringify({ data: { data: value, metadata: { version } } }), {
-    status,
-    headers: { "Content-Type": "application/json" }
-  })
+function kvResponse(
+  version: number,
+  value: ConfigObject,
+  createdTime = `2026-08-03T00:00:00.${String(version).padStart(9, "0")}Z`
+): Response {
+  return new Response(
+    JSON.stringify({ data: { data: value, metadata: { version, created_time: createdTime } } }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }
+  )
 }
 
 /** Creates one minimal valid source option object. */
@@ -94,7 +109,7 @@ describe("Vault KV v2 source construction and load", () => {
         label: "orders",
         nested: { values: [1, false, "three"] }
       },
-      revision: "7"
+      revision: revisionToken(7)
     })
     expect(Object.isFrozen(snapshot)).toBe(true)
     expect(Object.isFrozen(snapshot.value)).toBe(true)
@@ -120,7 +135,10 @@ describe("Vault KV v2 source construction and load", () => {
       mount: "secret",
       path: "config"
     })
-    await expect(source.load(background())).resolves.toMatchObject({ revision: "1", value: {} })
+    await expect(source.load(background())).resolves.toMatchObject({
+      revision: revisionToken(1),
+      value: {}
+    })
     const request = requests[0]
     if (request === undefined) throw new Error("Vault request was not captured")
     expect(request.headers.has("X-Vault-Token")).toBe(false)
@@ -150,6 +168,8 @@ describe("Vault KV v2 source construction and load", () => {
       ["address", "https://user:pass@vault.example"],
       ["address", "https://vault.example/path"],
       ["address", "https://vault.example?query=1"],
+      ["address", "https://vault.example?"],
+      ["address", "https://vault.example#"],
       ["address", "https://vault.example#fragment"],
       ["mount", null],
       ["mount", ""],
@@ -262,14 +282,16 @@ describe("Vault KV v2 source construction and load", () => {
       "null",
       "{}",
       '{"data":null}',
-      '{"data":{"data":[],"metadata":{"version":1}}}',
+      '{"data":{"data":[],"metadata":{"version":1,"created_time":"2026-08-03T00:00:00Z"}}}',
       '{"data":{"data":{},"metadata":null}}',
-      '{"data":{"data":{},"metadata":{"version":0}}}',
-      '{"data":{"data":{},"metadata":{"version":1.5}}}',
-      '{"data":{"data":{},"metadata":{"version":"1"}}}',
-      '{"data":{"data":{"__proto__":{}},"metadata":{"version":1}}}',
-      '{"data":{"data":{"nested":{"constructor":1}},"metadata":{"version":1}}}',
-      '{"data":{"data":{"value":[{"prototype":true}]},"metadata":{"version":1}}}'
+      '{"data":{"data":{},"metadata":{"version":1}}}',
+      '{"data":{"data":{},"metadata":{"version":1,"created_time":"not-a-time"}}}',
+      '{"data":{"data":{},"metadata":{"version":0,"created_time":"2026-08-03T00:00:00Z"}}}',
+      '{"data":{"data":{},"metadata":{"version":1.5,"created_time":"2026-08-03T00:00:00Z"}}}',
+      '{"data":{"data":{},"metadata":{"version":"1","created_time":"2026-08-03T00:00:00Z"}}}',
+      '{"data":{"data":{"__proto__":{}},"metadata":{"version":1,"created_time":"2026-08-03T00:00:00Z"}}}',
+      '{"data":{"data":{"nested":{"constructor":1}},"metadata":{"version":1,"created_time":"2026-08-03T00:00:00Z"}}}',
+      '{"data":{"data":{"value":[{"prototype":true}]},"metadata":{"version":1,"created_time":"2026-08-03T00:00:00Z"}}}'
     ]
     for (const document of documents) {
       const source = vaultSource({
@@ -405,6 +427,34 @@ describe("Vault KV v2 source construction and load", () => {
 })
 
 describe("Vault KV v2 polling watcher", () => {
+  test("detects metadata deletion and recreation when the numeric version resets", async () => {
+    const responses = [
+      kvResponse(1, { release: 1 }, "2026-08-03T00:00:00.000000001Z"),
+      kvResponse(1, { release: 1 }, "2026-08-03T00:00:00.000000001Z"),
+      kvResponse(1, { release: 2 }, "2026-08-03T00:00:00.000000002Z")
+    ]
+    let calls = 0
+    const source = vaultSource(
+      validOptions(async function fetchVault() {
+        const response = responses[calls]
+        calls += 1
+        if (response === undefined) throw new Error("unexpected poll")
+        return response
+      })
+    )
+    const initial = await source.load(background())
+    if (source.watch === undefined) throw new Error("watch capability missing")
+    const watch = await source.watch(background(), initial.revision)
+    const [ctx, cancel] = withTimeout(background(), 100)
+    try {
+      await expect(watch.next(ctx)).resolves.toBeUndefined()
+    } finally {
+      cancel()
+      await watch.stop(background())
+    }
+    expect(calls).toBe(3)
+  })
+
   test("ignores unchanged versions and resolves only after a real version change", async () => {
     const responses = [
       kvResponse(1, { release: 1 }),
@@ -419,7 +469,7 @@ describe("Vault KV v2 polling watcher", () => {
         if (response === undefined) throw new Error("unexpected poll")
         return response
       }),
-      "1"
+      revisionToken(1)
     )
     const next = watch.next(background())
     await expect(watch.next(background())).rejects.toThrow("already waiting")
@@ -444,6 +494,20 @@ describe("Vault KV v2 polling watcher", () => {
     )
     await expect(watch.next(background())).resolves.toBeUndefined()
     expect(calls).toBe(3)
+    await watch.stop(background())
+  })
+
+  test("accepts a legacy decimal revision only to force one safe resync", async () => {
+    let calls = 0
+    const watch = await watcher(
+      validOptions(async function fetchVault() {
+        calls += 1
+        return kvResponse(1, { release: 1 })
+      }),
+      "1"
+    )
+    await expect(watch.next(background())).resolves.toBeUndefined()
+    expect(calls).toBe(1)
     await watch.stop(background())
   })
 
@@ -520,8 +584,17 @@ describe("Vault KV v2 polling watcher", () => {
       })
     )
     if (source.watch === undefined) throw new Error("watch capability missing")
-    for (const revision of ["", "0", "-1", "1.0", "x"]) {
-      await expect(source.watch(background(), revision)).rejects.toThrow("positive decimal")
+    for (const revision of [
+      "",
+      "0",
+      "-1",
+      "1.0",
+      "x",
+      "[]",
+      JSON.stringify([2, 1, "2026-08-03T00:00:00Z"]),
+      JSON.stringify([1, 1, "not-a-time"])
+    ]) {
+      await expect(source.watch(background(), revision)).rejects.toThrow("valid opaque token")
     }
     const cancellation = new Error("watch admission canceled")
     const [ctx, cancel] = withCancelCause(background())

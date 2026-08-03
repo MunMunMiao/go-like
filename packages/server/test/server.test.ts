@@ -576,7 +576,8 @@ test("separates bind and advertise while preserving the actual bound port", asyn
 test("accepts an explicit advertise address or absolute endpoint", async () => {
   for (const [selected, expected] of [
     ["orders.internal:8443", "http://orders.internal:8443/"],
-    ["https://orders.example/rpc", "https://orders.example/rpc"]
+    ["https://orders.example/rpc", "https://orders.example/rpc"],
+    ["https://orders.example/rpc?", "https://orders.example/rpc?"]
   ] as const) {
     const server = newServer(
       transport(fixtureTransport(fixtureListener([], [], "0.0.0.0:43210"))),
@@ -794,9 +795,18 @@ test("requires a transport and at least one handler", () => {
   )
   expect(() => address("")).toThrow("server address must be a non-empty string")
   expect(() => advertise("")).toThrow("server advertise must be a non-empty string")
-  for (const value of ["[::1", "orders.internal/path"]) {
+  for (const value of ["[::1", "orders.internal/path", "orders.internal?", "orders.internal#"]) {
     expect(() => advertise(value)).toThrow(
       "server advertise must be an absolute endpoint, host, or host:port"
+    )
+  }
+  for (const value of [
+    "http://user:secret@orders.internal/rpc",
+    "http://orders.internal/rpc#private",
+    "http://orders.internal/rpc#"
+  ]) {
+    expect(() => advertise(value)).toThrow(
+      "server advertise endpoint must not contain credentials or a fragment"
     )
   }
   expect(() => handler("", "get", async (_ctx, request) => request)).toThrow(

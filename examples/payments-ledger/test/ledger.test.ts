@@ -68,6 +68,31 @@ describe("payment request boundary", () => {
     expect(isPaymentFailure(null)).toBe(false)
   })
 
+  test("does not let a hostile error code getter escape the HTTP boundary", async () => {
+    const sql = new SQL()
+    const failure = new Error("resolver unavailable")
+    Object.defineProperty(failure, "code", {
+      get() {
+        throw new Error("hostile error getter")
+      }
+    })
+    const handler = newPaymentHandler(sql, () => {
+      throw failure
+    })
+
+    const response = await handler(
+      new Request("http://ledger.internal/v1/ledger/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": "request-1" },
+        body: JSON.stringify(validPayment)
+      })
+    )
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ code: "LEDGER_UNAVAILABLE" })
+    await sql.close()
+  })
+
   test("passes the request Context to the trusted tenant resolver", async () => {
     const sql = new SQL()
     const observed: { request: Request | null; signal: AbortSignal | null } = {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit, prefix } from "@likego/store"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
 
 import { encodeBase64, encodeRecordPayload } from "../src/codec"
 import { newConsulStore, type ConsulFetch } from "../src/index"
@@ -19,6 +19,21 @@ function expiredRow(key: string, revision: number, session: string | null): obje
     ModifyIndex: revision,
     Value: encodeBase64(new TextEncoder().encode(payload)),
     Session: session
+  }
+}
+
+/** Creates one visible Consul row for a scripted competing writer. */
+function activeRow(key: string, revision: number): object {
+  const payload = encodeRecordPayload(
+    { key, value: Uint8Array.of(2), metadata: {} },
+    "competing-operation",
+    null
+  )
+  return {
+    Key: `likego/store/${key}`,
+    ModifyIndex: revision,
+    Value: encodeBase64(new TextEncoder().encode(payload)),
+    Session: null
   }
 }
 
@@ -318,6 +333,17 @@ describe("Consul Store TTL sessions", () => {
       code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
       combination: "ttl-cas"
     })
+    await expect(
+      store.write(
+        background(),
+        { key: "absent-ttl", value: Uint8Array.of(2) },
+        expiresIn(10_000),
+        ifAbsent()
+      )
+    ).rejects.toMatchObject({
+      code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
+      combination: "ttl-cas"
+    })
     expect(backend.requests).toHaveLength(beforeCombination)
 
     const ttl = await store.write(
@@ -563,7 +589,10 @@ describe("Consul Store uncertain-response readback", () => {
       Response.json([expiredRow("expired", 77, null)]),
       new Response("true"),
       Response.json([expiredRow("expired-cas", 78, null)]),
-      new Response("true")
+      new Response("true"),
+      Response.json([expiredRow("expired-if-absent", 79, null)]),
+      new Response("false"),
+      Response.json([activeRow("expired-if-absent", 80)])
     ]
     const expiring = newConsulStore({
       /** Serves expired provider carriers that have not yet been reaped remotely. */
@@ -578,5 +607,50 @@ describe("Consul Store uncertain-response readback", () => {
     await expect(
       expiring.delete(background(), "expired-cas", ifRevision("78"))
     ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT", actualRevision: null })
+    await expect(
+      expiring.write(
+        background(),
+        { key: "expired-if-absent", value: Uint8Array.of(3) },
+        ifAbsent()
+      )
+    ).rejects.toMatchObject({
+      code: "LIKEGO_STORE_CONFLICT",
+      expectedRevision: null,
+      actualRevision: "80"
+    })
+
+    const disappearingBackend = fakeConsul()
+    const key = "expired-disappeared"
+    await disappearingBackend.fetch(
+      new Request(`http://consul.test/v1/kv/likego/store/${key}`, {
+        method: "PUT",
+        body: encodeRecordPayload(
+          { key, value: Uint8Array.of(1), metadata: {} },
+          "expired-operation",
+          Date.now() - 1
+        )
+      })
+    )
+    let disappeared = false
+    const disappearing = newConsulStore({
+      /** Simulates a behavior-delete Session expiring immediately before exact cleanup. */
+      async fetch(request): Promise<Response> {
+        const url = new URL(request.url)
+        if (!disappeared && request.method === "DELETE" && url.searchParams.has("cas")) {
+          disappeared = true
+          url.search = ""
+          await disappearingBackend.fetch(new Request(url, { method: "DELETE" }))
+          return new Response("false")
+        }
+        return disappearingBackend.fetch(request)
+      },
+      address: "http://consul.test"
+    })
+    expect(
+      Array.from(
+        (await disappearing.write(background(), { key, value: Uint8Array.of(4) }, ifAbsent())).value
+      )
+    ).toEqual([4])
+    disappearingBackend.reset()
   })
 })

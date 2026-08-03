@@ -3,6 +3,7 @@ import { background, type Context } from "@likego/context"
 import {
   cursor,
   expiresIn,
+  ifAbsent,
   ifRevision,
   limit,
   prefix,
@@ -39,12 +40,21 @@ const record: StoreRecord = snapshotStoreRecord({
 })
 const page: StorePage = snapshotStorePage({ records: [record], cursor: null })
 const writeOption: WriteOption = expiresIn(1)
+const absentOption: WriteOption = ifAbsent()
+const legacyWriteOption: WriteOption = function legacyOption() {
+  return { expiresInMs: null, ifRevision: null }
+}
 const revisionOption: WriteOption & DeleteOption = ifRevision("one")
 const deleteOption: DeleteOption = revisionOption
 const listOption: ListOption = prefix("key")
 const resumed: ListOption = cursor("next")
 const limited: ListOption = limit(1)
-const writes: WriteOptions = writeOptions(writeOption, revisionOption)
+const writes: WriteOptions = writeOptions(
+  legacyWriteOption,
+  writeOption,
+  absentOption,
+  revisionOption
+)
 const deletes: DeleteOptions = deleteOptions(deleteOption)
 const lists: ListOptions = listOptions(listOption, resumed, limited)
 

@@ -255,9 +255,10 @@ export function newOtelServerWithProviders(
           state = "running"
           return done
         },
-        (failure: unknown) => {
+        (value: unknown) => {
+          const failure = normalizeOtelError("provider startup", value)
           state = "failed"
-          finish(normalizeOtelError("OpenTelemetry provider startup", failure))
+          finish(failure)
           throw failure
         }
       )

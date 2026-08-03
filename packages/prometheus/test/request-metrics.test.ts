@@ -217,6 +217,14 @@ test("measures unary Server operations from reserved route headers", async () =>
     },
     body: emptyBody
   }
+  const duplicateRoute: Message = {
+    header: {
+      [service]: "attacker-controlled-tenant-9817",
+      [service.toLowerCase()]: "payments",
+      [endpoint]: "Authorize"
+    },
+    body: emptyBody
+  }
 
   expect(await success(background(), routed)).toBe(routed)
   await expect(fail(background(), routed)).rejects.toBe(failure)
@@ -224,12 +232,15 @@ test("measures unary Server operations from reserved route headers", async () =>
   cancel(cancellation)
   await expect(cancelHandler(canceledContext, routed)).rejects.toBe(cancellation)
   expect(await success(background(), emptyMessage)).toBe(emptyMessage)
+  expect(await success(background(), duplicateRoute)).toBe(duplicateRoute)
 
   const body = await scrape(registry)
   expect(body).toContain(countLine(body, "server", "payments/Authorize", "success"))
   expect(body).toContain(countLine(body, "server", "payments/Authorize", "failure"))
   expect(body).toContain(countLine(body, "server", "payments/Authorize", "canceled"))
   expect(body).toContain(countLine(body, "server", "unknown/unknown", "success"))
+  expect(body).toContain(countLine(body, "server", "unknown/Authorize", "success"))
+  expect(body).not.toContain("attacker-controlled-tenant-9817")
   expect(body).not.toContain(failure.message)
 })
 
@@ -405,13 +416,16 @@ test("preserves Broker native results, events, Subscribers, options, and receive
   ).rejects.toThrow("broker handler must be a function")
 
   const body = await scrape(registry)
-  expect(body).toContain(countLine(body, "broker", "publish orders.created", "success"))
-  expect(body).toContain(countLine(body, "broker", "publish orders.updated", "success"))
-  expect(body).toContain(countLine(body, "broker", "publish orders.failed", "failure"))
-  expect(body).toContain(countLine(body, "broker", "publish orders.canceled", "canceled"))
-  expect(body).toContain(countLine(body, "broker", "consume orders.created", "success"))
-  expect(body).toContain(countLine(body, "broker", "consume orders.failed", "failure"))
-  expect(body).toContain(countLine(body, "broker", "consume orders.canceled", "canceled"))
+  expect(body).toContain(
+    'likego_requests_total{component="broker",operation="publish",outcome="success"} 2'
+  )
+  expect(body).toContain(countLine(body, "broker", "publish", "failure"))
+  expect(body).toContain(countLine(body, "broker", "publish", "canceled"))
+  expect(body).toContain(countLine(body, "broker", "consume", "success"))
+  expect(body).toContain(countLine(body, "broker", "consume", "failure"))
+  expect(body).toContain(countLine(body, "broker", "consume", "canceled"))
+  expect(body).not.toContain('operation="publish orders.')
+  expect(body).not.toContain('operation="consume orders.')
   expect(body).not.toContain("do-not-record")
   expect(body).not.toContain(publishFailure.message)
   expect(body).not.toContain(consumeFailure.message)

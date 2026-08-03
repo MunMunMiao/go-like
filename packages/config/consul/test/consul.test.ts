@@ -597,6 +597,8 @@ describe("Consul KV configuration source", () => {
     }
     expect(() => consulSource({ fetch, address: "ftp://consul", key: "x" })).toThrow("HTTP")
     expect(() => consulSource({ fetch, address: "http://consul/path", key: "x" })).toThrow("origin")
+    expect(() => consulSource({ fetch, address: "http://consul?", key: "x" })).toThrow("origin")
+    expect(() => consulSource({ fetch, address: "http://consul#", key: "x" })).toThrow("origin")
     expect(() => consulSource({ fetch, address: "http://consul", key: "" })).toThrow("key")
     expect(() =>
       consulSource({ fetch, address: "http://consul", key: "services/../admin" })

@@ -673,6 +673,9 @@ export function newFileStore(host: FileStoreHost, directory: string): FileStore 
         }
         purgeExpired()
         const current = records.get(key)
+        if (selected.ifAbsent === true && current !== undefined) {
+          throw newStoreConflictError(key, null, current.revision)
+        }
         if (selected.ifRevision !== null && current?.revision !== selected.ifRevision) {
           throw newStoreConflictError(key, selected.ifRevision, current?.revision ?? null)
         }

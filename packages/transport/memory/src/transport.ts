@@ -218,7 +218,7 @@ function memoryAddress(value: string): string {
     address.protocol !== "memory:" ||
     address.username.length > 0 ||
     address.password.length > 0 ||
-    address.hash.length > 0
+    address.href.includes("#")
   ) {
     throw new TypeError("memory transport address must be an uncredentialed memory URL")
   }

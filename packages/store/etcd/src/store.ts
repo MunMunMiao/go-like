@@ -268,6 +268,9 @@ export function createEtcdStore(construction: EtcdStoreOptions): EtcdStore {
       const key = storeKey(input.key, false)
       checkContext(ctx)
       let current = (await rangeExact(ctx, options, "write", key)).row
+      if (config.ifAbsent === true && visibleRevision(current) !== null) {
+        throw newStoreConflictError(key, null, visibleRevision(current))
+      }
       if (config.ifRevision !== null && config.ifRevision !== visibleRevision(current)) {
         throw newStoreConflictError(key, config.ifRevision, visibleRevision(current))
       }
@@ -312,10 +315,10 @@ export function createEtcdStore(construction: EtcdStoreOptions): EtcdStore {
           )
           return writtenRecord(input, attempt.revision, expiresAt)
         }
-        if (config.ifRevision !== null) {
+        if (config.ifAbsent === true || config.ifRevision !== null) {
           const conflict = newStoreConflictError(
             key,
-            config.ifRevision,
+            config.ifAbsent === true ? null : config.ifRevision,
             visibleRevision(attempt.current)
           )
           return await rejectAfterLeaseCleanup(ctx, options, lease, conflict)

@@ -138,10 +138,11 @@ export function newRequestMetrics(meter: Meter): RequestMetrics {
   ) {
     throw new TypeError("meter must implement the OpenTelemetry Meter interface")
   }
-  const requestsTotal = meter.createCounter("likego_requests_total", {
-    description: "Total completed LikeGo requests."
+  const requestsTotal = meter.createCounter("likego.request.completed", {
+    description: "Completed LikeGo requests.",
+    unit: "{request}"
   })
-  const requestDurationSeconds = meter.createHistogram("likego_request_duration_seconds", {
+  const requestDurationSeconds = meter.createHistogram("likego.request.duration", {
     description: "Duration of completed LikeGo requests in seconds.",
     unit: "s"
   })
@@ -320,8 +321,12 @@ export function failSpan(
   fallback: FailureKind
 ): void {
   let outcome: string = fallback
-  if (ctx.err() !== null) outcome = "canceled"
-  else if (isServiceError(value)) outcome = "service_error"
+  try {
+    if (ctx.err() !== null) outcome = "canceled"
+    else if (isServiceError(value)) outcome = "service_error"
+  } catch {
+    // Observability must not replace the wrapped operation's failure.
+  }
   span.setAttribute("likego.outcome", outcome)
   span.setStatus({ code: SpanStatusCode.ERROR })
   recordErrorIdentifiers(span, value)

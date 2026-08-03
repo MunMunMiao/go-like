@@ -6,6 +6,9 @@ LikeGo 的单目录、单 owner 文件 Store。根入口只依赖注入的结构
 每次 mutation 通过完整 checksum 快照、临时文件和原子 rename 提交。该 provider 适合小型本地状态，不支持
 跨进程 shared writers，也不伪装成数据库。
 
+`ifAbsent()` 和 `ifRevision(...)` 在单 owner 的 mutation queue 内与候选快照提交一起串行裁决，不会退化为
+业务层 read-then-write；条件失败不会写 temp 或替换 snapshot。
+
 ```ts
 import { newApp, server } from "@likego/core"
 import { newFileStore } from "@likego/store-file"

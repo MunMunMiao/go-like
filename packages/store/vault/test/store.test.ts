@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit, prefix } from "@likego/store"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
 
 import { newVaultStore } from "../src/index"
 import { physicalKey } from "../src/codec"
@@ -51,6 +51,9 @@ describe("Vault Store CRUD", () => {
       TypeError
     )
     await expect(store.write(background(), input("cas"), ifRevision("1"))).rejects.toBeInstanceOf(
+      TypeError
+    )
+    await expect(store.write(background(), input("absent"), ifAbsent())).rejects.toBeInstanceOf(
       TypeError
     )
     await expect(store.delete(background(), "cas", ifRevision("1"))).rejects.toBeInstanceOf(

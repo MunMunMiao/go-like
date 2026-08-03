@@ -1,4 +1,4 @@
-export { cursor, expiresIn, ifRevision, limit, prefix } from "./options"
+export { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "./options"
 export type {
   DeleteOption,
   DeleteOptions,

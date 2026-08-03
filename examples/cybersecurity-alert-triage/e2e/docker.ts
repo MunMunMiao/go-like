@@ -10,7 +10,12 @@ import {
   scenarioDockerEnvironment,
   type OwnedDockerContext
 } from "../../../e2e/harness/owned-docker"
-import { newEtcdAlertTriageLedger, newEtcdTriageConfig, newTriageReadiness } from "../src/config"
+import {
+  isAlertIdConflict,
+  newEtcdAlertTriageLedger,
+  newEtcdTriageConfig,
+  newTriageReadiness
+} from "../src/config"
 import { newTriageAlert } from "../src/service"
 
 const Image =
@@ -146,19 +151,55 @@ async function main(): Promise<void> {
     const options = Object.freeze({ address, configKey: ConfigKey })
     config = newEtcdTriageConfig(options)
     await config.load(background())
-    const decision = await newTriageAlert(
-      config,
-      newTriageReadiness(config),
-      newEtcdAlertTriageLedger(options)
-    )(background(), {
+    const readiness = newTriageReadiness(config)
+    const alert = Object.freeze({
       alertId: `alert-${RunId}`,
       source: "identity",
       failedAttempts: 10,
       malwareConfidence: 0,
       privileged: false
     })
+    const decision = await newTriageAlert(
+      config,
+      readiness,
+      newEtcdAlertTriageLedger(options)
+    )(background(), alert)
     if (decision.severity !== "critical")
       throw new Error("etcd-backed triage returned wrong result")
+    const replay = await newTriageAlert(
+      config,
+      readiness,
+      newEtcdAlertTriageLedger(options)
+    )(background(), alert)
+    if (JSON.stringify(replay) !== JSON.stringify(decision)) {
+      throw new Error("restarted etcd ledger did not preserve exact replay")
+    }
+    const competingId = `competing-${RunId}`
+    const competing = await Promise.allSettled([
+      newTriageAlert(
+        config,
+        readiness,
+        newEtcdAlertTriageLedger(options)
+      )(background(), {
+        ...alert,
+        alertId: competingId,
+        failedAttempts: 5
+      }),
+      newTriageAlert(
+        config,
+        readiness,
+        newEtcdAlertTriageLedger(options)
+      )(background(), {
+        ...alert,
+        alertId: competingId,
+        failedAttempts: 10
+      })
+    ])
+    const admitted = competing.filter((result) => result.status === "fulfilled")
+    const rejected = competing.filter((result) => result.status === "rejected")
+    if (admitted.length !== 1 || rejected.length !== 1 || !isAlertIdConflict(rejected[0]?.reason)) {
+      throw new Error("etcd ledger did not atomically reject conflicting alert facts")
+    }
 
     registry = newEtcdRegistry({
       fetch,

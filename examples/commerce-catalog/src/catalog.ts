@@ -44,5 +44,5 @@ export function findProduct(productId: string): Product | null {
 /** Finds one authoritative price without consulting inherited object properties. */
 export function findAmountMinor(productId: string, currency: string): number | null {
   const prices = Object.hasOwn(Prices, productId) ? Prices[productId] : undefined
-  return prices?.[currency] ?? null
+  return prices !== undefined && Object.hasOwn(prices, currency) ? (prices[currency] ?? null) : null
 }

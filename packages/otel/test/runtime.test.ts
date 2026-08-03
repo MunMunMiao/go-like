@@ -56,6 +56,31 @@ describe("OpenTelemetry native provider lifecycle", () => {
     await expect(server.start(background())).rejects.toMatchObject({ status: "failed" })
   })
 
+  test("normalizes one hostile Context startup failure for start and terminal waiters", async () => {
+    const providers = providerControl()
+    const base = background()
+    const hostileContext = Object.freeze({
+      deadline: base.deadline,
+      done: base.done,
+      err(): never {
+        throw "context inspection value"
+      },
+      value: base.value
+    })
+    const server = newOtelServerWithProviders(
+      {
+        tracerProvider: providers.tracerProvider
+      },
+      []
+    )
+
+    const startupFailure = await server.start(hostileContext).catch((error: unknown) => error)
+    expect(startupFailure).toBeInstanceOf(Error)
+    expect(startupFailure).toMatchObject({ cause: "context inspection value" })
+    await expect(server.stop(background())).rejects.toBe(startupFailure)
+    expect(providers.calls).toEqual({ trace: 0, metric: 0 })
+  })
+
   test("caller cancellation abandons only that stop wait", async () => {
     const providers = providerControl()
     const server = newOtelServerWithProviders(

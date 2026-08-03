@@ -1,5 +1,5 @@
 import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit, prefix } from "@likego/store"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
 
 import { newConsulStore, type ConsulFetch, type ConsulStore } from "../../src/index"
 
@@ -409,6 +409,37 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
     throw new Error("corrupt KV inside the provider root did not fail closed")
   }
 
+  const absentKey = `${KeyRoot}if-absent`
+  const peer = store(address)
+  const absentAttempts = await Promise.allSettled([
+    provider.write(
+      background(),
+      { key: absentKey, value: new TextEncoder().encode("first") },
+      ifAbsent()
+    ),
+    peer.write(
+      background(),
+      { key: absentKey, value: new TextEncoder().encode("second") },
+      ifAbsent()
+    )
+  ])
+  const absentSuccesses = absentAttempts.filter((result) => result.status === "fulfilled")
+  const absentFailures = absentAttempts.filter((result) => result.status === "rejected")
+  const absentFailure = absentFailures[0]
+  const concurrentIfAbsent =
+    absentSuccesses.length === 1 &&
+    absentFailures.length === 1 &&
+    absentFailure?.status === "rejected" &&
+    typeof absentFailure.reason === "object" &&
+    absentFailure.reason !== null &&
+    Object.getOwnPropertyDescriptor(absentFailure.reason, "code")?.value ===
+      "LIKEGO_STORE_CONFLICT" &&
+    Object.getOwnPropertyDescriptor(absentFailure.reason, "expectedRevision")?.value === null
+  if (!concurrentIfAbsent) {
+    throw new Error("real Consul CAS=0 did not admit exactly one ifAbsent writer")
+  }
+  await provider.delete(background(), absentKey)
+
   const crudKey = `${KeyRoot}crud`
   const created = await provider.write(background(), {
     key: crudKey,
@@ -575,6 +606,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
     differentRootsIsolated,
     crossRootCursorRejected,
     corruptOwnedDataFailedClosed,
+    concurrentIfAbsent,
     crudRoundTrip: true,
     modifyIndexAdvanced: updated.revision !== created.revision,
     staleConflict,

@@ -53,7 +53,7 @@ function endpoint(value: unknown): string {
     parsed.protocol.length === 0 ||
     parsed.username.length !== 0 ||
     parsed.password.length !== 0 ||
-    parsed.hash.length !== 0
+    parsed.href.includes("#")
   ) {
     throw new TypeError("ServiceInstance endpoint must omit credentials and fragments")
   }
