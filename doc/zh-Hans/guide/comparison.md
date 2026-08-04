@@ -13,7 +13,7 @@
 
 ## 在技术栈中的位置
 
-| 工具      | 主要解决的问题                       | 通常由它拥有的部分                                                                                                                                                       | go-like 可以补充、但不替换的部分                                                          |
+| 工具      | 主要解决的问题                       | 通常由它拥有的部分                                                                                                                                                       | go-like 可以补充、但不替换的部分                                                         |
 | --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | NestJS    | 约定驱动的 Node 应用框架             | Modules、providers、controllers、decorators、application context、framework lifecycle、HTTP 或 microservice adapter                                                      | 围绕原生应用增加结构式 lifecycle boundary 或 internal call contract，前提是自己写 bridge |
 | Fastify   | Node HTTP server 和请求处理 pipeline | Route table、hooks、plugins、encapsulation、Node listener、request/reply objects                                                                                         | 围绕 Fastify 所拥有的资源增加 lifecycle 或 provider adapter                              |
@@ -21,15 +21,15 @@
 | Elysia    | Bun 优先的 typed Web framework       | Route tree、schema 组合、decorators、hooks、Bun 或 Web Standard adapter                                                                                                  | 保留原生 Elysia 行为的同时增加 Core lifecycle 和内部 service building blocks             |
 | Koa       | 精简的 Node middleware kernel        | Middleware stack 和 Node listener；router 通常由外部提供                                                                                                                 | 不再引入另一套路由器的前提下补上 lifecycle 和内部 service contract                       |
 | tRPC      | 类型安全的 procedure layer           | Router/procedure paths、input/output parsers、context factory、HTTP/Fetch/WS adapters                                                                                    | Provider ownership、service discovery、selector policy、显式 App lifecycle               |
-| go-micro  | Go 微服务和 agent-oriented 生态      | Go Context、service/client/transport/registry/broker 抽象，以及额外的 agent/flow/MCP/A2A 范围                                                                            | go-like 借用部分词汇，不借用 Go ABI、goroutine 或 transport 兼容性                        |
-| go-kratos | Go 云原生服务框架                    | App lifecycle、Go Context、HTTP/gRPC transports、middleware、registry、config、Protobuf/code generation                                                                  | go-like 共享显式生命周期词汇，但刻意选择 TypeScript/Web API，不提供 gRPC/IDL              |
-| go-like    | 显式的 TypeScript 服务构建块         | Context、App/Server lifecycle、standard Fetch edge、内部 unary Message transport、Client/Server、Registry/Discovery/Selector、Config/Store/Cache/Broker/Health、adapters | 应用仍拥有框架路由、原生数据面、业务策略、认证和部署                                     |
+| go-micro  | Go 微服务和 agent-oriented 生态      | Go Context、service/client/transport/registry/broker 抽象，以及额外的 agent/flow/MCP/A2A 范围                                                                            | go-like 借用部分词汇，不借用 Go ABI、goroutine 或 transport 兼容性                       |
+| go-kratos | Go 云原生服务框架                    | App lifecycle、Go Context、HTTP/gRPC transports、middleware、registry、config、Protobuf/code generation                                                                  | go-like 共享显式生命周期词汇，但刻意选择 TypeScript/Web API，不提供 gRPC/IDL             |
+| go-like   | 显式的 TypeScript 服务构建块         | Context、App/Server lifecycle、standard Fetch edge、内部 unary Message transport、Client/Server、Registry/Discovery/Selector、Config/Store/Cache/Broker/Health、adapters | 应用仍拥有框架路由、原生数据面、业务策略、认证和部署                                     |
 
 所以，go-like 并不是要赢一场“谁的框架最大”的比较。真正的问题是：应用是否需要这些边界保持显式、并且可以组合。
 
 ## 所有权矩阵
 
-| 关注点                 | NestJS                                        | Fastify                            | Hono / Elysia / Koa                                         | tRPC                                       | go-like                                                          |
+| 关注点                 | NestJS                                        | Fastify                            | Hono / Elysia / Koa                                         | tRPC                                       | go-like                                                         |
 | ---------------------- | --------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------- |
 | 外部 route table       | Controllers 和 decorators                     | Fastify instance                   | Framework instance 或外部 router                            | Procedure router，不是普通 REST routes     | 外部 framework 或 application                                   |
 | Web handler ABI        | Adapter 所有的 request/reply abstraction      | Node request/reply                 | 对 Hono 和 Web Standard adapter 来说，Standard Fetch 是核心 | Fetch/Node/Express/Fastify adapters        | 标准的 `(Request) => Response \| Promise<Response>`             |
@@ -116,13 +116,13 @@ Web `ReadableStream` 不是内部 RPC channel。不要把 streamed HTTP body 和
 
 ## Runtime 比较
 
-| Runtime 问题                                                 | go-like 证据                                                                                       | 比较时的结论                                            |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| 共享代码能否使用 Fetch 和 `AbortSignal`？                    | Root Web 以及选定的 transport/config provider 使用标准 Web API 或注入的 Fetch                     | 可以有相似的可移植性目标，但类型不会替 runtime 实现行为 |
+| Runtime 问题                                                 | go-like 证据                                                                                        | 比较时的结论                                            |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 共享代码能否使用 Fetch 和 `AbortSignal`？                    | Root Web 以及选定的 transport/config provider 使用标准 Web API 或注入的 Fetch                       | 可以有相似的可移植性目标，但类型不会替 runtime 实现行为 |
 | 同一个 package 能否绑定 Node listener 和 Deno listener？     | Runtime-specific 子路径是明确的；`@go-like/web/node` 和 `@go-like/transport-http/node` 是 Node 路径 | 不要写“所有包到处都能原样运行”                          |
-| 自定义 PEM TLS、mTLS、ALPN 和 HTTP/2 能否通过 Fetch 可移植？ | Node transport 子路径拥有原生能力；root Fetch path 不暴露全部控制项                               | 应比较 host 能力和 import path，而不只是 package 名称   |
-| 应用是否保留 framework router？                              | Hono、Elysia 和 H3 示例都传入原生 Fetch handler                                                   | go-like 是 framework route ownership 的补充              |
-| package version 是否证明已经发布？                           | Root 和 packages 都是 private/workspace `0.0.1`；仓库文档说明尚未发布                             | 不能据此声称 npm 可用或生态成熟                         |
+| 自定义 PEM TLS、mTLS、ALPN 和 HTTP/2 能否通过 Fetch 可移植？ | Node transport 子路径拥有原生能力；root Fetch path 不暴露全部控制项                                 | 应比较 host 能力和 import path，而不只是 package 名称   |
+| 应用是否保留 framework router？                              | Hono、Elysia 和 H3 示例都传入原生 Fetch handler                                                     | go-like 是 framework route ownership 的补充             |
+| package version 是否证明已经发布？                           | Root 和 packages 都是 private/workspace `0.0.1`；仓库文档说明尚未发布                               | 不能据此声称 npm 可用或生态成熟                         |
 
 当前仓库有 Hono、Elysia、H3 和 vanilla Fetch 的直接 source 示例。没有当前的 NestJS 或 Fastify bridge，也没有对应 compatibility suite。这些框架是迁移读者的对象，不是已经支持的直接集成。
 
@@ -167,7 +167,7 @@ tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以
 
 ## 怎么选
 
-| 如果你的主要问题是……                            | 先从……开始            | 在这些情况下再加 go-like                                              |
+| 如果你的主要问题是……                            | 先从……开始            | 在这些情况下再加 go-like                                             |
 | ----------------------------------------------- | --------------------- | -------------------------------------------------------------------- |
 | Controllers、modules、decorators 和 DI          | NestJS                | 需要围绕现有资源或内部服务调用增加显式边界，并且愿意自己写 adapter   |
 | Node HTTP routes、hooks 和 plugin encapsulation | Fastify               | 需要超出 host 的生命周期组合，或需要内部 unary service contract      |
@@ -176,7 +176,7 @@ tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以
 | 精简的 Node middleware                          | Koa 加一个 router     | 需要补的是缺失的 lifecycle 或内部调用契约，而不是再加一个 router     |
 | 类型安全的 procedures                           | tRPC                  | 同时需要显式 service discovery、provider ownership 或 Core lifecycle |
 | Go 微服务栈                                     | go-micro 或 go-kratos | 正在构建独立的 TypeScript 组合，而不是做 source-compatible port      |
-| 跨 runtime 的 TypeScript 服务构建块             | go-like                | 只使用解决当前边界问题的 packages 和 providers                       |
+| 跨 runtime 的 TypeScript 服务构建块             | go-like               | 只使用解决当前边界问题的 packages 和 providers                       |
 
 正确答案可能是两套系统一起用。当显式所有权模型确实消除了一个实际歧义时，go-like 最有价值；一个已经完整的 framework application 如果把每个 package 都加进来，就违背了小型构建块的目标。
 

@@ -105,10 +105,10 @@ thenable 不会替换 heartbeat 错误，也不会阻塞后续 `deregister`。
 
 ## 资源所有权
 
-| 资源                  | Owner                     | 契约                                                      |
-| --------------------- | ------------------------- | --------------------------------------------------------- |
-| `consul-fetch`        | 应用                      | 仅借用；本包不调用 `close`、`destroy` 或同类能力。        |
-| `consul-process`      | 应用/运维                 | 仅通过 HTTP 使用；本包不启动、停止或配置 Consul 进程。    |
+| 资源                  | Owner                      | 契约                                                      |
+| --------------------- | -------------------------- | --------------------------------------------------------- |
+| `consul-fetch`        | 应用                       | 仅借用；本包不调用 `close`、`destroy` 或同类能力。        |
+| `consul-process`      | 应用/运维                  | 仅通过 HTTP 使用；本包不启动、停止或配置 Consul 进程。    |
 | private TTL heartbeat | `@go-like/registry-consul` | 由 `register` 创建，由 replacement 或 `deregister` 终止。 |
 | Consul Watcher        | `@go-like/registry-consul` | 由 `watch` 创建，由 `watcher.stop(ctx)` 终止。            |
 

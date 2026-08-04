@@ -26,11 +26,11 @@ docker compose -f examples/batch-reporting/compose.yaml down
 
 ## 用户角色
 
-| 角色       | 关心的问题                                                                 |
-| ---------- | -------------------------------------------------------------------------- |
-| 报表负责人 | 每个已关闭报表窗口最终产出一份可识别、可重跑的结果。                       |
-| 数据工程师 | 窗口边界、输入快照、输出提交和 checkpoint 推进规则明确。                   |
-| 平台运维   | Redis、进程、持久卷故障后能判断是否可恢复，并能安全停机。                  |
+| 角色       | 关心的问题                                                                  |
+| ---------- | --------------------------------------------------------------------------- |
+| 报表负责人 | 每个已关闭报表窗口最终产出一份可识别、可重跑的结果。                        |
+| 数据工程师 | 窗口边界、输入快照、输出提交和 checkpoint 推进规则明确。                    |
+| 平台运维   | Redis、进程、持久卷故障后能判断是否可恢复，并能安全停机。                   |
 | 开发者     | 直接使用 Croner、BullMQ 与 go-like 的真实 API，不维护第二套调度或队列抽象。 |
 
 ## 业务目标
@@ -106,12 +106,12 @@ src/
 
 ## go-like 包映射
 
-| 包                                                | 在本示例中的职责                                             | 不负责的内容                                                              |
-| ------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `@go-like/context`                                 | 为启动、停止和 Store 操作提供取消与 deadline。               | 不替代 BullMQ processor 的原生 `AbortSignal`。                            |
-| `@go-like/croner`                                  | 接管应用创建的 paused Croner job 的启动与停止。              | cron 表达式、timezone、overlap 和活动回调排空仍归应用/Croner。            |
-| `@go-like/bullmq`                                  | 接管官方 Worker 的 ready、run、pause、cancel、close 与终态。 | Queue、processor、attempts、backoff、jobId 和 stalled 参数归应用/BullMQ。 |
-| `@go-like/store`                                   | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
+| 包                                                  | 在本示例中的职责                                             | 不负责的内容                                                              |
+| --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `@go-like/context`                                  | 为启动、停止和 Store 操作提供取消与 deadline。               | 不替代 BullMQ processor 的原生 `AbortSignal`。                            |
+| `@go-like/croner`                                   | 接管应用创建的 paused Croner job 的启动与停止。              | cron 表达式、timezone、overlap 和活动回调排空仍归应用/Croner。            |
+| `@go-like/bullmq`                                   | 接管官方 Worker 的 ready、run、pause、cancel、close 与终态。 | Queue、processor、attempts、backoff、jobId 和 stalled 参数归应用/BullMQ。 |
+| `@go-like/store`                                    | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
 | `@go-like/store-file` 与 `@go-like/store-file/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。    | 不支持跨进程 shared writers。                                             |
 
 Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直接调用 `queue.close()`，不为它新增通用框架
@@ -174,11 +174,11 @@ Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直
 
 本示例的真实外部服务只有 Redis；Croner、BullMQ Worker 与 File Store 都运行在应用进程内。
 
-| 组件            | 当前仓库真实 pin                                                                                                 | 用途                                        |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Redis           | `redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241`，E2E 回读为 8.10.0 | BullMQ queue、lock、retry 与 stalled 状态。 |
-| BullMQ          | `6.0.6`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
-| Croner          | `10.0.1`                                                                                                         | 定时调度。                                  |
+| 组件             | 当前仓库真实 pin                                                                                                 | 用途                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Redis            | `redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241`，E2E 回读为 8.10.0 | BullMQ queue、lock、retry 与 stalled 状态。 |
+| BullMQ           | `6.0.6`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
+| Croner           | `10.0.1`                                                                                                         | 定时调度。                                  |
 | go-like packages | workspace `0.0.1`                                                                                                | 生命周期与 checkpoint provider。            |
 
 实现时默认复用上述仓库 pin。若实施日期已经需要升级，则先从 npm 官方 dist-tag 与官方镜像 registry 重新核实

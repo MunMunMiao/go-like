@@ -104,7 +104,9 @@ test("reads, deterministic registration, update, and cleanup align the root cont
   const initial = fixture("initial")
   await subject.register(background(), initial)
   expect(await subject.getService(background(), initial.name)).toEqual([initial])
-  expect(zookeeper.paths()).toContain(instancePath("/go-like/registry/v1", initial.name, initial.id))
+  expect(zookeeper.paths()).toContain(
+    instancePath("/go-like/registry/v1", initial.name, initial.id)
+  )
   const updated = fixture("updated")
   await subject.register(background(), updated)
   expect(await subject.getService(background(), initial.name)).toEqual([updated])

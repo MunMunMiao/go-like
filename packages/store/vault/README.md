@@ -29,7 +29,7 @@ const record = await store.read(background(), "orders/1001")
 
 | Store 语义     | Vault KV v2 映射                                                                    |
 | -------------- | ----------------------------------------------------------------------------------- |
-| value/metadata | `data` 下的 go-like version 1 JSON envelope；二进制 value 使用标准 base64            |
+| value/metadata | `data` 下的 go-like version 1 JSON envelope；二进制 value 使用标准 base64           |
 | revision       | KV v2 metadata 的正整数 `version`，对外使用十进制字符串                             |
 | write          | `POST /v1/{mount}/data/{root}/{physical-key}`，不伪造 CAS                           |
 | read           | `GET /v1/{mount}/data/{root}/{physical-key}`                                        |

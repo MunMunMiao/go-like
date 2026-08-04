@@ -396,7 +396,7 @@ await app.run()
 | ---------- | ------------------------------------------------------------------ | ----------------------------------------------- |
 | Domain     | overlap、cancellation reuse、idempotency、conflicting ID           | `src/service.ts` 行为和 unit test 结果          |
 | Context    | canceled booking 不会修改 repository，也不会调用 policy            | focused Context test                            |
-| Typed call | Struct decode/encode、policy rejection、response validation        | `@go-like/client` 和 `@go-like/server` boundary   |
+| Typed call | Struct decode/encode、policy rejection、response validation        | `@go-like/client` 和 `@go-like/server` boundary |
 | Cache      | miss、hit、TTL、invalidation、failure fallback                     | `newMemoryCache()` tests                        |
 | Health     | empty liveness、empty readiness、failing probe、405/404            | `newProbeRegistry()` 和 `createHealthHandler()` |
 | HTTP       | `POST`、`DELETE`、invalid JSON、conflict status                    | standard Fetch Handler test                     |

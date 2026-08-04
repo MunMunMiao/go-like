@@ -85,8 +85,8 @@ credential 仅进入私有客户端快照，不进入公共 Registry 契约、�
 
 | 资源                             | 所有者    | 生命周期                                        |
 | -------------------------------- | --------- | ----------------------------------------------- |
-| `zookeeper-registration-session` | go-like    | 首次注册时建立；最后一个实例注销后关闭。        |
-| `zookeeper-watcher-session`      | go-like    | `watch()` 建立；`Watcher.stop()` 后关闭。       |
+| `zookeeper-registration-session` | go-like   | 首次注册时建立；最后一个实例注销后关闭。        |
+| `zookeeper-watcher-session`      | go-like   | `watch()` 建立；`Watcher.stop()` 后关闭。       |
 | `zookeeper-process`              | 应用/运维 | 本包只连接，不启动、停止或配置 ZooKeeper 进程。 |
 
 `node-zookeeper-client` 的官方 `close()` API 不接受 `AbortSignal` 或 callback；本包会立即请求

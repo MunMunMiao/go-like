@@ -101,12 +101,12 @@ verbs: ["get", "list", "watch", "create", "update", "delete"]
 
 ## 资源所有权
 
-| 资源                  | Owner                         | 契约                                                            |
-| --------------------- | ----------------------------- | --------------------------------------------------------------- |
-| `kubernetes-fetch`    | 应用                          | 仅借用；本包不调用 `close`、`destroy` 或同类能力。              |
+| 资源                  | Owner                          | 契约                                                            |
+| --------------------- | ------------------------------ | --------------------------------------------------------------- |
+| `kubernetes-fetch`    | 应用                           | 仅借用；本包不调用 `close`、`destroy` 或同类能力。              |
 | Kubernetes Watcher    | `@go-like/registry-kubernetes` | 由 `watch` 创建，由 `watcher.stop(ctx)` 通过 AbortSignal 终止。 |
-| Managed EndpointSlice | Kubernetes Pod/应用           | 配置 `owner` 时随 Pod GC；否则由应用显式 `deregister`。         |
-| Kubernetes API/集群   | 应用/平台                     | 本包只使用 namespaced EndpointSlice API，不管理集群生命周期。   |
+| Managed EndpointSlice | Kubernetes Pod/应用            | 配置 `owner` 时随 Pod GC；否则由应用显式 `deregister`。         |
+| Kubernetes API/集群   | 应用/平台                      | 本包只使用 namespaced EndpointSlice API，不管理集群生命周期。   |
 
 ## 验证
 

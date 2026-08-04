@@ -76,12 +76,12 @@ feature flags。缓存 key 同时包含 generation 与 tenant ID，配置更新�
 | 能力         | 使用方式                                                                                                     |
 | ------------ | ------------------------------------------------------------------------------------------------------------ |
 | 应用生命周期 | Config 通过 `beforeStart / afterStop` hook 加载和关闭；Cache、Pino 与 Web Server 作为 `Server` 交给 Core App |
-| 配置         | `@go-like/config-consul` 提供 Config Source，完整文档通过 Schema 后发布                                       |
+| 配置         | `@go-like/config-consul` 提供 Config Source，完整文档通过 Schema 后发布                                      |
 | 缓存         | Redis Cache 持有连接生命周期                                                                                 |
 | Web          | Hono Handler 由标准 Web Server 承载                                                                          |
-| 限流         | `@go-like/resilience` 的无后台 timer Token Bucket                                                             |
-| 日志         | 应用配置 Pino；`@go-like/pino` 负责 flush/close 生命周期                                                      |
-| Store        | `@go-like/store-consul` 写入隔离的 runtime state，并在 App 停止时删除                                         |
+| 限流         | `@go-like/resilience` 的无后台 timer Token Bucket                                                            |
+| 日志         | 应用配置 Pino；`@go-like/pino` 负责 flush/close 生命周期                                                     |
+| Store        | `@go-like/store-consul` 写入隔离的 runtime state，并在 App 停止时删除                                        |
 
 ## 验证
 

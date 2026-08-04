@@ -329,7 +329,8 @@ function retryable(value: unknown): boolean {
 /** Reports whether one watch cursor has expired. */
 function expired(value: unknown): boolean {
   return (
-    property(value, "code") === "GO_LIKE_KUBERNETES_CONFIG_HTTP" && property(value, "status") === 410
+    property(value, "code") === "GO_LIKE_KUBERNETES_CONFIG_HTTP" &&
+    property(value, "status") === 410
   )
 }
 

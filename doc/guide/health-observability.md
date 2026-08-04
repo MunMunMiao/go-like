@@ -108,7 +108,7 @@ After successful admission, the adapter joins the native destination or logger s
 
 Health and observability do not authenticate a caller. The security layers are separate:
 
-| Layer                | go-like contribution                                                                                                  | Application or platform responsibility                                                  |
+| Layer                | go-like contribution                                                                                                 | Application or platform responsibility                                                  |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Transport encryption | Node HTTP transport can use explicit TLS material; `clientAuth("require")` can require a verified client certificate | Certificates, CA rotation, SNI policy, deployment defaults, trust model                 |
 | Authentication       | No universal JWT, OAuth, OIDC, or bearer-token validator                                                             | Parse and validate credentials, identity, issuer, audience, and expiry                  |

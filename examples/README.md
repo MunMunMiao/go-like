@@ -62,7 +62,7 @@ Tier 不自动代表 Docker。只有表格明确列出真实服务的案例才�
 
 ## 业务案例
 
-|   # | 案例                                                                         | 行业与业务不变量                           | 当前 go-like 微服务能力 / 调用链                                                      | Tier        | Docker 判定                                           |
+|   # | 案例                                                                         | 行业与业务不变量                           | 当前 go-like 微服务能力 / 调用链                                                     | Tier        | Docker 判定                                           |
 | --: | ---------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------- |
 |   1 | [`commerce-catalog`](./commerce-catalog/README.md)                           | 电商：缓存失效时仍从 Pricing 获取权威价格  | Hono/Web → Cache → Client + Retry → HTTP Pricing；Docker 注入 Redis/Consul           | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
 |   2 | [`saas-tenant-api`](./saas-tenant-api/README.md)                             | SaaS：配置、缓存和限流不得跨租户泄漏       | Hono/Web → Config + Cache → Token Bucket；Consul Store 保存 runtime state            | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
@@ -109,8 +109,8 @@ Tier 不自动代表 Docker。只有表格明确列出真实服务的案例才�
 
 以下四项专门演示第三方 Web 框架或原生 Fetch Handler 如何接入 go-like，同样属于正式 examples。
 
-| 案例                                     | 验证入口                                   | Tier        | Docker 判定       |
-| ---------------------------------------- | ------------------------------------------ | ----------- | ----------------- |
+| 案例                                     | 验证入口                                    | Tier        | Docker 判定       |
+| ---------------------------------------- | ------------------------------------------- | ----------- | ----------------- |
 | [`elysia`](./elysia/README.md)           | Elysia `app.fetch` → `@go-like/web` Handler | integration | 否：Node 接入测试 |
 | [`h3`](./h3/README.md)                   | H3 `app.fetch` → `@go-like/web` Handler     | integration | 否：Node 接入测试 |
 | [`hono`](./hono/README.md)               | Hono `app.fetch` → `@go-like/web` Handler   | integration | 否：Node 接入测试 |

@@ -4,7 +4,7 @@ This glossary keeps the English source precise and gives translators a stable se
 
 ## Core terms
 
-| Term                   | Meaning in go-like                                                                                                                              | Do not use it to mean                                                               |
+| Term                   | Meaning in go-like                                                                                                                             | Do not use it to mean                                                               |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | **Context**            | Explicit operation scope carrying deadline, cancellation result, cause, and values; passed first to blocking work                              | Dependency-injection bag, ambient request state, Go ABI, or a goroutine/channel     |
 | **App**                | One-shot coordinator for startup, registration, hooks, Server stop calls, terminal joins, and lifecycle errors                                 | Global service container or process supervisor for resources it was never given     |
@@ -22,7 +22,7 @@ This glossary keeps the English source precise and gives translators a stable se
 
 ## Control-plane and data-plane terms
 
-| Term                             | Meaning in go-like                                                                            | Do not collapse it into                                                            |
+| Term                             | Meaning in go-like                                                                           | Do not collapse it into                                                            |
 | -------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | **Registry**                     | Contract for registering and reading service instance reachability                           | Durable business Store or global service locator                                   |
 | **Registrar**                    | Registration and deregistration interface                                                    | Discovery watcher or health probe                                                  |
@@ -39,7 +39,7 @@ This glossary keeps the English source precise and gives translators a stable se
 | **Cache**                        | Disposable values with optional TTL that can be recomputed                                   | Authoritative state, durable record, lock, or CAS store                            |
 | **Broker**                       | Topic-based byte publish/subscribe while preserving native delivery identity                 | BullMQ queue, Event Store, or universal settlement API                             |
 | **Event**                        | Optional typed Codec projection over Broker bytes                                            | Durable event history, replay, or schema registry                                  |
-| **native delivery**              | Provider object retained as `event.native`, such as `Msg` or `JsMsg`                         | An object go-like can safely acknowledge with one common method                     |
+| **native delivery**              | Provider object retained as `event.native`, such as `Msg` or `JsMsg`                         | An object go-like can safely acknowledge with one common method                    |
 | **liveness**                     | Whether the process is alive enough for the platform's liveness policy                       | Readiness to receive traffic                                                       |
 | **readiness**                    | Whether the service should receive traffic now                                               | Proof that all external dependencies are permanently healthy                       |
 | **provider**                     | Backend implementation of a narrow contract                                                  | All lifecycle wrappers or one universal adapter bucket                             |
@@ -47,7 +47,7 @@ This glossary keeps the English source precise and gives translators a stable se
 
 ## Runtime and security terms
 
-| Term                       | Meaning in go-like                                                                   | Required qualification                                                                |
+| Term                       | Meaning in go-like                                                                  | Required qualification                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | **portable**               | Shared code uses standard Web/ECMAScript APIs or injected capabilities              | Not proof that every runtime can bind sockets, watch files, use UDP, or configure TLS |
 | **Fetch Handler**          | Standard one-argument `Request` to `Response` function                              | A Handler still needs a host/listener                                                 |

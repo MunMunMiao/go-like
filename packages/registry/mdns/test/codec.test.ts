@@ -138,9 +138,9 @@ describe("canonical mDNS ServiceInstance codec", () => {
 
   test("rejects malformed schema, encoding, chunk, hash, and decoded ceilings", async () => {
     const items = await encodeInstanceTXT(fixture(), 65_536)
-    await expect(decodeInstanceTXT(remove(items, "Go-Like-Encoding"), 65_536)).rejects.toMatchObject(
-      { code: "GO_LIKE_REGISTRY_PROTOCOL" }
-    )
+    await expect(
+      decodeInstanceTXT(remove(items, "Go-Like-Encoding"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
       decodeInstanceTXT(replace(items, "Go-Like-Wire-Version", "1"), 65_536)
     ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })

@@ -275,7 +275,9 @@ async function main(): Promise<void> {
       ) {
         await Bun.sleep(25)
       }
-      if (!programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')) {
+      if (
+        !programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')
+      ) {
         throw new Error("start:prepared did not report readiness")
       }
       const ready = await fetch(`http://127.0.0.1:${programPort}/readyz`)

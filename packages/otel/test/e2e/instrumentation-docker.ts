@@ -10,7 +10,13 @@ import { background, type Context } from "@go-like/context"
 import type { Server as LifecycleServer } from "@go-like/core"
 import { traceClient, traceUnaryMiddleware, traceWebHandler } from "@go-like/otel"
 import { newRandomSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
-import { address as serverAddress, handler, middleware, newServer, transport } from "@go-like/server"
+import {
+  address as serverAddress,
+  handler,
+  middleware,
+  newServer,
+  transport
+} from "@go-like/server"
 import type { Message } from "@go-like/transport"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"

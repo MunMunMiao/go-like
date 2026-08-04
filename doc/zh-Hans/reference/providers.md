@@ -13,23 +13,23 @@
 
 ## 按任务选择
 
-| 任务                         | 从这里开始                             | 按需增加                                                               | go-like 不拥有                                                |
-| ---------------------------- | -------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 暴露 Web API                 | `@go-like/web`、`@go-like/core`          | `@go-like/web/node` 或框架的原生 Fetch handler                          | Router、framework middleware、auth、response policy          |
+| 任务                         | 从这里开始                               | 按需增加                                                                  | go-like 不拥有                                               |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 暴露 Web API                 | `@go-like/web`、`@go-like/core`          | `@go-like/web/node` 或框架的原生 Fetch handler                            | Router、framework middleware、auth、response policy          |
 | 调用内部服务                 | `@go-like/client`、`@go-like/transport`  | `@go-like/transport-memory`、`@go-like/transport-http`、`@go-like/struct` | Business idempotency、generated IDL、全双工 RPC              |
-| 发现服务实例                 | `@go-like/registry`                     | 一个 Registry provider、filters、一个 Selector                         | Backend lease/revision consistency 或 global service locator |
-| 加载配置                     | `@go-like/config`                       | env/file/YAML 或一个外部 Config provider                               | Ambient global configuration 和跨资源事务                    |
-| 保存权威字节数据             | `@go-like/store`                        | Memory、File、Consul、etcd 或 Vault provider                           | 通用 database/ORM 或统一的 provider 保证                     |
-| 缓存可丢弃的值               | `@go-like/cache`                        | Memory 或 Redis provider                                               | Authority、persistence、CAS、持久化业务状态                  |
-| 发布或消费字节数据           | `@go-like/broker`                       | Memory、RabbitMQ 或 NATS                                               | 通用 ack/nack/term、DLQ、持久 offset、exactly-once           |
-| 增加 typed event payload     | `@go-like/event`                        | 一个应用自己的 Codec                                                   | Schema registry、replay、settlement policy                   |
-| 运行已有 scheduler 或 worker | `@go-like/core`                         | `@go-like/croner`、`@go-like/bullmq`、`@go-like/nats`                     | 原生 queue、processor、job policy 或 broker connection       |
-| 增加运维能力                 | `@go-like/health`、`@go-like/resilience` | Pino、Winston、OTel、Prometheus                                        | Global instrumentation、auth、deployment policy              |
+| 发现服务实例                 | `@go-like/registry`                      | 一个 Registry provider、filters、一个 Selector                            | Backend lease/revision consistency 或 global service locator |
+| 加载配置                     | `@go-like/config`                        | env/file/YAML 或一个外部 Config provider                                  | Ambient global configuration 和跨资源事务                    |
+| 保存权威字节数据             | `@go-like/store`                         | Memory、File、Consul、etcd 或 Vault provider                              | 通用 database/ORM 或统一的 provider 保证                     |
+| 缓存可丢弃的值               | `@go-like/cache`                         | Memory 或 Redis provider                                                  | Authority、persistence、CAS、持久化业务状态                  |
+| 发布或消费字节数据           | `@go-like/broker`                        | Memory、RabbitMQ 或 NATS                                                  | 通用 ack/nack/term、DLQ、持久 offset、exactly-once           |
+| 增加 typed event payload     | `@go-like/event`                         | 一个应用自己的 Codec                                                      | Schema registry、replay、settlement policy                   |
+| 运行已有 scheduler 或 worker | `@go-like/core`                          | `@go-like/croner`、`@go-like/bullmq`、`@go-like/nats`                     | 原生 queue、processor、job policy 或 broker connection       |
+| 增加运维能力                 | `@go-like/health`、`@go-like/resilience` | Pino、Winston、OTel、Prometheus                                           | Global instrumentation、auth、deployment policy              |
 
 ## 基础包
 
-| Package              | 用途                                                      | 主要 public API                                                                                                                                                                                                   | Runtime 与所有权说明                                                                     |
-| -------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Package               | 用途                                                      | 主要 public API                                                                                                                                                                                                   | Runtime 与所有权说明                                                                     |
+| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `@go-like/context`    | 显式取消、截止时间、cause 和 value                        | `background`、`todo`、`withCancel`、`withCancelCause`、`withDeadline`、`withDeadlineCause`、`withTimeout`、`withTimeoutCause`、`cause`、`withoutCancel`、`withValue`、`afterFunc`、`canceled`、`deadlineExceeded` | Portable source contract。`Context` 内部使用 `AbortSignal`；它不是 Go ABI，也不是 DI bag |
 | `@go-like/core`       | 组合 application 与 resource lifecycle                    | `newApp`、`server`、`registrar`、`beforeStart`、`afterStart`、`beforeStop`、`afterStop`、`startTimeout`、`stopTimeout`、`context`、`id`、`name`、`version`、`metadata`、`endpoint`、`newContext`、`fromContext`   | Portable structural `Server` 和 `App`。Sibling stop calls 是并发的                       |
 | `@go-like/metadata`   | 不可变的多值 metadata 与显式传播                          | metadata types 和 propagation functions                                                                                                                                                                           | Client 与 server metadata domains 分开；metadata 不是可信 identity                       |
@@ -39,11 +39,11 @@
 
 ## Web 与内部调用包
 
-| Package                       | 用途                                                                 | 主要 public API                                                                                                                                                                                              | 不负责                                                                               |
-| ----------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Package                        | 用途                                                                 | 主要 public API                                                                                                                                                                                              | 不负责                                                                               |
+| ------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | `@go-like/web`                 | 标准 Web Handler 和 request Context bridge                           | `Handler`、`ContextHandler`、`contextHandler`                                                                                                                                                                | Routes、WebSockets、SSE policy、listener、authentication                             |
 | `@go-like/web/health`          | Health Handler routes                                                | `createHealthHandler`                                                                                                                                                                                        | Probe registration 或 framework route mounting                                       |
-| `@go-like/web/node`            | 围绕 Fetch Handler 的 Node listener                                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                                                                                                                                                   | Internal HTTP Transport TLS/HTTP2；这些用 `@go-like/transport-http/node`              |
+| `@go-like/web/node`            | 围绕 Fetch Handler 的 Node listener                                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                                                                                                                                                   | Internal HTTP Transport TLS/HTTP2；这些用 `@go-like/transport-http/node`             |
 | `@go-like/client`              | 内部 unary calls、discovery、selection、middleware、retries、pooling | `newClient`、`withTransport`、`withAddress`、`withDiscovery`、`withSelector`、`withFilter`、`withBlock`、`withRetry`、`middleware`、`use`、`circuitBreakerMiddleware`、`closeTimeout`、`poolSize`、`poolTtl` | Framework routes、business replay safety、physical socket limits                     |
 | `@go-like/server`              | 内部 unary Message server 和 route dispatch                          | `newServer`、`transport`、`address`、`advertise`、`handler`、`middleware`、`use`、`listenOption`、`rateLimitMiddleware`                                                                                      | 外部 Fetch routes 和 protocol-specific business authorization                        |
 | `@go-like/transport`           | Transport SPI 和 Message boundary                                    | `Transport`、`Client`、`Listener`、`Socket`、`Message`、`TransportInfo`、`Endpoint`、`endpoint`、`chain`、`serviceError`                                                                                     | 除非选择 provider，否则不提供具体 wire；没有 internal full-duplex promise            |
@@ -53,8 +53,8 @@
 
 ## Config 包
 
-| Package 或 subpath          | 用途                                    | 主要 function                                                                                                          | 边界                                                                   |
-| --------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Package 或 subpath           | 用途                                    | 主要 function                                                                                                          | 边界                                                                   |
+| ---------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `@go-like/config`            | Config manager 和 object sources        | `newConfig`、`source`、`objectSource`、`schema`、`resolver`、`placeholderResolver`、`onReloadError`、`onTerminalError` | Immutable snapshots 和已接纳的 watcher lifecycle；自身不是 Core Server |
 | `@go-like/config/env`        | 显式的 environment record source        | `envSource`                                                                                                            | 接收注入的 record；不读取 ambient runtime globals                      |
 | `@go-like/config/file`       | File source 和 JSON decoder contract    | `fileSource`、`jsonFileDecoder`                                                                                        | 需要显式的 file capability                                             |
@@ -69,8 +69,8 @@ Config external providers 使用注入的标准 Fetch。凭据和 redirects 的�
 
 ## Registry 包
 
-| Package                       | 用途                                                | 主要 function                                                                                                                                      | Runtime/backend 说明                                                 |
-| ----------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Package                        | 用途                                                | 主要 function                                                                                                                                      | Runtime/backend 说明                                                 |
+| ------------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `@go-like/registry`            | Contract、snapshot、filters、selectors              | `filterVersion`、`filterLabel`、`newRandomSelector`、`newRoundRobinSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | Complete replacement snapshots；selection feedback 是显式的          |
 | `@go-like/registry/provider`   | Provider author helpers 和 registration diagnostics | `providerOptions`、`notifyRegistrationError`、snapshot/provider helpers                                                                            | 面向 provider 的 subpath，不是普通应用入口                           |
 | `@go-like/registry-consul`     | Consul registration 和 discovery                    | `newConsulRegistry`                                                                                                                                | Health-filtered、blocking-query、TTL/critical 行为由 Consul 原生决定 |
@@ -84,8 +84,8 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## Store 与 Cache 包
 
-| Package                   | 用途                               | 主要 function                                                                                                      | 边界                                                                            |
-| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Package                    | 用途                               | 主要 function                                                                                                      | 边界                                                                            |
+| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
 | `@go-like/store`           | Record contract 和 options         | `expiresIn`、`ifAbsent`、`ifRevision`、`prefix`、`limit`、`cursor`、`writeOptions`、`deleteOptions`、`listOptions` | Revisions、CAS、TTL、pagination；各 provider 的能力不同                         |
 | `@go-like/store/provider`  | Provider write/delete/list helpers | `writeOptions`、`deleteOptions`、`listOptions`、snapshot 和 conflict helpers                                       | 面向 provider；自身不是 durable backend                                         |
 | `@go-like/store-memory`    | 进程内 Store tests                 | `newMemoryStore`、`clock`                                                                                          | 没有重启持久化或跨进程状态                                                      |
@@ -100,8 +100,8 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## Broker、event 与工作包
 
-| Package 或 subpath              | 用途                                            | 主要 function                                                                  | 边界                                                                 |
-| ------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Package 或 subpath               | 用途                                            | 主要 function                                                                  | 边界                                                                 |
+| -------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `@go-like/broker`                | Byte/topic Broker contract                      | `newBrokerServer`                                                              | 没有 portable ack/nack/term、DLQ、retry 或 durable offset            |
 | `@go-like/broker/provider`       | Provider terminal registration                  | `registerSubscriberTerminal`、`subscriberTerminal`                             | 面向 provider 的 lifecycle bookkeeping                               |
 | `@go-like/broker-memory`         | Exact-topic 进程内 broker                       | `newMemoryBroker`                                                              | 实例私有、broadcast、没有 durable settlement                         |
@@ -116,8 +116,8 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## 日志与可观测性包
 
-| Package              | 用途                                            | 主要 function                                                                                                                                                                       | 不负责                                                                  |
-| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Package               | 用途                                            | 主要 function                                                                                                                                                                       | 不负责                                                                  |
+| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `@go-like/pino`       | Pino request/broker wrappers 和 drain lifecycle | `logClient`、`logUnaryMiddleware`、`logWebHandler`、`logBroker`、`newPinoServer`、`pinoDrainTimeout`                                                                                | Logger construction、destination policy、redaction、global setup        |
 | `@go-like/winston`    | Winston wrappers 和 shutdown lifecycle          | logging wrappers、`newWinstonServer`                                                                                                                                                | Logger/transports 以及它们原生的 finish/close semantics                 |
 | `@go-like/otel`       | 显式的 OpenTelemetry trace/metric wrappers      | `newOtelServer`、`traceClient`、`traceUnaryMiddleware`、`traceWebHandler`、`traceBroker`、`measureClient`、`measureClientMiddleware`、`measureUnaryMiddleware`、`newRequestMetrics` | Global providers、exporters、context manager、automatic instrumentation |
@@ -127,8 +127,8 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 以下是当前 package manifests 声明的 23 个显式 source subpath。生成的 packages 可能额外导出 metadata-only 的 `./package.json`；那不是 source API。
 
-|   # | Subpath                         | 主要 exports                                               | 面向对象                      |
-| --: | ------------------------------- | ---------------------------------------------------------- | ----------------------------- |
+|   # | Subpath                          | 主要 exports                                               | 面向对象                      |
+| --: | -------------------------------- | ---------------------------------------------------------- | ----------------------------- |
 |   1 | `@go-like/broker/provider`       | `registerSubscriberTerminal`、`subscriberTerminal`         | Provider authors              |
 |   2 | `@go-like/cache/provider`        | `putOptions`                                               | Provider authors              |
 |   3 | `@go-like/config/env`            | `envSource`                                                | Application authors           |
@@ -146,7 +146,7 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 |  15 | `@go-like/store-file/node`       | `newNodeFileStoreHost`                                     | Node file Store applications  |
 |  16 | `@go-like/struct/codec`          | `encodeJson`、`decodeJson`                                 | Typed contract authors        |
 |  17 | `@go-like/struct/runtime`        | introspection 和 parsing helpers                           | Runtime/provider authors      |
-|  18 | `@go-like/transport/headers`     | `Go-Like-*` header constants                                | Transport/provider authors    |
+|  18 | `@go-like/transport/headers`     | `Go-Like-*` header constants                               | Transport/provider authors    |
 |  19 | `@go-like/transport/json`        | `encodeJsonBody`、`decodeJsonBody`、`jsonContentType`      | Typed/raw transport authors   |
 |  20 | `@go-like/transport/provider`    | Message、metadata、ServiceError codecs 和 errors           | Provider authors              |
 |  21 | `@go-like/transport-http/node`   | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`         | Node HTTP applications        |

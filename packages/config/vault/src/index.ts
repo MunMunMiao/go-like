@@ -155,7 +155,9 @@ function isTransportError(error: Error): error is VaultTransportError {
 /** Narrows one decorated Error to the public Vault protocol shape. */
 function isProtocolError(error: Error): error is VaultProtocolError {
   return (
-    error.name === "VaultProtocolError" && "code" in error && error.code === "GO_LIKE_VAULT_PROTOCOL"
+    error.name === "VaultProtocolError" &&
+    "code" in error &&
+    error.code === "GO_LIKE_VAULT_PROTOCOL"
   )
 }
 

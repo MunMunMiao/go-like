@@ -82,8 +82,8 @@ TLS 字节和 Message header/body 都执行防御性复制。Message body 与 TL
 
 provider 子路径提供四个无 class、可结构识别、冻结且保留 `cause` 的错误：
 
-| 错误                                  | code                                      |
-| ------------------------------------- | ----------------------------------------- |
+| 错误                                  | code                                       |
+| ------------------------------------- | ------------------------------------------ |
 | `TransportClosedError`                | `GO_LIKE_TRANSPORT_CLOSED`                 |
 | `TransportStateError`                 | `GO_LIKE_TRANSPORT_STATE`                  |
 | `UnsupportedTransportCapabilityError` | `GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY` |

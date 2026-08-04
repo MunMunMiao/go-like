@@ -144,13 +144,13 @@ PostgreSQL transaction 绝不跨越 NATS 网络调用。JetStream 是通知和�
 
 ## go-like 包映射
 
-| 能力              | 采用方式与边界                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| 能力               | 采用方式与边界                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | `@go-like/context` | 作为 HTTP 与 publisher attempt 的独立首参语义；终止的 Context 不启动金融事务。                                |
 | `@go-like/web`     | `contextHandler(...)` 承接标准 `Request`/`Response`，租户由接收 Context 的服务端 resolver 注入。              |
-| TypeScript + JSON | 声明请求与 outbox event shape；required presence、字符串类型、金额和账户规则由应用显式检查。                  |
-| Bun `SQL`         | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 go-like SQL 抽象。                          |
-| 官方 NATS SDK     | `@nats-io/transport-node` 拥有连接，`@nats-io/jetstream` 发布并保留真实 `PubAck`。                            |
+| TypeScript + JSON  | 声明请求与 outbox event shape；required presence、字符串类型、金额和账户规则由应用显式检查。                  |
+| Bun `SQL`          | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 go-like SQL 抽象。                         |
+| 官方 NATS SDK      | `@nats-io/transport-node` 拥有连接，`@nats-io/jetstream` 发布并保留真实 `PubAck`。                            |
 | `@go-like/store`   | **禁止用于账本、余额、幂等行或 outbox。** Store 没有关系 transaction、数据库约束、索引查询或 migration 契约。 |
 
 go-like 当前没有 SQL/ORM 抽象。实现应直接选择一个支持参数化查询、连接池和 scoped transaction 的 PostgreSQL

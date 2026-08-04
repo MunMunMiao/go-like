@@ -4,7 +4,13 @@ import { join } from "node:path"
 
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancel, withCancelCause, withTimeout, type Context } from "@go-like/context"
+import {
+  background,
+  withCancel,
+  withCancelCause,
+  withTimeout,
+  type Context
+} from "@go-like/context"
 
 import { fileSource, type FileWatcher } from "../src/file"
 import {

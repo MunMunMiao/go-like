@@ -66,7 +66,7 @@ Client.call(ctx, operation, input)
 
 ## Why the distinction matters
 
-| Question      | Public Web stream                                          | Internal go-like call                                           |
+| Question      | Public Web stream                                          | Internal go-like call                                          |
 | ------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
 | Message shape | Web `Request`/`Response` body                              | `Message` headers plus `Uint8Array` body                       |
 | Direction     | Request body and response body; framework may add upgrades | One unary request and one unary response                       |
@@ -74,7 +74,7 @@ Client.call(ctx, operation, input)
 | Cancellation  | `Request.signal`, handler Context, stream cancellation     | call Context through `send`/`recv` and owner cleanup           |
 | Retry         | Application decides whether a Web request can be replayed  | `withRetry` requires explicit authorization and total attempts |
 | Backpressure  | Web Streams/framework/runtime contract                     | No internal stream backpressure SPI is promised                |
-| Full duplex   | Possible through a framework or Web API                    | Deliberately outside the current go-like boundary               |
+| Full duplex   | Possible through a framework or Web API                    | Deliberately outside the current go-like boundary              |
 
 A Fetch body can be streamed while a request is in flight. That does not imply the transport can exchange arbitrary frames in both directions, nor that a retry can safely recreate the body. If an application builds an internal stream protocol, it owns that protocol and should not label it as go-like's current Transport contract.
 

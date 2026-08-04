@@ -225,8 +225,8 @@ P2C cooldown is endpoint-local selection state, not a circuit breaker. The Clien
 
 ## Transport choices
 
-| Provider                      | Use it when                                                                   | Important boundary                                                                                           |
-| ----------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Provider                       | Use it when                                                                   | Important boundary                                                                                           |
+| ------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `@go-like/transport-memory`    | Same-process composition and deterministic tests                              | Private address map, unary exchange, no persistence or cross-process behavior                                |
 | `@go-like/transport-http`      | A portable Fetch-backed internal HTTP client is sufficient                    | Root `listen` needs an injected runtime `HTTPHost`; custom Node TLS material is not a portable Fetch feature |
 | `@go-like/transport-http/node` | A Node service needs native listener, HTTP/1.1, HTTP/2, TLS, mTLS, or pooling | Explicit Node subpath; TLS and ALPN are not automatically enabled by the root transport                      |

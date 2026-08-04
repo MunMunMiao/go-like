@@ -43,9 +43,11 @@ test("byte codec rejects malformed Base64 and invalid UTF-8", () => {
 
 test("record decoder rejects malformed and oversized managed values", async () => {
   const record = await encodeRecord("/go-like/registry/v1/", instance)
-  await expect(decodeRecord("/go-like/registry/v1/", record.key, "not-json")).rejects.toMatchObject({
-    code: "GO_LIKE_REGISTRY_PROTOCOL"
-  })
+  await expect(decodeRecord("/go-like/registry/v1/", record.key, "not-json")).rejects.toMatchObject(
+    {
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
+    }
+  )
   await expect(decodeRecord("/go-like/registry/v1/", record.key, "[]")).rejects.toThrow(
     "unsupported wire shape"
   )

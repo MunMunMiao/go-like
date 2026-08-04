@@ -43,18 +43,18 @@ await watcher.stop(background())
 
 ## 构造选项
 
-| 选项              | 默认值                 | 规则                                                                   |
-| ----------------- | ---------------------- | ---------------------------------------------------------------------- |
-| `fetch`           | 必填                   | 借用的标准 `(RequestInfo \| URL, RequestInit?) => Promise<Response>`。 |
-| `address`         | 必填                   | 单个无 credential、path、query、fragment 的 HTTP(S) origin。           |
+| 选项              | 默认值                  | 规则                                                                   |
+| ----------------- | ----------------------- | ---------------------------------------------------------------------- |
+| `fetch`           | 必填                    | 借用的标准 `(RequestInfo \| URL, RequestInit?) => Promise<Response>`。 |
+| `address`         | 必填                    | 单个无 credential、path、query、fragment 的 HTTP(S) origin。           |
 | `prefix`          | `/go-like/registry/v1/` | 以 `/` 开始和结束的绝对 UTF-8 key prefix。                             |
-| `token`           | 省略                   | 非空 HTTP `Authorization` header 值；不会进入 URL 或诊断。             |
-| `retryInitialMs`  | `250`                  | availability retry 初始间隔，整数 `1..60000`。                         |
-| `retryMaximumMs`  | `30000`                | availability retry 上限，整数 `retryInitialMs..600000`。               |
-| `watchBufferSize` | `128`                  | replacement snapshot 队列容量，整数 `1..4096`。                        |
-| `timeoutMs`       | `5000`                 | 单次 provider 操作超时，整数 `1..60000`。                              |
-| `ttlMs`           | `120000`               | 注册 lease 生命周期，整数 `2000..86400000`。                           |
-| `logger`          | `null`                 | 借用的结构化 provider 日志接口。                                       |
+| `token`           | 省略                    | 非空 HTTP `Authorization` header 值；不会进入 URL 或诊断。             |
+| `retryInitialMs`  | `250`                   | availability retry 初始间隔，整数 `1..60000`。                         |
+| `retryMaximumMs`  | `30000`                 | availability retry 上限，整数 `retryInitialMs..600000`。               |
+| `watchBufferSize` | `128`                   | replacement snapshot 队列容量，整数 `1..4096`。                        |
+| `timeoutMs`       | `5000`                  | 单次 provider 操作超时，整数 `1..60000`。                              |
+| `ttlMs`           | `120000`                | 注册 lease 生命周期，整数 `2000..86400000`。                           |
+| `logger`          | `null`                  | 借用的结构化 provider 日志接口。                                       |
 
 `address`、`logger`、`timeoutMs` 与 `ttlMs` 只通过 provider constructor 配置。
 Registry 实例不暴露可变 `init/options/string` 状态。TLS trust、client certificate、proxy 和连接池属于
@@ -110,8 +110,8 @@ Watcher 先读取一致快照，再从 `revision + 1` 建立 prefix watch，因�
 
 | 资源                | owner     | stop 契约                                                |
 | ------------------- | --------- | -------------------------------------------------------- |
-| `etcd-registration` | go-like    | `deregister(ctx, instance)` 停止续约并删除本地受管记录。 |
-| `etcd-watcher`      | go-like    | `watcher.stop(ctx)` 中止 stream、retry 和 pending wait。 |
+| `etcd-registration` | go-like   | `deregister(ctx, instance)` 停止续约并删除本地受管记录。 |
+| `etcd-watcher`      | go-like   | `watcher.stop(ctx)` 中止 stream、retry 和 pending wait。 |
 | `etcd-fetch`        | 应用      | 仅借用；本包不调用 `close`、`destroy` 或同类能力。       |
 | `etcd-process`      | 应用/运维 | 仅通过 HTTP 使用；本包不启动、停止或配置 etcd 进程。     |
 

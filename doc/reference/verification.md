@@ -90,7 +90,7 @@ The repository declares these versions in `e2e/runtime-versions.ts` and the veri
 | Tool       | Declared version |
 | ---------- | ---------------: |
 | Bun        |         `1.3.14` |
-| Node.js    |            `26.x` |
+| Node.js    |           `26.x` |
 | Deno       |          `2.9.4` |
 | TypeScript |          `7.0.2` |
 | k6         |          `2.1.0` |

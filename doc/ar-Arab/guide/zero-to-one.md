@@ -396,7 +396,7 @@ await app.run()
 | ---------- | ----------------------------------------------------------- | --------------------------------------------- |
 | Domain     | overlap وcancellation reuse وidempotency وconflicting ID    | سلوك `src/service.ts` ونتيجة اختبار الوحدة    |
 | Context    | لا يغيّر الحجز الملغى المستودع ولا يستدعي policy            | اختبار Context مركّز                          |
-| Typed call | Struct decode/encode وpolicy rejection وresponse validation | حد `@go-like/client` و`@go-like/server`         |
+| Typed call | Struct decode/encode وpolicy rejection وresponse validation | حد `@go-like/client` و`@go-like/server`       |
 | Cache      | miss وhit وTTL وinvalidation وfailure fallback              | اختبارات `newMemoryCache()`                   |
 | Health     | empty liveness وempty readiness وfailing probe و405/404     | `newProbeRegistry()` و`createHealthHandler()` |
 | HTTP       | `POST` و`DELETE` وinvalid JSON وconflict status             | اختبار Fetch Handler القياسي                  |

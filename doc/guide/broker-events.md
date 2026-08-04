@@ -144,7 +144,7 @@ Core stops sibling Servers concurrently. If a Croner schedule must stop before a
 
 ## Ownership matrix
 
-| Native resource                               | Application owns                                         | go-like adapter owns after admission                                                             |
+| Native resource                               | Application owns                                         | go-like adapter owns after admission                                                            |
 | --------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | NATS connection, stream, durable consumer     | Create, credentials, stream and consumer policy          | Accepted subscription or ConsumerMessages stop contract                                         |
 | RabbitMQ connection and borrowed channel      | Connection, topology policy, channel creation            | Borrowed subscription stop, or recovering channel generation for the canonical recovery adapter |

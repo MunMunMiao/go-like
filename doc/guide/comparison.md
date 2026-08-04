@@ -13,7 +13,7 @@ The current go-like source baseline for this track is commit `9385dbf5b6a7d913be
 
 ## Position in the stack
 
-| Tool      | Primary problem                              | What it normally owns                                                                                                                                                        | What go-like would complement, not replace                                                                               |
+| Tool      | Primary problem                              | What it normally owns                                                                                                                                                        | What go-like would complement, not replace                                                                              |
 | --------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | NestJS    | Convention-driven Node application framework | Modules, providers, controllers, decorators, application context, framework lifecycle, HTTP or microservice adapter                                                          | A structural lifecycle boundary or internal call contract around a native application, if an explicit bridge is written |
 | Fastify   | Node HTTP server and request pipeline        | Route table, hooks, plugins, encapsulation, Node listener, request/reply objects                                                                                             | A lifecycle or provider adapter around a Fastify-owned resource                                                         |
@@ -21,15 +21,15 @@ The current go-like source baseline for this track is commit `9385dbf5b6a7d913be
 | Elysia    | Bun-first typed Web framework                | Route tree, schema composition, decorators, hooks, Bun or Web Standard adapter                                                                                               | Core lifecycle and internal service building blocks while retaining native Elysia behavior                              |
 | Koa       | Minimal Node middleware kernel               | Middleware stack and Node listener; router is usually external                                                                                                               | Lifecycle and internal service contracts without introducing another router                                             |
 | tRPC      | Type-safe procedure layer                    | Router/procedure paths, input/output parsers, context factory, HTTP/Fetch/WS adapters                                                                                        | Provider ownership, service discovery, selector policy, explicit App lifecycle                                          |
-| go-micro  | Go microservice and agent-oriented ecosystem | Go Context, service/client/transport/registry/broker abstractions, provider ecosystem, and additional agent/flow/MCP/A2A scope                                               | go-like borrows some vocabulary, not Go ABI, goroutines, or transport compatibility                                      |
-| go-kratos | Go cloud-native service framework            | App lifecycle, Go Context, HTTP/gRPC transports, middleware, registry, config, Protobuf/code generation                                                                      | go-like shares explicit lifecycle vocabulary but intentionally chooses TypeScript/Web APIs and no gRPC/IDL               |
-| go-like    | Explicit TypeScript service building blocks  | Context, App/Server lifecycle, standard Fetch edge, internal unary Message transport, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adapters | The application still owns framework routes, native data planes, business policy, auth, and deployment                  |
+| go-micro  | Go microservice and agent-oriented ecosystem | Go Context, service/client/transport/registry/broker abstractions, provider ecosystem, and additional agent/flow/MCP/A2A scope                                               | go-like borrows some vocabulary, not Go ABI, goroutines, or transport compatibility                                     |
+| go-kratos | Go cloud-native service framework            | App lifecycle, Go Context, HTTP/gRPC transports, middleware, registry, config, Protobuf/code generation                                                                      | go-like shares explicit lifecycle vocabulary but intentionally chooses TypeScript/Web APIs and no gRPC/IDL              |
+| go-like   | Explicit TypeScript service building blocks  | Context, App/Server lifecycle, standard Fetch edge, internal unary Message transport, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adapters | The application still owns framework routes, native data planes, business policy, auth, and deployment                  |
 
 The project is therefore not trying to win a “largest framework” comparison. Its question is whether an application needs these boundaries to be explicit and composable.
 
 ## Ownership matrix
 
-| Concern                 | NestJS                                         | Fastify                             | Hono / Elysia / Koa                                          | tRPC                                            | go-like                                                                        |
+| Concern                 | NestJS                                         | Fastify                             | Hono / Elysia / Koa                                          | tRPC                                            | go-like                                                                       |
 | ----------------------- | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------- |
 | External route table    | Controllers and decorators                     | Fastify instance                    | Framework instance or external router                        | Procedure router, not ordinary REST routes      | External framework or application                                             |
 | Web handler ABI         | Adapter-owned request/reply abstraction        | Node request/reply                  | Standard Fetch is central for Hono and Web Standard adapters | Fetch/Node/Express/Fastify adapters             | Standard `(Request) => Response \| Promise<Response>`                         |
@@ -116,13 +116,13 @@ A Web `ReadableStream` is not an internal RPC channel. Do not compare a streamed
 
 ## Runtime comparison
 
-| Runtime question                                                      | go-like evidence                                                                                             | Comparison consequence                                                             |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Can shared code use Fetch and `AbortSignal`?                          | Root Web and selected transport/config providers use standard Web APIs or injected Fetch                    | Similar portability goals are possible, but types do not polyfill runtime behavior |
+| Runtime question                                                      | go-like evidence                                                                                              | Comparison consequence                                                             |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Can shared code use Fetch and `AbortSignal`?                          | Root Web and selected transport/config providers use standard Web APIs or injected Fetch                      | Similar portability goals are possible, but types do not polyfill runtime behavior |
 | Can the same package bind a Node listener and Deno listener?          | Runtime-specific subpaths are explicit; `@go-like/web/node` and `@go-like/transport-http/node` are Node paths | Do not write “all packages run unchanged everywhere”                               |
-| Can custom PEM TLS, mTLS, ALPN, and HTTP/2 be portable through Fetch? | Node transport subpath owns native behavior; root Fetch path does not expose all controls                   | Compare host capabilities and import paths, not only package names                 |
-| Does the application keep the framework router?                       | Hono, Elysia, and H3 examples pass native Fetch handlers                                                    | go-like is complementary to framework route ownership                               |
-| Does package version prove publication?                               | Root and packages are private/workspace `0.0.1`; repository docs say not yet published                      | No npm availability or ecosystem maturity claim                                    |
+| Can custom PEM TLS, mTLS, ALPN, and HTTP/2 be portable through Fetch? | Node transport subpath owns native behavior; root Fetch path does not expose all controls                     | Compare host capabilities and import paths, not only package names                 |
+| Does the application keep the framework router?                       | Hono, Elysia, and H3 examples pass native Fetch handlers                                                      | go-like is complementary to framework route ownership                              |
+| Does package version prove publication?                               | Root and packages are private/workspace `0.0.1`; repository docs say not yet published                        | No npm availability or ecosystem maturity claim                                    |
 
 The current repository contains direct source examples for Hono, Elysia, H3, and vanilla Fetch. It does not contain a current NestJS or Fastify bridge or compatibility suite. Those are migration audiences, not supported direct integrations.
 
@@ -167,7 +167,7 @@ These Go projects are useful architectural references for Context-first calls, s
 
 ## What to choose
 
-| If your primary problem is...                     | Start with...         | Add go-like when...                                                                                                      |
+| If your primary problem is...                     | Start with...         | Add go-like when...                                                                                                     |
 | ------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Controllers, modules, decorators, and DI          | NestJS                | You need an explicit boundary around an existing resource or internal service call and are willing to write the adapter |
 | Node HTTP routes, hooks, and plugin encapsulation | Fastify               | You need lifecycle composition beyond the host or internal unary service contracts                                      |
@@ -176,7 +176,7 @@ These Go projects are useful architectural references for Context-first calls, s
 | Minimal Node middleware                           | Koa plus a router     | You need the missing lifecycle or internal call contract, not another router                                            |
 | Type-safe procedures                              | tRPC                  | You also need explicit service discovery, provider ownership, or a Core lifecycle                                       |
 | Go microservice stack                             | go-micro or go-kratos | You are building a separate TypeScript composition, not a source-compatible port                                        |
-| Cross-runtime TypeScript service building blocks  | go-like                | Use only the packages and providers that solve the boundary                                                             |
+| Cross-runtime TypeScript service building blocks  | go-like               | Use only the packages and providers that solve the boundary                                                             |
 
 The right answer may be to use both systems. go-like is most useful when its explicit ownership model removes an actual ambiguity; adding every package to an otherwise complete framework application defeats the small-building-block goal.
 

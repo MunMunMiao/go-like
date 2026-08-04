@@ -98,7 +98,9 @@ test("npm pack JSON accepts a complete safe inventory and rejects archive escape
     { path: "index.d.ts" },
     { path: "index.js.map" }
   ]
-  expect(parseNpmPackOutput(packOutput(valid), "@go-like/context")).toBe("go-like-context-0.0.1.tgz")
+  expect(parseNpmPackOutput(packOutput(valid), "@go-like/context")).toBe(
+    "go-like-context-0.0.1.tgz"
+  )
   expect(() =>
     parseNpmPackOutput(packOutput([...valid, { path: "../escape" }]), "@go-like/context")
   ).toThrow("unsafe entry")
@@ -132,9 +134,9 @@ test("published trace accepts only staged resolutions and requires every public 
       ["@go-like/context", "@go-like/core"]
     )
   ).toThrow("escaped staged node_modules")
-  expect(() => validatePublishedTrace(valid, stage, ["@go-like/context", "@go-like/server"])).toThrow(
-    "missed public packages"
-  )
+  expect(() =>
+    validatePublishedTrace(valid, stage, ["@go-like/context", "@go-like/server"])
+  ).toThrow("missed public packages")
 })
 
 test("Node emit rewrites relative TS imports and preserves package specifiers", () => {

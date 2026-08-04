@@ -22,13 +22,13 @@
 
 | النظام الموجود | ما يبقى أصلياً                                                            | ما يُعتمد أولاً                                                           | الحدّ الحالي                                                                                              |
 | -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| NestJS         | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | `Server` بنيوي مخصص حول التطبيق الموجود، أو حدّ Client/Server داخلي منفصل | لا يوجد في هذا المستودع محوّل NestJS لـ go-like ولا تكامل DI تلقائي                                        |
-| Fastify        | Routes, plugins, hooks, request/reply, native listener                    | غلاف دورة حياة مخصص، أو جسر Fetch منفّذ صراحةً                            | لا يوجد تحويل مثبت حالياً من Fastify request/reply إلى go-like Handler                                     |
+| NestJS         | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | `Server` بنيوي مخصص حول التطبيق الموجود، أو حدّ Client/Server داخلي منفصل | لا يوجد في هذا المستودع محوّل NestJS لـ go-like ولا تكامل DI تلقائي                                       |
+| Fastify        | Routes, plugins, hooks, request/reply, native listener                    | غلاف دورة حياة مخصص، أو جسر Fetch منفّذ صراحةً                            | لا يوجد تحويل مثبت حالياً من Fastify request/reply إلى go-like Handler                                    |
 | Hono           | Routes, middleware, sub-apps, `app.fetch`                                 | `newNodeServer(app.fetch, ...)` ثم `newApp(...)`                          | التكامل المباشر مع Fetch موضّح في `examples/hono`                                                         |
-| Elysia         | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | `app.fetch` الأصلي مع مضيف/دورة حياة Core عند الحاجة                      | أبقِ دلالات `.listen()` الخاصة بـ Bun؛ لا تعدّها API من go-like عابرة لكل بيئات التشغيل                    |
+| Elysia         | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | `app.fetch` الأصلي مع مضيف/دورة حياة Core عند الحاجة                      | أبقِ دلالات `.listen()` الخاصة بـ Bun؛ لا تعدّها API من go-like عابرة لكل بيئات التشغيل                   |
 | H3             | H3 router and native handler conversion                                   | مسار Fetch Handler الموجود في مثال H3 الحالي                              | `app.fetch` في H3 2.x هو الشكل الموضّح حالياً؛ وتحتاج إرشادات `toWebHandler` الأقدم إلى مثال مثبت الإصدار |
-| Koa            | Middleware and external router                                            | غلاف مخصص للمالك، أو استدعاء خدمة داخلي                                   | لا تقبل `@go-like/web` كائن Koa الخاص بـ Node request/reply من دون جسر على مستوى التطبيق                   |
-| tRPC           | Router, procedure middleware, input/output parsers, adapter               | دورة حياة Core حول المضيف، أو حدّ نقل داخلي منفصل                         | إن `Endpoint` في go-like ليس موجّه إجراءات tRPC                                                            |
+| Koa            | Middleware and external router                                            | غلاف مخصص للمالك، أو استدعاء خدمة داخلي                                   | لا تقبل `@go-like/web` كائن Koa الخاص بـ Node request/reply من دون جسر على مستوى التطبيق                  |
+| tRPC           | Router, procedure middleware, input/output parsers, adapter               | دورة حياة Core حول المضيف، أو حدّ نقل داخلي منفصل                         | إن `Endpoint` في go-like ليس موجّه إجراءات tRPC                                                           |
 
 ### مثال Hono
 
@@ -66,17 +66,17 @@ framework route table
 
 إذا كنت قادماً من Go أو Kratos، فهاجر المفاهيم لا الأسماء:
 
-| مفهوم Go          | مفهوم go-like                                                                                                       | الاختلاف المهم                                                     |
+| مفهوم Go          | مفهوم go-like                                                                                                      | الاختلاف المهم                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `context.Context` | `Context` من `@go-like/context`                                                                                     | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                  |
+| `context.Context` | `Context` من `@go-like/context`                                                                                    | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                  |
 | Server lifecycle  | `Server` البنيوي في Core                                                                                           | قد يستمر `start(ctx)` طوال عمر الخدمة، ولا يعني الجاهزية           |
 | App runner        | `newApp` و`App.run` و`App.stop`                                                                                    | لا يستقبل `App.stop()` سياق المستدعي ويعيد Promise مشتركة واحدة    |
-| RPC client        | `@go-like/client`                                                                                                   | الاستدعاءات الداخلية هي `Message` أحادية؛ وإعادة المحاولة اختيارية |
-| Transport         | `@go-like/transport`                                                                                                | المزوّدات وحقول headers في `Message` عقود TypeScript/Web           |
-| Registry          | `@go-like/registry`                                                                                                 | يعيد المراقبون لقطات استبدال كاملة                                 |
+| RPC client        | `@go-like/client`                                                                                                  | الاستدعاءات الداخلية هي `Message` أحادية؛ وإعادة المحاولة اختيارية |
+| Transport         | `@go-like/transport`                                                                                               | المزوّدات وحقول headers في `Message` عقود TypeScript/Web           |
+| Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                 |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | الملاحظات الراجعة متزامنة وتعتمد على السياسة                       |
-| Protobuf/IDL      | لا مقابل له في go-like                                                                                              | `Endpoint` + `Struct` تحقق وقت التشغيل، وليس شيفرة مخطط مولّدة     |
-| gRPC stream       | لا يوجد مقابل حالي في go-like                                                                                       | تدفق Web العام منفصل عن النقل الداخلي الأحادي                      |
+| Protobuf/IDL      | لا مقابل له في go-like                                                                                             | `Endpoint` + `Struct` تحقق وقت التشغيل، وليس شيفرة مخطط مولّدة     |
+| gRPC stream       | لا يوجد مقابل حالي في go-like                                                                                      | تدفق Web العام منفصل عن النقل الداخلي الأحادي                      |
 
 الخطوة التدريجية الأولى هي استدعاء typed إلى عنوان مباشر عبر Memory Transport:
 
@@ -110,7 +110,7 @@ const result = await client.call(ctx, pricingEndpoint, request, withAddress("mem
 
 أبقِ التسوية وسياسة المهام أصليتين:
 
-| مستوى البيانات الموجود | ما يبقى أصلياً                                                   | ما تضيفه go-like من أجله                                                               |
+| مستوى البيانات الموجود | ما يبقى أصلياً                                                   | ما تضيفه go-like من أجله                                                              |
 | ---------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | NATS Core              | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer` و`newNatsCoreBroker` ودورة الحياة وحدّ البايتات                   |
 | NATS JetStream         | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer` و`newNatsJetStreamBroker` ودورة الحياة                       |

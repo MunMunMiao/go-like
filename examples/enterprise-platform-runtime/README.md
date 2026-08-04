@@ -78,15 +78,15 @@ application logs --------> Pino destination
 
 ## go-like 能力
 
-| 能力          | 使用方式                                                                                |
-| ------------- | --------------------------------------------------------------------------------------- |
-| App           | `newApp(...options)`、`app.run()`、`app.stop()`                                         |
-| Server        | `newServer(transport(...), address(...), handler(...), middleware(...))`                |
-| Client        | `newClient(withDiscovery(...), withSelector(...), withTransport(...))`                  |
-| Registry      | Core App 使用 `registrar(registry)` 注册自身；Client 直接使用同一 Discovery             |
-| Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭    |
-| Web           | Node Web Server 承载标准 Fetch Handler                                                  |
-| Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                               |
+| 能力          | 使用方式                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| App           | `newApp(...options)`、`app.run()`、`app.stop()`                                          |
+| Server        | `newServer(transport(...), address(...), handler(...), middleware(...))`                 |
+| Client        | `newClient(withDiscovery(...), withSelector(...), withTransport(...))`                   |
+| Registry      | Core App 使用 `registrar(registry)` 注册自身；Client 直接使用同一 Discovery              |
+| Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭     |
+| Web           | Node Web Server 承载标准 Fetch Handler                                                   |
+| Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                                |
 | Store         | `@go-like/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback |
 
 Server、Client、Registry 和 App 的用法与 go-like 当前公开 API 保持一致。

@@ -22,13 +22,13 @@ Do not start with a service-wide rewrite. The point of small contracts is that t
 
 | Existing system | Keep native                                                               | Adopt first                                                                                              | Current boundary                                                                                                 |
 | --------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| NestJS          | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | A custom structural Server around the existing application or a separate internal Client/Server boundary | No go-like Nest bridge or automatic DI integration is present in this repository                                  |
-| Fastify         | Routes, plugins, hooks, request/reply, native listener                    | A custom lifecycle wrapper, or an explicitly implemented Fetch bridge                                    | No current conversion from Fastify request/reply to go-like Handler is proven                                     |
+| NestJS          | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | A custom structural Server around the existing application or a separate internal Client/Server boundary | No go-like Nest bridge or automatic DI integration is present in this repository                                 |
+| Fastify         | Routes, plugins, hooks, request/reply, native listener                    | A custom lifecycle wrapper, or an explicitly implemented Fetch bridge                                    | No current conversion from Fastify request/reply to go-like Handler is proven                                    |
 | Hono            | Routes, middleware, sub-apps, `app.fetch`                                 | `newNodeServer(app.fetch, ...)`, then `newApp(...)`                                                      | Direct native Fetch integration is demonstrated in `examples/hono`                                               |
-| Elysia          | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | Native `app.fetch` plus Core host/lifecycle where appropriate                                            | Keep Bun-specific `.listen()` semantics; do not call it a cross-runtime go-like API                               |
+| Elysia          | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | Native `app.fetch` plus Core host/lifecycle where appropriate                                            | Keep Bun-specific `.listen()` semantics; do not call it a cross-runtime go-like API                              |
 | H3              | H3 router and native handler conversion                                   | Current H3 example's Fetch handler path                                                                  | H3 2.x `app.fetch` is the current demonstrated shape; older `toWebHandler` guidance needs its own pinned example |
-| Koa             | Middleware and external router                                            | A custom owner wrapper or internal service call                                                          | `@go-like/web` does not accept Koa's Node request/reply object without an application bridge                      |
-| tRPC            | Router, procedure middleware, input/output parsers, adapter               | Core lifecycle around the host or a separate internal transport boundary                                 | go-like Endpoint is not a tRPC procedure router                                                                   |
+| Koa             | Middleware and external router                                            | A custom owner wrapper or internal service call                                                          | `@go-like/web` does not accept Koa's Node request/reply object without an application bridge                     |
+| tRPC            | Router, procedure middleware, input/output parsers, adapter               | Core lifecycle around the host or a separate internal transport boundary                                 | go-like Endpoint is not a tRPC procedure router                                                                  |
 
 ### Hono example
 
@@ -66,17 +66,17 @@ Check the framework's runtime adapter before importing a Node subpath. Elysia's 
 
 For a Go or Kratos reader, migrate concepts rather than spelling:
 
-| Go concept        | go-like concept                                                                                                     | Important mismatch                                                     |
+| Go concept        | go-like concept                                                                                                    | Important mismatch                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `context.Context` | `@go-like/context` `Context`                                                                                        | `done()` is an `AbortSignal` or null, not a Go channel                 |
+| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` is an `AbortSignal` or null, not a Go channel                 |
 | Server lifecycle  | Core structural `Server`                                                                                           | `start(ctx)` may be long-lived and is not readiness                    |
 | App runner        | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` has no caller Context and returns one shared Promise      |
-| RPC client        | `@go-like/client`                                                                                                   | Internal calls are unary `Message`; retry is opt-in                    |
-| Transport         | `@go-like/transport`                                                                                                | Providers and Message headers are TypeScript/Web contracts             |
-| Registry          | `@go-like/registry`                                                                                                 | Watchers return complete replacement snapshots                         |
+| RPC client        | `@go-like/client`                                                                                                  | Internal calls are unary `Message`; retry is opt-in                    |
+| Transport         | `@go-like/transport`                                                                                               | Providers and Message headers are TypeScript/Web contracts             |
+| Registry          | `@go-like/registry`                                                                                                | Watchers return complete replacement snapshots                         |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Feedback is synchronous and policy-specific                            |
-| Protobuf/IDL      | no go-like equivalent                                                                                               | `Endpoint` + `Struct` is runtime validation, not generated schema code |
-| gRPC stream       | no current go-like equivalent                                                                                       | Public Web streaming is separate from internal unary transport         |
+| Protobuf/IDL      | no go-like equivalent                                                                                              | `Endpoint` + `Struct` is runtime validation, not generated schema code |
+| gRPC stream       | no current go-like equivalent                                                                                      | Public Web streaming is separate from internal unary transport         |
 
 An incremental first move is a direct-address typed call over Memory Transport:
 
@@ -110,7 +110,7 @@ Start with health and configuration before direct EndpointSlice selection. If th
 
 Keep native settlement and job policy:
 
-| Existing data plane | Keep                                                             | Add go-like for                                                                    |
+| Existing data plane | Keep                                                             | Add go-like for                                                                   |
 | ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | NATS Core           | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer`, `newNatsCoreBroker`, lifecycle and byte boundary             |
 | NATS JetStream      | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer`, `newNatsJetStreamBroker`, lifecycle                     |

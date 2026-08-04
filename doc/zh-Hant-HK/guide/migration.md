@@ -24,13 +24,13 @@
 
 | 現有系統 | 保留原生部分                                                          | 優先導入                                                                       | 目前的邊界                                                                                              |
 | -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| NestJS   | Modules、controllers、decorators、DI、interceptors、pipes、adapter    | 在現有應用程式外加一層自訂的結構式 Server，或建立獨立的內部 Client/Server 邊界 | 目前 repository 沒有 go-like Nest bridge，也沒有自動 DI 整合                                             |
-| Fastify  | Routes、plugins、hooks、request/reply、原生 listener                  | 自訂生命週期 wrapper，或明確實作的 Fetch bridge                                | 目前沒有證據證明 Fastify request/reply 能自動轉換成 go-like Handler                                      |
+| NestJS   | Modules、controllers、decorators、DI、interceptors、pipes、adapter    | 在現有應用程式外加一層自訂的結構式 Server，或建立獨立的內部 Client/Server 邊界 | 目前 repository 沒有 go-like Nest bridge，也沒有自動 DI 整合                                            |
+| Fastify  | Routes、plugins、hooks、request/reply、原生 listener                  | 自訂生命週期 wrapper，或明確實作的 Fetch bridge                                | 目前沒有證據證明 Fastify request/reply 能自動轉換成 go-like Handler                                     |
 | Hono     | Routes、middleware、sub-apps、`app.fetch`                             | `newNodeServer(app.fetch, ...)`，再接到 `newApp(...)`                          | `examples/hono` 展示了直接使用原生 Fetch 的整合方式                                                     |
-| Elysia   | Route tree、schema、decorators、derives、hooks、Bun/Web Standard 行為 | 在適合的情況下使用原生 `app.fetch` 加上 Core host/lifecycle                    | 保留 Bun 專屬的 `.listen()` 語意；不要把它說成跨 runtime 的 go-like API                                  |
+| Elysia   | Route tree、schema、decorators、derives、hooks、Bun/Web Standard 行為 | 在適合的情況下使用原生 `app.fetch` 加上 Core host/lifecycle                    | 保留 Bun 專屬的 `.listen()` 語意；不要把它說成跨 runtime 的 go-like API                                 |
 | H3       | H3 router 與原生 handler 轉換                                         | 目前 H3 範例中的 Fetch handler 路徑                                            | 目前以 example 固定嘅 `h3@2.0.1-rc.26` `app.fetch` 為準；舊版 `toWebHandler` 指引需要獨立固定版本的範例 |
-| Koa      | Middleware 和外部 router                                              | 自訂擁有者 wrapper，或內部服務呼叫                                             | `@go-like/web` 不會直接接收 Koa 的 Node request/reply 物件，除非應用程式自行提供 bridge                  |
-| tRPC     | Router、procedure middleware、輸入／輸出解析器、adapter               | 在 host 外圍加上 Core lifecycle，或使用獨立的內部 transport 邊界               | go-like Endpoint 不是 tRPC procedure router                                                              |
+| Koa      | Middleware 和外部 router                                              | 自訂擁有者 wrapper，或內部服務呼叫                                             | `@go-like/web` 不會直接接收 Koa 的 Node request/reply 物件，除非應用程式自行提供 bridge                 |
+| tRPC     | Router、procedure middleware、輸入／輸出解析器、adapter               | 在 host 外圍加上 Core lifecycle，或使用獨立的內部 transport 邊界               | go-like Endpoint 不是 tRPC procedure router                                                             |
 
 ### Hono 範例
 
@@ -68,17 +68,17 @@ framework route table
 
 如果你熟悉 Go 或 Kratos，遷移時應該遷移概念，而不是照抄拼法：
 
-| Go 概念           | go-like 概念                                                                                                        | 重要差異                                                              |
+| Go 概念           | go-like 概念                                                                                                       | 重要差異                                                              |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `context.Context` | `@go-like/context` `Context`                                                                                        | `done()` 回傳的是 `AbortSignal` 或 null，不是 Go channel              |
+| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` 回傳的是 `AbortSignal` 或 null，不是 Go channel              |
 | Server lifecycle  | Core 結構式 `Server`                                                                                               | `start(ctx)` 可能長時間維持執行，不等於 readiness                     |
 | App runner        | `newApp`、`App.run`、`App.stop`                                                                                    | `App.stop()` 沒有呼叫端 Context，並回傳一個共用的 Promise             |
-| RPC client        | `@go-like/client`                                                                                                   | 內部呼叫是 unary `Message`；retry 預設關閉                            |
-| Transport         | `@go-like/transport`                                                                                                | Provider 與 Message headers 都是 TypeScript/Web 契約                  |
-| Registry          | `@go-like/registry`                                                                                                 | Watcher 回傳完整替換後的 snapshot                                     |
+| RPC client        | `@go-like/client`                                                                                                  | 內部呼叫是 unary `Message`；retry 預設關閉                            |
+| Transport         | `@go-like/transport`                                                                                               | Provider 與 Message headers 都是 TypeScript/Web 契約                  |
+| Registry          | `@go-like/registry`                                                                                                | Watcher 回傳完整替換後的 snapshot                                     |
 | Selector          | `newRoundRobinSelector`、`newRandomSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | feedback 是同步的，而且取決於具體策略                                 |
-| Protobuf/IDL      | go-like 沒有對應能力                                                                                                | `Endpoint` + `Struct` 是 runtime validation，不是產生式 schema 程式碼 |
-| gRPC stream       | go-like 目前沒有對應能力                                                                                            | 對外 Web streaming 與內部 unary transport 是兩回事                    |
+| Protobuf/IDL      | go-like 沒有對應能力                                                                                               | `Endpoint` + `Struct` 是 runtime validation，不是產生式 schema 程式碼 |
+| gRPC stream       | go-like 目前沒有對應能力                                                                                           | 對外 Web streaming 與內部 unary transport 是兩回事                    |
 
 一個適合漸進遷移的第一步，是用 Memory Transport 做一次直連位址的 typed call：
 
@@ -112,7 +112,7 @@ Kubernetes 的原生能力繼續由 Kubernetes 負責：
 
 保留原生的 settlement 語意和工作策略：
 
-| 現有資料面     | 保留                                                             | 用 go-like 增加                                                       |
+| 現有資料面     | 保留                                                             | 用 go-like 增加                                                      |
 | -------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------- |
 | NATS Core      | Connection、subscription、queue group、`Msg`、drain              | `newNatsCoreServer`、`newNatsCoreBroker`、生命週期與位元組邊界       |
 | NATS JetStream | Stream、durable consumer、`JsMsg`、ack/nak/term、redelivery、DLQ | `newNatsJetStreamServer`、`newNatsJetStreamBroker`、生命週期         |

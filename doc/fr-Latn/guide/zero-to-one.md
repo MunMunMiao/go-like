@@ -396,7 +396,7 @@ Le hook `afterStop` constitue une frontière explicite d'ordonnancement pour le 
 | ------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Domaine      | chevauchement, réutilisation après annulation, idempotence, ID en conflit       | comportement de `src/service.ts` et résultat du test unitaire |
 | Context      | une réservation annulée ne modifie pas le repository et n'appelle pas la policy | test Context ciblé                                            |
-| Appel typé   | décodage/encodage Struct, refus de la policy, validation de la réponse          | frontière `@go-like/client` et `@go-like/server`                |
+| Appel typé   | décodage/encodage Struct, refus de la policy, validation de la réponse          | frontière `@go-like/client` et `@go-like/server`              |
 | Cache        | miss, hit, TTL, invalidation, repli après échec                                 | tests de `newMemoryCache()`                                   |
 | Santé        | liveness vide, readiness vide, probe en échec, 405/404                          | `newProbeRegistry()` et `createHealthHandler()`               |
 | HTTP         | `POST`, `DELETE`, JSON invalide, statut de conflit                              | test du Handler Fetch standard                                |

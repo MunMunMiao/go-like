@@ -734,7 +734,9 @@ async function smokePosixNativeHelper(binary: string, root: string): Promise<voi
 async function preflightLinuxCgroupNativeHelper(binary: string, root: string): Promise<void> {
   const cgroupParent = process.env.GO_LIKE_E2E_CGROUP_PARENT
   if (cgroupParent === undefined || cgroupParent.length === 0) {
-    throw new Error("prerequisite-linux-cgroup-v2-unavailable: GO_LIKE_E2E_CGROUP_PARENT is not set")
+    throw new Error(
+      "prerequisite-linux-cgroup-v2-unavailable: GO_LIKE_E2E_CGROUP_PARENT is not set"
+    )
   }
   const result = Bun.spawnSync([binary, "--cgroup-preflight", "--cgroup-parent", cgroupParent], {
     cwd: root,

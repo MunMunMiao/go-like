@@ -396,7 +396,7 @@ Hook `afterStop` — одна явная граница порядка для po
 | ---------- | --------------------------------------------------------------- | ------------------------------------------------- |
 | Domain     | overlap, cancellation reuse, idempotency, conflicting ID        | поведение `src/service.ts` и результат unit-теста |
 | Context    | отменённая booking не меняет repository и не вызывает policy    | целевой Context test                              |
-| Typed call | Struct decode/encode, policy rejection, response validation     | граница `@go-like/client` и `@go-like/server`       |
+| Typed call | Struct decode/encode, policy rejection, response validation     | граница `@go-like/client` и `@go-like/server`     |
 | Cache      | miss, hit, TTL, invalidation, failure fallback                  | тесты `newMemoryCache()`                          |
 | Health     | empty liveness, empty readiness, failing probe, 405/404         | `newProbeRegistry()` и `createHealthHandler()`    |
 | HTTP       | `POST`, `DELETE`, invalid JSON, conflict status                 | тест стандартного Fetch Handler                   |

@@ -180,7 +180,11 @@ test("codec rejects every malformed managed metadata field before publication", 
     ["remote ID", (service) => (service.ID = "wrong"), "remote ID"],
     ["chunk count", (_service, meta) => (meta["Go-Like-Chunk-Count"] = "zero"), "count is invalid"],
     ["chunk ceiling", (_service, meta) => (meta["Go-Like-Chunk-Count"] = "33"), "provider bounds"],
-    ["chunk size", (_service, meta) => (meta["Go-Like-Chunk-000"] = "a".repeat(481)), "exceeds 480"],
+    [
+      "chunk size",
+      (_service, meta) => (meta["Go-Like-Chunk-000"] = "a".repeat(481)),
+      "exceeds 480"
+    ],
     ["chunk sequence", (_service, meta) => (meta["Go-Like-Chunk-999"] = "extra"), "unexpected key"]
   ]
   for (const [, mutate, message] of cases) {

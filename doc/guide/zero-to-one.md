@@ -420,7 +420,7 @@ The `afterStop` hook is one explicit ordering boundary for the policy Client. Co
 | ---------- | --------------------------------------------------------------------- | ------------------------------------------------ |
 | Domain     | overlap, cancellation reuse, idempotency, conflicting ID              | `src/service.ts` behavior and unit test result   |
 | Context    | canceled booking does not mutate repository or call policy            | focused Context test                             |
-| Typed call | Struct decode/encode, policy rejection, response validation           | `@go-like/client` and `@go-like/server` boundary   |
+| Typed call | Struct decode/encode, policy rejection, response validation           | `@go-like/client` and `@go-like/server` boundary |
 | Cache      | miss, hit, TTL, invalidation, failure fallback                        | `newMemoryCache()` tests                         |
 | Health     | empty liveness, empty readiness, failing probe, 405/404               | `newProbeRegistry()` and `createHealthHandler()` |
 | HTTP       | `POST`, `DELETE`, invalid JSON, conflict status                       | standard Fetch Handler test                      |

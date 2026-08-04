@@ -106,7 +106,10 @@ describe("Consul Store HTTP boundary", () => {
   test("rejects ambiguous exact rows, non-success status, malformed bodies, and non-Responses", async () => {
     const cases: Array<{ readonly response: Response | null; readonly code: string }> = [
       { response: Response.json([row("wrong")]), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
-      { response: Response.json([row(), row("orders/two")]), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
+      {
+        response: Response.json([row(), row("orders/two")]),
+        code: "GO_LIKE_CONSUL_STORE_PROTOCOL"
+      },
       { response: new Response("secret body", { status: 403 }), code: "GO_LIKE_CONSUL_STORE_HTTP" },
       { response: new Response("not json"), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
       { response: null, code: "GO_LIKE_CONSUL_STORE_PROTOCOL" }

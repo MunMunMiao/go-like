@@ -396,7 +396,7 @@ El hook `afterStop` es una frontera explícita de orden para el Client de policy
 | -------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | Dominio        | solapamiento, reutilización tras cancelar, idempotencia, ID en conflicto | comportamiento de `src/service.ts` y resultado de la prueba unitaria |
 | Context        | una reserva cancelada no muta el repository ni llama a policy            | prueba enfocada de Context                                           |
-| Llamada tipada | decode/encode de Struct, rechazo de policy, validación de response       | frontera de `@go-like/client` y `@go-like/server`                      |
+| Llamada tipada | decode/encode de Struct, rechazo de policy, validación de response       | frontera de `@go-like/client` y `@go-like/server`                    |
 | Cache          | miss, hit, TTL, invalidación, fallback tras fallo                        | pruebas de `newMemoryCache()`                                        |
 | Health         | liveness vacío, readiness vacío, probe fallido, 405/404                  | `newProbeRegistry()` y `createHealthHandler()`                       |
 | HTTP           | `POST`, `DELETE`, JSON inválido, status de conflicto                     | prueba de Handler Fetch estándar                                     |

@@ -82,8 +82,8 @@ Raw v1 示例：
 | 能力         | 使用方式                                                          |
 | ------------ | ----------------------------------------------------------------- |
 | 应用生命周期 | `newApp(server(...))`、`app.run()`                                |
-| Broker       | `@go-like/broker` 的 `newBrokerServer(...)` 返回 Core Server       |
-| NATS         | `@go-like/nats/jetstream/broker` 适配官方 JetStream Client         |
+| Broker       | `@go-like/broker` 的 `newBrokerServer(...)` 返回 Core Server      |
+| NATS         | `@go-like/nats/jetstream/broker` 适配官方 JetStream Client        |
 | Context      | 传播取消、处理 deadline 与停止边界                                |
 | 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式 required-field、范围校验 |
 

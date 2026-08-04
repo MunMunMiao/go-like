@@ -2,7 +2,7 @@
 
 Configuration, service reachability, records, and acceleration all involve data, but their contracts answer different questions:
 
-| Domain   | Question                                                    | go-like contract                                                          | Typical lifetime               |
+| Domain   | Question                                                    | go-like contract                                                         | Typical lifetime               |
 | -------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
 | Config   | What configuration snapshot should this process use?        | Immutable merged source snapshots, validation, reload, last-good value   | Process or deployment          |
 | Registry | Which service instances can be reached now?                 | Registration, complete discovery snapshots, watchers, filters, selectors | Ephemeral control plane        |
@@ -138,13 +138,13 @@ Filters run in declaration order. A selector chooses one URL and returns a synch
 
 ## Registry providers
 
-| Provider                      | Backend mechanism                             | Use it when                                                  | Boundary                                                                       |
-| ----------------------------- | --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `@go-like/registry-consul`     | Consul health and blocking-query model        | Consul is already the service control plane                  | TTL, health filtering, and blocking indexes remain Consul semantics            |
-| `@go-like/registry-etcd`       | JSON gateway, leases, revisioned watch/relist | etcd is available through an HTTP gateway                    | Compaction, lease loss, and protocol conflicts are provider errors             |
-| `@go-like/registry-kubernetes` | `discovery.k8s.io/v1` EndpointSlice           | The application should select EndpointSlice-backed instances | It is not Kubernetes Service DNS, a fabricated TTL, or a Deployment controller |
+| Provider                       | Backend mechanism                             | Use it when                                                  | Boundary                                                                        |
+| ------------------------------ | --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `@go-like/registry-consul`     | Consul health and blocking-query model        | Consul is already the service control plane                  | TTL, health filtering, and blocking indexes remain Consul semantics             |
+| `@go-like/registry-etcd`       | JSON gateway, leases, revisioned watch/relist | etcd is available through an HTTP gateway                    | Compaction, lease loss, and protocol conflicts are provider errors              |
+| `@go-like/registry-kubernetes` | `discovery.k8s.io/v1` EndpointSlice           | The application should select EndpointSlice-backed instances | It is not Kubernetes Service DNS, a fabricated TTL, or a Deployment controller  |
 | `@go-like/registry-mdns`       | Local multicast DNS and TTL cache             | Small local-network discovery                                | UDP capability is in `@go-like/registry-mdns/node`; there is no global revision |
-| `@go-like/registry-zookeeper`  | Ephemeral znodes and native sessions          | ZooKeeper is the established control plane                   | The package explicitly does not support Deno                                   |
+| `@go-like/registry-zookeeper`  | Ephemeral znodes and native sessions          | ZooKeeper is the established control plane                   | The package explicitly does not support Deno                                    |
 
 Providers fail closed on malformed managed records or identity conflicts. They should not silently choose an arbitrary endpoint when the backend has ambiguous ownership.
 

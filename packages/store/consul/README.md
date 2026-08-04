@@ -36,8 +36,8 @@ root，因此 root 外的 Consul KV 不会进入结果。当前 root 内被查�
 
 | Store 语义         | Consul 2.0.2 映射                                                           |
 | ------------------ | --------------------------------------------------------------------------- |
-| root               | `<root>/<logical-key>`；默认 `go-like/store`，root 外 KV 永不混入            |
-| value              | go-like versioned JSON envelope；二进制 value 使用标准 base64                |
+| root               | `<root>/<logical-key>`；默认 `go-like/store`，root 外 KV 永不混入           |
+| value              | go-like versioned JSON envelope；二进制 value 使用标准 base64               |
 | revision           | KV `ModifyIndex` 的十进制字符串，不解释其业务含义                           |
 | create if absent   | `PUT /v1/kv/:key?cas=0`                                                     |
 | write CAS          | `PUT /v1/kv/:key?cas=<ModifyIndex>`                                         |

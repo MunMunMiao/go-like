@@ -22,13 +22,13 @@ Ne commencez pas par une réécriture du service entier. L'intérêt de petits c
 
 | Système existant | Gardez natif                                                                        | Adoptez d'abord                                                                                                        | Frontière actuelle                                                                                                           |
 | ---------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| NestJS           | Modules, controllers, decorators, DI, interceptors, pipes, adapter                  | Un `Server` structurel personnalisé autour de l'application existante ou une frontière interne Client/Server distincte | Aucun pont Nest go-like ni intégration DI automatique n'existe dans ce dépôt                                                  |
-| Fastify          | Routes, plugins, hooks, request/reply, listener natif                               | Un wrapper de cycle de vie personnalisé ou un pont Fetch explicitement implémenté                                      | Aucune conversion actuelle de request/reply Fastify vers un Handler go-like n'est démontrée                                   |
+| NestJS           | Modules, controllers, decorators, DI, interceptors, pipes, adapter                  | Un `Server` structurel personnalisé autour de l'application existante ou une frontière interne Client/Server distincte | Aucun pont Nest go-like ni intégration DI automatique n'existe dans ce dépôt                                                 |
+| Fastify          | Routes, plugins, hooks, request/reply, listener natif                               | Un wrapper de cycle de vie personnalisé ou un pont Fetch explicitement implémenté                                      | Aucune conversion actuelle de request/reply Fastify vers un Handler go-like n'est démontrée                                  |
 | Hono             | Routes, middleware, sous-applications, `app.fetch`                                  | `newNodeServer(app.fetch, ...)`, puis `newApp(...)`                                                                    | L'intégration Fetch native est démontrée dans `examples/hono`                                                                |
-| Elysia           | Arbre de routes, schémas, decorators, derives, hooks, comportement Bun/Web Standard | `app.fetch` natif avec le host/cycle de vie Core lorsque c'est pertinent                                               | Conservez la sémantique Bun de `.listen()` ; n'en faites pas une API go-like inter-runtime                                    |
+| Elysia           | Arbre de routes, schémas, decorators, derives, hooks, comportement Bun/Web Standard | `app.fetch` natif avec le host/cycle de vie Core lorsque c'est pertinent                                               | Conservez la sémantique Bun de `.listen()` ; n'en faites pas une API go-like inter-runtime                                   |
 | H3               | Routeur H3 et conversion native du handler                                          | Le chemin Fetch du handler de l'exemple H3 actuel                                                                      | `app.fetch` de H3 2.x est la forme démontrée ; l'ancienne recommandation `toWebHandler` nécessite son propre exemple épinglé |
-| Koa              | Middleware et routeur externe                                                       | Un wrapper du propriétaire ou un appel de service interne                                                              | `@go-like/web` n'accepte pas l'objet Node request/reply de Koa sans pont applicatif                                           |
-| tRPC             | Router, middleware de procédures, parseurs input/output, adaptateur                 | Le cycle de vie Core autour du host ou une frontière de transport interne séparée                                      | L'Endpoint go-like n'est pas un router de procédures tRPC                                                                     |
+| Koa              | Middleware et routeur externe                                                       | Un wrapper du propriétaire ou un appel de service interne                                                              | `@go-like/web` n'accepte pas l'objet Node request/reply de Koa sans pont applicatif                                          |
+| tRPC             | Router, middleware de procédures, parseurs input/output, adaptateur                 | Le cycle de vie Core autour du host ou une frontière de transport interne séparée                                      | L'Endpoint go-like n'est pas un router de procédures tRPC                                                                    |
 
 ### Exemple Hono
 
@@ -66,17 +66,17 @@ Vérifiez l'adaptateur de runtime du framework avant d'importer un sous-chemin N
 
 Pour un lecteur venant de Go ou de Kratos, migrez les concepts plutôt que les noms :
 
-| Concept Go          | Concept go-like                                                                                                     | Différence importante                                                           |
+| Concept Go          | Concept go-like                                                                                                    | Différence importante                                                           |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `context.Context`   | `@go-like/context` `Context`                                                                                        | `done()` est un `AbortSignal` ou `null`, pas un channel Go                      |
+| `context.Context`   | `@go-like/context` `Context`                                                                                       | `done()` est un `AbortSignal` ou `null`, pas un channel Go                      |
 | Cycle de vie Server | `Server` structurel de Core                                                                                        | `start(ctx)` peut durer toute la vie du service et ne signifie pas readiness    |
 | App runner          | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` n'accepte pas de Context du caller et renvoie une Promise partagée |
-| RPC client          | `@go-like/client`                                                                                                   | Les appels internes sont des `Message` unaires ; le retry est opt-in            |
-| Transport           | `@go-like/transport`                                                                                                | Les fournisseurs et les headers de `Message` sont des contrats TypeScript/Web   |
-| Registry            | `@go-like/registry`                                                                                                 | Les watchers renvoient des snapshots de remplacement complet                    |
+| RPC client          | `@go-like/client`                                                                                                  | Les appels internes sont des `Message` unaires ; le retry est opt-in            |
+| Transport           | `@go-like/transport`                                                                                               | Les fournisseurs et les headers de `Message` sont des contrats TypeScript/Web   |
+| Registry            | `@go-like/registry`                                                                                                | Les watchers renvoient des snapshots de remplacement complet                    |
 | Selector            | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Le feedback est synchrone et propre à la policy                                 |
-| Protobuf/IDL        | aucun équivalent go-like                                                                                            | `Endpoint` + `Struct` est une validation runtime, pas du code de schéma généré  |
-| gRPC stream         | aucun équivalent go-like actuel                                                                                     | Le streaming Web public est séparé du transport interne unaire                  |
+| Protobuf/IDL        | aucun équivalent go-like                                                                                           | `Endpoint` + `Struct` est une validation runtime, pas du code de schéma généré  |
+| gRPC stream         | aucun équivalent go-like actuel                                                                                    | Le streaming Web public est séparé du transport interne unaire                  |
 
 Un premier pas incrémental consiste à effectuer un appel typé à une adresse directe sur Memory Transport :
 
@@ -110,7 +110,7 @@ Commencez par la santé et la configuration avant de sélectionner directement d
 
 Conservez natifs le règlement et la policy des jobs :
 
-| Plan de données existant | À garder                                                         | Ajoutez go-like pour                                                                     |
+| Plan de données existant | À garder                                                         | Ajoutez go-like pour                                                                    |
 | ------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | NATS Core                | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer`, `newNatsCoreBroker`, cycle de vie et frontière de bytes            |
 | NATS JetStream           | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer`, `newNatsJetStreamBroker`, cycle de vie                        |
