@@ -76,7 +76,7 @@ async function body(request: Request): Promise<object> {
 }
 
 /** Creates one deterministic in-memory EndpointSlice API. */
-export function fakeKubernetes(namespace = "likego-test"): FakeKubernetes {
+export function fakeKubernetes(namespace = "go-like-test"): FakeKubernetes {
   const objects = new Map<string, object>()
   const requests: Request[] = []
   const watchers = new Set<WatchState>()
@@ -227,7 +227,7 @@ export function fakeKubernetes(namespace = "likego-test"): FakeKubernetes {
             labels !== null &&
             !Array.isArray(labels) &&
             property(labels, "endpointslice.kubernetes.io/managed-by") ===
-              "registry-kubernetes.likego.dev"
+              "registry-kubernetes.go-like.dev"
           if (managed) items.push(clone(value))
         }
         return response({

@@ -16,9 +16,9 @@
 - `src/http.ts`：维保信号的标准 Fetch 路由。
 - `src/main.ts`：唯一直接执行入口，挂载业务及健康路由并管理 HTTP 生命周期。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/context` 贯穿故障处理，使用 `@likego/web` 暴露可由任意标准 Fetch 运行时承接的信号入口，并使用 `@likego/health` 对维保状态仓储执行服务 readiness 检查。
+使用 `@go-like/context` 贯穿故障处理，使用 `@go-like/web` 暴露可由任意标准 Fetch 运行时承接的信号入口，并使用 `@go-like/health` 对维保状态仓储执行服务 readiness 检查。
 
 ## 验证矩阵
 
@@ -30,8 +30,8 @@
 | 标准 Fetch 入口  | `test/main.test.ts` 的 HTTP 用例   |
 
 ```bash
-bun run --filter @likego/example-manufacturing-maintenance typecheck
-bun run --filter @likego/example-manufacturing-maintenance test:unit
+bun run --filter @go-like/example-manufacturing-maintenance typecheck
+bun run --filter @go-like/example-manufacturing-maintenance test:unit
 ```
 
 ## Docker 判定
@@ -45,11 +45,11 @@ bun run --filter @likego/example-manufacturing-maintenance test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-manufacturing-maintenance start
+bun run --filter @go-like/example-manufacturing-maintenance start
 ```
 
-`start` 会先构建本地 LikeGo 包，再由 `start:prepared` 把 `src/main.ts` 构建为
-`.artifacts/main.mjs` 并启动。看到 `LIKEGO_EXAMPLE_READY` 后提交设备故障；
+`start` 会先构建本地 go-like 包，再由 `start:prepared` 把 `src/main.ts` 构建为
+`.artifacts/main.mjs` 并启动。看到 `GO_LIKE_EXAMPLE_READY` 后提交设备故障；
 `/livez` 与 `/readyz` 同时暴露真实健康探针：
 
 ```bash

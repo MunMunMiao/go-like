@@ -1,6 +1,6 @@
-# @likego/broker-rabbitmq
+# @go-like/broker-rabbitmq
 
-LikeGo 的 RabbitMQ AMQP 0-9-1 Broker provider，基于官方生态维护的 `amqplib`。
+go-like 的 RabbitMQ AMQP 0-9-1 Broker provider，基于官方生态维护的 `amqplib`。
 
 推荐入口 `newRecoveringRabbitMqBroker(ctx, connector)` 把 setup callback 交给应用的
 `amqplib.connect(..., { recovery: { setup } })`。它返回稳定 Broker 和应用拥有的

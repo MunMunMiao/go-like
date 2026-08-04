@@ -1,11 +1,11 @@
-# `@likego/cache-redis`
+# `@go-like/cache-redis`
 
-`@likego/cache-redis` 使用官方 `@redis/client` 6.2.0 实现 `@likego/cache`。连接由 Cache 生命周期拥有：
+`@go-like/cache-redis` 使用官方 `@redis/client` 6.2.0 实现 `@go-like/cache`。连接由 Cache 生命周期拥有：
 构造只捕获配置，`start(ctx)` 才连接，`stop(ctx)` 先停止新操作、等待已接纳操作，再关闭 Redis client。
 
 ```ts
-import { newRedisCache } from "@likego/cache-redis"
-import { newApp, server } from "@likego/core"
+import { newRedisCache } from "@go-like/cache-redis"
+import { newApp, server } from "@go-like/core"
 
 const cache = newRedisCache({ url: "redis://127.0.0.1:6379" })
 const app = newApp(server(cache))
@@ -13,12 +13,12 @@ const app = newApp(server(cache))
 await app.run()
 ```
 
-需要 TLS、Sentinel 或 Cluster 时，直接传入官方 `@redis/client` 的 dormant client factory；LikeGo 不复制
+需要 TLS、Sentinel 或 Cluster 时，直接传入官方 `@redis/client` 的 dormant client factory；go-like 不复制
 node-redis 的拓扑配置：
 
 ```ts
 import { createCluster, createSentinel } from "@redis/client"
-import { newRedisCache } from "@likego/cache-redis"
+import { newRedisCache } from "@go-like/cache-redis"
 
 const sentinel = newRedisCache({
   client: () =>
@@ -42,7 +42,7 @@ URL 模式；native client 使用 node-redis 自己的 socket options。
 业务 handler 在 Cache 运行期间直接调用 `get`、`put`、`delete`。
 
 值使用带版本的规范 base64 carrier，读取陌生或损坏值会返回稳定的 `RedisCacheProtocolError`，不会把任意 Redis
-字符串误当业务字节。默认 key 前缀为 `likego:cache:`，可显式设置为空字符串或其他 namespace。provider 会直接校验：
+字符串误当业务字节。默认 key 前缀为 `go-like:cache:`，可显式设置为空字符串或其他 namespace。provider 会直接校验：
 key 最多 1024 UTF-8 bytes，值最多 1 MiB，TTL 为 1 至 `Number.MAX_SAFE_INTEGER` 毫秒。
 
 每条命令使用调用 `Context` 的 `AbortSignal`，默认命令 timeout 为 5000ms；URL 模式的默认连接 timeout 也是

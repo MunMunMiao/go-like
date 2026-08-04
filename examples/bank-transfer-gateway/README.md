@@ -15,9 +15,9 @@
 `src/main.ts` 是直接入口；`src/http.ts` 处理标准 Web API；`src/service.ts` 放置路由规则、用例和内存网络目录；
 `src/contract.ts` 以 `endpoint` 直接绑定 request/response Struct，并由 `Infer` 推导唯一的共享类型；`src/transport.ts` 组合真实 Client、Server 与 Memory Transport。
 
-## LikeGo 能力
+## go-like 能力
 
-主要演示 `@likego/struct` 契约、`@likego/transport` 的类型化 `endpoint`、`@likego/server` 的 `handler(contract, fn)` 与 `@likego/client` 的 `client.call(ctx, contract, value)`。请求由统一 Struct JSON 边界校验，并由 `@likego/transport-memory` 完成真实的进程内 Client→Server 消息交换；外部入口仍使用 `@likego/web` 标准 Fetch Handler。
+主要演示 `@go-like/struct` 契约、`@go-like/transport` 的类型化 `endpoint`、`@go-like/server` 的 `handler(contract, fn)` 与 `@go-like/client` 的 `client.call(ctx, contract, value)`。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 消息交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
 
 ## 验证矩阵
 
@@ -29,8 +29,8 @@
 | 内部 unary 微服务链路  | `test/main.test.ts` 的内存传输用例 |
 
 ```bash
-bun run --filter @likego/example-bank-transfer-gateway typecheck
-bun run --filter @likego/example-bank-transfer-gateway test:unit
+bun run --filter @go-like/example-bank-transfer-gateway typecheck
+bun run --filter @go-like/example-bank-transfer-gateway test:unit
 ```
 
 ## Docker 判定
@@ -44,10 +44,10 @@ bun run --filter @likego/example-bank-transfer-gateway test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-bank-transfer-gateway start
+bun run --filter @go-like/example-bank-transfer-gateway start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后请求转账报价。HTTP Handler 会真实经过 Client → Server → Memory Transport 内部微服务链：
+看到 `GO_LIKE_EXAMPLE_READY` 后请求转账报价。HTTP Handler 会真实经过 Client → Server → Memory Transport 内部微服务链：
 
 ```bash
 curl -i http://127.0.0.1:3000/v1/transfer-quotes \

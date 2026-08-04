@@ -1,8 +1,8 @@
 import process from "node:process"
 
-import { newNatsJetStreamBroker } from "@likego/nats/jetstream/broker"
-import { afterStart, name, newApp, server } from "@likego/core"
-import { signal } from "@likego/core/node"
+import { newNatsJetStreamBroker } from "@go-like/nats/jetstream/broker"
+import { afterStart, name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
 import { jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { connect } from "@nats-io/transport-node"
 
@@ -41,7 +41,7 @@ try {
     ),
     afterStart(function announceReady(): void {
       process.stdout.write(
-        `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "iot-telemetry", worker: consumerName })}\n`
+        `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "iot-telemetry", worker: consumerName })}\n`
       )
     })
   )

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
-import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@likego/core"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
+import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@go-like/core"
 import type { Msg, Subscription } from "@nats-io/transport-node"
 import {
   natsCoreDrainTimeout,
@@ -189,7 +189,7 @@ describe("NATS Core native Subscription lifecycle", () => {
       .catch((value: unknown) => value)) as NatsCoreAlreadyStartedError
     expect(error).toMatchObject({
       name: "NatsCoreAlreadyStartedError",
-      code: "LIKEGO_NATS_CORE_ALREADY_STARTED",
+      code: "GO_LIKE_NATS_CORE_ALREADY_STARTED",
       status: "running"
     })
     await server.stop(background())
@@ -365,7 +365,7 @@ describe("NATS Core native Subscription lifecycle", () => {
     const failure = (await observedStopping) as NatsCoreDrainTimeoutError
     expect(failure).toMatchObject({
       name: "NatsCoreDrainTimeoutError",
-      code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT",
+      code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT",
       timeoutMs: 0,
       forced: true
     })
@@ -389,7 +389,7 @@ describe("NATS Core native Subscription lifecycle", () => {
     const running = server.start(background())
     await nextTurn()
     const failure = await server.stop(background()).catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT" })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT" })
     expect(subscription.unsubscribeCalls).toBe(1)
     await expect(running).rejects.toBe(failure)
     await Bun.sleep(5)
@@ -403,7 +403,7 @@ describe("NATS Core native Subscription lifecycle", () => {
     const running = server.start(background())
     await nextTurn()
     const failure = await server.stop(background()).catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT" })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT" })
     expect(subscription.unsubscribeCalls).toBe(1)
     await expect(running).rejects.toBe(failure)
   })
@@ -487,7 +487,7 @@ describe("NATS Core native Subscription lifecycle", () => {
       )) as NatsCoreUnexpectedExitError
       expect(failure).toMatchObject({
         name: "NatsCoreUnexpectedExitError",
-        code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT"
+        code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT"
       })
       if (entry.expectedCause === null) expect(failure.cause).toBeNull()
       else expect(failure.cause).toBeInstanceOf(Error)
@@ -518,7 +518,7 @@ describe("NATS Core native Subscription lifecycle", () => {
     const server = newNatsCoreServer(subscription)
     const running = server.start(background())
     const failure = await running.catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT", cause: null })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT", cause: null })
     expect(subscription.drainCalls).toBe(0)
   })
 

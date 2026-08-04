@@ -9,7 +9,7 @@ import {
   withCancelCause,
   withTimeout,
   type Context
-} from "@likego/context"
+} from "@go-like/context"
 
 import { newNodeMDNSHostWithFactory, type NodeMDNSNetworkInterfaceTable } from "../src/node-host"
 import { newNodeMDNSHost } from "../src/node"

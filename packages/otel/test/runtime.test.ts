@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancel, withCancelCause } from "@likego/context"
+import { background, canceled, withCancel, withCancelCause } from "@go-like/context"
 
 import {
   otelShutdownTimeout,
@@ -24,7 +24,7 @@ describe("OpenTelemetry native provider lifecycle", () => {
     expect(running).toBe(running)
     await expect(server.start(background())).rejects.toMatchObject({
       name: "OtelAlreadyStartedError",
-      code: "LIKEGO_OTEL_ALREADY_STARTED",
+      code: "GO_LIKE_OTEL_ALREADY_STARTED",
       status: "running"
     })
 
@@ -121,7 +121,7 @@ describe("OpenTelemetry native provider lifecycle", () => {
     const ownerFailure = await server.stop(background()).catch((error: unknown) => error)
     expect(ownerFailure).toMatchObject({
       name: "OtelShutdownTimeoutError",
-      code: "LIKEGO_OTEL_SHUTDOWN_TIMEOUT",
+      code: "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT",
       timeoutMs: 10
     })
     expect(await settlesWithin(running)).toBeFalse()
@@ -153,7 +153,7 @@ describe("OpenTelemetry native provider lifecycle", () => {
     if (!(ownerFailure instanceof AggregateError)) throw new Error("expected owner aggregate")
     expect(ownerFailure.errors[0]).toBe(traceFailure)
     const timeoutFailure = ownerFailure.errors[1]
-    expect(timeoutFailure).toMatchObject({ code: "LIKEGO_OTEL_SHUTDOWN_TIMEOUT" })
+    expect(timeoutFailure).toMatchObject({ code: "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT" })
     expect(await settlesWithin(running)).toBeFalse()
 
     providers.metricShutdown.reject(metricFailure)
@@ -222,7 +222,7 @@ describe("OpenTelemetry native provider lifecycle", () => {
     const ownerFailure = await server.stop(background()).catch((error: unknown) => error)
 
     expect(performance.now() - started).toBeGreaterThanOrEqual(30)
-    expect(ownerFailure).toMatchObject({ code: "LIKEGO_OTEL_SHUTDOWN_TIMEOUT" })
+    expect(ownerFailure).toMatchObject({ code: "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT" })
     expect(traceCalls).toBe(1)
     expect(metricCalls).toBe(1)
     await expect(running).rejects.toBe(ownerFailure)

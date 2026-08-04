@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 import { activeContext, inspectContext, readContextFailure, waitForDelay } from "./internal"
 import type { Backoff, BackoffOptions, RetryOperation, RetryOptions } from "./types"

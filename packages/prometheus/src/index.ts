@@ -1,18 +1,18 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, CallRequest, Client } from "@likego/client"
-import type { Context } from "@likego/context"
-import type { Middleware } from "@likego/server"
-import type { Infer, Struct } from "@likego/struct"
-import type { Endpoint, Message } from "@likego/transport"
-import { endpoint, request as service } from "@likego/transport/headers"
-import type { Handler } from "@likego/web"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, CallRequest, Client } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import type { Middleware } from "@go-like/server"
+import type { Infer, Struct } from "@go-like/struct"
+import type { Endpoint, Message } from "@go-like/transport"
+import { endpoint, request as service } from "@go-like/transport/headers"
+import type { Handler } from "@go-like/web"
 import { Counter, Histogram, Registry, type RegistryContentType } from "prom-client"
 
 export type RequestComponent = "broker" | "client" | "server" | "web"
 export type RequestMetricLabel = "component" | "operation" | "outcome"
 export type RequestOutcome = "canceled" | "failure" | "success"
 
-/** Holds the two official prom-client collectors used by LikeGo request instrumentation. */
+/** Holds the two official prom-client collectors used by go-like request instrumentation. */
 export interface RequestMetrics {
   readonly requestsTotal: Counter<RequestMetricLabel>
   readonly requestDurationSeconds: Histogram<RequestMetricLabel>
@@ -128,14 +128,14 @@ function webFailureOutcome(request: Request): RequestOutcome {
 /** Creates the fixed low-cardinality request collectors in an application-owned registry. */
 export function newRequestMetrics(registry: Registry<RegistryContentType>): RequestMetrics {
   const requestsTotal = new Counter<RequestMetricLabel>({
-    name: "likego_requests_total",
-    help: "Total completed LikeGo requests.",
+    name: "go_like_requests_total",
+    help: "Total completed go-like requests.",
     labelNames: ["component", "operation", "outcome"],
     registers: [registry]
   })
   const requestDurationSeconds = new Histogram<RequestMetricLabel>({
-    name: "likego_request_duration_seconds",
-    help: "Duration of completed LikeGo requests in seconds.",
+    name: "go_like_request_duration_seconds",
+    help: "Duration of completed go-like requests in seconds.",
     labelNames: ["component", "operation", "outcome"],
     registers: [registry]
   })
@@ -151,7 +151,7 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
     typeof client.call !== "function" ||
     typeof client.close !== "function"
   ) {
-    throw new TypeError("client must implement the LikeGo Client interface")
+    throw new TypeError("client must implement the go-like Client interface")
   }
   validateRequestMetrics(metrics)
   const call = client.call
@@ -162,14 +162,14 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
     ctx: Context,
     endpoint: Endpoint<RequestStruct, ResponseStruct>,
     request: NoInfer<Infer<RequestStruct>>,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
   ): Promise<Infer<ResponseStruct>>
 
   /** Measures one raw Client call. */
   function measuredCall(
     ctx: Context,
     request: CallRequest,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
   ): Promise<Message>
 
   /** Measures either public Client call overload through the original receiver. */
@@ -267,7 +267,7 @@ export function measureBroker<PublishOptions, PublishResult, SubscribeOptions, N
     typeof broker.subscribe !== "function" ||
     typeof broker.string !== "function"
   ) {
-    throw new TypeError("broker must implement the LikeGo Broker interface")
+    throw new TypeError("broker must implement the go-like Broker interface")
   }
   validateRequestMetrics(metrics)
   const publish = broker.publish
@@ -356,7 +356,7 @@ function metricsPath(value: string | undefined): string {
   if (path.length === 0 || !path.startsWith("/") || path.includes("?") || path.includes("#")) {
     throw new TypeError("path must be a normalized absolute URL pathname")
   }
-  const normalized = new URL(path, "http://likego.invalid").pathname
+  const normalized = new URL(path, "http://go-like.invalid").pathname
   if (normalized !== path) {
     throw new TypeError("path must be a normalized absolute URL pathname")
   }
@@ -379,7 +379,7 @@ function textResponse(
 }
 
 /**
- * Adapts one application-owned prom-client Registry to the standard LikeGo Web Handler ABI.
+ * Adapts one application-owned prom-client Registry to the standard go-like Web Handler ABI.
  *
  * The handler performs a fresh registry collection for GET and HEAD. Registry lifecycle, metric
  * registration, and cleanup remain under application ownership.

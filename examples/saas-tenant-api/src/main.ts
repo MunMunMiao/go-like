@@ -1,13 +1,13 @@
 import process from "node:process"
 
-import { newRedisCache } from "@likego/cache-redis"
-import { newConfig, schema, source } from "@likego/config"
-import { consulSource } from "@likego/config-consul"
-import { withoutCancel } from "@likego/context"
-import { afterStart, afterStop, beforeStart, name, newApp, server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import { newPinoServer } from "@likego/pino"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+import { newRedisCache } from "@go-like/cache-redis"
+import { newConfig, schema, source } from "@go-like/config"
+import { consulSource } from "@go-like/config-consul"
+import { withoutCancel } from "@go-like/context"
+import { afterStart, afterStop, beforeStart, name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newPinoServer } from "@go-like/pino"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 import pino from "pino"
 
 import { tenantDocumentSchema } from "./config"
@@ -21,7 +21,7 @@ if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
 }
 const consulAddress = process.env.CONSUL_HTTP_ADDR ?? "http://127.0.0.1:28500"
 const redisUrl = process.env.REDIS_URL ?? "redis://127.0.0.1:26379"
-const configKey = process.env.CONFIG_KEY ?? "likego/examples/saas-tenant-api/config"
+const configKey = process.env.CONFIG_KEY ?? "go-like/examples/saas-tenant-api/config"
 const runtimeState = newTenantRuntimeState(consulAddress, crypto.randomUUID())
 
 const config = newConfig(
@@ -39,7 +39,7 @@ const config = newConfig(
 )
 const cache = newRedisCache({
   url: redisUrl,
-  prefix: "likego:example:saas:",
+  prefix: "go-like:example:saas:",
   connectTimeoutMs: 5_000,
   commandTimeoutMs: 5_000
 })
@@ -73,7 +73,7 @@ const app = newApp(
   afterStart(async function announceReady(ctx): Promise<void> {
     await webServer.endpoint(ctx)
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "saas-tenant-api", origin })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "saas-tenant-api", origin })}\n`
     )
   }),
   afterStop(async function closeRuntime(ctx): Promise<void> {

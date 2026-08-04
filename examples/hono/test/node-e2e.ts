@@ -1,6 +1,6 @@
-import { background } from "@likego/context"
-import { newHandler } from "@likego/example-hono"
-import { newNodeServer } from "@likego/web/node"
+import { background } from "@go-like/context"
+import { newHandler } from "@go-like/example-hono"
+import { newNodeServer } from "@go-like/web/node"
 
 const server = newNodeServer(newHandler())
 const endpoint = await server.endpoint(background())

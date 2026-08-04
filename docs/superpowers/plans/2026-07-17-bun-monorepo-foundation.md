@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 建立 LikeGo 可复现的 Bun-first monorepo 基线，并用测试锁定 exact toolchain、workspace dependency 与 lockfile 规则。
+**Goal:** 建立 go-like 可复现的 Bun-first monorepo 基线，并用测试锁定 exact toolchain、workspace dependency 与 lockfile 规则。
 
 **Architecture:** 根 workspace 只负责编排，正式 package 后续各自 emit ESM dist。Bun `1.3.14` 负责安装、脚本与单测，npm TypeScript `7.0.2` 负责严格 typecheck。一个经过单测的 workspace verifier fail closed 地拒绝浮动依赖、非 Bun lockfile 和不合规 package manifest。
 
@@ -49,7 +49,7 @@ Create `package.json` exactly as follows:
 ```json
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "likego",
+  "name": "go-like",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -191,7 +191,7 @@ afterEach(async () => {
 })
 
 async function Fixture(manifest: unknown): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "likego-workspace-"))
+  const root = await mkdtemp(join(tmpdir(), "go-like-workspace-"))
   Roots.push(root)
   await Bun.write(join(root, "package.json"), `${JSON.stringify(manifest)}\n`)
   return root
@@ -231,7 +231,7 @@ describe("verifyWorkspace", () => {
 
   test("rejects invalid workspace manifests and floating dependencies", async () => {
     const root = await Fixture({
-      name: "likego",
+      name: "go-like",
       private: true,
       type: "module",
       packageManager: "bun@1.3.14",
@@ -272,13 +272,13 @@ Extend the final suite to nine focused tests covering:
 2. The real repository root passes.
 3. Root toolchain/lock drift emits the deterministic baseline issue order without duplicate dependency issues for the two required dev dependencies.
 4. Invalid workspace manifests and floating dependency specifiers fail.
-5. Actual workspace package ownership requires `workspace:*` internally and exact semver externally; determine ownership from discovered manifest names, never from the `@likego/` prefix alone.
+5. Actual workspace package ownership requires `workspace:*` internally and exact semver externally; determine ownership from discovered manifest names, never from the `@go-like/` prefix alone.
 6. Missing, unknown, boolean-valued, Node-runner, or otherwise drifted root scripts produce one `ROOT_SCRIPTS` issue.
 7. A real Bun subprocess runs the absolute CLI path from an invalid temporary fixture cwd, exits non-zero, and emits a stable stderr code/path; do not mock `process.exitCode` or subprocess APIs.
 8. Extra root dependencies reject floating ranges and `workspace:*` while accepting exact semver; required `@types/bun` and `typescript` continue to use only `DEV_DEPENDENCY`.
 9. Root `bun.lockb` and any lockfile nested directly beside an actually discovered workspace manifest produce deterministic `FOREIGN_LOCKFILE` code/path issues.
 
-The CLI integration process must fully exit before fixture cleanup. A fresh valid CLI run must emit exactly one `LIKEGO_WORKSPACE_RESULT={"valid":true}` line.
+The CLI integration process must fully exit before fixture cleanup. A fresh valid CLI run must emit exactly one `GO_LIKE_WORKSPACE_RESULT={"valid":true}` line.
 
 - [ ] **Step 4: Run RED and confirm the expected missing-module failure**
 
@@ -327,7 +327,7 @@ Implementation rules:
 5. Require exact root `@types/bun` and `typescript` versions through `DEV_DEPENDENCY` issues. For every other entry across root `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`, accept only the exact semver regex `^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`; root never accepts `workspace:*`.
 6. Require root `bun.lock`; reject root `bun.lockb`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `npm-shrinkwrap.json`.
 7. Discover `{packages,adapters,examples}/*/package.json` with `new Bun.Glob(...)`, sort paths lexically, and read each manifest exactly once into a snapshot. Build the actual workspace name set from string `name` values in these snapshots.
-8. Workspace name must start `@likego/`, version must be `0.1.0`, type must be `module`, and `exports` must exist.
+8. Workspace name must start `@go-like/`, version must be `0.1.0`, type must be `module`, and `exports` must exist.
 9. For workspace `dependencies`, `devDependencies`, `peerDependencies`, and `optionalDependencies`, an actual discovered workspace name accepts only exactly `workspace:*`; any other dependency name accepts only the exact semver regex. Do not infer ownership from a package-name prefix.
 10. Beside each actually discovered workspace manifest, deterministically reject `bun.lock`, `bun.lockb`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `npm-shrinkwrap.json`. Do not recursively scan `node_modules`.
 11. Reject `latest`, `next`, `*`, `^`, `~`, URL/Git specifiers, build-metadata variants, and all non-exact workspace ranges. Report every issue rather than stopping after the first.
@@ -349,7 +349,7 @@ if (issues.length > 0) {
   }
   process.exitCode = 1
 } else {
-  console.log("LIKEGO_WORKSPACE_RESULT={\"valid\":true}")
+  console.log("GO_LIKE_WORKSPACE_RESULT={\"valid\":true}")
 }
 ```
 
@@ -367,7 +367,7 @@ bun run verify
 git diff --check
 ```
 
-Expected: nine tests pass, the real CLI observes Bun `1.3.14` and emits exactly one `LIKEGO_WORKSPACE_RESULT` line, typecheck exits `0`, coverage reports 100% lines/functions for loaded implementation, frozen install and aggregate verify exit `0`, and whitespace check exits `0`.
+Expected: nine tests pass, the real CLI observes Bun `1.3.14` and emits exactly one `GO_LIKE_WORKSPACE_RESULT` line, typecheck exits `0`, coverage reports 100% lines/functions for loaded implementation, frozen install and aggregate verify exit `0`, and whitespace check exits `0`.
 
 - [ ] **Step 7: Verify lock drift fails and restore it**
 

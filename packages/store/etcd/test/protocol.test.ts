@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 
 import { decodeRow, encodeRecordPayload, encodeText } from "../src/codec"
@@ -40,7 +40,7 @@ function header(revision: string = "2"): Readonly<Record<string, string>> {
   return Object.freeze({ revision })
 }
 
-/** Creates one valid LikeGo gateway KV and payload pair. */
+/** Creates one valid go-like gateway KV and payload pair. */
 function gatewayRow(
   key: string = "protocol/key",
   revision: string = "2",
@@ -62,7 +62,7 @@ function gatewayRow(
 
 /** Expects one provider protocol rejection from an async operation. */
 async function rejectsProtocol(operation: PromiseLike<unknown>): Promise<void> {
-  await expect(operation).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_PROTOCOL" })
+  await expect(operation).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_PROTOCOL" })
 }
 
 describe("range and lease protocol", () => {

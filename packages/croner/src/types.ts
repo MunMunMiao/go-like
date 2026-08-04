@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import type { Cron } from "croner"
 
 /** Constructs one or more native Croner jobs inside the Server startup boundary. */

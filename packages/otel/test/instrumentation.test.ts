@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import { withAddress, type CallOption, type Client, type CallRequest } from "@likego/client"
-import { background, withCancelCause, type Context as LikegoContext } from "@likego/context"
-import { newMetadata, newServerContext } from "@likego/metadata"
-import { struct } from "@likego/struct"
-import { endpoint as typedEndpoint, serviceError, type Message } from "@likego/transport"
-import { contentType, endpoint, metadata, request as service } from "@likego/transport/headers"
-import { decodeMetadataHeader } from "@likego/transport/provider"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import { withAddress, type CallOption, type Client, type CallRequest } from "@go-like/client"
+import { background, withCancelCause, type Context as GoLikeContext } from "@go-like/context"
+import { newMetadata, newServerContext } from "@go-like/metadata"
+import { struct } from "@go-like/struct"
+import { endpoint as typedEndpoint, serviceError, type Message } from "@go-like/transport"
+import { contentType, endpoint, metadata, request as service } from "@go-like/transport/headers"
+import { decodeMetadataHeader } from "@go-like/transport/provider"
 import {
   ROOT_CONTEXT,
   SpanKind,
@@ -53,10 +53,10 @@ interface StreamingRequestInit extends RequestInit {
   readonly duplex: "half"
 }
 
-const secretSentinel = "LIKEGO_SECRET_SENTINEL"
+const secretSentinel = "GO_LIKE_SECRET_SENTINEL"
 
 /** Creates one secret-bearing Error with valid bounded diagnostic identifiers. */
-function secretFailure(name = "SensitiveError", code = "LIKEGO_TEST_FAILURE"): Error {
+function secretFailure(name = "SensitiveError", code = "GO_LIKE_TEST_FAILURE"): Error {
   const failure = new Error(secretSentinel, { cause: new Error(secretSentinel) })
   failure.name = name
   failure.stack = `${secretSentinel}_STACK`
@@ -119,14 +119,14 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-instrumentation-test")
+    const tracer = provider.getTracer("go-like-instrumentation-test")
     const ctx = background()
     const nativeSubscription = subscriptionHandle("orders.created")
     const nativePublishResult = Object.freeze({ sequence: 41 })
     const nativeEvent = Object.freeze({ sequence: 42 })
     const captured: {
       delivery:
-        | ((ctx: LikegoContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
+        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
         | null
       publishedMessage: BrokerMessage | null
       deliveredEvent: BrokerEvent<NativeEvent> | null
@@ -220,7 +220,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       marker: "native-client",
       async call(
         this: { readonly marker: string },
-        requestContext: LikegoContext,
+        requestContext: GoLikeContext,
         request: CallRequest
       ) {
         expect(this.marker).toBe("native-client")
@@ -278,10 +278,10 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const spans = exporter.getFinishedSpans()
     expect(spans).toHaveLength(5)
     const root = spanNamed(spans, "root")
-    const clientSpan = spanNamed(spans, "likego.client catalog/CreateOrder")
-    const serverSpan = spanNamed(spans, "likego.server catalog/CreateOrder")
-    const publishSpan = spanNamed(spans, "likego.broker publish orders.created")
-    const consumeSpan = spanNamed(spans, "likego.broker consume orders.created")
+    const clientSpan = spanNamed(spans, "go-like.client catalog/CreateOrder")
+    const serverSpan = spanNamed(spans, "go-like.server catalog/CreateOrder")
+    const publishSpan = spanNamed(spans, "go-like.broker publish orders.created")
+    const consumeSpan = spanNamed(spans, "go-like.broker consume orders.created")
     expect(clientSpan.kind).toBe(SpanKind.CLIENT)
     expect(serverSpan.kind).toBe(SpanKind.SERVER)
     expect(publishSpan.kind).toBe(SpanKind.PRODUCER)
@@ -294,26 +294,26 @@ describe("explicit OpenTelemetry instrumentation", () => {
       new Set([root.spanContext().traceId])
     )
     expect(clientSpan.attributes).toMatchObject({
-      "likego.kind": "client",
-      "likego.service": "catalog",
-      "likego.endpoint": "CreateOrder",
-      "likego.outcome": "ok"
+      "go-like.kind": "client",
+      "go-like.service": "catalog",
+      "go-like.endpoint": "CreateOrder",
+      "go-like.outcome": "ok"
     })
     expect(serverSpan.attributes).toMatchObject({
-      "likego.kind": "server",
-      "likego.service": "catalog",
-      "likego.endpoint": "CreateOrder",
-      "likego.outcome": "ok"
+      "go-like.kind": "server",
+      "go-like.service": "catalog",
+      "go-like.endpoint": "CreateOrder",
+      "go-like.outcome": "ok"
     })
     expect(publishSpan.attributes).toMatchObject({
-      "likego.kind": "broker_publish",
-      "likego.topic": "orders.created",
-      "likego.outcome": "ok"
+      "go-like.kind": "broker_publish",
+      "go-like.topic": "orders.created",
+      "go-like.outcome": "ok"
     })
     expect(consumeSpan.attributes).toMatchObject({
-      "likego.kind": "broker_consume",
-      "likego.topic": "orders.created",
-      "likego.outcome": "ok"
+      "go-like.kind": "broker_consume",
+      "go-like.topic": "orders.created",
+      "go-like.outcome": "ok"
     })
     expect(
       spans
@@ -337,7 +337,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-typed-client-test")
+    const tracer = provider.getTracer("go-like-typed-client-test")
     const payload = struct.object({ id: struct.number() })
     const outcomes: string[] = []
     const metrics: RequestMetrics = {
@@ -381,7 +381,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
         withAddress("loopback")
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_TRANSPORT_PROTOCOL",
+      code: "GO_LIKE_TRANSPORT_PROTOCOL",
       cause: { name: "StructError" }
     })
     await provider.forceFlush()
@@ -396,16 +396,16 @@ describe("explicit OpenTelemetry instrumentation", () => {
       /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/
     )
     const spans = exporter.getFinishedSpans()
-    expect(spanNamed(spans, "likego.client catalog/TypedRead").attributes).toMatchObject({
-      "likego.service": "catalog",
-      "likego.endpoint": "TypedRead",
-      "likego.outcome": "ok"
+    expect(spanNamed(spans, "go-like.client catalog/TypedRead").attributes).toMatchObject({
+      "go-like.service": "catalog",
+      "go-like.endpoint": "TypedRead",
+      "go-like.outcome": "ok"
     })
-    const failed = spanNamed(spans, "likego.client catalog/TypedFail")
-    expect(failed.attributes["likego.outcome"]).toBe("transport_error")
+    const failed = spanNamed(spans, "go-like.client catalog/TypedFail")
+    expect(failed.attributes["go-like.outcome"]).toBe("transport_error")
     expect(failed.status.code).toBe(SpanStatusCode.ERROR)
-    expect(spanNamed(spans, "likego.server catalog/TypedRead").parentSpanContext?.spanId).toBe(
-      spanNamed(spans, "likego.client catalog/TypedRead").spanContext().spanId
+    expect(spanNamed(spans, "go-like.server catalog/TypedRead").parentSpanContext?.spanId).toBe(
+      spanNamed(spans, "go-like.client catalog/TypedRead").spanContext().spanId
     )
     expect(outcomes).toEqual(["success", "failure"])
 
@@ -416,7 +416,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
   })
 
   test("forwards zero and multiple Client call options by identity and order", async () => {
-    const tracer = trace.getTracer("likego-call-options-test")
+    const tracer = trace.getTracer("go-like-call-options-test")
     const first: CallOption = (options) => options
     const second: CallOption = (options) => options
     const observed: Array<{
@@ -427,7 +427,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       marker: "option-client",
       async call(
         this: { readonly marker: string },
-        _ctx: LikegoContext,
+        _ctx: GoLikeContext,
         request: CallRequest,
         ...options: readonly CallOption[]
       ) {
@@ -463,7 +463,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-web-status-test")
+    const tracer = provider.getTracer("go-like-web-status-test")
     const responseBody = new ReadableStream<Uint8Array>({ pull(): void {} })
     const ok = new Response(responseBody, { status: 200 })
     const missing = new Response(null, { status: 404 })
@@ -514,25 +514,25 @@ describe("explicit OpenTelemetry instrumentation", () => {
       const failedSpan = spanNamed(spans, "PUT")
       const asyncSpan = spanNamed(spans, "HEAD")
       expect(okSpan.attributes).toMatchObject({
-        "likego.kind": "web",
+        "go-like.kind": "web",
         "http.request.method": "GET",
         "http.response.status_code": 200,
-        "likego.outcome": "ok"
+        "go-like.outcome": "ok"
       })
       expect(missingSpan.attributes).toMatchObject({
         "http.request.method": "POST",
         "http.response.status_code": 404,
-        "likego.outcome": "http_client_error"
+        "go-like.outcome": "http_client_error"
       })
       expect(failedSpan.attributes).toMatchObject({
         "http.request.method": "PUT",
         "http.response.status_code": 500,
-        "likego.outcome": "http_server_error"
+        "go-like.outcome": "http_server_error"
       })
       expect(asyncSpan.attributes).toMatchObject({
         "http.request.method": "HEAD",
         "http.response.status_code": 201,
-        "likego.outcome": "ok"
+        "go-like.outcome": "ok"
       })
       expect(okSpan.status.code).toBe(SpanStatusCode.UNSET)
       expect(missingSpan.status.code).toBe(SpanStatusCode.UNSET)
@@ -550,7 +550,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-web-failure-test")
+    const tracer = provider.getTracer("go-like-web-failure-test")
     const applicationFailure = new Error("Web handler failed")
     const cancellation = new Error("Web operation canceled")
 
@@ -587,8 +587,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
       expect(spans).toHaveLength(2)
       const rejectedSpan = spanNamed(spans, "PATCH")
       const canceledSpan = spanNamed(spans, "DELETE")
-      expect(rejectedSpan.attributes["likego.outcome"]).toBe("application_error")
-      expect(canceledSpan.attributes["likego.outcome"]).toBe("canceled")
+      expect(rejectedSpan.attributes["go-like.outcome"]).toBe("application_error")
+      expect(canceledSpan.attributes["go-like.outcome"]).toBe("canceled")
       expect(spans.every((span) => span.status.code === SpanStatusCode.ERROR)).toBe(true)
       expect(spans.every((span) => span.events.length === 0)).toBe(true)
     } finally {
@@ -601,7 +601,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-error-redaction-test")
+    const tracer = provider.getTracer("go-like-error-redaction-test")
     const failure = secretFailure()
 
     try {
@@ -614,9 +614,9 @@ describe("explicit OpenTelemetry instrumentation", () => {
       const span = spanNamed(exporter.getFinishedSpans(), "GET")
       expect(span.status.code).toBe(SpanStatusCode.ERROR)
       expect(span.attributes).toMatchObject({
-        "likego.outcome": "application_error",
+        "go-like.outcome": "application_error",
         "error.type": "SensitiveError",
-        "likego.error.code": "LIKEGO_TEST_FAILURE"
+        "go-like.error.code": "GO_LIKE_TEST_FAILURE"
       })
       expect(span.events).toEqual([])
       const exported = JSON.stringify({
@@ -638,7 +638,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-hostile-error-test")
+    const tracer = provider.getTracer("go-like-hostile-error-test")
     const failure = hostileFailure()
 
     try {
@@ -650,9 +650,9 @@ describe("explicit OpenTelemetry instrumentation", () => {
 
       const span = spanNamed(exporter.getFinishedSpans(), "GET")
       expect(span.status.code).toBe(SpanStatusCode.ERROR)
-      expect(span.attributes["likego.outcome"]).toBe("application_error")
+      expect(span.attributes["go-like.outcome"]).toBe("application_error")
       expect(span.attributes).not.toHaveProperty("error.type")
-      expect(span.attributes).not.toHaveProperty("likego.error.code")
+      expect(span.attributes).not.toHaveProperty("go-like.error.code")
       expect(span.events).toEqual([])
     } finally {
       await provider.shutdown()
@@ -664,10 +664,10 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-hostile-context-test")
+    const tracer = provider.getTracer("go-like-hostile-context-test")
     const failure = new Error("business failure")
     const contextFailure = new Error("Context inspection failed")
-    const hostileContext: LikegoContext = Object.freeze({
+    const hostileContext: GoLikeContext = Object.freeze({
       deadline: background().deadline,
       done: background().done,
       err(): never {
@@ -695,8 +695,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
       ).rejects.toBe(failure)
       await provider.forceFlush()
 
-      const span = spanNamed(exporter.getFinishedSpans(), "likego.client catalog/Read")
-      expect(span.attributes["likego.outcome"]).toBe("transport_error")
+      const span = spanNamed(exporter.getFinishedSpans(), "go-like.client catalog/Read")
+      expect(span.attributes["go-like.outcome"]).toBe("transport_error")
       expect(span.status.code).toBe(SpanStatusCode.ERROR)
     } finally {
       await provider.shutdown()
@@ -708,7 +708,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-invalid-error-test")
+    const tracer = provider.getTracer("go-like-invalid-error-test")
     let failure = secretFailure("Invalid Error", "lowercase")
     const failed = traceWebHandler(() => {
       throw failure
@@ -724,7 +724,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       expect(spans).toHaveLength(2)
       for (const span of spans) {
         expect(span.attributes).not.toHaveProperty("error.type")
-        expect(span.attributes).not.toHaveProperty("likego.error.code")
+        expect(span.attributes).not.toHaveProperty("go-like.error.code")
         expect(span.events).toEqual([])
       }
     } finally {
@@ -737,7 +737,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const provider = new TracerProvider({
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
-    const tracer = provider.getTracer("likego-failure-test")
+    const tracer = provider.getTracer("go-like-failure-test")
     const transportFailure = new Error("transport failed")
     const serviceFailure = serviceError("not_found", "not found", 404)
     const canceledFailure = new Error("caller stopped")
@@ -788,7 +788,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const brokerFailure = new Error("publish failed")
     const captured: {
       delivery:
-        | ((ctx: LikegoContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
+        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
         | null
     } = { delivery: null }
     const rawBroker: Broker<void, void, void, NativeEvent> = {
@@ -824,16 +824,16 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const spans = exporter.getFinishedSpans()
     expect(
       spans
-        .filter((span) => span.name === "likego.client catalog/Read")
-        .map((span) => span.attributes["likego.outcome"])
+        .filter((span) => span.name === "go-like.client catalog/Read")
+        .map((span) => span.attributes["go-like.outcome"])
     ).toEqual(["service_error", "transport_error", "canceled"])
-    expect(spanNamed(spans, "likego.server catalog/Write").attributes["likego.outcome"]).toBe(
+    expect(spanNamed(spans, "go-like.server catalog/Write").attributes["go-like.outcome"]).toBe(
       "application_error"
     )
-    expect(spanNamed(spans, "likego.broker publish topic").attributes["likego.outcome"]).toBe(
+    expect(spanNamed(spans, "go-like.broker publish topic").attributes["go-like.outcome"]).toBe(
       "broker_error"
     )
-    expect(spanNamed(spans, "likego.broker consume topic").attributes["likego.outcome"]).toBe(
+    expect(spanNamed(spans, "go-like.broker consume topic").attributes["go-like.outcome"]).toBe(
       "application_error"
     )
     expect(spans.every((span) => span.status.code === SpanStatusCode.ERROR)).toBe(true)
@@ -842,10 +842,10 @@ describe("explicit OpenTelemetry instrumentation", () => {
   })
 
   test("preserves __proto__ as an own propagation header across client and server adapters", async () => {
-    const tracer = trace.getTracer("likego-special-header-test")
+    const tracer = trace.getTracer("go-like-special-header-test")
     const captured: HeaderCarrier[] = []
     const client = {
-      async call(_ctx: LikegoContext, request: CallRequest) {
+      async call(_ctx: GoLikeContext, request: CallRequest) {
         captured.push(request.message.header)
         return request.message
       },
@@ -936,7 +936,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
   })
 
   test("supports an explicit propagator, exact optional arguments, and construction failures", async () => {
-    const tracer = trace.getTracer("likego-explicit-propagator-test")
+    const tracer = trace.getTracer("go-like-explicit-propagator-test")
     let propagationInjections = 0
     const propagator: TextMapPropagator<HeaderCarrier> = {
       inject(_otelContext, carrier, setter) {
@@ -955,7 +955,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const captured: { clientRequest: CallRequest | null } = { clientRequest: null }
     const client = traceClient(
       {
-        async call(_ctx: LikegoContext, request: CallRequest) {
+        async call(_ctx: GoLikeContext, request: CallRequest) {
           captured.clientRequest = request
           return request.message
         },

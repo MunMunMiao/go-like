@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { canceled, type Context } from "@likego/context"
+import { canceled, type Context } from "@go-like/context"
 
 import { contextHandler } from "../src/index"
 
@@ -11,7 +11,7 @@ test("returns the exact synchronous Response, headers, body, and stream", async 
       streamController = controller
     }
   })
-  const headers = new Headers({ "x-likego": "identity" })
+  const headers = new Headers({ "x-go-like": "identity" })
   const expectedResponse = new Response(stream, { headers })
   const expectedHeaders = expectedResponse.headers
   const expectedBody = expectedResponse.body

@@ -66,7 +66,7 @@ function capability(
     allowedExamples: [
       {
         id: "vanilla-web",
-        packageName: "@likego/example-vanilla-web",
+        packageName: "@go-like/example-vanilla-web",
         cwdRealpath: ExampleCwd,
         childOwner: "vanilla-web-owner-1"
       }
@@ -95,7 +95,7 @@ function participant(overrides: Readonly<Record<string, unknown>> = Object.freez
   return {
     schemaVersion: 1,
     id: "vanilla-web",
-    packageName: "@likego/example-vanilla-web",
+    packageName: "@go-like/example-vanilla-web",
     cwdRealpath: ExampleCwd,
     workerPid: process.pid,
     workerStartIdentity: "darwin:worker-1",
@@ -341,7 +341,7 @@ test("strict validators reject unknown fields, traversal identities, and array b
     { length: ExampleProtocolLimits.maximumAllowedExamples + 1 },
     (_, index) => ({
       id: `example-${index}`,
-      packageName: `@likego/example-${index}`,
+      packageName: `@go-like/example-${index}`,
       cwdRealpath: resolve(Root, `examples/example-${index}`),
       childOwner: `example-${index}-owner`
     })
@@ -419,10 +419,10 @@ test("process identity reports the current principal and dead roots fail closed"
 })
 
 test("terminal worker frame ignores ambient state and preserves non-empty scenario argv", () => {
-  const previousCapability = process.env.LIKEGO_E2E_CAPABILITY
-  const previousNonce = process.env.LIKEGO_E2E_NONCE
-  process.env.LIKEGO_E2E_CAPABILITY = "/stale/capability.json"
-  process.env.LIKEGO_E2E_NONCE = WrongNonce
+  const previousCapability = process.env.GO_LIKE_E2E_CAPABILITY
+  const previousNonce = process.env.GO_LIKE_E2E_NONCE
+  process.env.GO_LIKE_E2E_CAPABILITY = "/stale/capability.json"
+  process.env.GO_LIKE_E2E_NONCE = WrongNonce
   try {
     expect(parseTerminalWorkerFrame(["bun", "scenario.ts", "--flag", "value"])).toEqual({
       mode: "direct",
@@ -449,10 +449,10 @@ test("terminal worker frame ignores ambient state and preserves non-empty scenar
       nonce: FixedNonce
     })
   } finally {
-    if (previousCapability === undefined) delete process.env.LIKEGO_E2E_CAPABILITY
-    else process.env.LIKEGO_E2E_CAPABILITY = previousCapability
-    if (previousNonce === undefined) delete process.env.LIKEGO_E2E_NONCE
-    else process.env.LIKEGO_E2E_NONCE = previousNonce
+    if (previousCapability === undefined) delete process.env.GO_LIKE_E2E_CAPABILITY
+    else process.env.GO_LIKE_E2E_CAPABILITY = previousCapability
+    if (previousNonce === undefined) delete process.env.GO_LIKE_E2E_NONCE
+    else process.env.GO_LIKE_E2E_NONCE = previousNonce
   }
 })
 

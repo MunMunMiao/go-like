@@ -2,10 +2,10 @@ import process from "node:process"
 
 import { SQL } from "bun"
 
-import type { Context } from "@likego/context"
-import { afterStart, name, newApp, server, type Server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import type { Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import { afterStart, name, newApp, server, type Server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import type { Handler } from "@go-like/web"
 import { RetentionPolicy, StorageType, jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { connect, type NatsConnection } from "@nats-io/transport-node"
 
@@ -21,11 +21,11 @@ if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
   throw new TypeError("PORT must be an integer in 1..65535")
 }
 const databaseUrl =
-  process.env.DATABASE_URL ?? "postgres://likego:local-e2e-only@127.0.0.1:35432/ledger"
+  process.env.DATABASE_URL ?? "postgres://go-like:local-e2e-only@127.0.0.1:35432/ledger"
 const natsUrl = process.env.NATS_URL ?? "nats://127.0.0.1:34222"
 const publisherOwner = process.env.PUBLISHER_OWNER ?? `publisher_${crypto.randomUUID()}`
 
-/** Hosts one standard Fetch Handler through Bun's native server as a structural LikeGo Server. */
+/** Hosts one standard Fetch Handler through Bun's native server as a structural go-like Server. */
 function newBunWebServer(handler: Handler): Server {
   let started = false
   let native: ReturnType<typeof Bun.serve> | null = null
@@ -130,7 +130,7 @@ try {
     server(dependencyServer(sql, connection), publisher, newBunWebServer(handler)),
     afterStart(function announceReady(): void {
       process.stdout.write(
-        `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "payments-ledger", origin })}\n`
+        `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "payments-ledger", origin })}\n`
       )
     })
   )

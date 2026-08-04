@@ -17,9 +17,9 @@
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一创建 Core App 的可执行入口，按顺序挂载复核 Worker、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-主要演示 `@likego/core` 如何把用户实现的结构式理赔复核 Worker 当作 `Server` 纳入 App 生命周期：`start(ctx)` 表示整个运行期，`stop(ctx)` 请求停止，App 并发停止所有 Server；`@likego/web` 仍只暴露标准 Fetch Handler。
+主要演示 `@go-like/core` 如何把用户实现的结构式理赔复核 Worker 当作 `Server` 纳入 App 生命周期：`start(ctx)` 表示整个运行期，`stop(ctx)` 请求停止，App 并发停止所有 Server；`@go-like/web` 仍只暴露标准 Fetch Handler。
 
 ## 验证矩阵
 
@@ -31,17 +31,17 @@
 | 结构式 Worker 生命周期   | `test/main.test.ts` 的 Core 用例   |
 
 ```bash
-bun run --filter @likego/example-insurance-claims typecheck
-bun run --filter @likego/example-insurance-claims test:unit
+bun run --filter @go-like/example-insurance-claims typecheck
+bun run --filter @go-like/example-insurance-claims test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-insurance-claims start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-insurance-claims start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后提交保单 `policy-1` 的理赔：
+看到 `GO_LIKE_EXAMPLE_READY` 后提交保单 `policy-1` 的理赔：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/claims \

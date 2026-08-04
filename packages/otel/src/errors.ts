@@ -3,9 +3,9 @@ import type { OtelAlreadyStartedError, OtelShutdownTimeoutError } from "./types"
 export type OtelServerState = "idle" | "starting" | "running" | "stopping" | "stopped" | "failed"
 
 const alreadyStartedName: OtelAlreadyStartedError["name"] = "OtelAlreadyStartedError"
-const alreadyStartedCode: OtelAlreadyStartedError["code"] = "LIKEGO_OTEL_ALREADY_STARTED"
+const alreadyStartedCode: OtelAlreadyStartedError["code"] = "GO_LIKE_OTEL_ALREADY_STARTED"
 const shutdownTimeoutName: OtelShutdownTimeoutError["name"] = "OtelShutdownTimeoutError"
-const shutdownTimeoutCode: OtelShutdownTimeoutError["code"] = "LIKEGO_OTEL_SHUTDOWN_TIMEOUT"
+const shutdownTimeoutCode: OtelShutdownTimeoutError["code"] = "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT"
 
 /** Builds the immutable error returned by every attempt to restart one server. */
 export function newOtelAlreadyStartedError(

@@ -224,24 +224,24 @@ function stringEvidence(values: Set<string>): readonly string[] {
   return Object.freeze(Array.from(values).sort())
 }
 
-/** Reports whether one RR owner is a canonical LikeGo identity FQDN. */
+/** Reports whether one RR owner is a canonical go-like identity FQDN. */
 function canonicalIdentityOwner(value: string): boolean {
-  return /^li-[a-z2-7]+\.ls-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*likego\.$/.test(value)
+  return /^li-[a-z2-7]+\.ls-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*go-like\.$/.test(value)
 }
 
-/** Reports whether one RR owner is a canonical LikeGo service FQDN. */
+/** Reports whether one RR owner is a canonical go-like service FQDN. */
 function canonicalServiceOwner(value: string): boolean {
-  return /^ls-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*likego\.$/.test(value)
+  return /^ls-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*go-like\.$/.test(value)
 }
 
-/** Reports whether one RR owner is a canonical LikeGo host FQDN. */
+/** Reports whether one RR owner is a canonical go-like host FQDN. */
 function canonicalHostOwner(value: string): boolean {
-  return /^lh-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*likego\.$/.test(value)
+  return /^lh-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*go-like\.$/.test(value)
 }
 
-/** Reports whether one SRV target is a canonical LikeGo host FQDN. */
+/** Reports whether one SRV target is a canonical go-like host FQDN. */
 function canonicalHostTarget(value: string): boolean {
-  return /^lh-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*likego\.$/.test(value)
+  return /^lh-[a-z2-7]+\.(?:[a-z0-9_-]+\.)*go-like\.$/.test(value)
 }
 
 /** Reads one structural SRV target from a decoded record payload. */
@@ -262,15 +262,15 @@ function txtContains(record: DNSRecord, value: string, prefix = false): boolean 
   return false
 }
 
-/** Returns the required cache-flush class for one canonical LikeGo graph record. */
+/** Returns the required cache-flush class for one canonical go-like graph record. */
 function expectedFlush(record: DNSRecord): boolean | null {
-  if (record.type === "PTR" && record.name.endsWith(".likego.")) return false
+  if (record.type === "PTR" && record.name.endsWith(".go-like.")) return false
   if (record.type === "TXT" && canonicalServiceOwner(record.name)) return false
   if (record.type === "SRV" && canonicalIdentityOwner(record.name)) return true
   if (
     record.type === "TXT" &&
     canonicalIdentityOwner(record.name) &&
-    txtContains(record, "Likego-Wire-Version=2")
+    txtContains(record, "Go-Like-Wire-Version=2")
   ) {
     return true
   }
@@ -279,7 +279,7 @@ function expectedFlush(record: DNSRecord): boolean | null {
   return null
 }
 
-/** Reports whether one family/TTL record set contains a fully linked canonical LikeGo graph. */
+/** Reports whether one family/TTL record set contains a fully linked canonical go-like graph. */
 function completeGraph(
   values: readonly DNSRecord[],
   family: "ipv4" | "ipv6",
@@ -292,7 +292,7 @@ function completeGraph(
       identityTXT.type !== "TXT" ||
       !identityTXT.flush ||
       !canonicalIdentityOwner(identityTXT.name) ||
-      !txtContains(identityTXT, "Likego-Wire-Version=2")
+      !txtContains(identityTXT, "Go-Like-Wire-Version=2")
     )
       continue
     const instanceOwner = identityTXT.name
@@ -319,7 +319,7 @@ function completeGraph(
           record.name === serviceOwner &&
           record.type === "TXT" &&
           !record.flush &&
-          txtContains(record, "Likego-Service-Name=", true)
+          txtContains(record, "Go-Like-Service-Name=", true)
         )
       }
     )
@@ -459,7 +459,7 @@ export async function inspectPacketCapture(path: string): Promise<MDNSPacketCapt
       if (record.type !== "TXT" || !Array.isArray(record.data)) continue
       for (const item of record.data) {
         const value = decoder.decode(item)
-        if (value === "Likego-Wire-Version=2") managedTXT = true
+        if (value === "Go-Like-Wire-Version=2") managedTXT = true
         if (value.startsWith("Micro-")) legacyNamespaceAbsent = false
       }
     }

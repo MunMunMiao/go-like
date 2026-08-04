@@ -1,5 +1,5 @@
 ---
-"@likego/client": minor
+"@go-like/client": minor
 ---
 
 按 transport address 复用一个空闲 Client，同一连接不承接并发调用；失败 attempt 与多余并发连接立即关闭。

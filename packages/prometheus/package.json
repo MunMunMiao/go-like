@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/prometheus",
+  "name": "@go-like/prometheus",
   "version": "0.0.1",
-  "description": "Application-owned prom-client registries and explicit LikeGo request instrumentation.",
+  "description": "Application-owned prom-client registries and explicit go-like request instrumentation.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,13 +25,13 @@
     "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts && node ../../e2e/scripts/prometheus-native.ts"
   },
   "dependencies": {
-    "@likego/broker": "0.0.1",
-    "@likego/client": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/server": "0.0.1",
-    "@likego/struct": "0.0.1",
-    "@likego/transport": "0.0.1",
-    "@likego/web": "0.0.1",
+    "@go-like/broker": "0.0.1",
+    "@go-like/client": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/server": "0.0.1",
+    "@go-like/struct": "0.0.1",
+    "@go-like/transport": "0.0.1",
+    "@go-like/web": "0.0.1",
     "prom-client": "15.1.3"
   },
   "devDependencies": {

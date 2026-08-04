@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import type { RedisCacheErrorHandler } from "../src/types"
 import { captureRedisCacheOptions } from "../src/options"

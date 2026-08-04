@@ -15,7 +15,7 @@ function hasErrorCode(value: unknown): value is { readonly code: string } {
 
 /** Ensures Node can resolve workspace dependencies in an isolated package mount. */
 async function ensureWorkspaceLinks(): Promise<void> {
-  const scope = resolve(packageRoot, "node_modules/@likego")
+  const scope = resolve(packageRoot, "node_modules/@go-like")
   await mkdir(scope, { recursive: true })
   for (const name of ["context", "core", "web"]) {
     const link = resolve(scope, name)
@@ -30,8 +30,8 @@ async function ensureWorkspaceLinks(): Promise<void> {
 
 await ensureWorkspaceLinks()
 
-const context = await import("@likego/context")
-const api = await import("@likego/web/node")
+const context = await import("@go-like/context")
+const api = await import("@go-like/web/node")
 
 const keys = Object.keys(api).sort()
 if (
@@ -78,7 +78,7 @@ await server.stop(context.background())
 const terminal = await running.catch((error: unknown) => error)
 if (
   terminal !== undefined &&
-  (!hasErrorCode(terminal) || terminal.code !== "LIKEGO_NODE_SERVER_FORCE_CLOSE")
+  (!hasErrorCode(terminal) || terminal.code !== "GO_LIKE_NODE_SERVER_FORCE_CLOSE")
 ) {
   throw new Error("runtime server did not report its configured native force boundary")
 }

@@ -3,7 +3,7 @@
 这个可运行示例演示一个小型商城目录微服务：
 
 - Hono 提供对外商品查询 API；
-- Pricing 作为 LikeGo 内部 HTTP 服务运行；
+- Pricing 作为 go-like 内部 HTTP 服务运行；
 - Pricing 通过 Core App 注册到 Consul；
 - Catalog 使用 Client、Consul Discovery 和 round-robin Selector 调用 Pricing；
 - Redis 缓存有效价格，第二次相同查询不再调用 Pricing。
@@ -14,7 +14,7 @@
 
 ```sh
 docker compose -f examples/commerce-catalog/compose.yaml up -d --wait
-bun run --filter @likego/example-commerce-catalog start
+bun run --filter @go-like/example-commerce-catalog start
 ```
 
 程序默认监听 `http://127.0.0.1:3000`。在另一个终端调用：
@@ -63,7 +63,7 @@ Hono Catalog API
     +-- Redis 未命中
             |
             v
-       LikeGo Client -> Consul Discovery -> Pricing.Get HTTP Server
+       go-like Client -> Consul Discovery -> Pricing.Get HTTP Server
             |                                      |
             +--------------- 有效价格 <------------+
                             |
@@ -75,7 +75,7 @@ Hono Catalog API
 
 Pricing 调用显式声明为幂等，并配置最多三次有界重试。默认 Client 不会替业务自行决定是否重放。
 
-## LikeGo 能力
+## go-like 能力
 
 | 能力         | 使用方式                                                               |
 | ------------ | ---------------------------------------------------------------------- |
@@ -83,18 +83,18 @@ Pricing 调用显式声明为幂等，并配置最多三次有界重试。默认
 | 服务端       | `newServer(transport(...), address(...), handler(...))`                |
 | 客户端       | `newClient(withDiscovery(...), withSelector(...), withTransport(...))` |
 | 注册发现     | Core App 的 `registrar`、Consul Registry                               |
-| 内部传输     | `@likego/transport-http` client 与 Node server transport               |
-| 对外 Web     | Hono Handler 由 `@likego/web/node` 承载                                |
+| 内部传输     | `@go-like/transport-http` client 与 Node server transport               |
+| 对外 Web     | Hono Handler 由 `@go-like/web/node` 承载                                |
 | 缓存         | Redis Cache 作为 App Server 管理连接生命周期                           |
 | 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式业务校验                       |
 
-示例只使用 LikeGo 公开的 App、Server、Client、Registry 与 functional options。
+示例只使用 go-like 公开的 App、Server、Client、Registry 与 functional options。
 
 ## 验证
 
 ```sh
-bun run --filter @likego/example-commerce-catalog typecheck
-bun run --filter @likego/example-commerce-catalog test:unit
+bun run --filter @go-like/example-commerce-catalog typecheck
+bun run --filter @go-like/example-commerce-catalog test:unit
 bun run test:e2e:examples
 ```
 

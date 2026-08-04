@@ -28,24 +28,24 @@ Fetch Request
 - `src/main.ts`：唯一创建 Core App 的可执行入口，只挂载拥有真实监听资源的 HTTP Server。
 - `test/main.test.ts`：查询边界、修订冲突、缓存命中和失效测试。
 
-## LikeGo 能力
+## go-like 能力
 
-本例使用构造后即可工作的 `@likego/cache-memory`，完成缓存写入、读取和更新后的删除。测试通过仓储查询计数证明第二次查询命中缓存、版本更新后重新读取权威投影。
+本例使用构造后即可工作的 `@go-like/cache-memory`，完成缓存写入、读取和更新后的删除。测试通过仓储查询计数证明第二次查询命中缓存、版本更新后重新读取权威投影。
 
 ## 验证
 
 ```bash
-bun run --filter @likego/example-real-estate-search-index typecheck
-bun run --filter @likego/example-real-estate-search-index test:unit
+bun run --filter @go-like/example-real-estate-search-index typecheck
+bun run --filter @go-like/example-real-estate-search-index test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-real-estate-search-index start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-real-estate-search-index start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后写入投影并查询：
+看到 `GO_LIKE_EXAMPLE_READY` 后写入投影并查询：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/listings \

@@ -1,6 +1,6 @@
 # Enterprise Platform Runtime
 
-这个可运行示例演示如何用 LikeGo 公开 API 组装一套企业微服务运行时：
+这个可运行示例演示如何用 go-like 公开 API 组装一套企业微服务运行时：
 
 - Core App 管理所有长期运行组件；
 - Consul 提供服务注册与发现；
@@ -17,11 +17,11 @@
 ```sh
 docker compose -f examples/enterprise-platform-runtime/compose.yaml up -d --wait
 curl --fail --request POST \
-  --header "X-Vault-Token: likego-enterprise-dev" \
+  --header "X-Vault-Token: go-like-enterprise-dev" \
   --header "Content-Type: application/json" \
   --data '{"data":{"release":1,"feature":{"enabled":true}}}' \
   http://127.0.0.1:58200/v1/secret/data/applications/platform/config
-bun run --filter @likego/example-enterprise-platform-runtime start
+bun run --filter @go-like/example-enterprise-platform-runtime start
 ```
 
 程序默认监听 `http://127.0.0.1:3000`。在另一个终端调用：
@@ -76,7 +76,7 @@ Client/Server middleware -> OpenTelemetry SDK -> OTel Collector
 application logs --------> Pino destination
 ```
 
-## LikeGo 能力
+## go-like 能力
 
 | 能力          | 使用方式                                                                                |
 | ------------- | --------------------------------------------------------------------------------------- |
@@ -87,15 +87,15 @@ application logs --------> Pino destination
 | Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭    |
 | Web           | Node Web Server 承载标准 Fetch Handler                                                  |
 | Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                               |
-| Store         | `@likego/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback |
+| Store         | `@go-like/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback |
 
-Server、Client、Registry 和 App 的用法与 LikeGo 当前公开 API 保持一致。
+Server、Client、Registry 和 App 的用法与 go-like 当前公开 API 保持一致。
 
 ## 验证
 
 ```sh
-bun run --filter @likego/example-enterprise-platform-runtime typecheck
-bun run --filter @likego/example-enterprise-platform-runtime test:unit
+bun run --filter @go-like/example-enterprise-platform-runtime typecheck
+bun run --filter @go-like/example-enterprise-platform-runtime test:unit
 bun run test:e2e:examples
 ```
 

@@ -10,7 +10,7 @@ test("Store errors expose stable immutable machine-readable fields", () => {
 
   expect(conflict).toMatchObject({
     name: "StoreConflictError",
-    code: "LIKEGO_STORE_CONFLICT",
+    code: "GO_LIKE_STORE_CONFLICT",
     key: "key",
     expectedRevision: "one",
     actualRevision: "two"

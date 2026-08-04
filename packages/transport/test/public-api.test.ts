@@ -53,24 +53,24 @@ test("provider subpath exports exactly the reviewed lower-camel wire surface", (
 
 test("headers subpath exports the 18 exact reviewed names and values", () => {
   expect(Headers).toEqual({
-    message: "Likego-Topic",
-    request: "Likego-Service",
-    error: "Likego-Error",
-    endpoint: "Likego-Endpoint",
-    method: "Likego-Method",
-    metadata: "Likego-Metadata",
-    id: "Likego-ID",
-    prefix: "Likego-",
-    namespace: "Likego-Namespace",
-    protocol: "Likego-Protocol",
-    target: "Likego-Target",
+    message: "Go-Like-Topic",
+    request: "Go-Like-Service",
+    error: "Go-Like-Error",
+    endpoint: "Go-Like-Endpoint",
+    method: "Go-Like-Method",
+    metadata: "Go-Like-Metadata",
+    id: "Go-Like-ID",
+    prefix: "Go-Like-",
+    namespace: "Go-Like-Namespace",
+    protocol: "Go-Like-Protocol",
+    target: "Go-Like-Target",
     contentType: "Content-Type",
-    serviceError: "Likego-Service-Error",
-    serviceErrorCode: "Likego-Service-Error-Code",
-    serviceErrorStatus: "Likego-Service-Error-Status",
-    spanId: "Likego-Span-ID",
-    traceId: "Likego-Trace-ID",
-    stream: "Likego-Stream"
+    serviceError: "Go-Like-Service-Error",
+    serviceErrorCode: "Go-Like-Service-Error-Code",
+    serviceErrorStatus: "Go-Like-Service-Error-Status",
+    spanId: "Go-Like-Span-ID",
+    traceId: "Go-Like-Trace-ID",
+    stream: "Go-Like-Stream"
   })
 })
 
@@ -88,13 +88,13 @@ test("creates four frozen stable errors that preserve cause identity", () => {
   }
 
   const expected = [
-    ["newTransportClosedError", "TransportClosedError", "LIKEGO_TRANSPORT_CLOSED"],
-    ["newTransportProtocolError", "TransportProtocolError", "LIKEGO_TRANSPORT_PROTOCOL"],
-    ["newTransportStateError", "TransportStateError", "LIKEGO_TRANSPORT_STATE"],
+    ["newTransportClosedError", "TransportClosedError", "GO_LIKE_TRANSPORT_CLOSED"],
+    ["newTransportProtocolError", "TransportProtocolError", "GO_LIKE_TRANSPORT_PROTOCOL"],
+    ["newTransportStateError", "TransportStateError", "GO_LIKE_TRANSPORT_STATE"],
     [
       "newUnsupportedTransportCapabilityError",
       "UnsupportedTransportCapabilityError",
-      "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY"
+      "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY"
     ]
   ]
   for (const row of expected) {

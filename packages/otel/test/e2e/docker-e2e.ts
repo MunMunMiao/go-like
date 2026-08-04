@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
-import { background } from "@likego/context"
-import { otelShutdownTimeout, newOtelServer } from "@likego/otel"
+import { background } from "@go-like/context"
+import { otelShutdownTimeout, newOtelServer } from "@go-like/otel"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -16,10 +16,10 @@ import { BatchSpanProcessor, TracerProvider, type SpanExporter } from "@opentele
 const CollectorImage =
   "otel/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6"
 const CollectorVersion = "0.157.0"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly exitCode: number
@@ -131,7 +131,7 @@ function observedMetricExporter(
   })
 }
 
-const container = `likego-otel-${crypto.randomUUID()}`
+const container = `go-like-otel-${crypto.randomUUID()}`
 const config = resolve(import.meta.dir, "collector.yaml")
 const portReservation = Bun.serve({
   hostname: "127.0.0.1",
@@ -193,7 +193,7 @@ try {
   observedCollectorVersion = versionMatch[1]
   const endpoint = `http://127.0.0.1:${port}`
   const resource = resourceFromAttributes({
-    "service.name": "likego-otel-docker",
+    "service.name": "go-like-otel-docker",
     "deployment.environment.name": "e2e"
   })
   const traceExporter = observedTraceExporter(
@@ -293,7 +293,7 @@ try {
   if (shutdownSpanCount !== 1) {
     throw new Error(`shutdown trace was exported ${shutdownSpanCount} times`)
   }
-  if (!finalLogs.includes("likego-otel-docker")) {
+  if (!finalLogs.includes("go-like-otel-docker")) {
     throw new Error("collector did not receive the application-configured service Resource")
   }
 

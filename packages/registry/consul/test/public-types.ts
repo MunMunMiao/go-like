@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Registry, ServiceInstance, Watcher } from "@likego/registry"
+import { background } from "@go-like/context"
+import type { Registry, ServiceInstance, Watcher } from "@go-like/registry"
 import {
   newConsulRegistry,
   type ConsulFetch,

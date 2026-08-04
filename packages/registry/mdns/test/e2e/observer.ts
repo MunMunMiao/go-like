@@ -1,7 +1,7 @@
 import { readFile, readdir, readlink, writeFile } from "node:fs/promises"
 
-import { background, withTimeout, type Context } from "@likego/context"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+import { background, withTimeout, type Context } from "@go-like/context"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 import type {
   MDNSAddress,
   MDNSBindOptions,
@@ -11,7 +11,7 @@ import type {
   MDNSMembership,
   MDNSNetworkInterface,
   MDNSRegistry
-} from "@likego/registry-mdns"
+} from "@go-like/registry-mdns"
 
 import {
   primaryName,
@@ -131,7 +131,7 @@ function validatePrimary(service: ServiceInstance, revision: string): void {
   )
   verify(
     service.metadata.environment === "docker" &&
-      service.metadata.owner === "likego" &&
+      service.metadata.owner === "go-like" &&
       service.metadata.zone === "docker" &&
       service.metadata.revision === revision,
     "ServiceInstance metadata did not round-trip"
@@ -301,8 +301,8 @@ async function crash(): Promise<void> {
   )
 }
 
-if ((process.env.LIKEGO_MODE ?? "normal") === "crash") await crash()
+if ((process.env.GO_LIKE_MODE ?? "normal") === "crash") await crash()
 else await normal()
 process.stdout.write(
-  `LIKEGO_REGISTRY_MDNS_OBSERVER=${JSON.stringify({ valid: true, mode: process.env.LIKEGO_MODE ?? "normal" })}\n`
+  `GO_LIKE_REGISTRY_MDNS_OBSERVER=${JSON.stringify({ valid: true, mode: process.env.GO_LIKE_MODE ?? "normal" })}\n`
 )

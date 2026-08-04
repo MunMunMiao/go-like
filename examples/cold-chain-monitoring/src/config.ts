@@ -1,5 +1,5 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@likego/config"
-import type { Context } from "@likego/context"
+import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
+import type { Context } from "@go-like/context"
 
 import {
   validateTemperatureLimits,
@@ -11,7 +11,7 @@ export interface TemperatureLedger {
   record(ctx: Context, assessment: TemperatureAssessment): TemperatureAssessment
 }
 
-/** Creates the immutable temperature source and LikeGo Config lifecycle. */
+/** Creates the immutable temperature source and go-like Config lifecycle. */
 export function newTemperatureConfig(limits: TemperatureLimits): Config<ConfigObject> {
   validateTemperatureLimits(limits)
   return newConfig(

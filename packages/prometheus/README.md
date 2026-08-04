@@ -1,11 +1,11 @@
-# @likego/prometheus
+# @go-like/prometheus
 
-该适配器通过 `@likego/web` 的标准单参数 `Handler`，暴露由应用拥有的
+该适配器通过 `@go-like/web` 的标准单参数 `Handler`，暴露由应用拥有的
 [`prom-client`](https://github.com/prometheus/client_js) `Registry`。
 
 ## 所有权
 
-- 应用直接从 `prom-client` 创建 `new Registry()`；LikeGo 不再包装官方构造函数。
+- 应用直接从 `prom-client` 创建 `new Registry()`；go-like 不再包装官方构造函数。
 - 应用拥有指标注册、`Registry.clear()` 以及附加到 registry 的每个 collector。
 - `createPrometheusHandler()` 非驻留，不创建定时器、监听器或后台服务。
 - 该适配器绝不读取或修改 prom-client 全局 registry。
@@ -18,8 +18,8 @@
 
 `newRequestMetrics(registry)` 创建两个固定 collector：
 
-- `likego_requests_total`
-- `likego_request_duration_seconds`
+- `go_like_requests_total`
+- `go_like_request_duration_seconds`
 
 它们只有 `component`、`operation`、`outcome` 三个 label。`outcome` 只会是 `success`、`failure`
 或 `canceled`。包装器不会读取或记录 body、header、错误消息、URL、请求 ID 或用户 ID。
@@ -31,7 +31,7 @@ import {
   measureUnaryMiddleware,
   measureWebHandler,
   newRequestMetrics
-} from "@likego/prometheus"
+} from "@go-like/prometheus"
 import { Registry } from "prom-client"
 
 const registry = new Registry()
@@ -60,8 +60,8 @@ monitor，而上游辅助函数并未暴露清理 handle。若应用明确愿意
 
 - Bun 1.3.14
 - Node.js 24.18.1 LTS
-- Node.js 26.5.1 当前版
+- Node.js 26.x
 - prom-client 15.1.3
 
-返回的处理器只依赖标准 Web API，可交给 `@likego/web/node` 或任何接受 LikeGo `Handler` 的自实现 Server；
-该包不依赖 `@likego/web/node`，也不拥有 listener 生命周期。
+返回的处理器只依赖标准 Web API，可交给 `@go-like/web/node` 或任何接受 go-like `Handler` 的自实现 Server；
+该包不依赖 `@go-like/web/node`，也不拥有 listener 生命周期。

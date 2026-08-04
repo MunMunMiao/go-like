@@ -1,16 +1,16 @@
-# `@likego/registry-kubernetes`
+# `@go-like/registry-kubernetes`
 
-`@likego/registry-kubernetes` 是基于 Kubernetes `discovery.k8s.io/v1 EndpointSlice` 与标准 Web
-Fetch 的 `@likego/registry` provider。它直接使用统一的
+`@go-like/registry-kubernetes` 是基于 Kubernetes `discovery.k8s.io/v1 EndpointSlice` 与标准 Web
+Fetch 的 `@go-like/registry` provider。它直接使用统一的
 `ServiceInstance { id, name, version, metadata, endpoints }`，不引入第二套服务模型、CRD、Kubernetes SDK
 或运行时全局 `fetch`。
 
 ## 使用
 
 ```ts
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { newKubernetesRegistry } from "@likego/registry-kubernetes"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { newKubernetesRegistry } from "@go-like/registry-kubernetes"
 
 const registry = newKubernetesRegistry({
   fetch,
@@ -104,16 +104,16 @@ verbs: ["get", "list", "watch", "create", "update", "delete"]
 | 资源                  | Owner                         | 契约                                                            |
 | --------------------- | ----------------------------- | --------------------------------------------------------------- |
 | `kubernetes-fetch`    | 应用                          | 仅借用；本包不调用 `close`、`destroy` 或同类能力。              |
-| Kubernetes Watcher    | `@likego/registry-kubernetes` | 由 `watch` 创建，由 `watcher.stop(ctx)` 通过 AbortSignal 终止。 |
+| Kubernetes Watcher    | `@go-like/registry-kubernetes` | 由 `watch` 创建，由 `watcher.stop(ctx)` 通过 AbortSignal 终止。 |
 | Managed EndpointSlice | Kubernetes Pod/应用           | 配置 `owner` 时随 Pod GC；否则由应用显式 `deregister`。         |
 | Kubernetes API/集群   | 应用/平台                     | 本包只使用 namespaced EndpointSlice API，不管理集群生命周期。   |
 
 ## 验证
 
 ```sh
-bun run --filter '@likego/registry-kubernetes' typecheck
-bun run --filter '@likego/registry-kubernetes' test:unit:coverage
-bun run --filter '@likego/registry-kubernetes' build
+bun run --filter '@go-like/registry-kubernetes' typecheck
+bun run --filter '@go-like/registry-kubernetes' test:unit:coverage
+bun run --filter '@go-like/registry-kubernetes' build
 bun run test:e2e:suites -- --suite registry-kubernetes-docker
 ```
 

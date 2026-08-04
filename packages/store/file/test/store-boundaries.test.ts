@@ -5,14 +5,14 @@ import { join } from "node:path"
 
 import { expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { cursor, expiresIn, limit } from "../../src/index"
 
 import { newFileStore, newFileStoreCorruptionError, newFileStoreStateError } from "../src/index"
 import { newNodeFileStoreHost } from "../src/node"
 import { startStore, stopStore, withTempDirectory } from "./helpers"
 
-const SnapshotName = ".likego-store.snapshot"
+const SnapshotName = ".go-like-store.snapshot"
 const MaximumValueBytes = 16_777_216
 
 interface SnapshotPayload {
@@ -52,7 +52,7 @@ async function expectCorruption(
     await write(directory)
     const store = newFileStore(newNodeFileStoreHost(), directory)
     await expect(store.start(background())).rejects.toMatchObject({
-      code: "LIKEGO_FILE_STORE_CORRUPTION",
+      code: "GO_LIKE_FILE_STORE_CORRUPTION",
       reason
     })
   })

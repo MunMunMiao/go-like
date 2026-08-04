@@ -1,4 +1,4 @@
-/** Identifies one DNS question or resource-record kind supported by LikeGo mDNS. */
+/** Identifies one DNS question or resource-record kind supported by go-like mDNS. */
 export type DNSRecordType = "A" | "AAAA" | "PTR" | "SRV" | "TXT"
 
 /** Describes one DNS question. */

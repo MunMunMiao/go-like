@@ -1,4 +1,4 @@
-import type { Store } from "@likego/store"
+import type { Store } from "@go-like/store"
 
 /** Executes one borrowed standard Web Fetch request. */
 export interface EtcdStoreFetch {
@@ -28,7 +28,7 @@ export type EtcdStoreOperation =
 /** Describes one non-success etcd JSON gateway response. */
 export interface EtcdStoreHttpError extends Error {
   readonly name: "EtcdStoreHttpError"
-  readonly code: "LIKEGO_ETCD_STORE_HTTP"
+  readonly code: "GO_LIKE_ETCD_STORE_HTTP"
   readonly operation: EtcdStoreOperation
   readonly status: number
   readonly grpcCode: number | null
@@ -37,35 +37,35 @@ export interface EtcdStoreHttpError extends Error {
 /** Describes one secret-safe borrowed Fetch rejection. */
 export interface EtcdStoreTransportError extends Error {
   readonly name: "EtcdStoreTransportError"
-  readonly code: "LIKEGO_ETCD_STORE_TRANSPORT"
+  readonly code: "GO_LIKE_ETCD_STORE_TRANSPORT"
   readonly operation: EtcdStoreOperation
 }
 
 /** Describes malformed gateway data without retaining response contents. */
 export interface EtcdStoreProtocolError extends Error {
   readonly name: "EtcdStoreProtocolError"
-  readonly code: "LIKEGO_ETCD_STORE_PROTOCOL"
+  readonly code: "GO_LIKE_ETCD_STORE_PROTOCOL"
   readonly operation: EtcdStoreOperation
 }
 
 /** Describes a historical pagination revision removed by etcd compaction. */
 export interface EtcdStoreCompactedError extends Error {
   readonly name: "EtcdStoreCompactedError"
-  readonly code: "LIKEGO_ETCD_STORE_COMPACTED"
+  readonly code: "GO_LIKE_ETCD_STORE_COMPACTED"
   readonly revision: string
 }
 
 /** Describes a TTL mutation whose granted lease disappeared before commit. */
 export interface EtcdStoreLeaseLostError extends Error {
   readonly name: "EtcdStoreLeaseLostError"
-  readonly code: "LIKEGO_ETCD_STORE_LEASE_LOST"
+  readonly code: "GO_LIKE_ETCD_STORE_LEASE_LOST"
   readonly operation: "write"
 }
 
 /** Describes a mutation whose exact readback could not prove its outcome. */
 export interface EtcdStoreUncertainError extends Error {
   readonly name: "EtcdStoreUncertainError"
-  readonly code: "LIKEGO_ETCD_STORE_UNCERTAIN"
+  readonly code: "GO_LIKE_ETCD_STORE_UNCERTAIN"
   readonly operation: "write" | "delete"
   readonly cause: Error
 }
@@ -73,7 +73,7 @@ export interface EtcdStoreUncertainError extends Error {
 /** Describes a committed mutation whose obsolete lease could not be released. */
 export interface EtcdStoreCleanupError extends Error {
   readonly name: "EtcdStoreCleanupError"
-  readonly code: "LIKEGO_ETCD_STORE_CLEANUP"
+  readonly code: "GO_LIKE_ETCD_STORE_CLEANUP"
   readonly operation: "write" | "delete"
   readonly committed: true
   readonly cause: Error

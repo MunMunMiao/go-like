@@ -1,4 +1,4 @@
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { encodeBytes, encodeRecord, type EncodedRecord } from "../src/codec"
@@ -70,7 +70,7 @@ function record(endpoint = "http://127.0.0.1:8080/"): Promise<EncodedRecord> {
     metadata: {},
     endpoints: [endpoint]
   }
-  return encodeRecord("/likego/registry/v1/", instance)
+  return encodeRecord("/go-like/registry/v1/", instance)
 }
 
 test("lease and range parsing reject malformed gateway carriers", async () => {
@@ -126,7 +126,7 @@ test("publish accepts lost response only after exact ownership readback", async 
   ).rejects.toThrow("did not establish exact ownership")
   await expect(
     publish(scripted(rejected("lost"), json(rangeResponse([]))), current, "1", signal)
-  ).rejects.toMatchObject({ code: "LIKEGO_ETCD_TRANSPORT" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_TRANSPORT" })
 })
 
 test("restore refuses an occupied identity and remove leaves foreign content untouched", async () => {
@@ -170,7 +170,7 @@ test("restore and remove resolve ambiguous transaction responses by exact readba
   ).toBeTrue()
   await expect(
     restore(scripted(rejected("lost restore"), json(rangeResponse([]))), current, "1", signal)
-  ).rejects.toMatchObject({ code: "LIKEGO_ETCD_TRANSPORT" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_TRANSPORT" })
 
   await remove(scripted(rejected("lost remove"), json(rangeResponse([]))), current, signal)
   await expect(
@@ -179,5 +179,5 @@ test("restore and remove resolve ambiguous transaction responses by exact readba
       current,
       signal
     )
-  ).rejects.toMatchObject({ code: "LIKEGO_ETCD_TRANSPORT" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_TRANSPORT" })
 })

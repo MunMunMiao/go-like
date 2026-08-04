@@ -1,12 +1,12 @@
 # 冷链温度监控
 
-该示例演示冷链监控微服务：标准 Fetch API 接收运输传感器读数，应用从 `@likego/config`
+该示例演示冷链监控微服务：标准 Fetch API 接收运输传感器读数，应用从 `@go-like/config`
 的当前不可变配置读取允许温区，判定越界状态，并把每票货物的最后序列写入内存台账。
 
 ## 主要演示
 
 - Core hook 在 HTTP Server 启动前加载 Config，并在停止后关闭 Config。
-- `@likego/context` 从入口一路传入监控应用和读数台账。
+- `@go-like/context` 从入口一路传入监控应用和读数台账。
 - 标准 Fetch Handler 与监控服务、Config、运行入口分离。
 - 无外部 daemon 的可重复业务测试。
 
@@ -43,8 +43,8 @@
 ## 验证
 
 ```sh
-bun run --filter @likego/example-cold-chain-monitoring typecheck
-bun run --filter @likego/example-cold-chain-monitoring test:unit
+bun run --filter @go-like/example-cold-chain-monitoring typecheck
+bun run --filter @go-like/example-cold-chain-monitoring test:unit
 ```
 
 本示例不连接 IoT broker、时序数据库、告警平台或真实传感器，因此不需要 Docker；生产接入应替换
@@ -53,10 +53,10 @@ bun run --filter @likego/example-cold-chain-monitoring test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-cold-chain-monitoring start
+bun run --filter @go-like/example-cold-chain-monitoring start
 ```
 
-Core 的 `beforeStart` hook 加载 Config 并发布 `2°C..8°C` 规则。看到 `LIKEGO_EXAMPLE_READY` 后上报读数：
+Core 的 `beforeStart` hook 加载 Config 并发布 `2°C..8°C` 规则。看到 `GO_LIKE_EXAMPLE_READY` 后上报读数：
 
 ```bash
 curl -i http://127.0.0.1:3000/v1/cold-chain/readings \

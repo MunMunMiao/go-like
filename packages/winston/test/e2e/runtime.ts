@@ -3,11 +3,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { newApp, server, type Server } from "@likego/core"
-import { logWebHandler, newWinstonServer } from "@likego/winston"
+import { newApp, server, type Server } from "@go-like/core"
+import { logWebHandler, newWinstonServer } from "@go-like/winston"
 import winston from "winston"
 
-const directory = await mkdtemp(join(tmpdir(), "likego-winston-native-"))
+const directory = await mkdtemp(join(tmpdir(), "go-like-winston-native-"))
 const path = join(directory, "service.log")
 try {
   const logger = winston.createLogger({

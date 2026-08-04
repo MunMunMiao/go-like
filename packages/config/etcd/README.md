@@ -1,9 +1,9 @@
-# @likego/config-etcd
+# @go-like/config-etcd
 
-`@likego/config-etcd` 使用调用方注入的标准 Web `fetch` 访问 etcd v3 JSON gRPC gateway，加载并监视一个精确 KV key。包不引入 gRPC 或 Protobuf runtime，也不拥有调用方的 Fetch、TLS 或认证生命周期。
+`@go-like/config-etcd` 使用调用方注入的标准 Web `fetch` 访问 etcd v3 JSON gRPC gateway，加载并监视一个精确 KV key。包不引入 gRPC 或 Protobuf runtime，也不拥有调用方的 Fetch、TLS 或认证生命周期。
 
 ```ts
-import { etcdSource } from "@likego/config-etcd"
+import { etcdSource } from "@go-like/config-etcd"
 
 const source = etcdSource({
   fetch(request) {

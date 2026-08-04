@@ -6,7 +6,7 @@ import {
   type CancelFunc,
   type Context,
   type StopFunc
-} from "@likego/context"
+} from "@go-like/context"
 
 export type ProbeKind = "live" | "ready"
 

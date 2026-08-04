@@ -1,7 +1,7 @@
-import type { Context } from "@likego/context"
-import { newMetadata, type Metadata } from "@likego/metadata"
-import { newServerContext, type TransportInfo } from "@likego/transport"
-import { endpoint as endpointHeader, request as serviceHeader } from "@likego/transport/headers"
+import type { Context } from "@go-like/context"
+import { newMetadata, type Metadata } from "@go-like/metadata"
+import { newServerContext, type TransportInfo } from "@go-like/transport"
+import { endpoint as endpointHeader, request as serviceHeader } from "@go-like/transport/headers"
 
 const EmptyMetadata = newMetadata()
 

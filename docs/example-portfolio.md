@@ -1,4 +1,4 @@
-# LikeGo Examples 组合
+# go-like Examples 组合
 
 本组合覆盖多种行业微服务，以及 `elysia`、`h3`、`hono` 和 `vanilla-web` 等框架接入。后续只有在出现
 新的真实行业不变量或接入需求时才增加案例；目录本身就是可运行示例集合。
@@ -6,7 +6,7 @@
 ## 验证层级
 
 - `core`：验证单一业务不变量和便携核心能力。
-- `integration`：验证多个 LikeGo 能力之间的协作与故障边界。
+- `integration`：验证多个 go-like 能力之间的协作与故障边界。
 - `production`：验证真实中间件、传输安全、恢复或进程生命周期。
 
 层级表示验证深度，不表示案例的重要程度。
@@ -88,7 +88,7 @@
 
 ## 第三方框架接入案例
 
-- [`elysia`](../examples/elysia/README.md)：Elysia 原生 `app.fetch` 接入 `@likego/web` Handler。
-- [`h3`](../examples/h3/README.md)：H3 2.x 原生 `app.fetch` 接入 `@likego/web` Handler。
-- [`hono`](../examples/hono/README.md)：Hono 原生 `app.fetch` 接入 `@likego/web` Handler。
-- [`vanilla-web`](../examples/vanilla-web/README.md)：原生 Fetch Handler 由 LikeGo Web 生命周期承接。
+- [`elysia`](../examples/elysia/README.md)：Elysia 原生 `app.fetch` 接入 `@go-like/web` Handler。
+- [`h3`](../examples/h3/README.md)：H3 2.x 原生 `app.fetch` 接入 `@go-like/web` Handler。
+- [`hono`](../examples/hono/README.md)：Hono 原生 `app.fetch` 接入 `@go-like/web` Handler。
+- [`vanilla-web`](../examples/vanilla-web/README.md)：原生 Fetch Handler 由 go-like Web 生命周期承接。

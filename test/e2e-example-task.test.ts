@@ -44,7 +44,7 @@ import {
 
 const Posix = process.platform !== "win32"
 const Id = "example-task-fixture"
-const PackageName = `@likego/example-${Id}`
+const PackageName = `@go-like/example-${Id}`
 const Invocation = "example-task-invocation"
 const Owner = "example-task-fixture-owner"
 const Nonce = "12".repeat(32)
@@ -145,7 +145,7 @@ function spawnHarness(
 }
 
 async function fixture(): Promise<Fixture> {
-  const temp = await createTempDirectory("likego-example-task-")
+  const temp = await createTempDirectory("go-like-example-task-")
   const created = await createTempSubdirectories(temp, [
     ["invocation"],
     ["invocation", "participants"],
@@ -355,9 +355,9 @@ test("invalid or partial worker frames fail closed and direct mode delegates loc
 
     let delegated: unknown = null
     let spawns = 0
-    const previousOwner = process.env.LIKEGO_E2E_OWNER
+    const previousOwner = process.env.GO_LIKE_E2E_OWNER
     const previousAuthority = process.env[OwnedDockerEnvironmentKey]
-    process.env.LIKEGO_E2E_OWNER = "ambient-stale-owner"
+    process.env.GO_LIKE_E2E_OWNER = "ambient-stale-owner"
     process.env[OwnedDockerEnvironmentKey] = "ambient-stale-authority"
     try {
       const delegatedOutcome = Object.freeze({ status: "passed" as const })
@@ -379,8 +379,8 @@ test("invalid or partial worker frames fail closed and direct mode delegates loc
       })
       expect(spawns).toBe(0)
     } finally {
-      if (previousOwner === undefined) delete process.env.LIKEGO_E2E_OWNER
-      else process.env.LIKEGO_E2E_OWNER = previousOwner
+      if (previousOwner === undefined) delete process.env.GO_LIKE_E2E_OWNER
+      else process.env.GO_LIKE_E2E_OWNER = previousOwner
       if (previousAuthority === undefined) delete process.env[OwnedDockerEnvironmentKey]
       else process.env[OwnedDockerEnvironmentKey] = previousAuthority
     }
@@ -413,7 +413,7 @@ test("capability, nonce, root, cwd, package, permission, and symlink failures ne
       return { cwd: other }
     },
     async () => ({
-      options: { readPackageName: async () => "@likego/example-foreign" }
+      options: { readPackageName: async () => "@go-like/example-foreign" }
     }),
     async (selected) => {
       await chmod(selected.capabilityPath, 0o640)
@@ -726,12 +726,12 @@ test("worker injects only signed authority, uses detached false, and cleans exac
   const selected = await fixture()
   const spawned = spawnHarness()
   const cleanupCalls: unknown[][] = []
-  const previousOwner = process.env.LIKEGO_E2E_OWNER
-  const previousCapability = process.env.LIKEGO_E2E_CAPABILITY
-  const previousStale = process.env.LIKEGO_E2E_OWNED_DOCKER_STALE
-  process.env.LIKEGO_E2E_OWNER = "legacy-owner"
-  process.env.LIKEGO_E2E_CAPABILITY = "stale-capability"
-  process.env.LIKEGO_E2E_OWNED_DOCKER_STALE = "stale-owned-capability"
+  const previousOwner = process.env.GO_LIKE_E2E_OWNER
+  const previousCapability = process.env.GO_LIKE_E2E_CAPABILITY
+  const previousStale = process.env.GO_LIKE_E2E_OWNED_DOCKER_STALE
+  process.env.GO_LIKE_E2E_OWNER = "legacy-owner"
+  process.env.GO_LIKE_E2E_CAPABILITY = "stale-capability"
+  process.env.GO_LIKE_E2E_OWNED_DOCKER_STALE = "stale-owned-capability"
   try {
     const task = runExampleTask(selected.frame, selected.cwd, {
       ...baseOptions(selected, spawned),
@@ -745,9 +745,9 @@ test("worker injects only signed authority, uses detached false, and cleans exac
     expect(record?.argv).toEqual(ScenarioArgv)
     expect(record?.options.cwd).toBe(selected.cwd)
     expect(record?.options.detached).toBe(false)
-    expect(record?.options.env.LIKEGO_E2E_OWNER).toBeUndefined()
-    expect(record?.options.env.LIKEGO_E2E_CAPABILITY).toBeUndefined()
-    expect(record?.options.env.LIKEGO_E2E_OWNED_DOCKER_STALE).toBeUndefined()
+    expect(record?.options.env.GO_LIKE_E2E_OWNER).toBeUndefined()
+    expect(record?.options.env.GO_LIKE_E2E_CAPABILITY).toBeUndefined()
+    expect(record?.options.env.GO_LIKE_E2E_OWNED_DOCKER_STALE).toBeUndefined()
     const encoded = record?.options.env[OwnedDockerEnvironmentKey]
     expect(encoded).toBeString()
     const authority = JSON.parse(encoded ?? "null") as ScenarioDockerAuthority
@@ -761,12 +761,12 @@ test("worker injects only signed authority, uses detached false, and cleans exac
     expect(cleanupCalls[0]?.slice(0, 3)).toEqual([selected.cwd, Invocation, Owner])
   } finally {
     spawned.settle()
-    if (previousOwner === undefined) delete process.env.LIKEGO_E2E_OWNER
-    else process.env.LIKEGO_E2E_OWNER = previousOwner
-    if (previousCapability === undefined) delete process.env.LIKEGO_E2E_CAPABILITY
-    else process.env.LIKEGO_E2E_CAPABILITY = previousCapability
-    if (previousStale === undefined) delete process.env.LIKEGO_E2E_OWNED_DOCKER_STALE
-    else process.env.LIKEGO_E2E_OWNED_DOCKER_STALE = previousStale
+    if (previousOwner === undefined) delete process.env.GO_LIKE_E2E_OWNER
+    else process.env.GO_LIKE_E2E_OWNER = previousOwner
+    if (previousCapability === undefined) delete process.env.GO_LIKE_E2E_CAPABILITY
+    else process.env.GO_LIKE_E2E_CAPABILITY = previousCapability
+    if (previousStale === undefined) delete process.env.GO_LIKE_E2E_OWNED_DOCKER_STALE
+    else process.env.GO_LIKE_E2E_OWNED_DOCKER_STALE = previousStale
     await cleanup(selected)
   }
 })
@@ -1127,7 +1127,7 @@ test("shared resource events from earlier examples do not alter current exact-pa
   const cleanupCalls: unknown[][] = []
   const sibling = Object.freeze({
     id: "earlier-docker-example",
-    packageName: "@likego/example-earlier-docker-example",
+    packageName: "@go-like/example-earlier-docker-example",
     cwdRealpath: join(selected.root, "earlier-docker-example"),
     childOwner: "earlier-docker-example-owner"
   })

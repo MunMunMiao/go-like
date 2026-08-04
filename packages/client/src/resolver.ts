@@ -5,10 +5,10 @@ import {
   withCancelCause,
   withoutCancel,
   type Context
-} from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import type { Discovery, ServiceInstance, Watcher } from "@likego/registry"
-import { retry } from "@likego/resilience"
+} from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import type { Discovery, ServiceInstance, Watcher } from "@go-like/registry"
+import { retry } from "@go-like/resilience"
 
 const watcherRetryDelayMs = 1_000
 const watcherRollbackCleanups = new WeakMap<object, unknown>()

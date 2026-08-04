@@ -1,9 +1,9 @@
-import { background } from "@likego/context"
-import { filterLabel, filterVersion } from "@likego/registry"
-import type { Discovery, Selector } from "@likego/registry"
-import type { CircuitBreakerOptions } from "@likego/resilience"
-import { struct } from "@likego/struct"
-import { endpoint, type Message, type Transport } from "@likego/transport"
+import { background } from "@go-like/context"
+import { filterLabel, filterVersion } from "@go-like/registry"
+import type { Discovery, Selector } from "@go-like/registry"
+import type { CircuitBreakerOptions } from "@go-like/resilience"
+import { struct } from "@go-like/struct"
+import { endpoint, type Message, type Transport } from "@go-like/transport"
 
 import * as ClientPackage from "../src/index"
 import {

@@ -3,7 +3,7 @@ import {
   newMetadata,
   values as metadataValues,
   type Metadata
-} from "@likego/metadata"
+} from "@go-like/metadata"
 
 import { newTransportProtocolError } from "./errors"
 

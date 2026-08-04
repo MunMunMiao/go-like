@@ -1,12 +1,12 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 import { canonicalPayload, instanceContentHash } from "./canonical"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder("utf-8", { fatal: true })
 const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-const chunkPrefix = "Likego-Chunk-000="
+const chunkPrefix = "Go-Like-Chunk-000="
 const maximumChunkBytes = 255 - chunkPrefix.length
 
 interface PayloadCandidate {
@@ -211,10 +211,10 @@ function required(values: ReadonlyMap<string, string>, key: string): string {
 function protocol(value: unknown): Error {
   const cause =
     value instanceof Error ? value : new Error("mDNS TXT boundary rejected a non-Error value")
-  return newRegistryProtocolError("invalid LikeGo mDNS TXT payload", cause)
+  return newRegistryProtocolError("invalid go-like mDNS TXT payload", cause)
 }
 
-/** Encodes one ServiceInstance into ordered LikeGo TXT items. */
+/** Encodes one ServiceInstance into ordered go-like TXT items. */
 export async function encodeInstanceTXT(
   instance: ServiceInstance,
   maximumDecodedBytes: number
@@ -228,15 +228,15 @@ export async function encodeInstanceTXT(
   const encoded = base64url(compressed)
   const count = Math.ceil(encoded.length / maximumChunkBytes)
   const items: Uint8Array[] = [
-    txt("Likego-Wire-Version", "2"),
-    txt("Likego-Encoding", "deflate+base64url"),
-    txt("Likego-Instance-Content-Hash", await instanceContentHash(instance)),
-    txt("Likego-Chunk-Count", String(count).padStart(3, "0"))
+    txt("Go-Like-Wire-Version", "2"),
+    txt("Go-Like-Encoding", "deflate+base64url"),
+    txt("Go-Like-Instance-Content-Hash", await instanceContentHash(instance)),
+    txt("Go-Like-Chunk-Count", String(count).padStart(3, "0"))
   ]
   for (let index = 0; index < count; index += 1) {
     items.push(
       txt(
-        `Likego-Chunk-${String(index).padStart(3, "0")}`,
+        `Go-Like-Chunk-${String(index).padStart(3, "0")}`,
         encoded.slice(index * maximumChunkBytes, (index + 1) * maximumChunkBytes)
       )
     )
@@ -244,20 +244,20 @@ export async function encodeInstanceTXT(
   return Object.freeze(items)
 }
 
-/** Decodes ordered LikeGo TXT items into one validated ServiceInstance. */
+/** Decodes ordered go-like TXT items into one validated ServiceInstance. */
 export async function decodeInstanceTXT(
   items: readonly Uint8Array[],
   maximumDecodedBytes: number
 ): Promise<ServiceInstance> {
   try {
     const values = txtMap(items)
-    if (required(values, "Likego-Wire-Version") !== "2") {
+    if (required(values, "Go-Like-Wire-Version") !== "2") {
       throw new TypeError("mDNS wire version is unsupported")
     }
-    if (required(values, "Likego-Encoding") !== "deflate+base64url") {
+    if (required(values, "Go-Like-Encoding") !== "deflate+base64url") {
       throw new TypeError("mDNS payload encoding is unsupported")
     }
-    const countText = required(values, "Likego-Chunk-Count")
+    const countText = required(values, "Go-Like-Chunk-Count")
     if (!/^[0-9]{3}$/.test(countText)) throw new TypeError("mDNS chunk count is invalid")
     const count = Number(countText)
     if (count < 1 || count > 999) throw new RangeError("mDNS chunk count is out of range")
@@ -266,7 +266,7 @@ export async function decodeInstanceTXT(
     }
     let encoded = ""
     for (let index = 0; index < count; index += 1) {
-      encoded += required(values, `Likego-Chunk-${String(index).padStart(3, "0")}`)
+      encoded += required(values, `Go-Like-Chunk-${String(index).padStart(3, "0")}`)
     }
     const decoded = await decompress(unbase64url(encoded), maximumDecodedBytes)
     const json = decoder.decode(decoded)
@@ -274,7 +274,7 @@ export async function decodeInstanceTXT(
     if (canonicalPayload(instance) !== json)
       throw new TypeError("mDNS payload is not canonical JSON")
     if (
-      (await instanceContentHash(instance)) !== required(values, "Likego-Instance-Content-Hash")
+      (await instanceContentHash(instance)) !== required(values, "Go-Like-Instance-Content-Hash")
     ) {
       throw new TypeError("mDNS instance-content hash mismatch")
     }

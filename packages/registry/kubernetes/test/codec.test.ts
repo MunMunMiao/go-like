@@ -1,4 +1,4 @@
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import {
@@ -65,16 +65,16 @@ test("candidate projection supports IP, FQDN, arbitrary schemes, and empty endpo
     port: 1
   })
   const invalidHostname = await encodeCandidate(instance("https://bad_host.example/"))
-  expect(invalidHostname.addresses[0]).toMatch(/\.registry\.likego\.invalid$/)
+  expect(invalidHostname.addresses[0]).toMatch(/\.registry\.go-like\.invalid$/)
   for (const endpoint of ["http://127.0.0.1:80/", "http://[::1]:80/", "mailto:test@example.com"]) {
     const fallback = await encodeCandidate(instance(endpoint))
     expect(fallback.addressType).toBe("FQDN")
-    expect(fallback.addresses[0]).toMatch(/\.registry\.likego\.invalid$/)
+    expect(fallback.addresses[0]).toMatch(/\.registry\.go-like\.invalid$/)
   }
   const empty = await encodeCandidate(instance(null))
   expect(empty.addressType).toBe("FQDN")
   expect(empty.port).toBe(1)
-  expect(empty.name).toMatch(/^likego-[a-z2-7]{52}$/)
+  expect(empty.name).toMatch(/^go-like-[a-z2-7]{52}$/)
   expect(empty.identity).toMatch(/^ki-[a-z2-7]{52}$/)
   expect(Object.isFrozen(empty.instance)).toBe(true)
 })
@@ -82,10 +82,10 @@ test("candidate projection supports IP, FQDN, arbitrary schemes, and empty endpo
 test("canonical EndpointSlice round-trips one immutable ServiceInstance", async () => {
   const first = await encodeCandidate(instance("http://10.42.0.10:8080/"))
   const second = await encodeCandidate(instance("custom+rpc://orders:7000", "orders-2"))
-  const firstWire = committed(encodeSlice(first, "likego-test", null, owner), "11")
-  const secondWire = committed(encodeSlice(second, "likego-test", "10"), "12")
+  const firstWire = committed(encodeSlice(first, "go-like-test", null, owner), "11")
+  const secondWire = committed(encodeSlice(second, "go-like-test", "10"), "12")
 
-  const decoded = await decodeManagedSlice(firstWire, "likego-test")
+  const decoded = await decodeManagedSlice(firstWire, "go-like-test")
   expect(decoded).toMatchObject({
     identity: first.identity,
     content: first.content,
@@ -104,13 +104,13 @@ test("canonical EndpointSlice round-trips one immutable ServiceInstance", async 
         {
           metadata: {
             labels: { [managedByLabel]: "another-controller" },
-            namespace: "likego-test"
+            namespace: "go-like-test"
           }
         },
         firstWire
       ]
     },
-    "likego-test"
+    "go-like-test"
   )
   expect(snapshot.resourceVersion).toBe("12")
   expect(snapshot.records.map((record) => record.identity)).toEqual(
@@ -122,30 +122,30 @@ test("canonical EndpointSlice round-trips one immutable ServiceInstance", async 
 
 test("managed payload and projection mismatches fail closed", async () => {
   const candidate = await encodeCandidate(instance("http://10.42.0.10:8080/"))
-  const wire = committed(encodeSlice(candidate, "likego-test", null), "7")
+  const wire = committed(encodeSlice(candidate, "go-like-test", null), "7")
   const metadata = Reflect.get(wire, "metadata") as Record<string, unknown>
   const annotations = metadata.annotations as Record<string, unknown>
   annotations[contentAnnotation] = "kc-wrong"
-  await expect(decodeManagedSlice(wire, "likego-test")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+  await expect(decodeManagedSlice(wire, "go-like-test")).rejects.toMatchObject({
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 
-  const malformed = committed(encodeSlice(candidate, "likego-test", null), "8")
+  const malformed = committed(encodeSlice(candidate, "go-like-test", null), "8")
   const malformedMetadata = Reflect.get(malformed, "metadata") as Record<string, unknown>
   const malformedAnnotations = malformedMetadata.annotations as Record<string, unknown>
-  malformedAnnotations["registry.likego.dev/service-instance"] = "{"
-  await expect(decodeManagedSlice(malformed, "likego-test")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+  malformedAnnotations["registry.go-like.dev/service-instance"] = "{"
+  await expect(decodeManagedSlice(malformed, "go-like-test")).rejects.toMatchObject({
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 
   const wrongNamespace = committed(encodeSlice(candidate, "other", null), "9")
-  await expect(decodeManagedSlice(wrongNamespace, "likego-test")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+  await expect(decodeManagedSlice(wrongNamespace, "go-like-test")).rejects.toMatchObject({
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   expect(
     await decodeManagedSlice(
-      { metadata: { namespace: "likego-test", labels: { [managedByLabel]: "foreign" } } },
-      "likego-test"
+      { metadata: { namespace: "go-like-test", labels: { [managedByLabel]: "foreign" } } },
+      "go-like-test"
     )
   ).toBeNull()
 })
@@ -154,7 +154,7 @@ test("all malformed managed carriers fail closed at their exact boundary", async
   const candidate = await encodeCandidate(instance("http://10.42.0.10:8080/"))
   /** Creates one fresh committed mutable wire carrier. */
   function wire(): Record<string, unknown> {
-    return committed(encodeSlice(candidate, "likego-test", null), "10") as Record<string, unknown>
+    return committed(encodeSlice(candidate, "go-like-test", null), "10") as Record<string, unknown>
   }
   /** Reads one mutable metadata carrier. */
   function metadata(value: Record<string, unknown>): Record<string, unknown> {
@@ -166,8 +166,8 @@ test("all malformed managed carriers fail closed at their exact boundary", async
   }
   /** Requires one protocol rejection. */
   async function rejects(value: unknown): Promise<void> {
-    await expect(decodeManagedSlice(value, "likego-test")).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+    await expect(decodeManagedSlice(value, "go-like-test")).rejects.toMatchObject({
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
   }
 
@@ -225,8 +225,8 @@ test("all malformed managed carriers fail closed at their exact boundary", async
   }
 
   await expect(
-    decodeSliceList({ metadata: { resourceVersion: "1" }, items: null }, "likego-test")
-  ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+    decodeSliceList({ metadata: { resourceVersion: "1" }, items: null }, "go-like-test")
+  ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("oversized managed payload fails before EndpointSlice I/O", async () => {
@@ -239,5 +239,5 @@ test("oversized managed payload fails before EndpointSlice I/O", async () => {
       endpoints: []
     })
   ).rejects.toBeInstanceOf(RangeError)
-  expect(managedByValue).toBe("registry-kubernetes.likego.dev")
+  expect(managedByValue).toBe("registry-kubernetes.go-like.dev")
 })

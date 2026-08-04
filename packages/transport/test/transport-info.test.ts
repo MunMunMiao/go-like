@@ -2,8 +2,8 @@ import { runInNewContext } from "node:vm"
 
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel, withValue } from "@likego/context"
-import { newMetadata } from "@likego/metadata"
+import { background, canceled, withCancel, withValue } from "@go-like/context"
+import { newMetadata } from "@go-like/metadata"
 
 import {
   fromClientContext,

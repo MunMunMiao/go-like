@@ -1,16 +1,16 @@
-import { background } from "@likego/context"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+import { background } from "@go-like/context"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 
 import { newConsulRegistry, type ConsulFetch } from "../../src/index"
 
 const Image =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
-const Container = `likego-registry-consul-${crypto.randomUUID()}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
+const Container = `go-like-registry-consul-${crypto.randomUUID()}`
 
 interface CommandResult {
   readonly code: number

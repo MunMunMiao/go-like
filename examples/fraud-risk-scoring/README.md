@@ -17,9 +17,9 @@
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合缓存风控服务、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-主要演示 `@likego/cache-memory` 对已验证风险评估进行带身份指纹的 TTL 缓存，以及 `@likego/resilience` Circuit Breaker 对评分依赖失败进行熔断；Memory Cache 构造后即可使用，外部入口继续使用标准 Fetch Handler。
+主要演示 `@go-like/cache-memory` 对已验证风险评估进行带身份指纹的 TTL 缓存，以及 `@go-like/resilience` Circuit Breaker 对评分依赖失败进行熔断；Memory Cache 构造后即可使用，外部入口继续使用标准 Fetch Handler。
 
 ## 验证矩阵
 
@@ -31,8 +31,8 @@
 | Cache 命中与 Circuit Breaker | `test/main.test.ts` 的微服务用例     |
 
 ```bash
-bun run --filter @likego/example-fraud-risk-scoring typecheck
-bun run --filter @likego/example-fraud-risk-scoring test:unit
+bun run --filter @go-like/example-fraud-risk-scoring typecheck
+bun run --filter @go-like/example-fraud-risk-scoring test:unit
 ```
 
 ## 直接运行
@@ -40,10 +40,10 @@ bun run --filter @likego/example-fraud-risk-scoring test:unit
 在仓库根目录启动完整的 Cache、Circuit Breaker、HTTP 和 Core 应用：
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-fraud-risk-scoring start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-fraud-risk-scoring start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后，在另一个终端请求：
+看到 `GO_LIKE_EXAMPLE_READY` 后，在另一个终端请求：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/risk-assessments \

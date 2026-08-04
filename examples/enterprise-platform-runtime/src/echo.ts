@@ -1,6 +1,6 @@
-import type { Config } from "@likego/config"
-import type { Handler } from "@likego/server"
-import { serviceError } from "@likego/transport"
+import type { Config } from "@go-like/config"
+import type { Handler } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 
 import type { RuntimeConfig } from "./config"
 

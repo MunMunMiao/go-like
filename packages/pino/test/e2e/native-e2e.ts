@@ -3,8 +3,8 @@ import { once } from "node:events"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
 
-import { background } from "@likego/context"
-import { pinoDrainTimeout, newPinoServer } from "@likego/pino"
+import { background } from "@go-like/context"
+import { pinoDrainTimeout, newPinoServer } from "@go-like/pino"
 import pino, { symbols } from "pino"
 
 interface FileDestinationState {
@@ -169,7 +169,7 @@ function installListenerProbe(destination: ReturnType<typeof pino.destination>):
   })
 }
 
-const directory = await mkdtemp(resolve(tmpdir(), "likego-pino-e2e-"))
+const directory = await mkdtemp(resolve(tmpdir(), "go-like-pino-e2e-"))
 let destinationComponent: unknown = null
 let destinationRedacted: unknown = null
 let destinationFileLanded = false
@@ -478,7 +478,7 @@ try {
     if (
       !(outcome.error instanceof Error) ||
       !("code" in outcome.error) ||
-      outcome.error.code !== "LIKEGO_PINO_DESTINATION_CLOSED"
+      outcome.error.code !== "GO_LIKE_PINO_DESTINATION_CLOSED"
     )
       throw outcome.error
     startCaptureDestroyRejected = true
@@ -592,7 +592,7 @@ try {
     if (
       !(outcome.error instanceof Error) ||
       !("code" in outcome.error) ||
-      outcome.error.code !== "LIKEGO_PINO_DESTINATION_CLOSED"
+      outcome.error.code !== "GO_LIKE_PINO_DESTINATION_CLOSED"
     )
       throw outcome.error
     const state = fileDestinationState(captureCloseDestination)
@@ -814,7 +814,7 @@ try {
     if (
       !(error instanceof Error) ||
       !("code" in error) ||
-      error.code !== "LIKEGO_PINO_DESTINATION_CLOSED"
+      error.code !== "GO_LIKE_PINO_DESTINATION_CLOSED"
     )
       throw error
     destinationPreterminalRejected = true
@@ -862,7 +862,7 @@ try {
   if (
     !(endingOutcome.error instanceof Error) ||
     !("code" in endingOutcome.error) ||
-    endingOutcome.error.code !== "LIKEGO_PINO_DESTINATION_CLOSED"
+    endingOutcome.error.code !== "GO_LIKE_PINO_DESTINATION_CLOSED"
   ) {
     throw endingOutcome.error
   }
@@ -914,7 +914,7 @@ try {
     if (
       !(error instanceof Error) ||
       !("code" in error) ||
-      error.code !== "LIKEGO_PINO_DESTINATION_CLOSED"
+      error.code !== "GO_LIKE_PINO_DESTINATION_CLOSED"
     )
       throw error
     transportPreterminalRejected = true

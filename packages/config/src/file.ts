@@ -6,8 +6,8 @@ import {
   type ConfigSourceWatcher,
   type ConfigValue
 } from "./config"
-import { background, cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { background, cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 export interface FileReadResult {
   readonly text: string
@@ -297,7 +297,7 @@ function createWatcher(nativeWatcher: FileWatcher, initialDirty: boolean): FileW
  * Creates a complete-file configuration source from a runtime-neutral injected capability.
  *
  * Read and optional watch operations receive Context first. The accepted watch subscription is
- * private, its change callbacks are retained/coalesced, and its stop lifecycle is owned by LikeGo.
+ * private, its change callbacks are retained/coalesced, and its stop lifecycle is owned by go-like.
  */
 export function fileSource(
   capability: FileCapability,

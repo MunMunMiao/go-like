@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel, withCancelCause, type Context } from "@likego/context"
+import { background, canceled, withCancel, withCancelCause, type Context } from "@go-like/context"
 import {
   logger,
   secure,
@@ -8,13 +8,13 @@ import {
   withConnClose,
   type Message,
   type TransportLogLevel
-} from "@likego/transport"
+} from "@go-like/transport"
 import {
   executor,
   newHTTPTransport,
   type HTTPExecutor,
   type HTTPListener
-} from "@likego/transport-http"
+} from "@go-like/transport-http"
 import { newHTTPListener } from "../src/listener"
 import { host } from "../src/options"
 import { dispatchHTTPHostRequest } from "../src/socket"
@@ -158,7 +158,7 @@ function hostFixture(
 /** Creates one immutable transport Message response. */
 function message(value: string): Message {
   return Object.freeze({
-    header: Object.freeze({ "X-Likego-Result": "ok" }),
+    header: Object.freeze({ "X-Go-Like-Result": "ok" }),
     body: new TextEncoder().encode(value)
   })
 }
@@ -296,7 +296,7 @@ async function expectServeFirstOwnerCleanup(
     expect(terminalFailure).toBe(serveFailure)
   } else {
     expect(terminalFailure).toMatchObject({
-      code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT",
+      code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT",
       source: "serve",
       phase
     })
@@ -473,13 +473,13 @@ test("listen binds, accepts once, dispatches unary wire, and closes cleanly", as
     })
   )
   expect(response.status).toBe(200)
-  expect(response.headers.get("X-Likego-Result")).toBe("ok")
+  expect(response.headers.get("X-Go-Like-Result")).toBe("ok")
   expect(await response.text()).toBe("pong")
 
   await listener.close(background())
   await expect(accept).resolves.toBeUndefined()
   await expect(listener.accept(background(), function noop(): void {})).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_STATE"
+    code: "GO_LIKE_TRANSPORT_STATE"
   })
 })
 
@@ -727,7 +727,7 @@ test("capability admission happens before bind and force claims are verified aft
   transport.init(secure(true))
   await expect(
     transport.listen(background(), "127.0.0.1:0", host(noTLS.host))
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY" })
   expect(noTLS.bindCalls).toHaveLength(0)
 
   const invalidForce = hostFixture(
@@ -740,7 +740,7 @@ test("capability admission happens before bind and force claims are verified aft
   )
   await expect(
     newHTTPTransport().listen(background(), "127.0.0.1:0", host(invalidForce.host))
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY" })
   expect(invalidForce.bindCalls).toHaveLength(1)
   expect(invalidForce.closeCalls).toHaveLength(1)
 })
@@ -754,7 +754,7 @@ test("normal serve exit is an unexpected terminal error after readiness", async 
   fixture.serveDone.resolve(undefined)
 
   await expect(accept).rejects.toMatchObject({
-    code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT",
+    code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT",
     source: "serve",
     phase: "running"
   })
@@ -770,11 +770,11 @@ test("done settlement observed before ready wins the admission race", async () =
   fixture.ready.resolve(undefined)
 
   await expect(accepted).rejects.toMatchObject({
-    code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT",
+    code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT",
     source: "serve",
     phase: "before-ready"
   })
-  await expect(accept).rejects.toMatchObject({ code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT" })
+  await expect(accept).rejects.toMatchObject({ code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT" })
 })
 
 test("serve-first normal exit before ready cancels its derived owner", async () => {
@@ -932,7 +932,7 @@ test("listener close wins admission before a later synchronous serve failure", a
   function observedReentrantClose(): Promise<void> | null {
     return reentrantClose
   }
-  await expect(accepted).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(accepted).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   expect(observedReentrantClose()).toBe(accepting)
   fixture.hostDone.resolve(undefined)
   fixture.closeDone.resolve(undefined)
@@ -954,7 +954,7 @@ test("accept cancellation stays primary while a synchronous ready throw reaches 
 test("listener close stays primary while a synchronous ready throw reaches terminal", async () => {
   const race = readyThrowRace("close")
 
-  await expect(race.accepted).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(race.accepted).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   expect(race.reentrantClose()).toBe(race.accepting)
   expect(race.listener.close(background())).toBe(race.accepting)
   await expect(race.accepting).rejects.toBe(race.failure)
@@ -1072,7 +1072,7 @@ test("host-first normal exit cancels the serve owner without redundant host clos
   expect(fixture.closeCalls).toHaveLength(0)
   fixture.serveDone.resolve(undefined)
   await expect(accepting).rejects.toMatchObject({
-    code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT",
+    code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT",
     source: "host",
     phase: "running"
   })
@@ -1268,10 +1268,10 @@ test("dial and listen reject every unavailable portable capability before I/O", 
   const transport = newHTTPTransport(executor(run))
   await expect(
     transport.dial(background(), "localhost:8080", withConnClose())
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY" })
   await expect(transport.dial(background(), ":")).rejects.toBeInstanceOf(TypeError)
   await expect(transport.listen(background(), "127.0.0.1:0")).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY"
+    code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY"
   })
 
   const customTLS = newHTTPTransport(executor(run))
@@ -1286,7 +1286,7 @@ test("dial and listen reject every unavailable portable capability before I/O", 
     )
   )
   await expect(customTLS.dial(background(), "service.test:443")).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY"
+    code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY"
   })
 
   expect(transport.string()).toBe("http")
@@ -1997,7 +1997,7 @@ test("listener close normalizes a synchronous host cleanup throw", async () => {
   })
   const listener = newHTTPListener("127.0.0.1:43129", handle, baselineCapabilities())
   await expect(listener.close(background())).rejects.toBe(closeFailure)
-  await expect(listener.accepted()).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(listener.accepted()).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
 })
 
 test("live-Context bind rejection uses the terminal waiter normalization branch", async () => {

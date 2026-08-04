@@ -1,5 +1,5 @@
-import { background, type Context } from "@likego/context"
-import type { ConfigSource } from "@likego/config"
+import { background, type Context } from "@go-like/context"
+import type { ConfigSource } from "@go-like/config"
 
 import * as FileConfig from "../src/file"
 import {

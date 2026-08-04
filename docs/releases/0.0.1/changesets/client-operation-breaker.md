@@ -1,5 +1,5 @@
 ---
-"@likego/client": minor
+"@go-like/client": minor
 ---
 
 增加按 canonical `service/endpoint` operation 隔离的 `circuitBreakerMiddleware`。熔断器观察完整逻辑调用，

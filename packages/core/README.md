@@ -1,15 +1,15 @@
-# @likego/core
+# @go-like/core
 
-`@likego/core` 提供与 go-kratos 对齐的应用生命周期。应用只需要理解 `App.run()`、`App.stop()` 与结构化
+`@go-like/core` 提供与 go-kratos 对齐的应用生命周期。应用只需要理解 `App.run()`、`App.stop()` 与结构化
 `Server.start/stop`；不需要 handle、`done()`、diagnostics 或独立 runner。
 
 ## 使用方式
 
 ```ts
-import type { Context } from "@likego/context"
-import { name, newApp, registrar, server, type Server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import type { Registrar } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { name, newApp, registrar, server, type Server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import type { Registrar } from "@go-like/registry"
 
 declare const registry: Registrar
 const httpServer: Server = {
@@ -74,9 +74,9 @@ export interface App {
   否则“hook 完成后清理”与“清理完成后 hook 继续”会形成循环等待。
 - `context`、`id`、`name`、`version`、`metadata` 和 `endpoint` 对齐 Kratos App options。
 - `fromContext(ctx)` 与 `newContext(ctx, info)` 在 Context 中传递同一套 identity accessor。
-- `@likego/core/node` 只导出 `signal(...signals)` App option。默认监听 `SIGTERM`、`SIGQUIT`、`SIGINT`，
+- `@go-like/core/node` 只导出 `signal(...signals)` App option。默认监听 `SIGTERM`、`SIGQUIT`、`SIGINT`，
   第一次信号会设置 Unix exit code、同步移除该 App 自己的全部 listener，再请求 `App.stop()`；第二次信号恢复
   Node 默认终止行为。停止失败将 exit code 改为 `1`。
-- `@likego/core/lifecycle` 是 provider-facing 子路径，只提供 `waitForContext`：JavaScript Promise 本身不可取消，
+- `@go-like/core/lifecycle` 是 provider-facing 子路径，只提供 `waitForContext`：JavaScript Promise 本身不可取消，
   该 helper 让一个 caller Context 放弃等待时不误取消资源 owner，也不会制造 unhandled rejection。它不属于
   App 的 canonical happy path。

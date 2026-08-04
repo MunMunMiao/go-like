@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError } from "@likego/registry/provider"
+import type { Context } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError } from "@go-like/registry/provider"
 
 import { encodeCandidate, encodeSlice, type SliceCandidate } from "./codec"
 import { boundaryError } from "./errors"
@@ -73,7 +73,7 @@ export function newRegistrationManager(): RegistrationManager {
             let published
             if (existing === "foreign") {
               throw newRegistryProtocolError(
-                "Kubernetes foreign EndpointSlice occupies the canonical LikeGo name"
+                "Kubernetes foreign EndpointSlice occupies the canonical go-like name"
               )
             } else if (existing === null) {
               published = await createSlice(

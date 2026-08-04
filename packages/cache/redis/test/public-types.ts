@@ -1,5 +1,5 @@
-import type { Cache } from "@likego/cache"
-import type { Server } from "@likego/core"
+import type { Cache } from "@go-like/cache"
+import type { Server } from "@go-like/core"
 import type {
   RedisCacheClientFactory,
   RedisCacheErrorHandler,
@@ -17,7 +17,7 @@ const factories: readonly RedisCacheClientFactory[] = [
   () => createCluster({ rootNodes: [{ url: "redis://127.0.0.1:7000" }] }),
   () =>
     createSentinel({
-      name: "likego-primary",
+      name: "go-like-primary",
       sentinelRootNodes: [{ host: "127.0.0.1", port: 26379 }]
     })
 ]

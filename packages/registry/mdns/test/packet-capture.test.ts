@@ -7,11 +7,11 @@ import { expect, test } from "bun:test"
 import { encodeDNSPacket, type DNSPacket, type DNSRecord } from "../src/dns"
 import { inspectPacketCapture } from "./e2e/packet-capture"
 
-const InstanceOwner = "li-instance.ls-service.likego."
-const ServiceOwner = "ls-service.likego."
-const ListOwner = "_services.likego."
-const HostOwner = "lh-host.likego."
-const BrokenHostOwner = "lh-other.likego."
+const InstanceOwner = "li-instance.ls-service.go-like."
+const ServiceOwner = "ls-service.go-like."
+const ListOwner = "_services.go-like."
+const HostOwner = "lh-host.go-like."
+const BrokenHostOwner = "lh-other.go-like."
 
 type FixtureMutation =
   | "none"
@@ -34,7 +34,7 @@ function response(
       type: "TXT",
       ttl,
       flush: false,
-      data: [encoder.encode("Likego-Service-Name=service")]
+      data: [encoder.encode("Go-Like-Service-Name=service")]
     },
     {
       name: ServiceOwner,
@@ -60,7 +60,7 @@ function response(
       type: "TXT",
       ttl,
       flush: true,
-      data: [encoder.encode("Likego-Wire-Version=2"), encoder.encode("Likego-Chunk-Count=001")]
+      data: [encoder.encode("Go-Like-Wire-Version=2"), encoder.encode("Go-Like-Chunk-Count=001")]
     },
     family === "ipv4"
       ? { name: HostOwner, type: "A", ttl, flush: true, data: "192.0.2.10" }
@@ -150,7 +150,7 @@ function pcap(frames: readonly Uint8Array[]): Uint8Array {
 }
 
 test("extracts IP hop, RR TTL, flush, owner, target, and namespace evidence from classic pcap", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-mdns-pcap-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-mdns-pcap-"))
   const path = join(directory, "mdns.pcap")
   try {
     await writeFile(
@@ -202,7 +202,7 @@ test("extracts IP hop, RR TTL, flush, owner, target, and namespace evidence from
 })
 
 test("marks captures with a non-255 multicast hop limit invalid", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-mdns-pcap-hop-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-mdns-pcap-hop-"))
   const path = join(directory, "mdns.pcap")
   try {
     await writeFile(path, pcap([ipv4(response(120, "ipv4"), 64), ipv4(response(0, "ipv4"), 64)]))
@@ -213,7 +213,7 @@ test("marks captures with a non-255 multicast hop limit invalid", async () => {
 })
 
 test("rejects missing PTR or AAAA, wrong shared flush, and broken owner-target graphs", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-mdns-pcap-mutations-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-mdns-pcap-mutations-"))
   const path = join(directory, "mdns.pcap")
   try {
     const mutations: readonly (readonly [string, readonly Uint8Array[]])[] = [

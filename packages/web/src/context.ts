@@ -5,7 +5,7 @@ import {
   withTimeout,
   type CancelFunc,
   type Context
-} from "@likego/context"
+} from "@go-like/context"
 
 /** Handles one standard Web request without exposing a runtime-specific server contract. */
 export type Handler = (request: Request) => Response | Promise<Response>

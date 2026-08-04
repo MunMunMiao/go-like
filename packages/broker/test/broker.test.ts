@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import { newBrokerServer, type Broker, type BrokerEvent, type Subscriber } from "../src/index"
 import { registerSubscriberTerminal } from "../src/provider"
-import { background, withCancelCause, type Context } from "@likego/context"
+import { background, withCancelCause, type Context } from "@go-like/context"
 
 interface NativeEvent {
   readonly sequence: number

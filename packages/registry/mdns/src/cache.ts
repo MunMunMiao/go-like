@@ -1,9 +1,9 @@
-import { type ServiceInstance } from "@likego/registry"
+import { type ServiceInstance } from "@go-like/registry"
 import {
   newRegistryProtocolError,
   snapshotServiceInstance,
   snapshotServiceInstances
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 import { canonicalPayload, identityPreimage } from "./canonical"
 

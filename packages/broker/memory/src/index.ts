@@ -1,7 +1,7 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import { registerSubscriberTerminal } from "@likego/broker/provider"
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import { registerSubscriberTerminal } from "@go-like/broker/provider"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 /** Implements the process-local Broker contract without native delivery state. */
 export interface MemoryBroker extends Broker<void, void, void, null> {

@@ -1,11 +1,11 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567"
-const wireMarker = "likego.registry-etcd.instance.v1"
-const identityMarker = "likego.registry-instance.identity.v1"
-const contentMarker = "likego.registry-instance.content.v1"
+const wireMarker = "go-like.registry-etcd.instance.v1"
+const identityMarker = "go-like.registry-instance.identity.v1"
+const contentMarker = "go-like.registry-instance.content.v1"
 const maximumPayloadBytes = 1_048_576
 
 /** Describes one immutable canonical record ready for the etcd gateway. */
@@ -105,7 +105,7 @@ export function decodeBytes(value: string): string {
       typeof error === "object" &&
       error !== null &&
       "code" in error &&
-      error.code === "LIKEGO_REGISTRY_PROTOCOL"
+      error.code === "GO_LIKE_REGISTRY_PROTOCOL"
     ) {
       throw error
     }

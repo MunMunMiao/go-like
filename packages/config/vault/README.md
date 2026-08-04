@@ -1,11 +1,11 @@
-# @likego/config-vault
+# @go-like/config-vault
 
-`@likego/config-vault` 使用调用方注入的标准 Fetch，从 HashiCorp Vault KV v2 的一个精确 secret 路径读取
+`@go-like/config-vault` 使用调用方注入的标准 Fetch，从 HashiCorp Vault KV v2 的一个精确 secret 路径读取
 完整 `ConfigObject`，并以 `data.metadata.version` 和该版本的 `created_time` 组成 provider-opaque generation
 revision。它不依赖 Vault SDK，不读取运行时全局 `fetch`，也不支持 KV v1。
 
 ```ts
-import { vaultSource } from "@likego/config-vault"
+import { vaultSource } from "@go-like/config-vault"
 
 const source = vaultSource({
   fetch(request) {

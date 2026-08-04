@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { type Metadata } from "@likego/metadata"
+import { background } from "@go-like/context"
+import { type Metadata } from "@go-like/metadata"
 import {
   filterLabel,
   filterVersion,
@@ -8,14 +8,14 @@ import {
   type Registry,
   type SelectionOutcome,
   type ServiceInstance
-} from "@likego/registry"
+} from "@go-like/registry"
 import {
   notifyRegistrationError,
   providerOptions,
   snapshotServiceInstance,
   type ProviderOptionInput,
   type RegistrationErrorHandler
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 const service: ServiceInstance = snapshotServiceInstance({
   id: "published-1",

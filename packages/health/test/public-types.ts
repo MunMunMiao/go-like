@@ -1,4 +1,4 @@
-import { background, type Context } from "@likego/context"
+import { background, type Context } from "@go-like/context"
 import * as Health from "../src/index"
 import {
   newProbeRegistry,
@@ -25,7 +25,7 @@ void [report, unregister, checked]
 Health.ProbeRegistry
 // @ts-expect-error Capitalized callable aliases are not exported.
 Health.NewProbeRegistry()
-// @ts-expect-error HTTP handlers belong to @likego/web/health.
+// @ts-expect-error HTTP handlers belong to @go-like/web/health.
 Health.createHealthFetch(registry)
 // @ts-expect-error Probe kinds are exact.
 registry.register("startup", "x", probe)

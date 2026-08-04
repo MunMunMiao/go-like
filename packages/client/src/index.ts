@@ -1,6 +1,6 @@
-import { background, withoutCancel, withValue, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import { fromClientContext, newMetadata, type Metadata } from "@likego/metadata"
+import { background, withoutCancel, withValue, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { fromClientContext, newMetadata, type Metadata } from "@go-like/metadata"
 import {
   newRoundRobinSelector,
   newNoAvailableEndpointError,
@@ -10,7 +10,7 @@ import {
   type SelectionOutcome,
   type Selector,
   type ServiceInstance
-} from "@likego/registry"
+} from "@go-like/registry"
 import {
   newCircuitBreaker,
   retry,
@@ -19,8 +19,8 @@ import {
   type CircuitBreakerOptions,
   type RetryOptions,
   type RetryPredicate
-} from "@likego/resilience"
-import type { Infer, Struct } from "@likego/struct"
+} from "@go-like/resilience"
+import type { Infer, Struct } from "@go-like/struct"
 import {
   endpoint as endpointContract,
   fromClientContext as fromTransportClientContext,
@@ -33,20 +33,20 @@ import {
   type Middleware,
   type Transport,
   type TransportInfo
-} from "@likego/transport"
+} from "@go-like/transport"
 import {
   endpoint as endpointHeader,
   contentType as contentTypeHeader,
   metadata as metadataHeader,
   request as serviceHeader
-} from "@likego/transport/headers"
-import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@likego/transport/json"
+} from "@go-like/transport/headers"
+import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@go-like/transport/json"
 import {
   decodeServiceError,
   encodeMetadataHeader,
   newTransportProtocolError,
   snapshotMessage
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 import {
   closeWithTimeout,
   isCompletedCallFailure,
@@ -374,7 +374,7 @@ function rejectReservedHeaders(message: Message): void {
       lower === endpointHeaderLower ||
       lower === metadataHeaderLower
     ) {
-      throw new TypeError(`message header ${name} is reserved by @likego/client`)
+      throw new TypeError(`message header ${name} is reserved by @go-like/client`)
     }
   }
 }
@@ -774,7 +774,7 @@ export function middleware(value: ClientMiddleware): ClientOption {
 /** Replaces middleware for one exact or trailing-wildcard operation selector. */
 export function use(
   selector: string,
-  ...values: readonly ClientMiddleware[] /* likego-typed-rest: preserves ordered middleware. */
+  ...values: readonly ClientMiddleware[] /* go-like-typed-rest: preserves ordered middleware. */
 ): ClientOption {
   const operation = operationSelector(selector)
   const selected: ClientMiddleware[] = []
@@ -1413,7 +1413,7 @@ function createClient(
   async function dispatch(
     ctx: Context,
     request: CallRequest,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Message> {
     const operation = `${callName(request.service, "service")}/${callName(
       request.endpoint,
@@ -1422,7 +1422,7 @@ function createClient(
     return await (operationCall(operation, operationCalls) ?? baseCall)(
       ctx,
       request,
-      ...options /* likego-typed-spread: forwards call options. */
+      ...options /* go-like-typed-spread: forwards call options. */
     )
   }
 
@@ -1457,21 +1457,21 @@ function createClient(
     ctx: Context,
     contract: Endpoint<Request, Response>,
     request: NoInfer<Infer<Request>>,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Infer<Response>>
 
   /** Calls one raw Message endpoint. */
   function call(
     ctx: Context,
     request: CallRequest,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Message>
 
   /** Dispatches one raw or typed invocation without exposing an additional client concept. */
   async function call(
     ctx: Context,
     subject: unknown,
-    ...values: readonly unknown[] /* likego-typed-rest: accepts either public overload. */
+    ...values: readonly unknown[] /* go-like-typed-rest: accepts either public overload. */
   ): Promise<unknown> {
     if (closed) throw closedError
     if (isCallRequest(subject)) {

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { runInNewContext } from "node:vm"
 
-import { background, withCancelCause, type Context } from "@likego/context"
-import { type Metadata } from "@likego/metadata"
+import { background, withCancelCause, type Context } from "@go-like/context"
+import { type Metadata } from "@go-like/metadata"
 import {
   filterLabel,
   filterVersion,
@@ -375,7 +375,7 @@ describe("round-robin endpoint selector", () => {
     })()
     expect(failure).toMatchObject({
       name: "NoAvailableEndpointError",
-      code: "LIKEGO_NO_AVAILABLE_ENDPOINT"
+      code: "GO_LIKE_NO_AVAILABLE_ENDPOINT"
     } satisfies Partial<NoAvailableEndpointError>)
     expect(failure).toBeInstanceOf(Error)
     expect(Object.isFrozen(failure)).toBe(true)

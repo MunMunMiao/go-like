@@ -1,10 +1,10 @@
-import { newBrokerServer } from "@likego/broker"
-import { newMemoryBroker } from "@likego/broker-memory"
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { eventBroker, type Codec } from "@likego/event"
-import type { Store } from "@likego/store"
-import { newMemoryStore } from "@likego/store-memory"
+import { newBrokerServer } from "@go-like/broker"
+import { newMemoryBroker } from "@go-like/broker-memory"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { eventBroker, type Codec } from "@go-like/event"
+import type { Store } from "@go-like/store"
+import { newMemoryStore } from "@go-like/store-memory"
 
 import type { DeliveryReceipt } from "./service"
 

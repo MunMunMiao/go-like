@@ -1,6 +1,6 @@
-import { background, type Context } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { notifyRegistrationError, snapshotServiceInstance } from "@likego/registry/provider"
+import { background, type Context } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { notifyRegistrationError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 import {
   decodeAgentReadback,

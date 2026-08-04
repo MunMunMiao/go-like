@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/store-etcd",
+  "name": "@go-like/store-etcd",
   "version": "0.0.1",
-  "description": "Portable etcd v3 JSON gateway Store provider using standard Web Fetch for LikeGo.",
+  "description": "Portable etcd v3 JSON gateway Store provider using standard Web Fetch for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -26,9 +26,9 @@
     "test:e2e:runtimes": "bun test/e2e/runtime-matrix.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
-    "@likego/store": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/store": "0.0.1"
   },
   "devDependencies": {
     "@types/node": "26.1.2"

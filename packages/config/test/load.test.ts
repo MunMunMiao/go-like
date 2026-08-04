@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@likego/context"
+import { background, withCancelCause, type Context } from "@go-like/context"
 import type { ConfigSourceSnapshot } from "../src/index"
 import { newConfig, source } from "../src/index"
 import { deferred, flush } from "./helpers"
@@ -108,7 +108,7 @@ describe("initial config load", () => {
 
     await expect(asyncConfig.load(background())).rejects.toMatchObject({
       name: "ConfigSourceError",
-      code: "LIKEGO_CONFIG_SOURCE",
+      code: "GO_LIKE_CONFIG_SOURCE",
       sourceName: "async",
       phase: "load",
       cause: asynchronous

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { name, newApp, registrar, server } from "@likego/core"
-import { newNodeServer } from "@likego/web/node"
+import { name, newApp, registrar, server } from "@go-like/core"
+import { newNodeServer } from "@go-like/web/node"
 
 test("Core clean stop during Node Web startup does not surface cancellation", async () => {
   const app = newApp(

@@ -5,9 +5,9 @@ import {
   type ConfigSourceSnapshot,
   type ConfigSourceWatcher,
   type ConfigValue
-} from "@likego/config"
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/config"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 /** Executes one injected standard Web Fetch request. */
 export type VaultFetch = (request: Request) => Promise<Response>
@@ -30,18 +30,18 @@ export interface VaultSourceOptions {
 
 export interface VaultHttpError extends Error {
   readonly name: "VaultHttpError"
-  readonly code: "LIKEGO_VAULT_HTTP"
+  readonly code: "GO_LIKE_VAULT_HTTP"
   readonly status: number
 }
 
 export interface VaultTransportError extends Error {
   readonly name: "VaultTransportError"
-  readonly code: "LIKEGO_VAULT_TRANSPORT"
+  readonly code: "GO_LIKE_VAULT_TRANSPORT"
 }
 
 export interface VaultProtocolError extends Error {
   readonly name: "VaultProtocolError"
-  readonly code: "LIKEGO_VAULT_PROTOCOL"
+  readonly code: "GO_LIKE_VAULT_PROTOCOL"
 }
 
 interface CapturedOptions {
@@ -137,7 +137,7 @@ function isHttpError(error: Error): error is VaultHttpError {
   return (
     error.name === "VaultHttpError" &&
     "code" in error &&
-    error.code === "LIKEGO_VAULT_HTTP" &&
+    error.code === "GO_LIKE_VAULT_HTTP" &&
     "status" in error &&
     typeof error.status === "number"
   )
@@ -148,14 +148,14 @@ function isTransportError(error: Error): error is VaultTransportError {
   return (
     error.name === "VaultTransportError" &&
     "code" in error &&
-    error.code === "LIKEGO_VAULT_TRANSPORT"
+    error.code === "GO_LIKE_VAULT_TRANSPORT"
   )
 }
 
 /** Narrows one decorated Error to the public Vault protocol shape. */
 function isProtocolError(error: Error): error is VaultProtocolError {
   return (
-    error.name === "VaultProtocolError" && "code" in error && error.code === "LIKEGO_VAULT_PROTOCOL"
+    error.name === "VaultProtocolError" && "code" in error && error.code === "GO_LIKE_VAULT_PROTOCOL"
   )
 }
 
@@ -164,7 +164,7 @@ function newHttpError(status: number): VaultHttpError {
   const error = new Error(`Vault KV v2 read failed with HTTP ${status}`)
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultHttpError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_HTTP" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_HTTP" },
     status: { enumerable: true, value: status }
   })
   if (!isHttpError(error)) throw new Error("Vault HTTP error construction failed")
@@ -176,7 +176,7 @@ function newTransportError(): VaultTransportError {
   const error = new Error("Vault KV v2 transport failed")
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultTransportError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_TRANSPORT" }
+    code: { enumerable: true, value: "GO_LIKE_VAULT_TRANSPORT" }
   })
   if (!isTransportError(error)) throw new Error("Vault transport error construction failed")
   return Object.freeze(error)
@@ -187,7 +187,7 @@ function newProtocolError(): VaultProtocolError {
   const error = new Error("Vault KV v2 response was invalid")
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultProtocolError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_PROTOCOL" }
+    code: { enumerable: true, value: "GO_LIKE_VAULT_PROTOCOL" }
   })
   if (!isProtocolError(error)) throw new Error("Vault protocol error construction failed")
   return Object.freeze(error)
@@ -371,7 +371,7 @@ function headerValue(value: string | undefined, label: string): void {
   }
   try {
     const headers = new Headers()
-    headers.set("X-LikeGo-Validation", value)
+    headers.set("X-go-like-Validation", value)
   } catch {
     throw new TypeError(`Vault ${label} must be a non-empty HTTP header value`)
   }

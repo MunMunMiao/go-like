@@ -1,4 +1,4 @@
-import type { Server } from "@likego/core"
+import type { Server } from "@go-like/core"
 import type { MeterProvider } from "@opentelemetry/sdk-metrics"
 import type { TracerProvider } from "@opentelemetry/sdk-trace"
 
@@ -16,12 +16,12 @@ export interface OtelServer extends Server {}
 
 export interface OtelAlreadyStartedError extends Error {
   readonly name: "OtelAlreadyStartedError"
-  readonly code: "LIKEGO_OTEL_ALREADY_STARTED"
+  readonly code: "GO_LIKE_OTEL_ALREADY_STARTED"
   readonly status: "starting" | "running" | "stopping" | "stopped" | "failed"
 }
 
 export interface OtelShutdownTimeoutError extends Error {
   readonly name: "OtelShutdownTimeoutError"
-  readonly code: "LIKEGO_OTEL_SHUTDOWN_TIMEOUT"
+  readonly code: "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT"
   readonly timeoutMs: number
 }

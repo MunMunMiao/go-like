@@ -1,10 +1,10 @@
 import process from "node:process"
 
-import { afterStart, name, newApp, server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import type { Handler } from "@likego/web"
-import { createHealthHandler } from "@likego/web/health"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+import { afterStart, name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import type { Handler } from "@go-like/web"
+import { createHealthHandler } from "@go-like/web/health"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import { newRuntime } from "./service"
 
@@ -32,7 +32,7 @@ const app = newApp(
   afterStart(async function announceReady(ctx): Promise<void> {
     await webServer.endpoint(ctx)
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "manufacturing-maintenance", origin })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "manufacturing-maintenance", origin })}\n`
     )
   })
 )

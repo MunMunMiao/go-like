@@ -1,4 +1,4 @@
-import { background, deadlineExceeded, withCancelCause } from "@likego/context"
+import { background, deadlineExceeded, withCancelCause } from "@go-like/context"
 import { expect, test } from "bun:test"
 
 import { newHttpError, rollbackFailure } from "../src/errors"
@@ -43,13 +43,13 @@ test("HTTP boundary covers abort, invalid JSON, watch status, and empty body", a
   }
   await expect(
     postJson(options(invalid), "range", "/v3/kv/range", {}, new AbortController().signal)
-  ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 
   const denied: EtcdFetch = async function deniedWatch(): Promise<Response> {
     return new Response(null, { status: 403 })
   }
   await expect(postWatch(options(denied), {}, new AbortController().signal)).rejects.toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 403
   })
   const bodyless: EtcdFetch = async function bodylessWatch(): Promise<Response> {
@@ -64,8 +64,8 @@ test("retry classification is exact", () => {
   expect(retryable(deadlineExceeded)).toBeTrue()
   expect(retryable(null)).toBeFalse()
   expect(retryable({ code: "OTHER" })).toBeFalse()
-  expect(retryable({ code: "LIKEGO_ETCD_TRANSPORT" })).toBeTrue()
-  expect(retryable({ code: "LIKEGO_ETCD_HTTP", status: "500" })).toBeFalse()
+  expect(retryable({ code: "GO_LIKE_ETCD_TRANSPORT" })).toBeTrue()
+  expect(retryable({ code: "GO_LIKE_ETCD_HTTP", status: "500" })).toBeFalse()
   expect(retryable(newHttpError("range", 408))).toBeTrue()
   expect(retryable(newHttpError("range", 425))).toBeTrue()
   expect(retryable(newHttpError("range", 429))).toBeTrue()

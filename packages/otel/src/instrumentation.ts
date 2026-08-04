@@ -1,6 +1,6 @@
-import type { Context as LikegoContext } from "@likego/context"
-import { fromServerContext, mergeToClientContext, newMetadata } from "@likego/metadata"
-import { isServiceError } from "@likego/transport"
+import type { Context as GoLikeContext } from "@go-like/context"
+import { fromServerContext, mergeToClientContext, newMetadata } from "@go-like/metadata"
+import { isServiceError } from "@go-like/transport"
 import {
   context,
   propagation,
@@ -25,7 +25,7 @@ export type RequestOutcome = "canceled" | "failure" | "success"
 const errorTypePattern = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/
 const errorCodePattern = /^[A-Z0-9_.-]{1,64}$/
 
-/** Holds the two official OpenTelemetry instruments used by LikeGo request instrumentation. */
+/** Holds the two official OpenTelemetry instruments used by go-like request instrumentation. */
 export interface RequestMetrics {
   readonly requestsTotal: Counter
   readonly requestDurationSeconds: Histogram
@@ -48,7 +48,7 @@ function recordErrorIdentifiers(span: Span, value: unknown): void {
   const errorType = errorIdentifier(value, "name", errorTypePattern)
   const errorCode = errorIdentifier(value, "code", errorCodePattern)
   if (errorType !== null) span.setAttribute("error.type", errorType)
-  if (errorCode !== null) span.setAttribute("likego.error.code", errorCode)
+  if (errorCode !== null) span.setAttribute("go-like.error.code", errorCode)
 }
 
 /** Sets one propagation field on a mutable header carrier. */
@@ -138,12 +138,12 @@ export function newRequestMetrics(meter: Meter): RequestMetrics {
   ) {
     throw new TypeError("meter must implement the OpenTelemetry Meter interface")
   }
-  const requestsTotal = meter.createCounter("likego.request.completed", {
-    description: "Completed LikeGo requests.",
+  const requestsTotal = meter.createCounter("go-like.request.completed", {
+    description: "Completed go-like requests.",
     unit: "{request}"
   })
-  const requestDurationSeconds = meter.createHistogram("likego.request.duration", {
-    description: "Duration of completed LikeGo requests in seconds.",
+  const requestDurationSeconds = meter.createHistogram("go-like.request.duration", {
+    description: "Duration of completed go-like requests in seconds.",
     unit: "s"
   })
   return Object.freeze({ requestsTotal, requestDurationSeconds })
@@ -174,7 +174,7 @@ export function startMeasurement(
 }
 
 /** Classifies a failed Context-owned operation without inspecting its error. */
-export function contextOutcome(ctx: LikegoContext): RequestOutcome {
+export function contextOutcome(ctx: GoLikeContext): RequestOutcome {
   try {
     return ctx.err() === null ? "failure" : "canceled"
   } catch {
@@ -224,17 +224,17 @@ export function injectHeaders(
   return Object.freeze(carrier)
 }
 
-/** Injects active propagation fields into the canonical LikeGo client metadata Context. */
+/** Injects active propagation fields into the canonical go-like client metadata Context. */
 export function injectClientContext(
-  ctx: LikegoContext,
+  ctx: GoLikeContext,
   propagator: HeaderPropagator | undefined
-): LikegoContext {
+): GoLikeContext {
   return mergeToClientContext(ctx, newMetadata(injectHeaders(Object.freeze({}), propagator)))
 }
 
-/** Projects decoded LikeGo server metadata over direct wire headers for parent extraction. */
+/** Projects decoded go-like server metadata over direct wire headers for parent extraction. */
 function serverHeaderCarrier(
-  ctx: LikegoContext,
+  ctx: GoLikeContext,
   headers: Readonly<Record<string, string>>
 ): HeaderCarrier {
   const carrier = propagationCarrier(headers, Object.freeze([]))
@@ -260,9 +260,9 @@ export function extractHeaders(
     : propagator.extract(context.active(), carrier, headerGetter)
 }
 
-/** Extracts one remote parent from direct headers and canonical LikeGo server metadata. */
+/** Extracts one remote parent from direct headers and canonical go-like server metadata. */
 export function extractServerContext(
-  ctx: LikegoContext,
+  ctx: GoLikeContext,
   headers: Readonly<Record<string, string>>,
   propagator: HeaderPropagator | undefined
 ): OtelContext {
@@ -298,7 +298,7 @@ export function routeField(headers: Readonly<Record<string, string>>, expected: 
 
 /** Marks one successfully completed operation with only low-cardinality outcome data. */
 export function succeedSpan(span: Span): void {
-  span.setAttribute("likego.outcome", "ok")
+  span.setAttribute("go-like.outcome", "ok")
   span.setStatus({ code: SpanStatusCode.OK })
 }
 
@@ -306,17 +306,17 @@ export function succeedSpan(span: Span): void {
 export function completeResponseSpan(span: Span, response: Response): void {
   span.setAttribute("http.response.status_code", response.status)
   if (response.status >= 500) {
-    span.setAttribute("likego.outcome", "http_server_error")
+    span.setAttribute("go-like.outcome", "http_server_error")
     span.setStatus({ code: SpanStatusCode.ERROR })
     return
   }
-  span.setAttribute("likego.outcome", response.status >= 400 ? "http_client_error" : "ok")
+  span.setAttribute("go-like.outcome", response.status >= 400 ? "http_client_error" : "ok")
 }
 
 /** Classifies one failed operation without copying error text into span attributes. */
 export function failSpan(
   span: Span,
-  ctx: LikegoContext,
+  ctx: GoLikeContext,
   value: unknown,
   fallback: FailureKind
 ): void {
@@ -327,7 +327,7 @@ export function failSpan(
   } catch {
     // Observability must not replace the wrapped operation's failure.
   }
-  span.setAttribute("likego.outcome", outcome)
+  span.setAttribute("go-like.outcome", outcome)
   span.setStatus({ code: SpanStatusCode.ERROR })
   recordErrorIdentifiers(span, value)
 }
@@ -342,7 +342,7 @@ export function failRequestSpan(
   let outcome: string = fallback
   if (signal.aborted) outcome = "canceled"
   else if (isServiceError(value)) outcome = "service_error"
-  span.setAttribute("likego.outcome", outcome)
+  span.setAttribute("go-like.outcome", outcome)
   span.setStatus({ code: SpanStatusCode.ERROR })
   recordErrorIdentifiers(span, value)
 }

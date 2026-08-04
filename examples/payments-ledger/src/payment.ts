@@ -1,4 +1,4 @@
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 import type { PubAck } from "@nats-io/jetstream"
 
 export const paymentSubject = "payments.ledger.v1.posted"

@@ -1,5 +1,5 @@
-import type { Broker, Subscriber } from "@likego/broker"
-import { background } from "@likego/context"
+import type { Broker, Subscriber } from "@go-like/broker"
+import { background } from "@go-like/context"
 import type { ConsumerMessages, JetStreamClient, JsMsg, PubAck } from "@nats-io/jetstream"
 import {
   newNatsJetStreamBroker,

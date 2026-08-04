@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
 import { Worker } from "bullmq"
 
 import {
@@ -46,14 +46,14 @@ export interface BullMqWorkerLike {
   on(
     event: "error" | "closed",
     listener: (
-      ...values: unknown[] /* likego-typed-rest: matches the official EventEmitter listener shape without narrowing native values. */
+      ...values: unknown[] /* go-like-typed-rest: matches the official EventEmitter listener shape without narrowing native values. */
     ) => void
   ): this
   /** Removes one adapter-installed native lifecycle listener. */
   off(
     event: "error" | "closed",
     listener: (
-      ...values: unknown[] /* likego-typed-rest: matches the official EventEmitter listener shape without narrowing native values. */
+      ...values: unknown[] /* go-like-typed-rest: matches the official EventEmitter listener shape without narrowing native values. */
     ) => void
   ): this
   /** Waits for the official Worker connections. */
@@ -558,7 +558,7 @@ export function newBullMqWorkerServer<
   NameType extends string = string
 >(
   worker: Worker<DataType, ResultType, NameType>,
-  ...options: readonly BullMqOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly BullMqOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): BullMqWorkerServer
 
 /** Creates an application-configured official Worker lazily inside Server startup. */
@@ -568,7 +568,7 @@ export function newBullMqWorkerServer<
   NameType extends string = string
 >(
   factory: BullMqWorkerFactory<DataType, ResultType, NameType>,
-  ...options: readonly BullMqOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly BullMqOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): BullMqWorkerServer
 
 /** Implements the official Worker and factory overloads without owning the data plane. */
@@ -580,7 +580,7 @@ export function newBullMqWorkerServer<
   workerOrFactory:
     | Worker<DataType, ResultType, NameType>
     | BullMqWorkerFactory<DataType, ResultType, NameType>,
-  ...options: readonly BullMqOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly BullMqOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): BullMqWorkerServer {
   if (workerOrFactory instanceof Worker) {
     const worker = workerOrFactory

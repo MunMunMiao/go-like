@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { name, newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { newBankTransferHandler } from "../src/http"
 import { newMemoryTransferNetworkDirectory, newQuoteTransfer } from "../src/service"

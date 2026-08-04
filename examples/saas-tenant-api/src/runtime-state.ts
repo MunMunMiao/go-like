@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newConsulStore } from "@likego/store-consul"
+import type { Context } from "@go-like/context"
+import { newConsulStore } from "@go-like/store-consul"
 
 export interface TenantRuntimeState {
   publish(ctx: Context): Promise<void>
@@ -15,7 +15,7 @@ export function newTenantRuntimeState(address: string, instanceId: string): Tena
       return fetch(request)
     },
     address,
-    root: "likego/examples/saas-tenant-api/runtime"
+    root: "go-like/examples/saas-tenant-api/runtime"
   })
   const key = `instances/${instanceId}`
   const value = encoder.encode(JSON.stringify({ instanceId, status: "running" }))

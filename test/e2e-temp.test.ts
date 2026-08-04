@@ -24,23 +24,23 @@ test("canonical temp root is absolute, private, and resolves platform aliases", 
 
 test("temp directory handles are contained, private, removable, and not forgeable", async () => {
   const root = await canonicalTempRoot()
-  const directory = await createTempDirectory("likego-test-")
+  const directory = await createTempDirectory("go-like-test-")
   expect(isPathContained(root, directory.path)).toBe(true)
   const metadata = await stat(directory.path)
   if (process.platform !== "win32") expect(metadata.mode & 0o077).toBe(0)
   await removeTempDirectory(directory)
   expect(await Bun.file(directory.path).exists()).toBe(false)
   await expect(removeTempDirectory({ path: directory.path })).rejects.toThrow(
-    "unknown LikeGo temp directory handle"
+    "unknown go-like temp directory handle"
   )
 })
 
 test("temp subdirectories create private no-symlink components and reject collisions", async () => {
-  const directory = await createTempDirectory("likego-components-")
+  const directory = await createTempDirectory("go-like-components-")
   try {
     const created = await createTempSubdirectories(directory, [
-      ["node_modules", "@likego"],
-      ["node_modules", "@likego", "web"],
+      ["node_modules", "@go-like"],
+      ["node_modules", "@go-like", "web"],
       ["node_modules", "hono"]
     ])
     const scope = created[0]
@@ -49,8 +49,8 @@ test("temp subdirectories create private no-symlink components and reject collis
     if (scope === undefined || first === undefined || second === undefined) {
       throw new Error("temp subdirectory result inventory changed")
     }
-    expect(scope).toBe(join(directory.path, "node_modules", "@likego"))
-    expect(first).toBe(join(directory.path, "node_modules", "@likego", "web"))
+    expect(scope).toBe(join(directory.path, "node_modules", "@go-like"))
+    expect(first).toBe(join(directory.path, "node_modules", "@go-like", "web"))
     expect(second).toBe(join(directory.path, "node_modules", "hono"))
     for (const path of [scope, first, second]) {
       const metadata = await lstat(path)
@@ -62,7 +62,7 @@ test("temp subdirectories create private no-symlink components and reject collis
       "path component already exists"
     )
     await expect(createTempSubdirectory(directory, ["..", "escape"])).rejects.toThrow(
-      "invalid LikeGo temp path component"
+      "invalid go-like temp path component"
     )
   } finally {
     await removeTempDirectory(directory)
@@ -71,8 +71,8 @@ test("temp subdirectories create private no-symlink components and reject collis
 
 test("temp cleanup rejects a symlink swap without deleting its target", async () => {
   if (process.platform === "win32") return
-  const first = await createTempDirectory("likego-swap-first-")
-  const second = await createTempDirectory("likego-swap-second-")
+  const first = await createTempDirectory("go-like-swap-first-")
+  const second = await createTempDirectory("go-like-swap-second-")
   const movedFirst = `${first.path}-moved`
   try {
     await Bun.write(`${second.path}/canary`, "preserve")
@@ -94,10 +94,10 @@ test("temp cleanup rejects a symlink swap without deleting its target", async ()
 
 test("unsafe prefixes fail before a directory is created", async () => {
   await expect(createTempDirectory("../unsafe-")).rejects.toThrow(
-    "invalid LikeGo temp directory prefix"
+    "invalid go-like temp directory prefix"
   )
   await expect(createTempDirectory("missing-trailing-separator")).rejects.toThrow(
-    "invalid LikeGo temp directory prefix"
+    "invalid go-like temp directory prefix"
   )
 })
 
@@ -107,5 +107,5 @@ test("temp cleanup failures can be collected without hiding later cleanup", asyn
     removeTempDirectory({ path: "/tmp/foreign" })
   )
   expect(failures).toHaveLength(1)
-  expect(failures[0]?.error.message).toBe("unknown LikeGo temp directory handle")
+  expect(failures[0]?.error.message).toBe("unknown go-like temp directory handle")
 })

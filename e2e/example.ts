@@ -6,7 +6,7 @@ import { authorityToEnvironment } from "./harness/owned-docker"
 import { createProcessSupervisor, type ProcessSupervisor } from "./harness/process"
 
 const RepositoryRoot = resolve(import.meta.dir, "..")
-const readyPrefix = "LIKEGO_EXAMPLE_READY="
+const readyPrefix = "GO_LIKE_EXAMPLE_READY="
 const commandTimeoutMs = 30_000
 
 function timeout<T>(work: Promise<T>, milliseconds: number, message: string): Promise<T> {

@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import { newTransportProtocolError } from "@likego/transport/provider"
+import { cause, type Context } from "@go-like/context"
+import { newTransportProtocolError } from "@go-like/transport/provider"
 
 import type { HTTPStatusError, HTTPTransportUnexpectedExitError } from "./types"
 
@@ -210,7 +210,7 @@ export async function newHTTPStatusError(
     "name" | "code" | "status" | "statusText" | "body" | "bodyTruncated"
   > = {
     name: "HTTPStatusError",
-    code: "LIKEGO_HTTP_STATUS",
+    code: "GO_LIKE_HTTP_STATUS",
     status: response.status,
     statusText: response.statusText,
     body: new Uint8Array(retained),
@@ -236,7 +236,7 @@ export function newHTTPTransportUnexpectedExitError(
   const error = new Error(`HTTP ${source} ended unexpectedly during ${phase}`)
   const details: Pick<HTTPTransportUnexpectedExitError, "name" | "code" | "source" | "phase"> = {
     name: "HTTPTransportUnexpectedExitError",
-    code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT",
+    code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT",
     source,
     phase
   }

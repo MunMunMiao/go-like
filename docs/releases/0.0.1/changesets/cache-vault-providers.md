@@ -1,11 +1,11 @@
 ---
-"@likego/cache": patch
-"@likego/cache-memory": patch
-"@likego/cache-redis": patch
-"@likego/config": patch
-"@likego/config-vault": patch
-"@likego/store-consul": patch
-"@likego/store-vault": patch
+"@go-like/cache": patch
+"@go-like/cache-memory": patch
+"@go-like/cache-redis": patch
+"@go-like/config": patch
+"@go-like/config-vault": patch
+"@go-like/store-consul": patch
+"@go-like/store-vault": patch
 ---
 
 增加独立 Cache SPI、Memory 与 Redis provider，为 Config 和 Store 增加 Vault KV v2 provider，并让 Consul

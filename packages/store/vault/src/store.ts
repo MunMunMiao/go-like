@@ -1,4 +1,4 @@
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 import {
   type DeleteOption,
   type ListOption,
@@ -6,14 +6,14 @@ import {
   type StoreRecord,
   type StoreRecordInput,
   type WriteOption
-} from "@likego/store"
+} from "@go-like/store"
 import {
   deleteOptions,
   listOptions,
   snapshotStorePage,
   snapshotStoreRecordInput,
   writeOptions
-} from "@likego/store/provider"
+} from "@go-like/store/provider"
 
 import { maximumKeyBytes, maximumValueBytes, physicalKey } from "./codec"
 import { newSnapshotError } from "./errors"

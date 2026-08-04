@@ -1,10 +1,10 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, CallRequest, Client } from "@likego/client"
-import type { Context } from "@likego/context"
-import type { Middleware } from "@likego/server"
-import type { Infer, Struct } from "@likego/struct"
-import type { Endpoint, Message } from "@likego/transport"
-import { endpoint, request as service } from "@likego/transport/headers"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, CallRequest, Client } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import type { Middleware } from "@go-like/server"
+import type { Infer, Struct } from "@go-like/struct"
+import type { Endpoint, Message } from "@go-like/transport"
+import { endpoint, request as service } from "@go-like/transport/headers"
 import type { Logger } from "pino"
 
 type Outcome = "success" | "failure" | "canceled"
@@ -14,17 +14,17 @@ type WebHandler = (request: Request) => Response | Promise<Response>
 type RawClientCall = (
   ctx: Context,
   request: CallRequest,
-  ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+  ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
 ) => Promise<Message>
 /** Calls one runtime-erased typed Client endpoint. */
 type UnknownTypedClientCall = (
   ctx: Context,
   endpoint: Endpoint,
   request: unknown,
-  ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+  ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
 ) => Promise<unknown>
 
-const completionMessage = "LikeGo operation completed"
+const completionMessage = "go-like operation completed"
 const errorTypePattern = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/
 const errorCodePattern = /^[A-Z0-9_.-]{1,64}$/
 
@@ -116,7 +116,7 @@ function routeField(headers: Readonly<Record<string, string>>, expected: string)
   return found === null || found.length === 0 ? "unknown" : found
 }
 
-/** Creates the server operation name from LikeGo's reserved routing headers only. */
+/** Creates the server operation name from go-like's reserved routing headers only. */
 function serverOperation(message: Message): string {
   return `${routeField(message.header, service)}/${routeField(message.header, endpoint)}`
 }
@@ -157,7 +157,7 @@ export function logClient(client: Client, logger: Logger): Client {
     typeof client.call !== "function" ||
     typeof client.close !== "function"
   ) {
-    throw new TypeError("client must implement the LikeGo Client interface")
+    throw new TypeError("client must implement the go-like Client interface")
   }
   const selectedLogger = loggerValue(logger)
   const rawCall: RawClientCall = client.call
@@ -169,14 +169,14 @@ export function logClient(client: Client, logger: Logger): Client {
     ctx: Context,
     endpoint: Endpoint<RequestStruct, ResponseStruct>,
     request: NoInfer<Infer<RequestStruct>>,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
   ): Promise<Infer<ResponseStruct>>
 
   /** Logs one raw Client call. */
   function loggedCall(
     ctx: Context,
     request: CallRequest,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves the Client call ABI. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
   ): Promise<Message>
 
   /** Logs either public Client call overload through the original receiver. */
@@ -360,7 +360,7 @@ export function logBroker<PublishOptions, PublishResult, SubscribeOptions, Nativ
     typeof broker.subscribe !== "function" ||
     typeof broker.string !== "function"
   ) {
-    throw new TypeError("broker must implement the LikeGo Broker interface")
+    throw new TypeError("broker must implement the go-like Broker interface")
   }
   const selectedLogger = loggerValue(logger)
   const publish = broker.publish

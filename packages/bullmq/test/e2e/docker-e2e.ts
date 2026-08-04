@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises"
 
-import { background, type Context } from "@likego/context"
+import { background, type Context } from "@go-like/context"
 import {
   newApp,
   server as registerServer,
   stopTimeout as appStopTimeout,
   type Server
-} from "@likego/core"
+} from "@go-like/core"
 import { Queue, Worker, type Job, type Processor, type WorkerOptions } from "bullmq"
 
 import { bullMqWorkerShutdownTimeout, newBullMqWorkerServer } from "../../src/index"
@@ -15,10 +15,10 @@ import { outageErrorDelta } from "../outage-observation"
 const RedisImage =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
 const ExpectedRedisVersion = "8.10.0"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -278,12 +278,12 @@ async function persistentContainerConnections(container: string): Promise<number
 
 /** Executes the fixed-digest Redis 8.10.0 release gate. */
 async function main(): Promise<void> {
-  const project = `likego-bullmq-${crypto.randomUUID()}`
+  const project = `go-like-bullmq-${crypto.randomUUID()}`
   const container = `${project}-redis`
-  const label = `likego.project=${project}`
+  const label = `go-like.project=${project}`
   const port = allocateHostPort()
   const queueName = `jobs-${crypto.randomUUID()}`
-  const prefix = `likego-${crypto.randomUUID()}`
+  const prefix = `go-like-${crypto.randomUUID()}`
   const managedWorkers = new Set<ManagedWorker>()
   const workers = new Set<Worker>()
   const lateRejections: unknown[] = []
@@ -608,7 +608,7 @@ async function main(): Promise<void> {
       !(await settlesWithin(acceptedForcedRunning)),
       "Server runtime settled before the admitted processor released"
     )
-    const adapterTimeout = errorWithCode(forceFailure, "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT")
+    const adapterTimeout = errorWithCode(forceFailure, "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT")
     assert(adapterTimeout instanceof Error, "App failure lost the BullMQ owner timeout")
     releaseProcessor.resolve()
     const terminalFailure = await rejected(acceptedForcedRunning)

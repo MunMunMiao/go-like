@@ -1,8 +1,8 @@
 ---
-"@likego/broker": patch
-"@likego/broker-memory": patch
-"@likego/broker-rabbitmq": patch
-"@likego/nats": patch
+"@go-like/broker": patch
+"@go-like/broker-memory": patch
+"@go-like/broker-rabbitmq": patch
+"@go-like/nats": patch
 ---
 
 让 Broker provider 的被动终止与 handler 失败进入现有 `Server.start()` 终态，同时保持 go-micro 风格

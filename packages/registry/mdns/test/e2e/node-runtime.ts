@@ -1,12 +1,12 @@
 import { createSocket } from "node:dgram"
 
-import { background, withTimeout } from "@likego/context"
+import { background, withTimeout } from "@go-like/context"
 import type {
   MDNSBindOptions,
   MDNSDatagramSocket,
   MDNSNetworkInterface
-} from "@likego/registry-mdns"
-import { newNodeMDNSHost } from "@likego/registry-mdns/node"
+} from "@go-like/registry-mdns"
+import { newNodeMDNSHost } from "@go-like/registry-mdns/node"
 
 /** Reserves and releases one kernel-assigned IPv4 UDP port. */
 async function unusedPort(): Promise<number> {

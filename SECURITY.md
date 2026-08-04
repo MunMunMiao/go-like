@@ -2,7 +2,7 @@
 
 ## 支持范围
 
-LikeGo 尚未发布稳定版本。安全修复只面向最新正式发布版本和 `main` 上尚未发布的下一版本；更早的 `0.x`
+go-like 尚未发布稳定版本。安全修复只面向最新正式发布版本和 `main` 上尚未发布的下一版本；更早的 `0.x`
 版本不承诺回移植。
 
 ## 报告漏洞
@@ -24,10 +24,10 @@ workflow 不得保存长期 npm token；environment 审批、npm trusted publish
 vulnerability reporting 与 Dependabot security updates 属于仓库管理员必须在外部完成的控制项。
 
 npm 只能为已经存在的包配置 trusted publisher，因此 0.0.1 首次建包是一次性 bootstrap 例外。scope owner 创建有效期
-1 天、仅限 `@likego` scope read/write 的 granular token，只把它临时保存为受保护 `npm` environment 的
+1 天、仅限 `@go-like` scope read/write 的 granular token，只把它临时保存为受保护 `npm` environment 的
 `NPM_BOOTSTRAP_TOKEN`，并从 `main` 对同一已验证 SHA 手动运行 `release.yml`，显式启用 `bootstrap`。
 
-bootstrap 会在发布前确认所有公共包都属于 `@likego/*` 且版本为 `0.0.1`；npm 与 Changesets 负责拒绝无权限、版本冲突
+bootstrap 会在发布前确认所有公共包都属于 `@go-like/*` 且版本为 `0.0.1`；npm 与 Changesets 负责拒绝无权限、版本冲突
 和 registry 错误，并在同一版本的部分发布后跳过已经存在的包。完成后必须立即删除 environment secret、撤销 token
-并回读，再为全部公共包配置 `MunMunMiao/likego`、`release.yml`、`npm` environment 和 `npm publish` 权限的
+并回读，再为全部公共包配置 `MunMunMiao/go-like`、`release.yml`、`npm` environment 和 `npm publish` 权限的
 trusted publisher。后续版本不得继续使用 bootstrap 路径，并应将传统 token 发布设置为禁止。

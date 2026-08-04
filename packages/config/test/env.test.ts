@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { envSource } from "../src/env"
 
 describe("environment configuration source", () => {
@@ -121,7 +121,7 @@ describe("environment configuration source", () => {
       revision: null
     })
 
-    const sparse: import("@likego/config").ConfigValue[] = []
+    const sparse: import("@go-like/config").ConfigValue[] = []
     sparse.length = 1
     expect(() =>
       envSource(
@@ -133,7 +133,7 @@ describe("environment configuration source", () => {
         }
       )
     ).toThrow("invalid environment value")
-    const cyclic: import("@likego/config").ConfigValue[] = []
+    const cyclic: import("@go-like/config").ConfigValue[] = []
     cyclic.push(cyclic)
     expect(() =>
       envSource(
@@ -177,7 +177,7 @@ describe("environment configuration source", () => {
         }
       )
     ).toThrow("unsafe environment value key")
-    const decoratedArray: import("@likego/config").ConfigValue[] = []
+    const decoratedArray: import("@go-like/config").ConfigValue[] = []
     Object.defineProperty(decoratedArray, "extra", { enumerable: true, value: "bad" })
     expect(() =>
       envSource(
@@ -189,7 +189,7 @@ describe("environment configuration source", () => {
         }
       )
     ).toThrow("invalid environment value")
-    const accessorArray: import("@likego/config").ConfigValue[] = ["placeholder"]
+    const accessorArray: import("@go-like/config").ConfigValue[] = ["placeholder"]
     Object.defineProperty(accessorArray, "0", {
       enumerable: true,
       get() {

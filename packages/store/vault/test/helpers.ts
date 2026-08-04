@@ -87,7 +87,7 @@ export function fakeVault(): FakeVault {
     requests.push(request.clone())
     if (take("deny")) return new Response(null, { status: 403 })
     const url = new URL(request.url)
-    const match = /^\/v1\/secret\/(data|delete|metadata)\/likego\/store(?:\/([^/]+))?$/u.exec(
+    const match = /^\/v1\/secret\/(data|delete|metadata)\/go-like\/store(?:\/([^/]+))?$/u.exec(
       url.pathname
     )
     if (match === null) return new Response(null, { status: 404 })

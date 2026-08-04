@@ -2,12 +2,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { newBullMqWorkerServer } from "@likego/bullmq"
-import { background, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { newCronerServer } from "@likego/croner"
-import { newFileStore } from "@likego/store-file"
-import { newNodeFileStoreHost } from "@likego/store-file/node"
+import { newBullMqWorkerServer } from "@go-like/bullmq"
+import { background, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { newCronerServer } from "@go-like/croner"
+import { newFileStore } from "@go-like/store-file"
+import { newNodeFileStoreHost } from "@go-like/store-file/node"
 import { Queue, Worker, type Job, type Processor, type WorkerOptions } from "bullmq"
 import { Cron } from "croner"
 
@@ -247,11 +247,11 @@ async function stopServer(managed: RunningServer): Promise<void> {
 
 /** Runs the fixed-digest Redis reporting workflow. */
 async function run(): Promise<void> {
-  const container = `likego-batch-redis-${crypto.randomUUID()}`
+  const container = `go-like-batch-redis-${crypto.randomUUID()}`
   const port = allocateHostPort()
   const queueName = `reports-${crypto.randomUUID()}`
-  const prefix = `likego-${crypto.randomUUID()}`
-  const checkpointDirectory = await mkdtemp(join(tmpdir(), "likego-batch-reporting-"))
+  const prefix = `go-like-${crypto.randomUUID()}`
+  const checkpointDirectory = await mkdtemp(join(tmpdir(), "go-like-batch-reporting-"))
   const cleanupErrors: Error[] = []
   const shutdownOrder: string[] = []
 
@@ -318,7 +318,7 @@ async function run(): Promise<void> {
     store = newFileStore(newNodeFileStoreHost(), checkpointDirectory)
     storeServer = startServer(store)
     await waitForServer(storeServer, "File Store readiness", async () => {
-      await store!.read(background(), "__likego_e2e_readiness__")
+      await store!.read(background(), "__go-like_e2e_readiness__")
       return true
     })
     let nowMs = Date.UTC(2026, 6, 22, 1)
@@ -461,7 +461,7 @@ async function run(): Promise<void> {
     const reopenedServer = startServer(reopened)
     try {
       await waitForServer(reopenedServer, "reopened File Store readiness", async () => {
-        await reopened.read(background(), "__likego_e2e_readiness__")
+        await reopened.read(background(), "__go-like_e2e_readiness__")
         return true
       })
       finalCheckpoint = (await readCheckpoint(background(), reopened)) ?? -1
@@ -503,8 +503,8 @@ async function run(): Promise<void> {
         await waitUntil(
           "start:prepared task publication",
           () =>
-            programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"batch-reporting"') &&
-            programOutput.includes("LIKEGO_REPORT_PUBLISHED="),
+            programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"batch-reporting"') &&
+            programOutput.includes("GO_LIKE_REPORT_PUBLISHED="),
           30_000
         )
       } catch (error) {

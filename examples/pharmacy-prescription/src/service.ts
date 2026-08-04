@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { retry } from "@likego/resilience"
+import type { Context } from "@go-like/context"
+import { retry } from "@go-like/resilience"
 
 export type PrescriptionStatus = "issued" | "dispensed" | "cancelled"
 

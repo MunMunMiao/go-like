@@ -1,9 +1,9 @@
-import type { Broker } from "@likego/broker"
-import type { Client } from "@likego/client"
-import type { Middleware } from "@likego/server"
+import type { Broker } from "@go-like/broker"
+import type { Client } from "@go-like/client"
+import type { Middleware } from "@go-like/server"
 import { Registry } from "prom-client"
 
-import type { Handler } from "@likego/web"
+import type { Handler } from "@go-like/web"
 import {
   createPrometheusHandler,
   measureBroker,

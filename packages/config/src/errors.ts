@@ -24,7 +24,7 @@ export function newSourceError(
   })
   const details: Pick<ConfigSourceError, "name" | "code" | "sourceName" | "phase"> = {
     name: "ConfigSourceError",
-    code: "LIKEGO_CONFIG_SOURCE",
+    code: "GO_LIKE_CONFIG_SOURCE",
     sourceName,
     phase
   }
@@ -47,7 +47,7 @@ export function newValidationError(
   )
   const details: Pick<ConfigValidationError, "name" | "code" | "reason" | "issues"> = {
     name: "ConfigValidationError",
-    code: "LIKEGO_CONFIG_VALIDATION",
+    code: "GO_LIKE_CONFIG_VALIDATION",
     reason,
     issues: Object.freeze(issues)
   }
@@ -63,7 +63,7 @@ export function newNotFoundError(key: string): ConfigNotFoundError {
   )
   const details: Pick<ConfigNotFoundError, "name" | "code" | "key"> = {
     name: "ConfigNotFoundError",
-    code: "LIKEGO_CONFIG_NOT_FOUND",
+    code: "GO_LIKE_CONFIG_NOT_FOUND",
     key
   }
   return Object.freeze(Object.assign(error, details))
@@ -76,7 +76,7 @@ export function newAlreadyLoadedError(
   const error = new Error("configuration has already loaded")
   const details: Pick<ConfigAlreadyLoadedError, "name" | "code" | "status"> = {
     name: "ConfigAlreadyLoadedError",
-    code: "LIKEGO_CONFIG_ALREADY_LOADED",
+    code: "GO_LIKE_CONFIG_ALREADY_LOADED",
     status
   }
   return Object.freeze(Object.assign(error, details))

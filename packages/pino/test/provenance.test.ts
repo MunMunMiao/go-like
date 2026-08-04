@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { expect, test } from "bun:test"
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import pino, { symbols } from "pino"
 
 import { pinoDrainTimeout, newPinoServer } from "../src/index"
@@ -56,7 +56,7 @@ function destroyIfOpen(destination: ReturnType<typeof pino.destination>): void {
 }
 
 test("uses the file destination implementation owned by Pino", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-provenance-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-provenance-"))
   const path = join(directory, "provenance.log")
   const destination = pino.destination({ dest: path, mkdir: true, sync: false })
   const closed = once(destination, "close")
@@ -80,7 +80,7 @@ test("uses the file destination implementation owned by Pino", async () => {
 })
 
 test("uses stable file-destination methods first observed at construction", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-construction-baseline-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-construction-baseline-"))
   const destination = pino.destination({
     dest: join(directory, "construction-baseline.log"),
     mkdir: true,
@@ -117,7 +117,7 @@ test("uses stable file-destination methods first observed at construction", asyn
 })
 
 test("revalidates the file-destination prototype method after construction and before ownership", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-provenance-start-mutation-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-provenance-start-mutation-"))
   const destination = pino.destination({
     dest: join(directory, "start-mutation.log"),
     mkdir: true,
@@ -149,7 +149,7 @@ test("revalidates the file-destination prototype method after construction and b
 })
 
 test("rejects an own end override introduced after construction", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-provenance-own-end-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-provenance-own-end-"))
   const destination = pino.destination({
     dest: join(directory, "own-end.log"),
     mkdir: true,
@@ -181,7 +181,7 @@ test("rejects an own end override introduced after construction", async () => {
 })
 
 test("revalidates the exact logger stream binding at ownership admission", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-provenance-stream-drift-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-provenance-stream-drift-"))
   const first = pino.destination({ dest: join(directory, "first.log"), mkdir: true, sync: false })
   const second = pino.destination({ dest: join(directory, "second.log"), mkdir: true, sync: false })
   const firstClosed = once(first, "close")
@@ -217,7 +217,7 @@ test("revalidates the exact logger stream binding at ownership admission", async
 })
 
 test("revalidates construction operations after synchronous listener-registration re-entry", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-provenance-listener-reentry-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-provenance-listener-reentry-"))
   const destination = pino.destination({
     dest: join(directory, "listener-reentry.log"),
     mkdir: true,
@@ -265,7 +265,7 @@ test("revalidates construction operations after synchronous listener-registratio
 })
 
 test("rejects lifecycle method drift during owner operation capture", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-capture-drift-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-capture-drift-"))
   const destination = pino.destination({
     dest: join(directory, "owner-capture-drift.log"),
     mkdir: true,
@@ -302,7 +302,7 @@ test("rejects lifecycle method drift during owner operation capture", async () =
 })
 
 test("rejects lifecycle method drift after owner operation capture", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-post-capture-drift-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-post-capture-drift-"))
   const destination = pino.destination({
     dest: join(directory, "owner-post-capture-drift.log"),
     mkdir: true,
@@ -343,7 +343,7 @@ test("rejects lifecycle method drift after owner operation capture", async () =>
 })
 
 test("rejects a destination destroyed during owner operation capture", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-capture-destroy-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-capture-destroy-"))
   const destination = pino.destination({
     dest: join(directory, "owner-capture-destroy.log"),
     mkdir: true,
@@ -382,7 +382,7 @@ test("rejects a destination destroyed during owner operation capture", async () 
       }
     })
     const outcome = await observeStart(server)
-    expect(outcome.error).toMatchObject({ code: "LIKEGO_PINO_DESTINATION_CLOSED" })
+    expect(outcome.error).toMatchObject({ code: "GO_LIKE_PINO_DESTINATION_CLOSED" })
     expect(captureActionCalls).toBe(1)
     expect(flushCalls).toBe(0)
     expect(destination.listenerCount("error")).toBe(baselineErrorListeners)
@@ -397,7 +397,7 @@ test("rejects a destination destroyed during owner operation capture", async () 
 })
 
 test("preserves an error emitted during owner operation capture", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-capture-error-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-capture-error-"))
   const destination = pino.destination({
     dest: join(directory, "owner-capture-error.log"),
     mkdir: true,
@@ -470,7 +470,7 @@ test("preserves an error emitted during owner operation capture", async () => {
 })
 
 test("rejects a close emitted during owner operation capture", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-capture-close-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-capture-close-"))
   const destination = pino.destination({
     dest: join(directory, "owner-capture-close.log"),
     mkdir: true,
@@ -508,7 +508,7 @@ test("rejects a close emitted during owner operation capture", async () => {
       }
     })
     const outcome = await observeStart(server)
-    expect(outcome.error).toMatchObject({ code: "LIKEGO_PINO_DESTINATION_CLOSED" })
+    expect(outcome.error).toMatchObject({ code: "GO_LIKE_PINO_DESTINATION_CLOSED" })
     expect(captureActionCalls).toBe(1)
     expect(flushCalls).toBe(0)
     expect(destinationState(destination)).toEqual({ destroyed: false, writable: true })
@@ -527,7 +527,7 @@ test("rejects a close emitted during owner operation capture", async () => {
 })
 
 test("uses the admitted prototype end after ownership transfer", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-prototype-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-prototype-"))
   const destination = pino.destination({
     dest: join(directory, "owner-prototype.log"),
     mkdir: true,
@@ -559,7 +559,7 @@ test("uses the admitted prototype end after ownership transfer", async () => {
 })
 
 test("uses admitted own lifecycle targets after destination method drift", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-own-methods-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-own-methods-"))
   const destination = pino.destination({
     dest: join(directory, "owner-own-methods.log"),
     mkdir: true,
@@ -623,7 +623,7 @@ test("uses admitted own lifecycle targets after destination method drift", async
 })
 
 test("uses the admitted Logger flush target after method drift", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-logger-method-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-logger-method-"))
   const destination = pino.destination({
     dest: join(directory, "owner-logger-method.log"),
     mkdir: true,
@@ -668,7 +668,7 @@ test("uses the admitted Logger flush target after method drift", async () => {
 })
 
 test("fails closed on owner Logger stream drift while closing the transferred destination", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-pino-owner-stream-drift-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-pino-owner-stream-drift-"))
   const first = pino.destination({
     dest: join(directory, "owner-first.log"),
     mkdir: true,

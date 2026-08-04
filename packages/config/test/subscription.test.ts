@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, type Context } from "@likego/context"
+import { background, type Context } from "@go-like/context"
 
 import type { Config, ConfigObject, ConfigSourceSnapshot, ConfigValue, Value } from "../src/index"
 import { newConfig, source } from "../src/index"

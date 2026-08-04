@@ -198,8 +198,8 @@ const SiblingNames = Object.freeze([
   "graceful",
   "resources"
 ] as const)
-const LegacyOwnerEnvironmentKey = "LIKEGO_E2E_OWNER"
-const StaleCapabilityEnvironmentPrefix = "LIKEGO_E2E_"
+const LegacyOwnerEnvironmentKey = "GO_LIKE_E2E_OWNER"
+const StaleCapabilityEnvironmentPrefix = "GO_LIKE_E2E_"
 const EmptyOptions = Object.freeze({})
 const Utf8Decoder = new TextDecoder("utf-8", { fatal: true })
 
@@ -347,7 +347,7 @@ function packageEntry(
     matches.length !== 1 ||
     entry === undefined ||
     basename(cwd) !== entry.id ||
-    packageName !== `@likego/example-${entry.id}`
+    packageName !== `@go-like/example-${entry.id}`
   ) {
     throw workerError(
       "example-not-authorized",

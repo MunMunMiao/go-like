@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises"
 
 import { expect, test } from "bun:test"
 
-import { background, withCancel } from "@likego/context"
+import { background, withCancel } from "@go-like/context"
 import type { StoreRecord } from "../../src/index"
 
 import { newFileStore, type FileStoreHost } from "../src/index"

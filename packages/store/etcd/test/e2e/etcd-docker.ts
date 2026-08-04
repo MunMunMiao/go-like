@@ -1,16 +1,16 @@
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@go-like/store"
 
 import { encodeText, prefixRangeEnd } from "../../src/codec"
 import { newEtcdStore, type EtcdStore } from "../../src/index"
 
 const Image =
   "gcr.io/etcd-development/etcd:v3.7.1@sha256:a9983dd6d9283138ab926daa307c6c25623636703ecf5645d5df4d666ce9eba2"
-const name = `likego-store-etcd-${crypto.randomUUID()}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const name = `go-like-store-etcd-${crypto.randomUUID()}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly stdout: string
@@ -214,7 +214,7 @@ try {
       typeof absentFailure.reason === "object" &&
       absentFailure.reason !== null &&
       "code" in absentFailure.reason &&
-      absentFailure.reason.code === "LIKEGO_STORE_CONFLICT" &&
+      absentFailure.reason.code === "GO_LIKE_STORE_CONFLICT" &&
       "expectedRevision" in absentFailure.reason &&
       absentFailure.reason.expectedRevision === null,
     "concurrent ifAbsent did not return an absence conflict"
@@ -244,7 +244,7 @@ try {
     typeof conflict === "object" &&
       conflict !== null &&
       "code" in conflict &&
-      conflict.code === "LIKEGO_STORE_CONFLICT",
+      conflict.code === "GO_LIKE_STORE_CONFLICT",
     "stale CAS was not rejected"
   )
 

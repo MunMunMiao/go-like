@@ -13,7 +13,7 @@ const Contracts = Object.freeze({
 const kind = process.argv[2] ?? ""
 const contract = Contracts[kind]
 if (contract === undefined) throw new Error(`unknown web framework evidence target ${kind}`)
-const stage = process.env.LIKEGO_E2E_FRAMEWORK_STAGE
+const stage = process.env.GO_LIKE_E2E_FRAMEWORK_STAGE
 if (typeof stage !== "string" || stage.length === 0) throw new Error("framework stage is missing")
 
 function verify(condition, message) {
@@ -55,12 +55,12 @@ async function frameworkHandler(selectedKind) {
   })).fetch
 }
 
-for (const specifier of ["@likego/context", "@likego/web/node", "@hono/node-server"]) {
+for (const specifier of ["@go-like/context", "@go-like/web/node", "@hono/node-server"]) {
   assertStaged(specifier)
 }
 const [{ background }, { newNodeServer }] = await Promise.all([
-  import("@likego/context"),
-  import("@likego/web/node")
+  import("@go-like/context"),
+  import("@go-like/web/node")
 ])
 const server = newNodeServer(await frameworkHandler(kind))
 const running = server.start(background())

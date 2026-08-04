@@ -1,8 +1,8 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-const wireMarker = "likego.registry-zookeeper.v2"
+const wireMarker = "go-like.registry-zookeeper.v2"
 const maximumPayloadBytes = 1_048_576
 
 /** Describes one immutable instance record stored in an ephemeral znode. */
@@ -84,7 +84,7 @@ export function decodePathSegment(value: string): string {
     const decoded = new TextDecoder("utf-8", { fatal: true }).decode(unbase64(padded))
     return decoded
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "LIKEGO_REGISTRY_PROTOCOL") {
+    if (error instanceof Error && "code" in error && error.code === "GO_LIKE_REGISTRY_PROTOCOL") {
       throw error
     }
     throw newRegistryProtocolError(

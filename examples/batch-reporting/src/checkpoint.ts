@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { StoreRecord, StoreRecordInput } from "@likego/store"
+import type { Context } from "@go-like/context"
+import type { StoreRecord, StoreRecordInput } from "@go-like/store"
 
 import { reportWindow, type ReportWindow } from "./report-window"
 

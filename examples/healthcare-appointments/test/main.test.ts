@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { name, newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { newAppointmentHandler } from "../src/http"
 import {
@@ -94,7 +94,7 @@ describe("healthcare appointments", () => {
     expect(await cancelled.json()).toMatchObject({ appointmentId: "web-1", status: "cancelled" })
   })
 
-  test("checks appointment policy through LikeGo client, server and memory transport", async () => {
+  test("checks appointment policy through go-like client, server and memory transport", async () => {
     const policy = newAppointmentPolicyService(3_600_000)
     const app = newApp(name("healthcare-appointments-test"), server(policy.server))
     const running = app.run()

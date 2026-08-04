@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { type Registry, type ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import { type Registry, type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { newConsulRegistry, type ConsulFetch } from "../src/index"

@@ -1,4 +1,4 @@
-import type { Registry } from "@likego/registry"
+import type { Registry } from "@go-like/registry"
 import {
   newEtcdRegistry,
   type EtcdFetch,

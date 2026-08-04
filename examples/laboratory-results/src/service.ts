@@ -1,11 +1,11 @@
-import type { Context } from "@likego/context"
-import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
 import {
   newMetadata,
   newServerContext,
   propagateToClientContext,
   type MetadataInput
-} from "@likego/metadata"
+} from "@go-like/metadata"
 
 export interface Encounter {
   readonly encounterId: string

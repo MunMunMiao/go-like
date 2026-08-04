@@ -1,5 +1,5 @@
 ---
-"@likego/config": minor
+"@go-like/config": minor
 ---
 
 增加显式的 post-merge 配置 resolver 与 `${dotted.key}` 占位符解析器；解析按 option

@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifAbsent, ifRevision, limit } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit } from "@go-like/store"
 
 import { physicalKey } from "../../src/codec"
 import { newVaultStore, type VaultFetch, type VaultStore } from "../../src/index"
@@ -7,17 +7,17 @@ import { newVaultStore, type VaultFetch, type VaultStore } from "../../src/index
 const Image =
   "hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54"
 const RunId = crypto.randomUUID()
-const Name = `likego-store-vault-${RunId}`
-const Label = `likego.store-vault.integration=${RunId}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Name = `go-like-store-vault-${RunId}`
+const Label = `go-like.store-vault.integration=${RunId}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
-const Token = `likego-vault-token-${RunId}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
+const Token = `go-like-vault-token-${RunId}`
 const WrongToken = `wrong-${RunId}`
-const Root = `likego/store-vault/${RunId}/primary`
-const IsolatedRoot = `likego/store-vault/${RunId}/isolated`
+const Root = `go-like/store-vault/${RunId}/primary`
+const IsolatedRoot = `go-like/store-vault/${RunId}/isolated`
 
 interface CommandResult {
   readonly stdout: string
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     } catch (value) {
       wrongCode = typeof value === "object" && value !== null && "code" in value ? value.code : null
     }
-    if (wrongCode !== "LIKEGO_VAULT_STORE_HTTP") throw new Error("wrong token was not denied")
+    if (wrongCode !== "GO_LIKE_VAULT_STORE_HTTP") throw new Error("wrong token was not denied")
 
     const primaryStore = createStore(address, Root, requests)
     const isolatedStore = createStore(address, IsolatedRoot, requests)

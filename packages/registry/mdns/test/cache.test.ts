@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 
 import { newMDNSCache } from "../src/cache"
 
@@ -60,7 +60,7 @@ describe("mDNS ServiceInstance TTL cache", () => {
     expect(cache.observe("publisher-a", updated, 2, 1)).toEqual(["cache-service"])
     expect(cache.instances("cache-service")).toEqual([updated])
     expect(() => cache.observe("publisher-b", initial, 2, 2)).toThrow(
-      expect.objectContaining({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      expect.objectContaining({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     )
     expect(cache.instances("cache-service")).toEqual([updated])
   })

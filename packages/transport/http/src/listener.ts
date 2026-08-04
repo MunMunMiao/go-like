@@ -1,10 +1,10 @@
-import { background, canceled, withCancel, type Context } from "@likego/context"
-import { type AcceptHandler, type TransportLogger } from "@likego/transport"
+import { background, canceled, withCancel, type Context } from "@go-like/context"
+import { type AcceptHandler, type TransportLogger } from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportStateError,
   type TransportClosedError
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 import { contextError, newHTTPTransportUnexpectedExitError, normalizeHTTPError } from "./errors"
 import { defaultHTTPMaxMessageBytes } from "./options"
 import { dispatchHTTPHostRequest } from "./socket"

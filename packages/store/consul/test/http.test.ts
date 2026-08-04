@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context, type ContextError } from "@likego/context"
+import { background, withCancelCause, type Context, type ContextError } from "@go-like/context"
 
 import { encodeBase64, encodeRecordPayload } from "../src/codec"
 import {
@@ -28,7 +28,7 @@ function options(fetch: ConsulFetch, token?: string): CapturedOptions {
   return token === undefined ? captureOptions(base) : captureOptions(Object.assign(base, { token }))
 }
 
-/** Creates one real Consul row containing a valid LikeGo payload. */
+/** Creates one real Consul row containing a valid go-like payload. */
 function row(key = "orders/one", index = 42): object {
   const payload = encodeRecordPayload(
     { key, value: Uint8Array.of(1), metadata: { owner: "orders" } },
@@ -36,7 +36,7 @@ function row(key = "orders/one", index = 42): object {
     null
   )
   return {
-    Key: `likego/store/${key}`,
+    Key: `go-like/store/${key}`,
     ModifyIndex: index,
     Value: encodeBase64(new TextEncoder().encode(payload)),
     Session: null
@@ -98,18 +98,18 @@ describe("Consul Store HTTP boundary", () => {
     expect(exact.headers.get("X-Consul-Token")).toBe("top-secret")
     expect(exact.url).not.toContain("top-secret")
     expect(new URL(exact.url).searchParams.has("consistent")).toBe(true)
-    expect(new URL(exact.url).pathname).toBe("/v1/kv/likego/store/orders/one")
+    expect(new URL(exact.url).pathname).toBe("/v1/kv/go-like/store/orders/one")
     expect(new URL(recurse.url).searchParams.get("recurse")).toBe("true")
-    expect(new URL(recurse.url).pathname).toBe("/v1/kv/likego/store/orders/")
+    expect(new URL(recurse.url).pathname).toBe("/v1/kv/go-like/store/orders/")
   })
 
   test("rejects ambiguous exact rows, non-success status, malformed bodies, and non-Responses", async () => {
     const cases: Array<{ readonly response: Response | null; readonly code: string }> = [
-      { response: Response.json([row("wrong")]), code: "LIKEGO_CONSUL_STORE_PROTOCOL" },
-      { response: Response.json([row(), row("orders/two")]), code: "LIKEGO_CONSUL_STORE_PROTOCOL" },
-      { response: new Response("secret body", { status: 403 }), code: "LIKEGO_CONSUL_STORE_HTTP" },
-      { response: new Response("not json"), code: "LIKEGO_CONSUL_STORE_PROTOCOL" },
-      { response: null, code: "LIKEGO_CONSUL_STORE_PROTOCOL" }
+      { response: Response.json([row("wrong")]), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
+      { response: Response.json([row(), row("orders/two")]), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
+      { response: new Response("secret body", { status: 403 }), code: "GO_LIKE_CONSUL_STORE_HTTP" },
+      { response: new Response("not json"), code: "GO_LIKE_CONSUL_STORE_PROTOCOL" },
+      { response: null, code: "GO_LIKE_CONSUL_STORE_PROTOCOL" }
     ]
     for (const item of cases) {
       const script = scripted([item.response])
@@ -131,7 +131,7 @@ describe("Consul Store HTTP boundary", () => {
       const script = scripted([response])
       await expect(
         queryIndexedRows(background(), options(script.fetch), "orders/")
-      ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_PROTOCOL" })
+      ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_PROTOCOL" })
     }
     const script = scripted([Response.json([row()], { headers: { "X-Consul-Index": "42" } })])
     await expect(queryIndexedRows(background(), options(script.fetch), "orders/")).resolves.toEqual(
@@ -149,13 +149,13 @@ describe("Consul Store HTTP boundary", () => {
     await expect(
       queryRows(background(), options(synchronous), "read", "x", false)
     ).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_TRANSPORT"
+      code: "GO_LIKE_CONSUL_STORE_TRANSPORT"
     })
 
     const asynchronous = scripted([new Error("async refused")])
     await expect(
       queryRows(background(), options(asynchronous.fetch), "read", "x", false)
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_TRANSPORT" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_TRANSPORT" })
 
     const brokenBody = new ReadableStream<Uint8Array>({
       /** Rejects the response body at its first pull. */
@@ -166,7 +166,7 @@ describe("Consul Store HTTP boundary", () => {
     const bodyScript = scripted([new Response(brokenBody)])
     await expect(
       queryRows(background(), options(bodyScript.fetch), "read", "x", false)
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_PROTOCOL" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_PROTOCOL" })
 
     const syncText = new Response("[]")
     Object.defineProperty(syncText, "text", {
@@ -178,7 +178,7 @@ describe("Consul Store HTTP boundary", () => {
     const textScript = scripted([syncText])
     await expect(
       queryRows(background(), options(textScript.fetch), "read", "x", false)
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_PROTOCOL" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_PROTOCOL" })
 
     const [preCanceled, cancelPre] = withCancelCause(background())
     const preReason = new Error("pre-canceled")
@@ -221,7 +221,7 @@ describe("Consul Store HTTP boundary", () => {
         "x",
         false
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_HTTP", status: 403 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: 403 })
 
     let inspections = 0
     const observed = new Error("canceled after transport") as ContextError
@@ -314,7 +314,7 @@ describe("Consul Store HTTP boundary", () => {
     const malformed = scripted([new Response("yes")])
     await expect(
       mutateKey(background(), options(malformed.fetch), "write", "k", "v", { kind: "plain" })
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_PROTOCOL" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_PROTOCOL" })
 
     const denied = scripted([new Response("ACL TOKEN top-secret", { status: 403 })])
     try {
@@ -323,7 +323,7 @@ describe("Consul Store HTTP boundary", () => {
       })
       throw new Error("denied mutation unexpectedly succeeded")
     } catch (error) {
-      expect(error).toMatchObject({ code: "LIKEGO_CONSUL_STORE_HTTP", status: 403 })
+      expect(error).toMatchObject({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: 403 })
       expect(String(error)).not.toContain("top-secret")
     }
   })
@@ -340,7 +340,7 @@ describe("Consul Store behavior-delete sessions", () => {
     expect(request.method).toBe("PUT")
     expect(request.headers.get("Content-Type")).toBe("application/json")
     expect(await request.clone().json()).toEqual({
-      Name: "likego-store:op-1",
+      Name: "go-like-store:op-1",
       Behavior: "delete",
       TTL: "10001ms",
       LockDelay: "0s",
@@ -351,7 +351,7 @@ describe("Consul Store behavior-delete sessions", () => {
   test("proves a lost create response by unique session-name readback", async () => {
     const script = scripted([
       new Error("response lost"),
-      Response.json([{ ID: "session-readback", Name: "likego-store:op-lost" }])
+      Response.json([{ ID: "session-readback", Name: "go-like-store:op-lost" }])
     ])
     await expect(
       createSession(background(), options(script.fetch), "op-lost", 10_000)
@@ -371,8 +371,8 @@ describe("Consul Store behavior-delete sessions", () => {
       [
         new Error("lost"),
         Response.json([
-          { ID: "one", Name: "likego-store:duplicate" },
-          { ID: "two", Name: "likego-store:duplicate" }
+          { ID: "one", Name: "go-like-store:duplicate" },
+          { ID: "two", Name: "go-like-store:duplicate" }
         ])
       ],
       [new Error("lost"), new Response("denied", { status: 403 })],
@@ -393,7 +393,7 @@ describe("Consul Store behavior-delete sessions", () => {
     const definitive = scripted([new Response("bad request", { status: 400 })])
     await expect(
       createSession(background(), options(definitive.fetch), "bad", 10_000)
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_HTTP", status: 400 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: 400 })
   })
 
   test("destroys a session and proves uncertain outcomes with exact info readback", async () => {
@@ -411,12 +411,12 @@ describe("Consul Store behavior-delete sessions", () => {
 
     const remains = scripted([
       new Error("lost"),
-      Response.json([{ ID: "session-3", Name: "likego-store:op" }])
+      Response.json([{ ID: "session-3", Name: "go-like-store:op" }])
     ])
     await expect(
       destroySession(background(), options(remains.fetch), "session-3")
     ).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_UNCERTAIN",
+      code: "GO_LIKE_CONSUL_STORE_UNCERTAIN",
       operation: "session-destroy"
     })
   })
@@ -425,7 +425,7 @@ describe("Consul Store behavior-delete sessions", () => {
     const denied = scripted([new Response("denied", { status: 400 })])
     await expect(
       destroySession(background(), options(denied.fetch), "session-1")
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_HTTP", status: 400 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: 400 })
 
     for (const info of [
       new Response("not-json"),

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newRoundRobinSelector, type ServiceInstance } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { newRoundRobinSelector, type ServiceInstance } from "@go-like/registry"
 
 import type {
   RouteSupportCaseCommand,
@@ -58,7 +58,7 @@ function agentLevel(agent: ServiceInstance): "senior" | "standard" {
   return agent.metadata.level === "senior" ? "senior" : "standard"
 }
 
-/** Creates an in-memory assignment store using a LikeGo endpoint selector. */
+/** Creates an in-memory assignment store using a go-like endpoint selector. */
 export function newMemorySupportRoutingStore(
   agents: readonly ServiceInstance[] = defaultAgents
 ): SupportRoutingStore {

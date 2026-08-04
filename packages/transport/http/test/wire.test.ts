@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel } from "@likego/context"
-import { fromServerContext, type Client, type Message } from "@likego/transport"
+import { background, canceled, withCancel } from "@go-like/context"
+import { fromServerContext, type Client, type Message } from "@go-like/transport"
 import {
   executor,
   maxMessageBytes,
   newHTTPTransport,
   type HTTPExecutor
-} from "@likego/transport-http"
+} from "@go-like/transport-http"
 import {
   assertHTTPContentLength,
   newHTTPStatusError,
@@ -142,7 +142,7 @@ async function invalidatedServerFailure(kind: InvalidatedBodyKind): Promise<{
 
 /** Requires one protocol error whose cause is the runtime's original byte-copy TypeError. */
 function expectInvalidatedProtocolFailure(value: unknown): void {
-  expect(value).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(value).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   if (typeof value !== "object" || value === null) throw value
   expect(Reflect.get(value, "cause")).toBeInstanceOf(TypeError)
 }
@@ -162,7 +162,7 @@ test("non-200 responses become bounded defensive HTTPStatusError values", async 
   } catch (error) {
     expect(error).toMatchObject({
       name: "HTTPStatusError",
-      code: "LIKEGO_HTTP_STATUS",
+      code: "GO_LIKE_HTTP_STATUS",
       status: 503,
       statusText: "Unavailable",
       bodyTruncated: true
@@ -221,7 +221,7 @@ test("unary clients admit the exact message limit and reject larger known reques
       background(),
       Object.freeze({ header: Object.freeze({}), body: new Uint8Array([1, 2, 3, 4]) })
     )
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   expect(calls).toBe(0)
 
   await client.send(
@@ -270,7 +270,7 @@ test("unary clients reject declared and streamed oversized responses and cancel 
     ).dial(background(), "localhost:8080")
     await client.send(background(), requestMessage())
     await expect(client.recv(background())).rejects.toMatchObject({
-      code: "LIKEGO_TRANSPORT_PROTOCOL"
+      code: "GO_LIKE_TRANSPORT_PROTOCOL"
     })
     expect(canceledBodies[index]).toBe(1)
     await client.close(background())
@@ -290,7 +290,7 @@ test("unary clients fail closed for an oversized declaration without a response 
   ).dial(background(), "localhost:8080")
   await client.send(background(), requestMessage())
   await expect(client.recv(background())).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL"
+    code: "GO_LIKE_TRANSPORT_PROTOCOL"
   })
   await client.close(background())
 })
@@ -324,7 +324,7 @@ test("unary servers enforce declared, streamed, and known response message limit
     3
   )
   expect(rejectedRequest.status).toBe(500)
-  expect(receiveFailure).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(receiveFailure).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   expect(requestCanceled).toBe(1)
 
   let streamedCanceled = 0
@@ -359,7 +359,7 @@ test("unary servers enforce declared, streamed, and known response message limit
     3
   )
   expect(streamedRequest.status).toBe(500)
-  expect(streamedFailure).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(streamedFailure).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   expect(streamedCanceled).toBe(1)
 
   let emptyFailure: unknown = null
@@ -386,7 +386,7 @@ test("unary servers enforce declared, streamed, and known response message limit
     3
   )
   expect(emptyRequest.status).toBe(500)
-  expect(emptyFailure).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(emptyFailure).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
 
   let sendFailure: unknown = null
   const rejectedResponse = await dispatchHTTPHostRequest(
@@ -416,7 +416,7 @@ test("unary servers enforce declared, streamed, and known response message limit
     3
   )
   expect(rejectedResponse.status).toBe(500)
-  expect(sendFailure).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(sendFailure).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
 
   const admitted = await dispatchHTTPHostRequest(
     background(),
@@ -453,7 +453,7 @@ test("Content-Length inspection preserves its original Headers failure", () => {
       }
     })
     expect(() => assertHTTPContentLength(new Headers(), 3, "invalid length")).toThrow(
-      expect.objectContaining({ code: "LIKEGO_TRANSPORT_PROTOCOL", cause: failure })
+      expect.objectContaining({ code: "GO_LIKE_TRANSPORT_PROTOCOL", cause: failure })
     )
   } finally {
     if (descriptor === undefined) Reflect.deleteProperty(Headers.prototype, "get")
@@ -461,7 +461,7 @@ test("Content-Length inspection preserves its original Headers failure", () => {
   }
   expect(() =>
     assertHTTPContentLength(new Headers({ "content-length": "invalid" }), 3, "invalid length")
-  ).toThrow(expect.objectContaining({ code: "LIKEGO_TRANSPORT_PROTOCOL" }))
+  ).toThrow(expect.objectContaining({ code: "GO_LIKE_TRANSPORT_PROTOCOL" }))
 })
 
 test("200 response bodies reject non-Uint8Array chunks with the original Error cause", async () => {
@@ -473,7 +473,7 @@ test("200 response bodies reject non-Uint8Array chunks with the original Error c
   await client.send(background(), requestMessage())
 
   await expect(client.recv(background())).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     cause: chunkFailure
   })
 })
@@ -500,14 +500,14 @@ test("non-200 status bodies reject non-Uint8Array chunks with the original Error
   await client.send(background(), requestMessage())
 
   await expect(client.recv(background())).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     cause: chunkFailure
   })
 })
 
 test("body read-result validation normalizes malformed values and getter failures", () => {
   expect(() => snapshotHTTPBodyChunk(null, "invalid body result")).toThrow(
-    expect.objectContaining({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+    expect.objectContaining({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   )
   const getterFailure = new Error("body result getter failed")
   const result = new Proxy(Object.freeze({}), {
@@ -518,7 +518,7 @@ test("body read-result validation normalizes malformed values and getter failure
   })
   expect(() => snapshotHTTPBodyChunk(result, "invalid body result")).toThrow(
     expect.objectContaining({
-      code: "LIKEGO_TRANSPORT_PROTOCOL",
+      code: "GO_LIKE_TRANSPORT_PROTOCOL",
       cause: getterFailure
     })
   )
@@ -551,7 +551,7 @@ test("body byte snapshot preserves the exact defensive-copy Error cause", () => 
     else Object.defineProperty(globalThis, "Uint8Array", descriptor)
   }
 
-  expect(observed).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(observed).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   if (typeof observed !== "object" || observed === null) throw observed
   expect(Reflect.get(observed, "cause")).toBe(copyFailure)
 })
@@ -589,7 +589,7 @@ test("status body read rejection becomes a protocol error with the original caus
   )
 
   await expect(newHTTPStatusError(response)).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     cause: readFailure
   })
 })
@@ -614,7 +614,7 @@ test("status classification survives truncated-body cancellation failure", async
 
   const error = await newHTTPStatusError(response)
   expect(error).toMatchObject({
-    code: "LIKEGO_HTTP_STATUS",
+    code: "GO_LIKE_HTTP_STATUS",
     status: 502,
     bodyTruncated: true
   })
@@ -639,7 +639,7 @@ test("status classification survives a synchronous reader cancellation throw", a
     })
     const error = await newHTTPStatusError(new Response(bytes, { status: 504 }))
     expect(error).toMatchObject({
-      code: "LIKEGO_HTTP_STATUS",
+      code: "GO_LIKE_HTTP_STATUS",
       status: 504,
       bodyTruncated: true
     })
@@ -699,7 +699,7 @@ test("status truncation publishes reader cancellation before client-close reentr
     await client.send(background(), requestMessage())
     const receiving = client.recv(background())
 
-    await expect(receiving).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+    await expect(receiving).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
     const ownerClose = client.close(background())
     expect(observedReentrantClose()).not.toBe(ownerClose)
     expect(client.close(background())).toBe(ownerClose)
@@ -769,7 +769,7 @@ test("status truncation breaks a reader-to-owner cleanup cycle without abandonin
         function closed(error: unknown): string {
           return typeof error === "object" &&
             error !== null &&
-            Reflect.get(error, "code") === "LIKEGO_TRANSPORT_CLOSED"
+            Reflect.get(error, "code") === "GO_LIKE_TRANSPORT_CLOSED"
             ? "closed"
             : "unexpected-error"
         }
@@ -848,22 +848,22 @@ test("server unary socket enforces state, explicit close, response, and metadata
       const responseMethod = Reflect.get(socket, "response")
       if (typeof responseMethod !== "function") throw new Error("response method missing")
       await expect(Reflect.apply(responseMethod, socket, [])).rejects.toMatchObject({
-        code: "LIKEGO_TRANSPORT_STATE"
+        code: "GO_LIKE_TRANSPORT_STATE"
       })
       const incoming = await socket.recv(ctx)
-      await expect(socket.recv(ctx)).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_STATE" })
+      await expect(socket.recv(ctx)).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
       await socket.send(ctx, incoming)
       await expect(socket.send(ctx, incoming)).rejects.toMatchObject({
-        code: "LIKEGO_TRANSPORT_STATE"
+        code: "GO_LIKE_TRANSPORT_STATE"
       })
       await expect(Reflect.apply(responseMethod, socket, [])).resolves.toBeInstanceOf(Response)
       await socket.close(ctx)
       await socket.close(background())
       await expect(socket.recv(background())).rejects.toMatchObject({
-        code: "LIKEGO_TRANSPORT_CLOSED"
+        code: "GO_LIKE_TRANSPORT_CLOSED"
       })
       await expect(socket.send(background(), incoming)).rejects.toMatchObject({
-        code: "LIKEGO_TRANSPORT_CLOSED"
+        code: "GO_LIKE_TRANSPORT_CLOSED"
       })
     },
     Object.freeze({
@@ -917,7 +917,7 @@ test("server wire maps invalid methods and request body failures to safe 500", a
       true
     )
     expect(response.status).toBe(500)
-    expect(observed).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+    expect(observed).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   }
 })
 
@@ -943,7 +943,7 @@ test("server POST bodies reject non-Uint8Array chunks with the original Error ca
 
   expect(response.status).toBe(500)
   expect(observed).toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     cause: chunkFailure
   })
 })
@@ -1039,8 +1039,8 @@ test("server transport info exposes only admitted HTTP observations", async () =
       request: new Request("http://service.test/rpc", {
         method: "POST",
         headers: {
-          "Likego-Service": "orders",
-          "Likego-Endpoint": "get",
+          "Go-Like-Service": "orders",
+          "Go-Like-Endpoint": "get",
           "X-Request": "yes"
         },
         body: "payload"
@@ -1185,7 +1185,7 @@ test("server operation cancellation and invalid response messages remain request
     }),
     true
   )
-  expect(sendFailure).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  expect(sendFailure).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   expect(invalidResponse.status).toBe(500)
 })
 

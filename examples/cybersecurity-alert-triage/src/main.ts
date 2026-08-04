@@ -1,12 +1,12 @@
 import process from "node:process"
 
-import { withoutCancel } from "@likego/context"
-import { afterStart, afterStop, beforeStart, name, newApp, registrar, server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import { newEtcdRegistry } from "@likego/registry-etcd"
-import type { Handler } from "@likego/web"
-import { createHealthHandler } from "@likego/web/health"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+import { withoutCancel } from "@go-like/context"
+import { afterStart, afterStop, beforeStart, name, newApp, registrar, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newEtcdRegistry } from "@go-like/registry-etcd"
+import type { Handler } from "@go-like/web"
+import { createHealthHandler } from "@go-like/web/health"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import {
   newEtcdAlertTriageLedger,
@@ -31,7 +31,7 @@ const etcdOptions =
     ? null
     : Object.freeze({
         address: etcdAddress,
-        configKey: process.env.ETCD_CONFIG_KEY ?? "likego/examples/security/triage/config"
+        configKey: process.env.ETCD_CONFIG_KEY ?? "go-like/examples/security/triage/config"
       })
 const config =
   etcdOptions === null
@@ -50,7 +50,7 @@ const registry =
     : newEtcdRegistry({
         fetch,
         address: etcdOptions.address,
-        prefix: "/likego/examples/security/registry/"
+        prefix: "/go-like/examples/security/registry/"
       })
 const registration = registry === null ? [] : [registrar(registry)]
 const readiness = newTriageReadiness(config)
@@ -72,7 +72,7 @@ const app = newApp(
   afterStart(async function announceReady(ctx): Promise<void> {
     await httpServer.endpoint(ctx)
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "cybersecurity-alert-triage", origin })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "cybersecurity-alert-triage", origin })}\n`
     )
   }),
   afterStop((ctx) => config.close(withoutCancel(ctx)))

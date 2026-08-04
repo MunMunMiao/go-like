@@ -1,5 +1,5 @@
-import { canceled, cause, withTimeoutCause, type Context } from "@likego/context"
-import { newCircuitBreaker, type CircuitBreaker, type CircuitState } from "@likego/resilience"
+import { canceled, cause, withTimeoutCause, type Context } from "@go-like/context"
+import { newCircuitBreaker, type CircuitBreaker, type CircuitState } from "@go-like/resilience"
 
 import {
   identityCommandFingerprint,

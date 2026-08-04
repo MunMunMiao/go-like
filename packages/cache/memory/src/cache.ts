@@ -1,6 +1,6 @@
-import type { PutOption } from "@likego/cache"
-import { putOptions } from "@likego/cache/provider"
-import { cause, type Context } from "@likego/context"
+import type { PutOption } from "@go-like/cache"
+import { putOptions } from "@go-like/cache/provider"
+import { cause, type Context } from "@go-like/context"
 
 import { memoryCacheOptions } from "./options"
 import type { MemoryCache, MemoryCacheClock, MemoryCacheOption } from "./types"
@@ -85,7 +85,7 @@ function expiry(selectedClock: MemoryCacheClock, durationMs: number | null): num
 
 /** Creates one immediately usable process-local Cache without resident resources. */
 export function newMemoryCache(
-  ...options: readonly MemoryCacheOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly MemoryCacheOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): MemoryCache {
   const selected = memoryCacheOptions(options)
   const entries = new Map<string, MemoryEntry>()
@@ -111,7 +111,7 @@ export function newMemoryCache(
       ctx: Context,
       key: string,
       value: Uint8Array,
-      ...putOption: readonly PutOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+      ...putOption: readonly PutOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
     ): Promise<void> {
       checkContext(ctx)
       const selectedKey = cacheKey(key)

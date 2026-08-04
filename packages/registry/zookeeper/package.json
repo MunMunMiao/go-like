@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/registry-zookeeper",
+  "name": "@go-like/registry-zookeeper",
   "version": "0.0.1",
-  "description": "Node and Bun ZooKeeper service registry and discovery for LikeGo.",
+  "description": "Node and Bun ZooKeeper service registry and discovery for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -26,9 +26,9 @@
     "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
-    "@likego/registry": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/registry": "0.0.1",
     "node-zookeeper-client": "1.1.3"
   },
   "devDependencies": {

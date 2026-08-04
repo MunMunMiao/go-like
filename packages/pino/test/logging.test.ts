@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, Client } from "@likego/client"
-import { background, withCancelCause, type Context } from "@likego/context"
-import { struct } from "@likego/struct"
-import { endpoint, type Message } from "@likego/transport"
-import { endpoint as endpointHeader, request as service } from "@likego/transport/headers"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, Client } from "@go-like/client"
+import { background, withCancelCause, type Context } from "@go-like/context"
+import { struct } from "@go-like/struct"
+import { endpoint, type Message } from "@go-like/transport"
+import { endpoint as endpointHeader, request as service } from "@go-like/transport/headers"
 import type { Logger } from "pino"
 
 import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "../src/index"
@@ -21,10 +21,10 @@ interface CapturedLogger {
   readonly records: LoggedRecord[]
 }
 
-const secretSentinel = "LIKEGO_SECRET_SENTINEL"
+const secretSentinel = "GO_LIKE_SECRET_SENTINEL"
 
 /** Creates one secret-bearing Error with valid bounded diagnostic identifiers. */
-function secretFailure(name = "SensitiveError", code = "LIKEGO_TEST_FAILURE"): Error {
+function secretFailure(name = "SensitiveError", code = "GO_LIKE_TEST_FAILURE"): Error {
   const failure = new Error(secretSentinel, { cause: new Error(secretSentinel) })
   failure.name = name
   failure.stack = `${secretSentinel}_STACK`
@@ -79,7 +79,7 @@ function brokerMessage(): BrokerMessage {
 
 /** Requires one stable completion envelope while allowing its measured duration to vary. */
 function expectCompletion(record: LoggedRecord, expected: Readonly<Record<string, unknown>>): void {
-  expect(record.message).toBe("LikeGo operation completed")
+  expect(record.message).toBe("go-like operation completed")
   expect(record.fields).toMatchObject(expected)
   expect(record.fields.durationMs).toBeNumber()
   expect(record.fields.durationMs).toBeGreaterThanOrEqual(0)
@@ -387,7 +387,7 @@ describe("Pino Web request logging", () => {
       outcome: "failure",
       durationMs: expect.any(Number),
       errorType: "SensitiveError",
-      errorCode: "LIKEGO_TEST_FAILURE"
+      errorCode: "GO_LIKE_TEST_FAILURE"
     })
     expect(fields).not.toHaveProperty("error")
     expect(JSON.stringify(fields)).not.toContain(secretSentinel)

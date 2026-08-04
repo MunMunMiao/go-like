@@ -1,7 +1,7 @@
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import type { StoreRecordInput } from "@likego/store"
-import { snapshotStoreRecord } from "@likego/store/provider"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import type { StoreRecordInput } from "@go-like/store"
+import { snapshotStoreRecord } from "@go-like/store/provider"
 
 import {
   decodeDataEnvelope,

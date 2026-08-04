@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/cache",
+  "name": "@go-like/cache",
   "version": "0.0.1",
-  "description": "Portable Go-style Cache contracts for LikeGo.",
+  "description": "Portable Go-style Cache contracts for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,10 +25,10 @@
     "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
-    "@likego/context": "0.0.1"
+    "@go-like/context": "0.0.1"
   },
   "devDependencies": {
-    "@likego/core": "workspace:*"
+    "@go-like/core": "workspace:*"
   },
   "license": "MIT"
 }

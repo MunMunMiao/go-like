@@ -4,8 +4,8 @@ import { connect, createSecureServer, type ClientHttp2Session } from "node:http2
 
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
-import type { TLSConfig, TLSEncodedBytes } from "@likego/transport"
+import { background } from "@go-like/context"
+import type { TLSConfig, TLSEncodedBytes } from "@go-like/transport"
 
 import {
   allowHTTP1,

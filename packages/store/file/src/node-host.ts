@@ -9,8 +9,8 @@ import {
 } from "node:fs/promises"
 import { join } from "node:path"
 
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import { newFileStoreLockedError, newFileStoreStateError } from "./store"
 import type { FileStoreDirectory, FileStoreHost, FileStoreState } from "./types"
@@ -31,7 +31,7 @@ export interface NodeFileStoreIO {
   unlink(path: string): Promise<void>
 }
 
-const LockName = ".likego-store.lock"
+const LockName = ".go-like-store.lock"
 const DefaultIO: NodeFileStoreIO = Object.freeze({
   /** Creates one real Node directory tree. */
   async mkdir(path: string): Promise<void> {

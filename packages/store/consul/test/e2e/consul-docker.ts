@@ -1,25 +1,25 @@
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@go-like/store"
 
 import { newConsulStore, type ConsulFetch, type ConsulStore } from "../../src/index"
 
 const Image =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
 const RunId = crypto.randomUUID()
-const LabelKey = "likego.store-consul.integration"
+const LabelKey = "go-like.store-consul.integration"
 const Label = `${LabelKey}=${RunId}`
-const PrimaryName = `likego-store-consul-${RunId}`
-const AclName = `likego-store-consul-acl-${RunId}`
-const AclToken = `likego-store-consul-test-token-${RunId}`
-const ProviderRoot = `likego-store/${RunId}`
-const SecondaryRoot = `likego-store-secondary/${RunId}`
-const ExternalKey = `outside-likego-store/${RunId}`
+const PrimaryName = `go-like-store-consul-${RunId}`
+const AclName = `go-like-store-consul-acl-${RunId}`
+const AclToken = `go-like-store-consul-test-token-${RunId}`
+const ProviderRoot = `go-like-store/${RunId}`
+const SecondaryRoot = `go-like-store-secondary/${RunId}`
+const ExternalKey = `outside-go-like-store/${RunId}`
 const KeyRoot = "records/"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
-const PrimaryVolume = `likego-store-consul-data-${RunId}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
+const PrimaryVolume = `go-like-store-consul-data-${RunId}`
 
 interface CommandResult {
   readonly stdout: string
@@ -109,7 +109,7 @@ async function ready(address: string, token?: string): Promise<void> {
       if (elected) {
         const probe = await consulRequest(
           address,
-          "/v1/kv/__likego_store_docker_readiness__?consistent",
+          "/v1/kv/__go-like_store_docker_readiness__?consistent",
           "GET",
           null,
           token
@@ -310,7 +310,7 @@ async function providerSessions(
 ): Promise<readonly ConsulSessionRow[]> {
   return Object.freeze(
     (await sessions(address, token)).filter(function managed(row) {
-      return row.Name.startsWith("likego-store:")
+      return row.Name.startsWith("go-like-store:")
     })
   )
 }
@@ -394,7 +394,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
   await secondary.delete(background(), isolatedKey)
 
   const corruptKey = physicalKey(ProviderRoot, `${KeyRoot}corrupt`)
-  await writeRawKey(address, corruptKey, "not-a-likego-envelope")
+  await writeRawKey(address, corruptKey, "not-a-go-like-envelope")
   let corruptOwnedDataFailedClosed = false
   try {
     await provider.list(background(), prefix(KeyRoot))
@@ -402,7 +402,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
     corruptOwnedDataFailedClosed =
       typeof error === "object" &&
       error !== null &&
-      Object.getOwnPropertyDescriptor(error, "code")?.value === "LIKEGO_CONSUL_STORE_PROTOCOL"
+      Object.getOwnPropertyDescriptor(error, "code")?.value === "GO_LIKE_CONSUL_STORE_PROTOCOL"
   }
   await deleteRawKey(address, corruptKey, false)
   if (!corruptOwnedDataFailedClosed) {
@@ -433,7 +433,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
     typeof absentFailure.reason === "object" &&
     absentFailure.reason !== null &&
     Object.getOwnPropertyDescriptor(absentFailure.reason, "code")?.value ===
-      "LIKEGO_STORE_CONFLICT" &&
+      "GO_LIKE_STORE_CONFLICT" &&
     Object.getOwnPropertyDescriptor(absentFailure.reason, "expectedRevision")?.value === null
   if (!concurrentIfAbsent) {
     throw new Error("real Consul CAS=0 did not admit exactly one ifAbsent writer")
@@ -462,7 +462,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
     staleConflict =
       typeof error === "object" &&
       error !== null &&
-      Object.getOwnPropertyDescriptor(error, "code")?.value === "LIKEGO_STORE_CONFLICT"
+      Object.getOwnPropertyDescriptor(error, "code")?.value === "GO_LIKE_STORE_CONFLICT"
   }
   const read = await provider.read(background(), crudKey)
   if (new TextDecoder().decode(read?.value) !== "updated") {
@@ -537,7 +537,7 @@ async function primaryScenarios(address: string): Promise<Readonly<Record<string
       return row.ID === earlySession
     })
 
-  const directName = `likego-store:direct-conflict-${RunId}`
+  const directName = `go-like-store:direct-conflict-${RunId}`
   const create = await consulRequest(
     address,
     "/v1/session/create",

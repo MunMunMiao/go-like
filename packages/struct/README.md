@@ -1,10 +1,10 @@
-# `@likego/struct`
+# `@go-like/struct`
 
-`@likego/struct` 为 LikeGo 服务契约提供可移植的 Go-style runtime struct。字段声明同时产生 TypeScript
-输出类型和运行时编解码元数据；LikeGo Transport 直接使用这一份契约，不需要 Proto 或生成代码。
+`@go-like/struct` 为 go-like 服务契约提供可移植的 Go-style runtime struct。字段声明同时产生 TypeScript
+输出类型和运行时编解码元数据；go-like Transport 直接使用这一份契约，不需要 Proto 或生成代码。
 
 ```ts
-import { struct, type Infer } from "@likego/struct"
+import { struct, type Infer } from "@go-like/struct"
 
 const User = struct.object({
   id: struct.string(),
@@ -15,8 +15,8 @@ const User = struct.object({
 type User = Infer<typeof User>
 ```
 
-服务契约只需要根入口。Transport 等边界实现使用 `@likego/struct/codec` 完成 JSON wire 编解码，或使用
-`@likego/struct/runtime` 调用 `isStruct`、`parseStructTuple`、`parseStructValue` 与 `encodeStructValue`；内部实现文件不属于
+服务契约只需要根入口。Transport 等边界实现使用 `@go-like/struct/codec` 完成 JSON wire 编解码，或使用
+`@go-like/struct/runtime` 调用 `isStruct`、`parseStructTuple`、`parseStructValue` 与 `encodeStructValue`；内部实现文件不属于
 公共入口。
 
 ## Go 兼容基线

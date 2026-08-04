@@ -1,4 +1,4 @@
-import { afterFunc, canceled, cause, type Context, type StopFunc } from "@likego/context"
+import { afterFunc, canceled, cause, type Context, type StopFunc } from "@go-like/context"
 
 /** Resolves the effective cancellation Error for an externally supplied Context. */
 function cancellationError(ctx: Context): Error {

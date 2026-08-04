@@ -1,5 +1,5 @@
-import type { Broker } from "@likego/broker"
-import type { NatsJetStreamBrokerPublishOptions } from "@likego/nats/jetstream/broker"
+import type { Broker } from "@go-like/broker"
+import type { NatsJetStreamBrokerPublishOptions } from "@go-like/nats/jetstream/broker"
 import type { JsMsg, PubAck } from "@nats-io/jetstream"
 
 export const rawTelemetrySubjectPrefix = "telemetry.raw.v1"

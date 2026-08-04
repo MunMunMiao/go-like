@@ -6,7 +6,7 @@
 生命周期适配器。
 
 **Architecture:** 第三方库拥有调度、HTTP 协议、路由、消息循环、ack、任务 processor、日志配置和业务 API；
-LikeGo 接收应用创建的原生资源或 start factory，只把原生启动、停止、异常终态映射到稳定的 `ServerHandle`。
+go-like 接收应用创建的原生资源或 start factory，只把原生启动、停止、异常终态映射到稳定的 `ServerHandle`。
 应用仍使用官方类型和 API，任何无法由上游可靠观测的终态都在 capability manifest 中如实降级。
 
 **技术栈：** TypeScript 7.0.2、Bun 1.3.14、Node 24.18/26.5、Deno 2.9.3、Croner 10.0.1、`@hono/node-server` 2.0.12、Pino 10.3.1、Winston 3.19.0、Docker。
@@ -58,7 +58,7 @@ Expected: 旧 facade 仍存在，新的 factory 生命周期用例失败。
 
 factory 只能在 `start(ctx)` 内同步调用；结果必须非空、为官方 `Cron`、初始 paused、未 stopped、未 busy。成功时逐个 `resume()`；部分失败时反序 `stop()` 回滚。`stop(ctx)` 第一次调用执行共享 owner stop 并取消 runtime Context；每个 caller Context 只限制自身等待；`done()` 始终返回同一 Promise。
 
-- [x] **Step 4: 用原生能力证明没有被 LikeGo 重写**
+- [x] **Step 4: 用原生能力证明没有被 go-like 重写**
 
 测试 `Date` 单次任务、`timezone`、`maxRuns`、`protect`、`context`、原生 `trigger()` 与 callback 参数。Croner 无 passive terminal 和可靠 callback drain，因此 `capability.json` 将其作为 v1 `releaseBlocking:true` 能力，同时保持 `terminalObservability:"unobservable"`；README 明确 stop 只阻止未来调度。
 
@@ -83,7 +83,7 @@ Expected: 全部退出 0。
 - Modify: `adapters/fetch-node/README.md`
 - Modify: `examples/*/src/app.ts`
 
-- [x] **Step 1: 写失败测试证明协议转换已退出 LikeGo**
+- [x] **Step 1: 写失败测试证明协议转换已退出 go-like**
 
 测试公开入口只接收 `FetchHandler` 与生命周期 functional options；`request.ts`/`response.ts` 不再进入 source inventory。真实网络用例分别传 Vanilla、Hono `app.fetch`、Elysia handler、H3 `app.fetch`。
 
@@ -198,7 +198,7 @@ Winston File transport 构建产物烟测。
 
 - [x] **Step 1: 删除锁定旧 facade 的发布用例**
 
-发布包只验证类型导出、factory start/stop/done 与供应商原生对象兼容，不再把 Cron 调度策略、Node HTTP 协议转换、Pino 文件打开当作 LikeGo 行为。
+发布包只验证类型导出、factory start/stop/done 与供应商原生对象兼容，不再把 Cron 调度策略、Node HTTP 协议转换、Pino 文件打开当作 go-like 行为。
 
 - [x] **Step 2: 重写真实 E2E 场景和证据描述**
 
@@ -206,7 +206,7 @@ Winston File transport 构建产物烟测。
 
 - [x] **Step 3: 更新中文主交付文档**
 
-README 与 ADR 明确统一公式：`第三方原生能力 + LikeGo structural Server lifecycle`；给出用户自实现 Server、Croner factory、Hono/Elysia/H3 Fetch handler、Pino transport factory 示例及所有权限制。
+README 与 ADR 明确统一公式：`第三方原生能力 + go-like structural Server lifecycle`；给出用户自实现 Server、Croner factory、Hono/Elysia/H3 Fetch handler、Pino transport factory 示例及所有权限制。
 
 - [ ] **Step 4: 全量验证并清理生成物**
 

@@ -1,10 +1,10 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import {
   exponentialBackoff,
   newCircuitBreaker,
   newTokenBucketLimiter,
   retry
-} from "@likego/resilience"
+} from "@go-like/resilience"
 
 const ctx = background()
 const attempts: number[] = []

@@ -1,6 +1,6 @@
 # 端到端测试
 
-本目录包含仓库级真实进程、跨 runtime、examples aggregate、发布包 consumer 和外部服务 E2E；包级场景仍位于对应 workspace 的 `test/e2e/`。其余确定性测试由 `bun run test:unit` 执行。LikeGo 只有 unit 与 E2E 两类测试；scope、目录和命令入口只表示执行范围，不代表质量等级。
+本目录包含仓库级真实进程、跨 runtime、examples aggregate、发布包 consumer 和外部服务 E2E；包级场景仍位于对应 workspace 的 `test/e2e/`。其余确定性测试由 `bun run test:unit` 执行。go-like 只有 unit 与 E2E 两类测试；scope、目录和命令入口只表示执行范围，不代表质量等级。
 
 ## 公共入口
 
@@ -42,7 +42,7 @@ Examples lane 每次从当前 immediate `examples/*/package.json` 动态生成 e
 
 Specialized scenario 的 container/network/volume create 必须通过共享 `OwnedDocker` API 注入 owner+invocation 双标签并先持久发布 resource event。Worker 正常清理 exact pair，root 只对当前 invocation 与已注册 child owners 执行 backstop；label collision 和 foreign resource 不会被 inspect、读取 logs 或删除。Docker logs 默认关闭，仅 authenticated `safe-redacted-logs` 测试权限可读取同一 context 创建的 container，并且只返回固定行数、字符上限且经过 known-secret redaction 的 tail。
 
-只有 Web 的 package-owned built-dist synthetic bridge suite 进入默认 suites/all。`hono-node`、`h3-node` 与 `elysia-node` 是显式可选的原生 Fetch Handler 兼容性测试，不对应 LikeGo 框架桥接包；其中 `h3-node` 通过私有 H3 example 的精确版本跟踪 npm `latest`。Framework vendor dependency staging 使用 invocation-scoped secure temp，不写入仓库内 `e2e/node_modules`。
+只有 Web 的 package-owned built-dist synthetic bridge suite 进入默认 suites/all。`hono-node`、`h3-node` 与 `elysia-node` 是显式可选的原生 Fetch Handler 兼容性测试，不对应 go-like 框架桥接包；其中 `h3-node` 通过私有 H3 example 的精确版本跟踪 npm `latest`。Framework vendor dependency staging 使用 invocation-scoped secure temp，不写入仓库内 `e2e/node_modules`。
 
 ## Registered runtimes 与版本
 
@@ -53,10 +53,10 @@ runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启
 - `scripts.test:e2e:runtimes` 是非空字符串；
 - 实际执行固定 argv `bun run test:e2e:runtimes`，不解析或执行 manifest 中的 script 文本。
 
-当前精确版本要求：
+当前验证要求：
 
 - Bun `1.3.14`
-- Node.js `26.5.1`
+- Node.js `26.x`
 - Deno `2.9.4`
 - TypeScript `7.0.2`
 - k6 image 内部版本 `2.1.0`
@@ -71,13 +71,13 @@ k6 workload 是独立 typecheck、未 bundle 的 committed TypeScript，并由�
 
 ## Runtime 与宿主机边界
 
-LikeGo 的产品平台支持由所选 JavaScript runtime 对相应标准 Web API 和显式 runtime adapter 的支持决定。E2E runner 的进程启动、超时和 cleanup 是测试基础设施，不定义发布包的平台支持范围。
+go-like 的产品平台支持由所选 JavaScript runtime 对相应标准 Web API 和显式 runtime adapter 的支持决定。E2E runner 的进程启动、超时和 cleanup 是测试基础设施，不定义发布包的平台支持范围。
 
 默认 `managed` 模式只报告本次测试运行实际观察到的退出与残留结果。内部 `--require-platform-containment` 仅用于维护 supervisor；它不产生产品兼容性声明，也不是 PR、release 或 tag 的门禁。
 
 ## 所有权与 CI 边界
 
-场景脚本继续持有业务、协议、readiness、权限和恢复断言；root 只负责 selection、version preflight、timeout/abort、Docker suite owner backstop、cleanup 和当前运行 summary。Docker suite 使用 exact `io.likego.e2e.owner` 清理容器、网络和 volume；观察到 owned leak 即使被代清理也仍判失败。
+场景脚本继续持有业务、协议、readiness、权限和恢复断言；root 只负责 selection、version preflight、timeout/abort、Docker suite owner backstop、cleanup 和当前运行 summary。Docker suite 使用 exact `io.go-like.e2e.owner` 清理容器、网络和 volume；观察到 owned leak 即使被代清理也仍判失败。
 
 Committed E2E TypeScript 的 owner 为：root tests 使用 `tsconfig.test.json`，ordinary root E2E 使用 `e2e/tsconfig.json`，k6 使用 `e2e/load/tsconfig.json`，published fixture authoring 使用独立 `tsconfig.authoring.json`，package 与 example E2E 使用 owning workspace 的 `tsconfig.test.json`、必要 `tsconfig.e2e.json` 或 example `tsconfig.json`。常规检查均为 `noEmit`；published C8 的 staged NodeNext config 仍必须实际 emit。该归属由配置与贡献审查维护，不增加全仓 source scanner。
 

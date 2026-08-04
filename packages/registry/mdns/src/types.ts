@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Registry } from "@likego/registry"
-import type { RegistrationErrorHandler } from "@likego/registry/provider"
+import type { Context } from "@go-like/context"
+import type { Registry } from "@go-like/registry"
+import type { RegistrationErrorHandler } from "@go-like/registry/provider"
 
 /** Supplies runtime-specific datagram and interface capabilities to the portable provider. */
 export interface MDNSHost {

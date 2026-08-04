@@ -16,16 +16,16 @@
 main（进程与生命周期）
   -> HTTP（Request / Response）
   -> inventory service（规则、用例、进程内仓储）
-  -> LikeGo Cache Memory（库存查询缓存）
+  -> go-like Cache Memory（库存查询缓存）
 ```
 
 - `src/service.ts`：库存规则、进程内仓储、Cache 读写和 Context-first 用例。
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
-- `src/main.ts`：唯一可执行入口，组合 LikeGo App、Cache、HTTP Server 与进程信号。
+- `src/main.ts`：唯一可执行入口，组合 go-like App、Cache、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/cache-memory` 缓存 `GET /v1/inventory/:sku` 的库存读模型；预占成功后写入最新可用量，避免返回旧库存。Memory Cache 构造后即可使用，`@likego/core` 只负责 HTTP Server 的启动和停止，`@likego/web` 暴露标准 Fetch Handler。
+使用 `@go-like/cache-memory` 缓存 `GET /v1/inventory/:sku` 的库存读模型；预占成功后写入最新可用量，避免返回旧库存。Memory Cache 构造后即可使用，`@go-like/core` 只负责 HTTP Server 的启动和停止，`@go-like/web` 暴露标准 Fetch Handler。
 
 ## 验证矩阵
 
@@ -37,8 +37,8 @@ main（进程与生命周期）
 | 标准 Fetch 入口  | `test/main.test.ts` 的 POST 与 GET 请求用例  |
 
 ```bash
-bun run --filter @likego/example-retail-inventory-reservation typecheck
-bun run --filter @likego/example-retail-inventory-reservation test:unit
+bun run --filter @go-like/example-retail-inventory-reservation typecheck
+bun run --filter @go-like/example-retail-inventory-reservation test:unit
 ```
 
 ## 直接运行
@@ -46,10 +46,10 @@ bun run --filter @likego/example-retail-inventory-reservation test:unit
 在仓库根目录启动完整小程序：
 
 ```bash
-bun run --filter @likego/example-retail-inventory-reservation start
+bun run --filter @go-like/example-retail-inventory-reservation start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后，可查询预置的 `mug` 库存并提交预占：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后，可查询预置的 `mug` 库存并提交预占：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/inventory/mug

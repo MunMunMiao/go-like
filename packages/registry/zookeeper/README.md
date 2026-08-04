@@ -1,24 +1,24 @@
-# @likego/registry-zookeeper
+# @go-like/registry-zookeeper
 
-`@likego/registry-zookeeper` 是 LikeGo 的 ZooKeeper 注册中心实现。公共用法与
-`@likego/registry`、go-kratos 的 `Registrar` / `Discovery` 模型保持一致，不暴露
+`@go-like/registry-zookeeper` 是 go-like 的 ZooKeeper 注册中心实现。公共用法与
+`@go-like/registry`、go-kratos 的 `Registrar` / `Discovery` 模型保持一致，不暴露
 ZooKeeper 会话、注册句柄或 provider capability 等额外概念。
 
 ## 安装
 
 ```bash
-bun add @likego/registry-zookeeper
+bun add @go-like/registry-zookeeper
 ```
 
 ## 使用
 
 ```ts
-import { background } from "@likego/context"
-import { newZookeeperRegistry } from "@likego/registry-zookeeper"
+import { background } from "@go-like/context"
+import { newZookeeperRegistry } from "@go-like/registry-zookeeper"
 
 const registry = newZookeeperRegistry({
   address: "127.0.0.1:2181",
-  root: "/likego/registry/v1",
+  root: "/go-like/registry/v1",
   timeoutMs: 5_000
 })
 
@@ -85,8 +85,8 @@ credential 仅进入私有客户端快照，不进入公共 Registry 契约、�
 
 | 资源                             | 所有者    | 生命周期                                        |
 | -------------------------------- | --------- | ----------------------------------------------- |
-| `zookeeper-registration-session` | LikeGo    | 首次注册时建立；最后一个实例注销后关闭。        |
-| `zookeeper-watcher-session`      | LikeGo    | `watch()` 建立；`Watcher.stop()` 后关闭。       |
+| `zookeeper-registration-session` | go-like    | 首次注册时建立；最后一个实例注销后关闭。        |
+| `zookeeper-watcher-session`      | go-like    | `watch()` 建立；`Watcher.stop()` 后关闭。       |
 | `zookeeper-process`              | 应用/运维 | 本包只连接，不启动、停止或配置 ZooKeeper 进程。 |
 
 `node-zookeeper-client` 的官方 `close()` API 不接受 `AbortSignal` 或 callback；本包会立即请求

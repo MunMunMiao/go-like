@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 /** Describes one immutable record returned by a Store. */
 export interface StoreRecord {
@@ -54,7 +54,7 @@ export type ListOption = (options: ListOptions) => ListOptions
 /** Describes a stable conditional-write conflict without interpreting provider revisions. */
 export interface StoreConflictError extends Error {
   readonly name: "StoreConflictError"
-  readonly code: "LIKEGO_STORE_CONFLICT"
+  readonly code: "GO_LIKE_STORE_CONFLICT"
   readonly key: string
   /** Null means the caller expected the key to be absent. */
   readonly expectedRevision: string | null
@@ -70,20 +70,20 @@ export interface Store {
   write(
     ctx: Context,
     record: StoreRecordInput,
-    ...options: readonly WriteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+    ...options: readonly WriteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
   ): Promise<StoreRecord>
 
   /** Deletes one exact key and reports whether an unexpired record was removed. */
   delete(
     ctx: Context,
     key: string,
-    ...options: readonly DeleteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+    ...options: readonly DeleteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
   ): Promise<boolean>
 
   /** Lists one stable code-point-sorted page of unexpired records. */
   list(
     ctx: Context,
-    ...options: readonly ListOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+    ...options: readonly ListOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
   ): Promise<StorePage>
 
   /** Returns one stable provider diagnostic name. */

@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
 import { describe, expect, test } from "bun:test"
 
 import { newSupportRoutingHandler } from "../src/http"

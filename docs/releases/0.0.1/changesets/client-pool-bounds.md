@@ -1,5 +1,5 @@
 ---
-"@likego/client": minor
+"@go-like/client": minor
 ---
 
 # Client 空闲连接边界

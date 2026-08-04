@@ -1,7 +1,7 @@
 ---
-"@likego/transport": minor
-"@likego/transport-http": minor
-"@likego/transport-memory": minor
+"@go-like/transport": minor
+"@go-like/transport-http": minor
+"@go-like/transport-memory": minor
 ---
 
 收紧 Transport 公共选项，只保留当前 provider 能够真实实现的能力。删除未被任何实现消费的

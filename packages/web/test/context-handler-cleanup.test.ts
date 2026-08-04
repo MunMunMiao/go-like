@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { canceled, cause, type Context } from "@likego/context"
+import { canceled, cause, type Context } from "@go-like/context"
 
 import { contextHandler } from "../src/index"
 

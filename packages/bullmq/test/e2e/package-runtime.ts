@@ -1,4 +1,4 @@
-import * as api from "@likego/bullmq"
+import * as api from "@go-like/bullmq"
 
 const exports = Object.keys(api).sort()
 const expected = ["bullMqWorkerShutdownTimeout", "newBullMqWorkerServer"]

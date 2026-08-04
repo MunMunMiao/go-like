@@ -7,7 +7,7 @@
 - Redis 按租户和配置 generation 缓存公开响应；
 - Token Bucket 对每个租户执行进程内限流；
 - Pino 输出结构化请求日志，并由 Core App 管理输出终态。
-- `@likego/store-consul` 在隔离 KV root 发布当前进程状态，启动和清理都执行 fresh readback。
+- `@go-like/store-consul` 在隔离 KV root 发布当前进程状态，启动和清理都执行 fresh readback。
 
 ## 运行
 
@@ -16,10 +16,10 @@
 ```sh
 docker compose -f examples/saas-tenant-api/compose.yaml up -d --wait
 curl --fail --request PUT --data-binary @- \
-  http://127.0.0.1:28500/v1/kv/likego/examples/saas-tenant-api/config <<'JSON'
+  http://127.0.0.1:28500/v1/kv/go-like/examples/saas-tenant-api/config <<'JSON'
 {"schemaVersion":1,"generation":"demo-1","cacheTtlMs":30000,"tenants":{"tenant-acme":{"enabled":true,"plan":"pro","features":{"exports":true,"auditLog":true},"rateLimit":{"capacity":60,"refillTokens":60,"refillIntervalMs":60000}}}}
 JSON
-bun run --filter @likego/example-saas-tenant-api start
+bun run --filter @go-like/example-saas-tenant-api start
 ```
 
 程序默认监听 `http://127.0.0.1:3000`。在另一个终端调用：
@@ -71,23 +71,23 @@ feature flags。缓存 key 同时包含 generation 与 tenant ID，配置更新�
 `main.ts` 中的 `X-Tenant-Id` 仅用于让本地小程序可以直接运行。`newTenantHandler` 接受
 `resolveTenant(ctx, request)`；生产应用必须接入已经完成认证和授权的身份系统，不能直接信任该示例 header。
 
-## LikeGo 能力
+## go-like 能力
 
 | 能力         | 使用方式                                                                                                     |
 | ------------ | ------------------------------------------------------------------------------------------------------------ |
 | 应用生命周期 | Config 通过 `beforeStart / afterStop` hook 加载和关闭；Cache、Pino 与 Web Server 作为 `Server` 交给 Core App |
-| 配置         | `@likego/config-consul` 提供 Config Source，完整文档通过 Schema 后发布                                       |
+| 配置         | `@go-like/config-consul` 提供 Config Source，完整文档通过 Schema 后发布                                       |
 | 缓存         | Redis Cache 持有连接生命周期                                                                                 |
 | Web          | Hono Handler 由标准 Web Server 承载                                                                          |
-| 限流         | `@likego/resilience` 的无后台 timer Token Bucket                                                             |
-| 日志         | 应用配置 Pino；`@likego/pino` 负责 flush/close 生命周期                                                      |
-| Store        | `@likego/store-consul` 写入隔离的 runtime state，并在 App 停止时删除                                         |
+| 限流         | `@go-like/resilience` 的无后台 timer Token Bucket                                                             |
+| 日志         | 应用配置 Pino；`@go-like/pino` 负责 flush/close 生命周期                                                      |
+| Store        | `@go-like/store-consul` 写入隔离的 runtime state，并在 App 停止时删除                                         |
 
 ## 验证
 
 ```sh
-bun run --filter @likego/example-saas-tenant-api typecheck
-bun run --filter @likego/example-saas-tenant-api test:unit
+bun run --filter @go-like/example-saas-tenant-api typecheck
+bun run --filter @go-like/example-saas-tenant-api test:unit
 bun run test:e2e:examples
 ```
 

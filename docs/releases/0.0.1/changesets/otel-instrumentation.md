@@ -1,5 +1,5 @@
 ---
-"@likego/otel": patch
+"@go-like/otel": patch
 ---
 
 增加 unary Client、Server、Web Handler 与 Broker 的显式 OpenTelemetry instrumentation，升级至

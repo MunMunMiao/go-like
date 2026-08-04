@@ -1,9 +1,9 @@
 # البدء
 
-ثبّت فقط الأجزاء التي تحتاج إليها خدمتك. تبدأ خدمة HTTP معتادة بالحزم `@likego/context` و`@likego/core` و`@likego/web`، مع إطار Web يوفّر معالج Fetch أصلياً. أما الاستدعاءات الداخلية فتضيف `@likego/client` و`@likego/transport` و`@likego/transport-http`. يبقى اكتشاف الخدمات والإعداد والتخزين اختيارات صريحة، ولا تظهر كإعدادات افتراضية مخفية.
+ثبّت فقط الأجزاء التي تحتاج إليها خدمتك. تبدأ خدمة HTTP معتادة بالحزم `@go-like/context` و`@go-like/core` و`@go-like/web`، مع إطار Web يوفّر معالج Fetch أصلياً. أما الاستدعاءات الداخلية فتضيف `@go-like/client` و`@go-like/transport` و`@go-like/transport-http`. يبقى اكتشاف الخدمات والإعداد والتخزين اختيارات صريحة، ولا تظهر كإعدادات افتراضية مخفية.
 
 > [!IMPORTANT]
-> لم تُنشر حزم `@likego/*` على npm بعد. عند العمل من نسخة المستودع، يحلّ `workspace:*` الاعتماديات إلى حزم `@likego/*` المحلية؛ ولا يعني الإصدار `0.0.1` في ملفات manifest أنها منشورة على npm. لذلك يصف أمر `bun add` أدناه المسار المتاح بعد النشر. للتحقق من المصدر الحالي وتشغيله من جذر المستودع:
+> لم تُنشر حزم `@go-like/*` على npm بعد. عند العمل من نسخة المستودع، يحلّ `workspace:*` الاعتماديات إلى حزم `@go-like/*` المحلية؛ ولا يعني الإصدار `0.0.1` في ملفات manifest أنها منشورة على npm. لذلك يصف أمر `bun add` أدناه المسار المتاح بعد النشر. للتحقق من المصدر الحالي وتشغيله من جذر المستودع:
 >
 > ```sh
 > bun install --frozen-lockfile
@@ -12,29 +12,36 @@
 > ```
 
 ```sh
-bun add @likego/context @likego/core @likego/web
+bun add @go-like/context @go-like/core @go-like/web
 ```
 
 أنشئ `src/main.ts`:
 
 ```ts
-import { background } from "@likego/context"
-import { context, name, newApp, server, stopTimeout } from "@likego/core"
-import { signal } from "@likego/core/node"
-import type { Handler } from "@likego/web"
-import { newNodeServer, port } from "@likego/web/node"
+import process from "node:process"
+
+import { background } from "@go-like/context"
+import { afterStart, context, name, newApp, server, stopTimeout } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import type { Handler } from "@go-like/web"
+import { newNodeServer, port } from "@go-like/web/node"
 
 const handler: Handler = (request) => {
   const path = new URL(request.url).pathname
-  return Response.json({ message: "hello from LikeGo", path })
+  return Response.json({ message: "hello from go-like", path })
 }
 
+const webServer = newNodeServer(handler, port(3000))
 const app = newApp(
   context(background()),
   name("hello"),
-  server(newNodeServer(handler, port(3000))),
+  server(webServer),
   stopTimeout(30_000),
-  signal()
+  signal(),
+  afterStart(async function announceReady(ctx): Promise<void> {
+    await webServer.endpoint(ctx)
+    process.stdout.write("GO_LIKE_EXAMPLE_READY=hello\n")
+  })
 )
 
 await app.run()
@@ -46,6 +53,6 @@ await app.run()
 bun run src/main.ts
 ```
 
-يمكن لأي كائن يحقق عقد `Server` بنيوياً أن ينضم إلى التطبيق. توفّر حزم مثل `@likego/croner` و`@likego/bullmq` و`@likego/pino` و`@likego/winston` محوّلات لمكتبات شائعة، لكنها لا تستبدل تلك المكتبات ولا تنسخ جميع خياراتها إلى واجهة جديدة.
+انتظر ظهور `GO_LIKE_EXAMPLE_READY=hello` قبل إرسال الطلبات. يمكن لأي كائن يحقق عقد `Server` بنيوياً أن ينضم إلى التطبيق. توفّر حزم مثل `@go-like/croner` و`@go-like/bullmq` و`@go-like/pino` و`@go-like/winston` محوّلات لمكتبات شائعة، لكنها لا تستبدل تلك المكتبات ولا تنسخ جميع خياراتها إلى واجهة جديدة.
 
-أنشئ بيانات الاعتماد وعملاء الشبكة وإعداد إطار العمل داخل شيفرة التطبيق. مرّر إلى LikeGo أقل قدرة لازمة، وغالباً ما تكون كائناً أصلياً موجوداً أو دالة `fetch` محقونة. بهذه الطريقة تصبح الاختبارات حتمية، ويظل واضحاً عند الإيقاف من يملك كل اتصال أو مستمع ومن تقع عليه مسؤولية إغلاقه.
+أنشئ بيانات الاعتماد وعملاء الشبكة وإعداد إطار العمل داخل شيفرة التطبيق. مرّر إلى go-like أقل قدرة لازمة، وغالباً ما تكون كائناً أصلياً موجوداً أو دالة `fetch` محقونة. بهذه الطريقة تصبح الاختبارات حتمية، ويظل واضحاً عند الإيقاف من يملك كل اتصال أو مستمع ومن تقع عليه مسؤولية إغلاقه.

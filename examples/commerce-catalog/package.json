@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-commerce-catalog",
+  "name": "@go-like/example-commerce-catalog",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,23 +12,23 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {
-    "@likego/cache": "workspace:*",
-    "@likego/cache-redis": "workspace:*",
-    "@likego/client": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/health": "workspace:*",
-    "@likego/registry": "workspace:*",
-    "@likego/registry-consul": "workspace:*",
-    "@likego/resilience": "workspace:*",
-    "@likego/server": "workspace:*",
-    "@likego/transport": "workspace:*",
-    "@likego/transport-http": "workspace:*",
-    "@likego/web": "workspace:*",
+    "@go-like/cache": "workspace:*",
+    "@go-like/cache-redis": "workspace:*",
+    "@go-like/client": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/health": "workspace:*",
+    "@go-like/registry": "workspace:*",
+    "@go-like/registry-consul": "workspace:*",
+    "@go-like/resilience": "workspace:*",
+    "@go-like/server": "workspace:*",
+    "@go-like/transport": "workspace:*",
+    "@go-like/transport-http": "workspace:*",
+    "@go-like/web": "workspace:*",
     "hono": "4.12.34"
   },
   "devDependencies": {
-    "@likego/cache-memory": "workspace:*",
+    "@go-like/cache-memory": "workspace:*",
     "@types/node": "26.1.2"
   },
   "license": "MIT"

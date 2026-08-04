@@ -335,7 +335,7 @@ export function newTransportClosedError(message: string, cause?: Error): Transpo
   const error = new Error(message, cause === undefined ? undefined : { cause })
   const details: Pick<TransportClosedError, "name" | "code" | "cause"> = {
     name: "TransportClosedError",
-    code: "LIKEGO_TRANSPORT_CLOSED",
+    code: "GO_LIKE_TRANSPORT_CLOSED",
     cause
   }
   return Object.freeze(Object.assign(error, details))
@@ -346,7 +346,7 @@ export function newTransportStateError(message: string, cause?: Error): Transpor
   const error = new Error(message, cause === undefined ? undefined : { cause })
   const details: Pick<TransportStateError, "name" | "code" | "cause"> = {
     name: "TransportStateError",
-    code: "LIKEGO_TRANSPORT_STATE",
+    code: "GO_LIKE_TRANSPORT_STATE",
     cause
   }
   return Object.freeze(Object.assign(error, details))
@@ -360,7 +360,7 @@ export function newUnsupportedTransportCapabilityError(
   const error = new Error(message, cause === undefined ? undefined : { cause })
   const details: Pick<UnsupportedTransportCapabilityError, "name" | "code" | "cause"> = {
     name: "UnsupportedTransportCapabilityError",
-    code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY",
+    code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY",
     cause
   }
   return Object.freeze(Object.assign(error, details))
@@ -371,7 +371,7 @@ export function newTransportProtocolError(message: string, cause?: Error): Trans
   const error = new Error(message, cause === undefined ? undefined : { cause })
   const details: Pick<TransportProtocolError, "name" | "code" | "cause"> = {
     name: "TransportProtocolError",
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     cause
   }
   return Object.freeze(Object.assign(error, details))

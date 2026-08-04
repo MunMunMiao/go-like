@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled } from "@likego/context"
-import type { Context } from "@likego/context"
-import type { StoreRecord, StoreRecordInput } from "@likego/store"
+import { background, canceled } from "@go-like/context"
+import type { Context } from "@go-like/context"
+import type { StoreRecord, StoreRecordInput } from "@go-like/store"
 
 import { commitCheckpoint, readCheckpoint, type CheckpointStore } from "../../src/checkpoint"
 import { processReport } from "../../src/processor"

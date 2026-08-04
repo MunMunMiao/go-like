@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { newEtcdRegistry, type EtcdFetch } from "../src/index"
@@ -87,19 +87,19 @@ test("watch emits complete replacement snapshots across update and deregister", 
   expect(await watcher.next(background())).toEqual([])
   await watcher.stop(background())
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_STOPPED"
+    code: "GO_LIKE_WATCHER_STOPPED"
   })
 })
 
 test("malformed managed bytes fail query and watch admission closed", async () => {
   const etcd = fakeEtcd()
   const registry = newEtcdRegistry({ fetch: etcd.fetch, address: "https://etcd.example" })
-  etcd.putRaw("/likego/registry/v1/records/not-managed", "not-json")
+  etcd.putRaw("/go-like/registry/v1/records/not-managed", "not-json")
   await expect(registry.getService(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   await expect(registry.watch(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 })
 
@@ -110,7 +110,7 @@ test("HTTP and token-bearing transport errors never expose credential bytes", as
   }
   const statusRegistry = newEtcdRegistry({ fetch: statusFetch, address: "https://etcd.example" })
   await expect(statusRegistry.getService(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 503
   })
 
@@ -126,7 +126,7 @@ test("HTTP and token-bearing transport errors never expose credential bytes", as
     await secretRegistry.getService(background(), "orders")
     throw new Error("secret-bearing request unexpectedly fulfilled")
   } catch (error) {
-    expect(error).toMatchObject({ code: "LIKEGO_ETCD_TRANSPORT" })
+    expect(error).toMatchObject({ code: "GO_LIKE_ETCD_TRANSPORT" })
     expect(String(error)).not.toContain(secret)
     expect(String(error instanceof Error ? error.cause : error)).not.toContain(secret)
   }

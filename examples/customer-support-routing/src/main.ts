@@ -1,8 +1,8 @@
 import process from "node:process"
 
-import { afterStart, name, newApp, server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+import { afterStart, name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import { newSupportRoutingHandler } from "./http"
 import { newMemorySupportRoutingStore } from "./routing"
@@ -24,7 +24,7 @@ const app = newApp(
   afterStart(async function announceReady(ctx): Promise<void> {
     await httpServer.endpoint(ctx)
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "customer-support-routing", origin })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "customer-support-routing", origin })}\n`
     )
   })
 )

@@ -11,7 +11,7 @@ import type {
 
 export const RequiredRuntimeVersions = Object.freeze({
   bun: "1.3.14",
-  node: "26.5.1",
+  node: "26.x",
   deno: "2.9.4",
   typescript: "7.0.2",
   k6: "2.1.0",
@@ -148,11 +148,19 @@ export async function probeRequiredRuntimeVersions(
   return Object.freeze(observations)
 }
 
+function matchesRequiredVersion(actual: string, required: string): boolean {
+  const majorRange = /^(\d+)\.x$/u.exec(required)
+  if (majorRange?.[1] !== undefined) return actual.startsWith(`${majorRange[1]}.`)
+  return actual === required
+}
+
 export function assertRequiredRuntimeVersions(
   observations: readonly RuntimeVersionObservation[]
 ): void {
   const mismatches = observations.filter(
-    (observation) => observation.required !== null && observation.actual !== observation.required
+    (observation) =>
+      observation.required !== null &&
+      !matchesRequiredVersion(observation.actual, observation.required)
   )
   if (mismatches.length === 0) return
   throw new Error(

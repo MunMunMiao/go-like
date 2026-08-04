@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 
-import type { Context } from "@likego/context"
-import type { Listener } from "@likego/transport"
+import type { Context } from "@go-like/context"
+import type { Listener } from "@go-like/transport"
 import { transportConformanceCases, type TransportConformanceFaultHarness } from "../../src/testing"
 
 import { newMemoryTransport } from "../src/index"

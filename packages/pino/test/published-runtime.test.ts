@@ -1,7 +1,7 @@
 import { once } from "node:events"
 
 import { expect, test } from "bun:test"
-import { background, canceled, withCancelCause } from "@likego/context"
+import { background, canceled, withCancelCause } from "@go-like/context"
 import pino, { symbols, type Logger } from "pino"
 
 import { pinoDrainTimeout, newPinoServer } from "../src/index"

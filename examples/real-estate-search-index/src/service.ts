@@ -1,5 +1,5 @@
-import type { MemoryCache } from "@likego/cache-memory"
-import type { Context } from "@likego/context"
+import type { MemoryCache } from "@go-like/cache-memory"
+import type { Context } from "@go-like/context"
 import type { IndexChange, ListingRepository } from "./repository"
 
 export interface ListingUpdate {

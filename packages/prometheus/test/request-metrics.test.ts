@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, CallRequest, Client } from "@likego/client"
-import { background, withCancelCause, type Context } from "@likego/context"
-import type { Message } from "@likego/transport"
-import { endpoint, request as service } from "@likego/transport/headers"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, CallRequest, Client } from "@go-like/client"
+import { background, withCancelCause, type Context } from "@go-like/context"
+import type { Message } from "@go-like/transport"
+import { endpoint, request as service } from "@go-like/transport/headers"
 import { Registry } from "prom-client"
 
 import {
@@ -24,7 +24,7 @@ async function scrape(registry: Registry): Promise<string> {
 }
 
 function countLine(body: string, component: string, operation: string, outcome: string): string {
-  return `likego_requests_total{component="${component}",operation="${operation}",outcome="${outcome}"} 1`
+  return `go_like_requests_total{component="${component}",operation="${operation}",outcome="${outcome}"} 1`
 }
 
 function durationCountLine(
@@ -33,14 +33,14 @@ function durationCountLine(
   operation: string,
   outcome: string
 ): string {
-  return `likego_request_duration_seconds_count{component="${component}",operation="${operation}",outcome="${outcome}"} 1`
+  return `go_like_request_duration_seconds_count{component="${component}",operation="${operation}",outcome="${outcome}"} 1`
 }
 
 test("creates fixed application-owned collectors and rejects malformed instrumentation inputs", async () => {
   const registry = new Registry()
   const metrics = newRequestMetrics(registry)
-  const registeredTotal = registry.getSingleMetric("likego_requests_total")
-  const registeredDuration = registry.getSingleMetric("likego_request_duration_seconds")
+  const registeredTotal = registry.getSingleMetric("go_like_requests_total")
+  const registeredDuration = registry.getSingleMetric("go_like_request_duration_seconds")
   if (registeredTotal === undefined || registeredDuration === undefined) {
     throw new Error("request collectors were not registered")
   }
@@ -50,7 +50,7 @@ test("creates fixed application-owned collectors and rejects malformed instrumen
   expect(Object.isFrozen(metrics)).toBe(true)
   expect(await scrape(registry)).not.toContain("error")
   expect(() => newRequestMetrics(registry)).toThrow(
-    "A metric with the name likego_requests_total has already been registered"
+    "A metric with the name go_like_requests_total has already been registered"
   )
 
   const invalidMetrics = {}
@@ -58,13 +58,13 @@ test("creates fixed application-owned collectors and rejects malformed instrumen
     Reflect.apply(measureWebHandler, undefined, [() => new Response(), invalidMetrics])
   ).toThrow("metrics must be created by newRequestMetrics")
   expect(() => Reflect.apply(measureClient, undefined, [{}, metrics])).toThrow(
-    "client must implement the LikeGo Client interface"
+    "client must implement the go-like Client interface"
   )
   expect(() => Reflect.apply(measureWebHandler, undefined, [null, metrics])).toThrow(
     "Web handler must be a function"
   )
   expect(() => Reflect.apply(measureBroker, undefined, [{}, metrics])).toThrow(
-    "broker must implement the LikeGo Broker interface"
+    "broker must implement the go-like Broker interface"
   )
   expect(() => Reflect.apply(measureUnaryMiddleware(metrics), undefined, [null])).toThrow(
     "unary handler must be a function"
@@ -417,7 +417,7 @@ test("preserves Broker native results, events, Subscribers, options, and receive
 
   const body = await scrape(registry)
   expect(body).toContain(
-    'likego_requests_total{component="broker",operation="publish",outcome="success"} 2'
+    'go_like_requests_total{component="broker",operation="publish",outcome="success"} 2'
   )
   expect(body).toContain(countLine(body, "broker", "publish", "failure"))
   expect(body).toContain(countLine(body, "broker", "publish", "canceled"))

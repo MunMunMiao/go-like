@@ -14,11 +14,11 @@
 
 ```sh
 docker compose -f examples/iot-telemetry/compose.yaml up -d
-bun run --filter @likego/example-iot-telemetry start
+bun run --filter @go-like/example-iot-telemetry start
 ```
 
 程序默认连接 `nats://127.0.0.1:44222`，可通过 `NATS_URL` 覆盖。启动后会创建或复用三个
-File Storage Stream 和 durable consumer，并输出 `LIKEGO_EXAMPLE_READY`。
+File Storage Stream 和 durable consumer，并输出 `GO_LIKE_EXAMPLE_READY`。
 
 停止程序后清理：
 
@@ -51,7 +51,7 @@ e2e/
 Producer
    |
    v
-TELEMETRY_RAW -> durable consumer -> LikeGo subscription Server
+TELEMETRY_RAW -> durable consumer -> go-like subscription Server
                                       |
                                       +-- valid -> TELEMETRY_VALIDATED -> ack raw
                                       |
@@ -77,24 +77,24 @@ Raw v1 示例：
 交付语义是 at-least-once。Validated 事件使用稳定 `eventId`，但 JetStream 的 `Nats-Msg-Id`
 只在配置的滚动 duplicate window 内去重；下游仍必须持久幂等，示例不声称 exactly-once。
 
-## LikeGo 能力
+## go-like 能力
 
 | 能力         | 使用方式                                                          |
 | ------------ | ----------------------------------------------------------------- |
 | 应用生命周期 | `newApp(server(...))`、`app.run()`                                |
-| Broker       | `@likego/broker` 的 `newBrokerServer(...)` 返回 Core Server       |
-| NATS         | `@likego/nats/jetstream/broker` 适配官方 JetStream Client         |
+| Broker       | `@go-like/broker` 的 `newBrokerServer(...)` 返回 Core Server       |
+| NATS         | `@go-like/nats/jetstream/broker` 适配官方 JetStream Client         |
 | Context      | 传播取消、处理 deadline 与停止边界                                |
 | 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式 required-field、范围校验 |
 
-LikeGo 不重新实现 Cron 或消息系统；它只让这些长期运行组件实现统一 `Server.start/stop` 契约，再交给
+go-like 不重新实现 Cron 或消息系统；它只让这些长期运行组件实现统一 `Server.start/stop` 契约，再交给
 App 管理。
 
 ## 验证
 
 ```sh
-bun run --filter @likego/example-iot-telemetry typecheck
-bun run --filter @likego/example-iot-telemetry test:unit
+bun run --filter @go-like/example-iot-telemetry typecheck
+bun run --filter @go-like/example-iot-telemetry test:unit
 bun run test:e2e:examples
 ```
 

@@ -16,7 +16,7 @@ test("Redis carrier round-trips detached binary values canonically", () => {
 
 test("Redis carrier rejects foreign malformed non-canonical and oversized values", () => {
   for (const value of [null, "", "v2:AA==", "v1:A", "v1:AB==", "v1:!!!!"]) {
-    expect(() => decodeRedisCacheValue(value, 10)).toThrow("canonical LikeGo carrier")
+    expect(() => decodeRedisCacheValue(value, 10)).toThrow("canonical go-like carrier")
   }
-  expect(() => decodeRedisCacheValue("v1:AAE=", 1)).toThrow("canonical LikeGo carrier")
+  expect(() => decodeRedisCacheValue("v1:AAE=", 1)).toThrow("canonical go-like carrier")
 })

@@ -1,6 +1,6 @@
 /// <reference lib="es2024.promise" />
 
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 
 import type { Cache } from "../src/index"
 import { putOptions } from "../src/provider"

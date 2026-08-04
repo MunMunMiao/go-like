@@ -1,8 +1,8 @@
-import type { Context } from "@likego/context"
-import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
-import type { CircuitState } from "@likego/resilience"
-import { contextHandler, type Handler } from "@likego/web"
-import { createHealthHandler } from "@likego/web/health"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
+import type { CircuitState } from "@go-like/resilience"
+import { contextHandler, type Handler } from "@go-like/web"
+import { createHealthHandler } from "@go-like/web/health"
 
 import { newVerifyIdentity, type VerifyIdentity, type VerifyIdentityCommand } from "./service"
 import {

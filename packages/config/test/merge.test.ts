@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { mergeObjects } from "../src/merge"
 import { newConfig, source, objectSource } from "../src/index"
 import { readConfig } from "./helpers"

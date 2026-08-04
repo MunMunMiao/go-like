@@ -1,5 +1,5 @@
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
-import { eventBroker, type Codec } from "@likego/event"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
+import { eventBroker, type Codec } from "@go-like/event"
 import {
   connect,
   type Msg,
@@ -14,10 +14,10 @@ import { newNatsCoreBroker } from "../../src/broker"
 const NatsImage =
   "docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
 const ExpectedServerVersion = "2.14.4"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface Deferred<T> {
   readonly promise: Promise<T>
@@ -189,9 +189,9 @@ async function closeConnection(connection: NatsConnection | null): Promise<void>
 
 /** Executes the fixed-digest NATS Core real-service gate. */
 async function main(): Promise<void> {
-  const project = `likego-nats-core-${crypto.randomUUID()}`
+  const project = `go-like-nats-core-${crypto.randomUUID()}`
   const container = `${project}-server`
-  const label = `likego.project=${project}`
+  const label = `go-like.project=${project}`
   const prefix = crypto.randomUUID().replaceAll("-", "")
   const lateRejections: unknown[] = []
   const statuses: Status["type"][] = []

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { newConfig } from "@likego/config"
-import { background, withCancelCause, type Context } from "@likego/context"
+import { newConfig } from "@go-like/config"
+import { background, withCancelCause, type Context } from "@go-like/context"
 import {
   fileSource,
   jsonFileDecoder,

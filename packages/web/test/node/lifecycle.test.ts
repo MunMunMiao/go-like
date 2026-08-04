@@ -7,8 +7,8 @@ import {
   withCancelCause,
   withTimeout,
   type Context
-} from "@likego/context"
-import type { Handler } from "@likego/web"
+} from "@go-like/context"
+import type { Handler } from "@go-like/web"
 
 import {
   nodeShutdownTimeout,
@@ -219,7 +219,7 @@ test("rejects every restart with the current one-shot lifecycle state", async ()
 
   await expect(subject.start(background())).rejects.toMatchObject({
     name: "NodeServerAlreadyStartedError",
-    code: "LIKEGO_NODE_SERVER_ALREADY_STARTED",
+    code: "GO_LIKE_NODE_SERVER_ALREADY_STARTED",
     status: "running"
   })
 
@@ -377,7 +377,7 @@ test("Node shutdown timeout requests force but waits for native terminal", async
   expect((terminal as AggregateError).errors).toHaveLength(2)
   expect((terminal as AggregateError).errors[0]).toMatchObject({
     name: "NodeServerForceCloseError",
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE",
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE",
     timeoutMs: 0,
     activeConnections: 2
   })
@@ -429,7 +429,7 @@ test("passive close rejects as an unexpected terminal exit without closing nativ
   const failure = await running.catch((error: unknown) => error)
   expect(failure).toMatchObject({
     name: "NodeServerUnexpectedCloseError",
-    code: "LIKEGO_NODE_SERVER_UNEXPECTED_CLOSE"
+    code: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE"
   })
   expect(fake.closeCalls).toBe(0)
   await expect(subject.stop(background())).rejects.toBe(failure)
@@ -450,7 +450,7 @@ test("monotonic Node shutdown deadline wins when native close blocks past its bu
   await expect(subject.stop(background())).resolves.toBeUndefined()
   await expect(running).rejects.toMatchObject({
     name: "NodeServerForceCloseError",
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE",
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE",
     timeoutMs: 1
   })
   expect(fake.closeAllCalls).toBe(1)
@@ -470,7 +470,7 @@ test("zero Node shutdown timeout is an immediate monotonic owner deadline", asyn
   await expect(subject.stop(background())).resolves.toBeUndefined()
   await expect(running).rejects.toMatchObject({
     name: "NodeServerForceCloseError",
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE",
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE",
     timeoutMs: 0
   })
   expect(fake.closeAllCalls).toBe(1)
@@ -772,7 +772,7 @@ test("forces safely when the native host omits or disables closeAllConnections",
   absent.finishClose()
   await absentStop
   await expect(absentRunning).rejects.toMatchObject({
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE"
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE"
   })
   expect(absent.closeAllCalls).toBe(0)
 
@@ -789,7 +789,7 @@ test("forces safely when the native host omits or disables closeAllConnections",
   disabled.finishClose()
   await disabledStop
   await expect(disabledRunning).rejects.toMatchObject({
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE"
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE"
   })
   expect(disabled.closeAllCalls).toBe(0)
 })
@@ -812,7 +812,7 @@ test("closeAllConnections failure joins the earlier terminal cause", async () =>
   expect(terminal).toBeInstanceOf(AggregateError)
   expect((terminal as AggregateError).errors).toHaveLength(2)
   expect((terminal as AggregateError).errors[0]).toMatchObject({
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE"
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE"
   })
   expect((terminal as AggregateError).errors[1]).toBe(closeAllFailure)
 })

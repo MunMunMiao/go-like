@@ -19,7 +19,7 @@ describe("mDNS construction options", () => {
   test("normative defaults are immutable", () => {
     const options = mdnsOptions()
     expect(options).toEqual({
-      domain: "likego.",
+      domain: "go-like.",
       interfaceIds: [],
       families: ["ipv4"],
       queryTimeoutMs: 1_000,
@@ -88,7 +88,7 @@ describe("mDNS construction options", () => {
     /** Returns one structurally typed but semantically invalid candidate. */
     function invalid(_current: MDNSOptions): MDNSOptions {
       return {
-        domain: "likego.",
+        domain: "go-like.",
         interfaceIds: [],
         families: ["ipv4"],
         queryTimeoutMs: 1_000,

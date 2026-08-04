@@ -1,12 +1,12 @@
 /// <reference lib="es2024.promise" />
 
-import { afterFunc, canceled, cause, type Context, type StopFunc } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { afterFunc, canceled, cause, type Context, type StopFunc } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import {
   newWatcherOverflowError,
   newWatcherStoppedError,
   snapshotServiceInstances
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 interface Deferred<T> {
   readonly promise: Promise<T>

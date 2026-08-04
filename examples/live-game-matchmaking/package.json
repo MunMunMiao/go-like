@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-live-game-matchmaking",
+  "name": "@go-like/example-live-game-matchmaking",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,11 +12,11 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/registry": "workspace:*",
-    "@likego/registry-kubernetes": "workspace:*",
-    "@likego/web": "workspace:*"
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/registry": "workspace:*",
+    "@go-like/registry-kubernetes": "workspace:*",
+    "@go-like/web": "workspace:*"
   },
   "license": "MIT"
 }

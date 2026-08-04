@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Transport } from "@likego/transport"
+import { background } from "@go-like/context"
+import type { Transport } from "@go-like/transport"
 
 import {
   executor,

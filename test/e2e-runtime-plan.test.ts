@@ -20,6 +20,8 @@ import { createProcessSupervisor, runCommand, type CommandResult } from "../e2e/
 import { createTempDirectory, removeTempDirectory } from "../e2e/harness/temp"
 import { RequiredRuntimeVersions } from "../e2e/runtime-versions"
 
+const RepresentativeNodeVersion = "26.0.0"
+
 function successfulResult(): CommandResult {
   return Object.freeze({
     exitCode: 0,
@@ -74,7 +76,7 @@ function successfulOneExampleResult(): ExamplesRunResult {
   const owner = "alpha-test-owner"
   const input = Object.freeze({
     id: "alpha",
-    packageName: "@likego/example-alpha",
+    packageName: "@go-like/example-alpha",
     cwdRealpath: "/repo/examples/alpha",
     scriptName: "test:e2e" as const
   })
@@ -170,7 +172,7 @@ async function withRuntimeFixture(
   manifest: unknown,
   run: (root: string, definition: SuiteDefinition) => Promise<void>
 ): Promise<void> {
-  const directory = await createTempDirectory("likego-runtime-plan-")
+  const directory = await createTempDirectory("go-like-runtime-plan-")
   const cwd = join(directory.path, "package")
   try {
     await mkdir(cwd)
@@ -326,7 +328,7 @@ test("examples dispatches in process without a legacy owner while suite ownershi
   })
   await runDefinition("/repo", suiteOwned, supervisor)
   expect(commandDefinitions[0]).toMatchObject({
-    environment: { LIKEGO_E2E_OWNER: expect.stringMatching(/^suite-owned-/u) }
+    environment: { GO_LIKE_E2E_OWNER: expect.stringMatching(/^suite-owned-/u) }
   })
   expect(
     commandDefinitions
@@ -334,7 +336,7 @@ test("examples dispatches in process without a legacy owner while suite ownershi
       .some((definition) =>
         String(
           (definition as { readonly command?: readonly string[] }).command?.join(" ")
-        ).includes("label=io.likego.e2e.owner=suite-owned-")
+        ).includes("label=io.go-like.e2e.owner=suite-owned-")
       )
   ).toBe(true)
 })
@@ -359,7 +361,7 @@ test("examples completeness is reported on both pass and failure", async () => {
         ...successfulResult(),
         stdout:
           executable === "node"
-            ? `v${RequiredRuntimeVersions.node}`
+            ? `v${RepresentativeNodeVersion}`
             : executable === "docker"
               ? "28.0.0"
               : ""
@@ -371,7 +373,7 @@ test("examples completeness is reported on both pass and failure", async () => {
   const owner = "alpha-test-owner"
   const input = Object.freeze({
     id: "alpha",
-    packageName: "@likego/example-alpha",
+    packageName: "@go-like/example-alpha",
     cwdRealpath: "/repo/examples/alpha",
     scriptName: "test:e2e" as const
   })
@@ -574,7 +576,7 @@ test("generic definition injection cannot intercept child-owned examples", async
         ...successfulResult(),
         stdout:
           definition.command[0] === "node"
-            ? `v${RequiredRuntimeVersions.node}`
+            ? `v${RepresentativeNodeVersion}`
             : definition.command[0] === "docker"
               ? "29.6.2"
               : ""
@@ -695,7 +697,7 @@ test("an abort between definitions preserves summary count conservation", async 
 })
 
 test("execution-plan validation rejects empty plans, duplicate IDs, and inconsistent metadata", async () => {
-  const directory = await createTempDirectory("likego-runtime-validation-")
+  const directory = await createTempDirectory("go-like-runtime-validation-")
   try {
     await expect(validateExecutionPlan(directory.path, [])).rejects.toThrow(
       "execution plan is empty"

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { runInNewContext } from "node:vm"
 
-import { background, canceled, deadlineExceeded, withCancel, type Context } from "@likego/context"
-import type { Registrar, ServiceInstance } from "@likego/registry"
+import { background, canceled, deadlineExceeded, withCancel, type Context } from "@go-like/context"
+import type { Registrar, ServiceInstance } from "@go-like/registry"
 import {
   afterStart,
   afterStop,

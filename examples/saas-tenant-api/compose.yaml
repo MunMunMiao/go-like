@@ -1,4 +1,4 @@
-name: likego-saas-tenant-api
+name: go-like-saas-tenant-api
 
 services:
   consul:

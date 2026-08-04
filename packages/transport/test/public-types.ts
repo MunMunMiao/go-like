@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import { newMetadata } from "@likego/metadata"
-import { struct, type Infer } from "@likego/struct"
+import type { Context } from "@go-like/context"
+import { newMetadata } from "@go-like/metadata"
+import { struct, type Infer } from "@go-like/struct"
 
 import {
   fromClientContext,

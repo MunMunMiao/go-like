@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import {
   newApplyFulfillmentEvent,

@@ -17,7 +17,7 @@ export function newWinstonAlreadyStartedError(status: StartedStatus): WinstonAlr
   const error: WinstonAlreadyStartedError = {
     name: "WinstonAlreadyStartedError",
     message: "Winston server has already started",
-    code: "LIKEGO_WINSTON_ALREADY_STARTED",
+    code: "GO_LIKE_WINSTON_ALREADY_STARTED",
     status
   }
   Object.setPrototypeOf(error, Error.prototype)
@@ -29,7 +29,7 @@ export function newWinstonLoggerFinishedError(): WinstonLoggerFinishedError {
   const error: WinstonLoggerFinishedError = {
     name: "WinstonLoggerFinishedError",
     message: "Winston logger finished before owner stop",
-    code: "LIKEGO_WINSTON_LOGGER_FINISHED"
+    code: "GO_LIKE_WINSTON_LOGGER_FINISHED"
   }
   Object.setPrototypeOf(error, Error.prototype)
   return Object.freeze(error)
@@ -40,7 +40,7 @@ export function newWinstonLoggerClosedError(): WinstonLoggerClosedError {
   const error: WinstonLoggerClosedError = {
     name: "WinstonLoggerClosedError",
     message: "Winston logger closed before its finish boundary",
-    code: "LIKEGO_WINSTON_LOGGER_CLOSED"
+    code: "GO_LIKE_WINSTON_LOGGER_CLOSED"
   }
   Object.setPrototypeOf(error, Error.prototype)
   return Object.freeze(error)

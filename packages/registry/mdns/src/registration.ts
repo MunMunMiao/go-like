@@ -1,5 +1,5 @@
-import { type ServiceInstance } from "@likego/registry"
-import { snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { snapshotServiceInstance } from "@go-like/registry/provider"
 
 import { hostLabel, identityLabel, serviceLabel } from "./canonical"
 import { encodeInstanceTXT } from "./codec"
@@ -21,7 +21,7 @@ function validateAddress(family: "ipv4" | "ipv6", address: string): void {
       questions: [],
       answers: [
         {
-          name: "address.likego.",
+          name: "address.go-like.",
           type: family === "ipv4" ? "A" : "AAAA",
           ttl: 1,
           flush: true,
@@ -102,7 +102,7 @@ function ownerLabels(prefixes: readonly string[], labels: readonly string[]): re
   return joined
 }
 
-/** Builds the complete fixed LikeGo RR set for one ServiceInstance. */
+/** Builds the complete fixed go-like RR set for one ServiceInstance. */
 export async function instanceRecords(
   value: ServiceInstance,
   domain: string,
@@ -122,7 +122,7 @@ export async function instanceRecords(
   const serviceOwner = validateDNSName(ownerLabels([serviceNameLabel], labels))
   const instanceOwner = validateDNSName(ownerLabels([identityNameLabel, serviceNameLabel], labels))
   const hostOwner = validateDNSName(ownerLabels([hostNameLabel], labels))
-  const nameTXT = new TextEncoder().encode(`Likego-Service-Name=${instance.name}`)
+  const nameTXT = new TextEncoder().encode(`Go-Like-Service-Name=${instance.name}`)
   if (nameTXT.byteLength > 255) throw new RangeError("mDNS service name TXT exceeds 255 bytes")
   const records: DNSRecord[] = [
     Object.freeze({

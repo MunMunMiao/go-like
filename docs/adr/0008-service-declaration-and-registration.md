@@ -11,7 +11,7 @@
 ## 背景
 
 go-micro 把 Server、Client、Transport、Registry 和 Selector 组合成完整内部调用链；go-kratos 则允许任意
-结构式 Server 进入 App。LikeGo 需要同时保留两点：用户可以自行实现 Server，官方内部调用也必须有一条
+结构式 Server 进入 App。go-like 需要同时保留两点：用户可以自行实现 Server，官方内部调用也必须有一条
 声明、分派、注册、发现、选择和调用一致的路径。
 
 如果 handler route 与 Registry endpoint 分别维护，二者会产生漂移。如果注册早于 listener bind，注册表会
@@ -35,15 +35,15 @@ interface ServerHandle {
 ```
 
 用户自建 HTTP 框架、Cron、consumer、control loop 或其他服务，只要满足该接口，就能与官方适配器一同交给
-`newApp(...)`。`@likego/server` 不引入基类、decorator、反射容器或强制 DI。
+`newApp(...)`。`@go-like/server` 不引入基类、decorator、反射容器或强制 DI。
 
 ### 单一服务声明
 
 `ServiceDeclaration` 是内部服务的唯一事实源：service name/version/metadata、node identity 和 endpoint
-name/schema/metadata/handler 在一次不可变声明中提供。LikeGo 在任何 factory 或 provider I/O 前验证并快照
+name/schema/metadata/handler 在一次不可变声明中提供。go-like 在任何 factory 或 provider I/O 前验证并快照
 完整声明。
 
-- `unaryHandler(...)` 将声明投影成 `@likego/transport` 的 `AcceptHandler`。
+- `unaryHandler(...)` 将声明投影成 `@go-like/transport` 的 `AcceptHandler`。
 - `fetchHandler(...)` 将声明投影成标准 `Request -> Response` transport handler，并保持成功 response body
   streaming，不预读或重新包装。
 - 同一 endpoint 集合投影成精确 Registry `Endpoint[]`；runtime handler 不进入 Registry wire。
@@ -53,7 +53,7 @@ name/schema/metadata/handler 在一次不可变声明中提供。LikeGo 在任�
 ### 中间件
 
 `composeUnary(handler, ...middleware)` 与 `composeFetch(handler, ...middleware)` 都只组合普通函数，
-并复用 `@likego/transport` 的 Context-first middleware 契约。第一个声明的 middleware 是最外层。
+并复用 `@go-like/transport` 的 Context-first middleware 契约。第一个声明的 middleware 是最外层。
 它们不依赖 class、decorator 或全局 registry，也不跨越外部 Web framework 的 middleware 所有权。
 
 Fetch middleware 直接围绕标准 `Request -> Response` handler 组合；成功 response body 仍保持 streaming，
@@ -76,7 +76,7 @@ transport server drain/stop
 ```
 
 默认 advertise address 只在 admission 后读取 `AddressServer.address()`。容器、NAT、Ingress 或 unspecified bind
-必须使用显式 resolver；LikeGo 不猜 scheme、host 映射或可达性。空地址、重复地址或非法 resolver 结果在任何
+必须使用显式 resolver；go-like 不猜 scheme、host 映射或可达性。空地址、重复地址或非法 resolver 结果在任何
 Registry 写入前 fail closed，并回滚已经绑定的 Server。
 
 Core 的逆序 stop 保证撤注册先于 listener drain。注册失败会回滚 listener；撤注册失败不会跳过 listener
@@ -97,9 +97,9 @@ transport；它不在运行期重新检查。
 配置 Discovery 的 `newClient` 按服务名懒持有 watcher/cache，每次 unary attempt 从最新快照执行
 selection、dial/send/recv、feedback 和逻辑 client close；直连调用不创建 watcher。Client 不做隐式 retry 或
 私有 timeout，应用结束使用时调用 `client.close(ctx)`。调用成功后，feedback/close failure 不覆盖成功响应；
-主调用和后置清理都失败时按稳定顺序聚合。LikeGo 不再提供第二套 `newResidentClient` 或逻辑连接池。
+主调用和后置清理都失败时按稳定顺序聚合。go-like 不再提供第二套 `newResidentClient` 或逻辑连接池。
 
-`@likego/transport-http` 同时实现内部 unary client/server 和标准 Fetch transport server。`@likego/web`
+`@go-like/transport-http` 同时实现内部 unary client/server 和标准 Fetch transport server。`@go-like/web`
 仍只负责外部 Web 请求；两层不互相重导出。需要外部 Web 到内部 Client 的 gateway 时，必须由显式 route
 table 桥接。
 
@@ -113,5 +113,5 @@ table 桥接。
 
 ## 后果
 
-LikeGo 同时获得 go-micro 风格的完整内部调用链和 go-kratos 风格的自由 Server 组合。声明漂移、注册时序和
+go-like 同时获得 go-micro 风格的完整内部调用链和 go-kratos 风格的自由 Server 组合。声明漂移、注册时序和
 地址猜测被收敛到清楚边界，而外部 Web、内部 Transport、Registry provider 与应用路由仍可独立替换。

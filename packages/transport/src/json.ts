@@ -1,6 +1,6 @@
-import type { Infer, Struct } from "@likego/struct"
-import { decodeJson, encodeJson } from "@likego/struct/codec"
-import { parseStructValue } from "@likego/struct/runtime"
+import type { Infer, Struct } from "@go-like/struct"
+import { decodeJson, encodeJson } from "@go-like/struct/codec"
+import { parseStructValue } from "@go-like/struct/runtime"
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder("utf-8", { fatal: true })

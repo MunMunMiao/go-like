@@ -161,10 +161,10 @@ test("a signal-driven stop failure changes the eventual exit code to one", async
 test("validates signal names and handles host-specific event names", async () => {
   expect(() => signal("" as never)).toThrow(TypeError)
   const previousExitCode = process.exitCode
-  const app = newApp(signal("LIKEGO_TEST_SIGNAL" as never))
+  const app = newApp(signal("GO_LIKE_TEST_SIGNAL" as never))
   const running = app.run()
   await turn()
-  process.emit("LIKEGO_TEST_SIGNAL" as never)
+  process.emit("GO_LIKE_TEST_SIGNAL" as never)
   await running
   expect(process.exitCode).toBe(1)
   process.exitCode = previousExitCode ?? 0

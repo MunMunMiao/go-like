@@ -1,4 +1,4 @@
-import * as metadata from "@likego/metadata"
+import * as metadata from "@go-like/metadata"
 
 const expectedExports = [
   "append",
@@ -21,7 +21,7 @@ const expectedExports = [
 
 const actualExports = Object.keys(metadata).sort()
 if (JSON.stringify(actualExports) !== JSON.stringify(expectedExports)) {
-  throw new Error(`unexpected @likego/metadata exports: ${actualExports.join(",")}`)
+  throw new Error(`unexpected @go-like/metadata exports: ${actualExports.join(",")}`)
 }
 
 const snapshot = metadata.append(metadata.newMetadata({ Trace: "one" }), "trace", "two")
@@ -33,5 +33,5 @@ if (
   metadata.get(replaced, "trace") !== "replacement" ||
   metadata.get(removed, "trace") !== null
 ) {
-  throw new Error("built @likego/metadata multi-value runtime failed")
+  throw new Error("built @go-like/metadata multi-value runtime failed")
 }

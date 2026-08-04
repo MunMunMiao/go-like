@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import {
   newHandler,
@@ -92,7 +92,7 @@ describe("hotel room reservation", () => {
     expect(await releaseResponse.json()).toMatchObject({ holdId: "web-1", status: "released" })
   })
 
-  test("fails LikeGo readiness when no room inventory catalog is loaded", async () => {
+  test("fails go-like readiness when no room inventory catalog is loaded", async () => {
     const missing = newRuntime({})
     expect((await missing.probes.check(background(), "ready")).ok).toBe(false)
     const ready = newRuntime({ standard: 1 })

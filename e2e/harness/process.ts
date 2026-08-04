@@ -238,9 +238,9 @@ function legacyResidual(cleanupFailures: readonly FailureRecord[]): ResidualObse
   return cleanupFailures.length === 0 ? "zero-observed" : "inconclusive"
 }
 
-const NativeHelperSource = "e2e/harness/native/likego_e2e_posix_controller.c"
-const NativeHelperHeader = "e2e/harness/native/likego_e2e_posix_protocol.h"
-const NativeHelperBinary = ".artifacts/e2e-native/likego-e2e-posix-controller"
+const NativeHelperSource = "e2e/harness/native/go-like_e2e_posix_controller.c"
+const NativeHelperHeader = "e2e/harness/native/go-like_e2e_posix_protocol.h"
+const NativeHelperBinary = ".artifacts/e2e-native/go-like-e2e-posix-controller"
 
 const PosixFrameMagic = 0x4c475033
 const PosixProtocolVersion = 1
@@ -248,7 +248,7 @@ const PosixNonceSize = 32
 const PosixHeaderSize = 52
 const PosixMaximumBody = 1024 * 1024
 const PosixTransitionBudgetMs = 5_000
-const PosixControllerOnlyEnvironment = new Set(["LIKEGO_E2E_CGROUP_PARENT"])
+const PosixControllerOnlyEnvironment = new Set(["GO_LIKE_E2E_CGROUP_PARENT"])
 
 export interface PosixControllerFrame {
   readonly type: number
@@ -732,9 +732,9 @@ async function smokePosixNativeHelper(binary: string, root: string): Promise<voi
 }
 
 async function preflightLinuxCgroupNativeHelper(binary: string, root: string): Promise<void> {
-  const cgroupParent = process.env.LIKEGO_E2E_CGROUP_PARENT
+  const cgroupParent = process.env.GO_LIKE_E2E_CGROUP_PARENT
   if (cgroupParent === undefined || cgroupParent.length === 0) {
-    throw new Error("prerequisite-linux-cgroup-v2-unavailable: LIKEGO_E2E_CGROUP_PARENT is not set")
+    throw new Error("prerequisite-linux-cgroup-v2-unavailable: GO_LIKE_E2E_CGROUP_PARENT is not set")
   }
   const result = Bun.spawnSync([binary, "--cgroup-preflight", "--cgroup-parent", cgroupParent], {
     cwd: root,
@@ -1029,17 +1029,17 @@ async function runPosixControlledCommand(
   let stderr = ""
   const argv = [helperPath]
   if (mode === "platform-containment" && process.platform === "linux") {
-    const cgroupParent = process.env.LIKEGO_E2E_CGROUP_PARENT
+    const cgroupParent = process.env.GO_LIKE_E2E_CGROUP_PARENT
     if (cgroupParent === undefined || cgroupParent.length === 0) {
       throw new Error(
-        "prerequisite-linux-cgroup-v2-unavailable: LIKEGO_E2E_CGROUP_PARENT is not set"
+        "prerequisite-linux-cgroup-v2-unavailable: GO_LIKE_E2E_CGROUP_PARENT is not set"
       )
     }
     argv.push("--cgroup-parent", cgroupParent)
   }
   const controller = Bun.spawn(argv, {
     cwd: root,
-    env: Object.freeze({ ...process.env, LIKEGO_E2E_CGROUP_PARENT: undefined }),
+    env: Object.freeze({ ...process.env, GO_LIKE_E2E_CGROUP_PARENT: undefined }),
     stdin: "pipe",
     stdout: "ignore",
     stderr: "pipe",

@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { distPackageManifest, packageEntries } from "../tsdown.config"
 
 const source = {
-  name: "@likego/example",
+  name: "@go-like/example",
   version: "0.0.1",
   private: true,
   type: "module",
@@ -20,12 +20,12 @@ const source = {
 }
 
 test("builds every public export and writes a minimal dist manifest", async () => {
-  const root = await mkdtemp(join(tmpdir(), "likego-dist-manifest-"))
+  const root = await mkdtemp(join(tmpdir(), "go-like-dist-manifest-"))
   try {
     expect(packageEntries(source)).toEqual({ index: "src/index.ts", node: "src/node.ts" })
     const manifest = await distPackageManifest(source, root)
     expect(manifest).toMatchObject({
-      name: "@likego/example",
+      name: "@go-like/example",
       version: "0.0.1",
       main: "./index.js",
       module: "./index.js",

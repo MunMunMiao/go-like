@@ -7,9 +7,9 @@ const Root = resolve(import.meta.dir, "..")
 const FixtureCwd = resolve(Root, "e2e/fixtures/example-task-cli")
 const Entry = resolve(Root, "e2e/example-task.ts")
 const Preload = Bun.pathToFileURL(resolve(FixtureCwd, "preload.ts")).href
-const ModeKey = "LIKEGO_TEST_EXAMPLE_TASK_CLI_MODE"
-const MarkerKey = "LIKEGO_TEST_SCENARIO_MARKER"
-const EvidencePrefix = "LIKEGO_EXAMPLE_TASK_CLI_FIXTURE="
+const ModeKey = "GO_LIKE_TEST_EXAMPLE_TASK_CLI_MODE"
+const MarkerKey = "GO_LIKE_TEST_SCENARIO_MARKER"
+const EvidencePrefix = "GO_LIKE_EXAMPLE_TASK_CLI_FIXTURE="
 const TimeoutMs = 20_000
 
 interface DirectCliCase {

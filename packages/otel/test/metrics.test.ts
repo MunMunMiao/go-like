@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 
-import { withAddress, type CallOption, type CallRequest } from "@likego/client"
-import { background, withCancelCause, type Context } from "@likego/context"
-import { struct } from "@likego/struct"
-import { endpoint as serviceEndpoint, type Message } from "@likego/transport"
-import { contentType, endpoint, request as service } from "@likego/transport/headers"
-import { encodeJsonBody } from "@likego/transport/json"
+import { withAddress, type CallOption, type CallRequest } from "@go-like/client"
+import { background, withCancelCause, type Context } from "@go-like/context"
+import { struct } from "@go-like/struct"
+import { endpoint as serviceEndpoint, type Message } from "@go-like/transport"
+import { contentType, endpoint, request as service } from "@go-like/transport/headers"
+import { encodeJsonBody } from "@go-like/transport/json"
 import {
   AggregationTemporality,
   InMemoryMetricExporter,
@@ -69,7 +69,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
       })
     ]
   })
-  const metrics = newRequestMetrics(provider.getMeter("likego-request-test"))
+  const metrics = newRequestMetrics(provider.getMeter("go-like-request-test"))
   const response: Message = Object.freeze({
     header: Object.freeze({ native: "response" }),
     body: new Uint8Array([1])
@@ -129,7 +129,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
       withAddress("loopback")
     )
   ).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid"
   })
   await wrapped.close(background())
@@ -164,8 +164,8 @@ test("records Client and unary Server outcomes through the official metrics SDK"
   expect(await successful(background(), emptyMessage)).toBe(emptyMessage)
 
   await provider.forceFlush()
-  const total = metricNamed(exporter, "likego.request.completed")
-  const duration = metricNamed(exporter, "likego.request.duration")
+  const total = metricNamed(exporter, "go-like.request.completed")
+  const duration = metricNamed(exporter, "go-like.request.duration")
   for (const metric of [total, duration]) {
     expect(hasAttributes(metric, "client", "catalog/Get", "success")).toBe(true)
     expect(hasAttributes(metric, "client", "catalog/Fail", "failure")).toBe(true)
@@ -185,7 +185,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
 
 test("preserves typed Client Struct and protocol failures", async () => {
   const provider = new MeterProvider({ readers: [] })
-  const metrics = newRequestMetrics(provider.getMeter("likego-typed-validation-test"))
+  const metrics = newRequestMetrics(provider.getMeter("go-like-typed-validation-test"))
   const requestStruct = struct.object({ id: struct.number() })
   const responseStruct = struct.object({ total: struct.number() })
   const subject = newLoopbackClient((request) => {
@@ -229,7 +229,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
       withAddress("loopback")
     )
   ).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid"
   })
   await expect(
@@ -240,7 +240,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
       withAddress("loopback")
     )
   ).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid"
   })
   await expect(
@@ -251,7 +251,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
       withAddress("loopback")
     )
   ).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid",
     cause: { name: "TypeError" }
   })
@@ -263,7 +263,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
       withAddress("loopback")
     )
   ).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_PROTOCOL",
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid",
     cause: { name: "StructError" }
   })
@@ -288,7 +288,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
 
 test("validates instrumentation inputs and never replaces application outcomes", async () => {
   const provider = new MeterProvider({ readers: [] })
-  const metrics = newRequestMetrics(provider.getMeter("likego-validation-test"))
+  const metrics = newRequestMetrics(provider.getMeter("go-like-validation-test"))
   expect(Object.isFrozen(metrics)).toBe(true)
   expect(() => newRequestMetrics(null as never)).toThrow(
     "meter must implement the OpenTelemetry Meter interface"

@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import type { Subscription } from "@nats-io/transport-node"
 import {
   natsCoreDrainTimeout,
@@ -32,7 +32,7 @@ void alreadyStarted
 void unexpectedExit
 void drainTimeout
 
-// @ts-expect-error Lifecycle-only factories do not receive a LikeGo Context.
+// @ts-expect-error Lifecycle-only factories do not receive a go-like Context.
 const contextFactory: NatsCoreSubscriptionFactory = (_ctx) => subscription
 void contextFactory
 

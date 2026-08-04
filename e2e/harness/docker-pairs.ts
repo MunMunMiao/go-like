@@ -1,7 +1,7 @@
 import { runCommand, type CommandResult, type ProcessSupervisor } from "./process"
 
-export const DockerOwnerLabelKey = "io.likego.e2e.owner"
-export const DockerInvocationLabelKey = "io.likego.e2e.invocation"
+export const DockerOwnerLabelKey = "io.go-like.e2e.owner"
+export const DockerInvocationLabelKey = "io.go-like.e2e.invocation"
 
 export type DockerResourceType = "container" | "network" | "volume"
 export type DockerPairClassificationKind = "owned" | "collision" | "foreign"

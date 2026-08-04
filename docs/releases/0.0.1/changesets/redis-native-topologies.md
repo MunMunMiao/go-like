@@ -1,5 +1,5 @@
 ---
-"@likego/cache-redis": minor
+"@go-like/cache-redis": minor
 ---
 
 支持将官方 node-redis dormant client factory 交给 Cache 生命周期持有，在保留 URL 单节点模式的同时承接

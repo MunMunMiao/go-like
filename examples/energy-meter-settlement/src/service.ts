@@ -1,5 +1,5 @@
-import type { Config, ConfigObject } from "@likego/config"
-import type { Context } from "@likego/context"
+import type { Config, ConfigObject } from "@go-like/config"
+import type { Context } from "@go-like/context"
 
 import {
   calculateSettlement,
@@ -25,7 +25,7 @@ function currentRates(config: Config<ConfigObject>): TariffRates {
   return Object.freeze({ offPeakMinorPerKwh, peakMinorPerKwh })
 }
 
-/** Creates the Context-first settlement use case backed by LikeGo Config. */
+/** Creates the Context-first settlement use case backed by go-like Config. */
 export function newSettleMeter(config: Config<ConfigObject>): SettleMeter {
   return function settleMeter(ctx: Context, reading: MeterReading): EnergySettlement {
     const failure = ctx.err()

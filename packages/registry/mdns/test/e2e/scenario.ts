@@ -1,8 +1,8 @@
 import { access, readFile, writeFile } from "node:fs/promises"
 
-import { background, withTimeout } from "@likego/context"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
-import { snapshotServiceInstance } from "@likego/registry/provider"
+import { background, withTimeout } from "@go-like/context"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
+import { snapshotServiceInstance } from "@go-like/registry/provider"
 import {
   domain,
   families,
@@ -14,13 +14,13 @@ import {
   type MDNSHost,
   type MDNSNetworkInterface,
   type MDNSRegistry
-} from "@likego/registry-mdns"
-import { newNodeMDNSHost } from "@likego/registry-mdns/node"
+} from "@go-like/registry-mdns"
+import { newNodeMDNSHost } from "@go-like/registry-mdns/node"
 
-export const primaryName = "likego-mdns-primary"
-export const secondaryName = "likego-mdns-catalog"
-export const isolatedName = "likego-mdns-isolated"
-export const lateName = "likego-mdns-late"
+export const primaryName = "go-like-mdns-primary"
+export const secondaryName = "go-like-mdns-catalog"
+export const isolatedName = "go-like-mdns-isolated"
+export const lateName = "go-like-mdns-late"
 
 /** Fails one real E2E invariant. */
 export function verify(condition: unknown, message: string): asserts condition {
@@ -36,15 +36,15 @@ export function delay(milliseconds: number): Promise<void> {
 
 /** Reads and validates the selected address family. */
 export function selectedFamily(): MDNSFamily {
-  const value = process.env.LIKEGO_FAMILY
-  if (value !== "ipv4" && value !== "ipv6") throw new Error("LIKEGO_FAMILY must be ipv4 or ipv6")
+  const value = process.env.GO_LIKE_FAMILY
+  if (value !== "ipv4" && value !== "ipv6") throw new Error("GO_LIKE_FAMILY must be ipv4 or ipv6")
   return value
 }
 
 /** Returns the shared artifact directory mounted by the Docker harness. */
 export function artifactDirectory(): string {
-  const value = process.env.LIKEGO_ARTIFACTS
-  if (value === undefined || value.length === 0) throw new Error("LIKEGO_ARTIFACTS is required")
+  const value = process.env.GO_LIKE_ARTIFACTS
+  if (value === undefined || value.length === 0) throw new Error("GO_LIKE_ARTIFACTS is required")
   return value
 }
 
@@ -96,7 +96,7 @@ export function registry(
     ? newMDNSRegistry(
         host,
         families(family),
-        domain("isolated.likego"),
+        domain("isolated.go-like"),
         queryTimeout(300),
         watchBufferSize(watcherQueueSize),
         ttl(ttlMs)
@@ -141,7 +141,7 @@ export function primaryService(endpoint: string, revision: string): ServiceInsta
     id: "primary-node",
     name: primaryName,
     version: "v1",
-    metadata: { environment: "docker", owner: "likego", revision, zone: "docker" },
+    metadata: { environment: "docker", owner: "go-like", revision, zone: "docker" },
     endpoints: [endpoint]
   })
 }

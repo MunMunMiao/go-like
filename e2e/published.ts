@@ -35,7 +35,7 @@ const FixtureFiles = Object.freeze([
   "tsconfig.authoring.json",
   "tsconfig.types.json",
   "tsconfig.node.json",
-  "authoring-stubs/likego.d.ts"
+  "authoring-stubs/go-like.d.ts"
 ])
 
 function record(value: unknown): Record<string, unknown> {
@@ -176,7 +176,7 @@ async function packageRoots(root: string): Promise<readonly PublishedPackage[]> 
     if (path.includes("/dist/") || path.includes("/node_modules/")) continue
     const manifest = record(await Bun.file(join(root, path)).json())
     if (manifest.private === true) continue
-    if (typeof manifest.name !== "string" || !/^@likego\/[a-z0-9-]+$/u.test(manifest.name)) {
+    if (typeof manifest.name !== "string" || !/^@go-like\/[a-z0-9-]+$/u.test(manifest.name)) {
       throw new Error(`public package at ${path} has an invalid name`)
     }
     if (names.has(manifest.name)) throw new Error(`duplicate public package ${manifest.name}`)
@@ -318,7 +318,7 @@ export function validatePublishedTrace(
 ): void {
   const nodeModules = join(resolve(stage), "node_modules")
   const resolved = new Map<string, string>()
-  const pattern = /Module name '(@likego\/[^']+)' was successfully resolved to '([^']+)'/gu
+  const pattern = /Module name '(@go-like\/[^']+)' was successfully resolved to '([^']+)'/gu
   for (const match of trace.matchAll(pattern)) {
     const specifier = match[1]
     const path = match[2]
@@ -328,7 +328,7 @@ export function validatePublishedTrace(
     }
     resolved.set(specifier, path)
   }
-  if (resolved.size === 0) throw new Error("published type trace contained no @likego resolutions")
+  if (resolved.size === 0) throw new Error("published type trace contained no @go-like resolutions")
   const missing = packageNames.filter((name) => !resolved.has(name))
   if (missing.length > 0) {
     throw new Error(`published type trace missed public packages: ${missing.join(", ")}`)
@@ -340,7 +340,7 @@ export function validateNodeEmit(portable: string, node: string): void {
   if (!node.includes('from "./portable.js"') || node.includes("./portable.ts")) {
     throw new Error("published Node emit did not rewrite the relative TypeScript import")
   }
-  if (!portable.includes('from "@likego/') || !node.includes('from "@likego/')) {
+  if (!portable.includes('from "@go-like/') || !node.includes('from "@go-like/')) {
     throw new Error("published Node emit lost package specifiers")
   }
 }
@@ -389,7 +389,7 @@ async function expectConsumerFailure(
   ) {
     throw failure
   }
-  if (!`${result.stdout}\n${result.stderr}`.includes("@likego/context")) {
+  if (!`${result.stdout}\n${result.stderr}`.includes("@go-like/context")) {
     throw new Error(`${sanitizeArgv(argv).join(" ")} failed for an unrelated reason`, {
       cause: failure
     })
@@ -405,8 +405,8 @@ async function runHidePackageNegatives(
   environment: Readonly<Record<string, string | undefined>>,
   signal?: AbortSignal
 ): Promise<void> {
-  const installed = join(stage, "node_modules/@likego/context")
-  const hidden = join(stage, "node_modules/@likego/.context-hidden")
+  const installed = join(stage, "node_modules/@go-like/context")
+  const hidden = join(stage, "node_modules/@go-like/.context-hidden")
   await rename(installed, hidden)
   let primary: Error | null = null
   try {
@@ -453,7 +453,7 @@ async function writeMarker(paths: PublishedStagePaths, name: string): Promise<vo
 
 export async function runPublishedE2e(root: string, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
-  const directory = await createTempDirectory("likego-published-")
+  const directory = await createTempDirectory("go-like-published-")
   const stage = directory.path
   let primary: Error | null = null
   try {

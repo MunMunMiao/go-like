@@ -20,7 +20,7 @@ test("constructor options are captured, canonicalized, and validated without I/O
       return Response.json({})
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     owner: { name: "orders.pod", uid: "pod-uid" },
     token: "secret",
     retryInitialMs: 2,
@@ -31,7 +31,7 @@ test("constructor options are captured, canonicalized, and validated without I/O
   })
   expect(calls).toBe(0)
   expect(captured).toMatchObject({
-    namespace: "likego-test",
+    namespace: "go-like-test",
     owner: { name: "orders.pod", uid: "pod-uid" },
     token: "secret",
     retryInitialMs: 2,
@@ -174,7 +174,7 @@ test("HTTP boundary uses standard Request and keeps errors status-only and secre
     (value: unknown) => value
   )
   expect(secretError).toMatchObject({
-    code: "LIKEGO_KUBERNETES_TRANSPORT",
+    code: "GO_LIKE_KUBERNETES_TRANSPORT",
     operation: "list"
   })
   expect((secretError as Error).cause).not.toBe(transportFailure)
@@ -188,7 +188,7 @@ test("HTTP boundary uses standard Request and keeps errors status-only and secre
     options.common
   )
   await expect(json(malformed, "get", "/bad", "GET", null, signal)).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 })
 
@@ -223,9 +223,9 @@ test("mutation protocol rejects a foreign create or update readback", async () =
   const options = operationOptions(provider, provider.common)
   const signal = new AbortController().signal
   await expect(createSlice(options, "{}", signal)).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   await expect(updateSlice(options, "exact", "{}", signal)).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 })

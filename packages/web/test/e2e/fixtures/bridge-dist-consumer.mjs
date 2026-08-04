@@ -3,7 +3,7 @@ import { createServer } from "node:http"
 import { isAbsolute, relative } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const stage = process.env.LIKEGO_E2E_FRAMEWORK_STAGE
+const stage = process.env.GO_LIKE_E2E_FRAMEWORK_STAGE
 if (typeof stage !== "string" || stage.length === 0) throw new Error("framework stage is missing")
 
 function verify(condition, message) {
@@ -23,35 +23,35 @@ function assertStaged(specifier) {
 }
 
 for (const specifier of [
-  "@likego/context",
-  "@likego/web",
-  "@likego/web/node",
+  "@go-like/context",
+  "@go-like/web",
+  "@go-like/web/node",
   "@hono/node-server"
 ]) {
   assertStaged(specifier)
 }
 
-const context = await import("@likego/context")
-const web = await import("@likego/web")
-const webNode = await import("@likego/web/node")
+const context = await import("@go-like/context")
+const web = await import("@go-like/web")
+const webNode = await import("@go-like/web/node")
 verify(
   JSON.stringify(Object.keys(web).sort()) === JSON.stringify(["contextHandler"]),
-  "@likego/web exports changed"
+  "@go-like/web exports changed"
 )
 verify(
   JSON.stringify(Object.keys(webNode).sort()) ===
     JSON.stringify(["hostname", "newNodeServer", "nodeShutdownTimeout", "port"]),
-  "@likego/web/node exports changed"
+  "@go-like/web/node exports changed"
 )
 
-const path = "/__likego_web_bridge"
+const path = "/__go-like_web_bridge"
 const handler = web.contextHandler((_ctx, request) => {
   const url = new URL(request.url)
   if (request.method !== "GET" || url.pathname !== path)
     return new Response("not found", { status: 404 })
-  return Response.json({ bridge: "@likego/web", method: request.method, path: url.pathname })
+  return Response.json({ bridge: "@go-like/web", method: request.method, path: url.pathname })
 })
-verify(handler.length === 1, "@likego/web bridge changed its standard Web ABI")
+verify(handler.length === 1, "@go-like/web bridge changed its standard Web ABI")
 
 const server = webNode.newNodeServer(handler, webNode.hostname("127.0.0.1"), webNode.port(0))
 const running = server.start(context.background())
@@ -60,15 +60,15 @@ let endpoint
 try {
   endpoint = new URL(await server.endpoint(context.background()))
   const response = await fetch(new URL(path, endpoint))
-  verify(response.status === 200, `@likego/web bridge returned ${response.status}`)
+  verify(response.status === 200, `@go-like/web bridge returned ${response.status}`)
   verify(
     response.headers.get("content-type")?.startsWith("application/json") === true,
-    "@likego/web bridge did not return JSON"
+    "@go-like/web bridge did not return JSON"
   )
   verify(
     JSON.stringify(await response.json()) ===
-      JSON.stringify({ bridge: "@likego/web", method: "GET", path }),
-    "@likego/web bridge payload changed"
+      JSON.stringify({ bridge: "@go-like/web", method: "GET", path }),
+    "@go-like/web bridge payload changed"
   )
 } finally {
   await server.stop(context.background())

@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 /** Captures one put call's immutable effective options. */
 export interface PutOptions {
@@ -18,7 +18,7 @@ export interface Cache {
     ctx: Context,
     key: string,
     value: Uint8Array,
-    ...options: readonly PutOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+    ...options: readonly PutOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
   ): Promise<void>
 
   /** Deletes one exact key; missing keys are successful no-ops. */

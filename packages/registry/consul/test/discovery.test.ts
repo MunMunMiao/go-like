@@ -1,5 +1,5 @@
-import { background, withCancelCause } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { encodeRegistration } from "../src/codec"
@@ -95,7 +95,7 @@ test("watch returns only complete replacement snapshots and owns stop", async ()
 
   await watcher.stop(background())
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_STOPPED"
+    code: "GO_LIKE_WATCHER_STOPPED"
   })
 })
 
@@ -130,7 +130,7 @@ test("watch buffer overflow is a stable terminal provider error", async () => {
   await provider.register(background(), instance("updated"))
   await Bun.sleep(50)
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_OVERFLOW",
+    code: "GO_LIKE_WATCHER_OVERFLOW",
     bufferSize: 1
   })
   await watcher.stop(background())
@@ -153,7 +153,7 @@ test("discovery rejects invalid names, missing cursors, and unavailable queries"
     return new Response(null, { status: 503 })
   })
   await expect(unavailable.watch(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     status: 503
   })
 })
@@ -183,7 +183,7 @@ test("watch rejects a pending caller with one terminal non-retryable failure", a
   const waiting = watcher.next(caller[0])
   blocked.resolve(new Response(null, { status: 400 }))
 
-  await expect(waiting).rejects.toMatchObject({ code: "LIKEGO_CONSUL_HTTP", status: 400 })
+  await expect(waiting).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_HTTP", status: 400 })
   await watcher.stop(background())
 })
 

@@ -10,8 +10,8 @@ import {
   withCancel,
   withCancelCause,
   type Context
-} from "@likego/context"
-import { get } from "@likego/metadata"
+} from "@go-like/context"
+import { get } from "@go-like/metadata"
 import {
   codec,
   secure,
@@ -24,8 +24,8 @@ import {
   type Message,
   type MessageCodec,
   type TransportInfo
-} from "@likego/transport"
-import { endpoint, request } from "@likego/transport/headers"
+} from "@go-like/transport"
+import { endpoint, request } from "@go-like/transport/headers"
 
 import { newMemoryTransport } from "../src/index"
 import { failMemoryListener } from "../src/testing"
@@ -88,13 +88,13 @@ test("owns an exact private address map and releases only the closing listener",
   expect(beta.addr()).toBe("memory://beta/")
 
   expect(errorCode(await rejected(first.listen(background(), "memory://alpha/")))).toBe(
-    "LIKEGO_TRANSPORT_STATE"
+    "GO_LIKE_TRANSPORT_STATE"
   )
   expect(errorCode(await rejected(first.dial(background(), "memory://missing")))).toBe(
-    "LIKEGO_TRANSPORT_STATE"
+    "GO_LIKE_TRANSPORT_STATE"
   )
   expect(errorCode(await rejected(isolated.dial(background(), alpha.addr())))).toBe(
-    "LIKEGO_TRANSPORT_STATE"
+    "GO_LIKE_TRANSPORT_STATE"
   )
 
   const alphaAccept = echo(alpha, background())
@@ -116,7 +116,7 @@ test("owns an exact private address map and releases only the closing listener",
     errorCode(
       await rejected(alphaClient.send(background(), { header: {}, body: new Uint8Array() }))
     )
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   expect(
     (
       await exchange(background(), betaClient, {
@@ -268,7 +268,7 @@ test("rechecks client admission after hostile request getters close or cancel sy
     body: new Uint8Array()
   }
   expect(errorCode(await rejected(closingClient.send(background(), closingMessage)))).toBe(
-    "LIKEGO_TRANSPORT_CLOSED"
+    "GO_LIKE_TRANSPORT_CLOSED"
   )
   await closeWork
   await closingAccept
@@ -331,7 +331,7 @@ test("rolls back failed provisional accept admission without leaving a ghost han
           client.send(background(), { header: { phase: "ghost" }, body: new Uint8Array() })
         )
       )
-    ).toBe("LIKEGO_TRANSPORT_STATE")
+    ).toBe("GO_LIKE_TRANSPORT_STATE")
     expect(handled).toBe(0)
 
     const accepting = echo(listener, background())
@@ -472,7 +472,7 @@ test("removes provisional cancellation listeners and reports terminal removal fa
   })
   expect(
     errorCode(await rejected(listener.accept(closingContext, function unreachable(): void {})))
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   await closeWork
   expect([adds, removes]).toEqual([1, 1])
 
@@ -896,7 +896,7 @@ test("isolates caller wait-listener cleanup failures from every winning outcome"
   if (admittedAbort === null) throw new Error("wait cancellation observer is missing")
   admittedAbort(new Event("abort"))
   expect(await observationClosing).toBe(observationFailure)
-  expect(errorCode(await observationSending)).toBe("LIKEGO_TRANSPORT_CLOSED")
+  expect(errorCode(await observationSending)).toBe("GO_LIKE_TRANSPORT_CLOSED")
   observationRelease.resolve(undefined)
   await observationAccept
   await observationClient.close(background())
@@ -995,7 +995,7 @@ test("does not start a handler when its Client closes during dispatch admission"
         client.send(background(), { header: { phase: "close" }, body: new Uint8Array() })
       )
     )
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   await Promise.resolve()
   expect(handled).toBe(0)
   await listener.close(background())
@@ -1031,7 +1031,7 @@ test("dispatch stays closed when a hostile accept Context closes its listener", 
   const client = await transport.dial(background(), listener.addr())
   expect(
     errorCode(await rejected(client.send(background(), { header: {}, body: new Uint8Array() })))
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   await closeWork
   await accepting
   expect(handled).toBe(0)
@@ -1064,7 +1064,7 @@ test("rechecks Socket state after a hostile response getter closes its listener"
         client.send(background(), { header: { phase: "close" }, body: new Uint8Array() })
       )
     )
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   expect(await socketFailure.promise).toBe(canceled)
   await closeWork
   await accepting
@@ -1144,7 +1144,7 @@ test("enforces timeouts, connection-close, and unsupported capability boundaries
     errorCode(
       await rejected(oneShotClient.send(background(), { header: {}, body: new Uint8Array() }))
     )
-  ).toBe("LIKEGO_TRANSPORT_CLOSED")
+  ).toBe("GO_LIKE_TRANSPORT_CLOSED")
   await oneShotListener.close(background())
   await oneShotAccept
 
@@ -1171,7 +1171,7 @@ test("enforces timeouts, connection-close, and unsupported capability boundaries
     const subject = newMemoryTransport()
     subject.init(option)
     expect(errorCode(await rejected(subject.listen(background(), "memory://unsupported")))).toBe(
-      "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY"
+      "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY"
     )
   }
 })
@@ -1364,7 +1364,7 @@ test("propagates an accept-owner custom cause through listener terminal cleanup"
   owner[1](ownerCause)
   expect(await observed.promise).toBe(ownerCause)
   expect(await rejected(accepting)).toBe(ownerCause)
-  expect(errorCode(await rejected(sending))).toBe("LIKEGO_TRANSPORT_CLOSED")
+  expect(errorCode(await rejected(sending))).toBe("GO_LIKE_TRANSPORT_CLOSED")
   await listener.close(background())
 })
 
@@ -1411,7 +1411,7 @@ test("rejects malformed provider reducers and a send before accept without poiso
         client.send(background(), { header: { phase: "early" }, body: new Uint8Array() })
       )
     )
-  ).toBe("LIKEGO_TRANSPORT_STATE")
+  ).toBe("GO_LIKE_TRANSPORT_STATE")
   const accepting = echo(listener, background())
   expect(
     (
@@ -1478,7 +1478,7 @@ test("isolates handler protocol failure and oversized TransportInfo observations
         client.send(background(), { header: { phase: "no-reply" }, body: new Uint8Array() })
       )
     )
-  ).toBe("LIKEGO_TRANSPORT_STATE")
+  ).toBe("GO_LIKE_TRANSPORT_STATE")
   const oversized = await exchange(background(), client, {
     header: {
       phase: "oversized",

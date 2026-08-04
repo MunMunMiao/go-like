@@ -6,10 +6,10 @@ import { dirname, resolve } from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
-import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@likego/client"
-import { newConfig, schema, source } from "@likego/config"
-import { vaultSource } from "@likego/config-vault"
-import { background, withoutCancel } from "@likego/context"
+import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@go-like/client"
+import { newConfig, schema, source } from "@go-like/config"
+import { vaultSource } from "@go-like/config-vault"
+import { background, withoutCancel } from "@go-like/context"
 import {
   afterStop,
   beforeStart,
@@ -23,24 +23,24 @@ import {
   stopTimeout,
   version,
   type App
-} from "@likego/core"
-import { newProbeRegistry } from "@likego/health"
-import { newOtelServer, traceClient, traceUnaryMiddleware } from "@likego/otel"
-import { newPinoServer } from "@likego/pino"
-import { createPrometheusHandler } from "@likego/prometheus"
-import { newRoundRobinSelector } from "@likego/registry"
-import { newConsulRegistry } from "@likego/registry-consul"
+} from "@go-like/core"
+import { newProbeRegistry } from "@go-like/health"
+import { newOtelServer, traceClient, traceUnaryMiddleware } from "@go-like/otel"
+import { newPinoServer } from "@go-like/pino"
+import { createPrometheusHandler } from "@go-like/prometheus"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newConsulRegistry } from "@go-like/registry-consul"
 import {
   address,
   handler as serviceHandler,
   middleware,
   newServer,
   transport as serverTransport
-} from "@likego/server"
-import { newHTTPTransport } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
-import { createHealthHandler } from "@likego/web/health"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+} from "@go-like/server"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+import { createHealthHandler } from "@go-like/web/health"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 import { context } from "@opentelemetry/api"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
 import { ExportResultCode, W3CTraceContextPropagator, type ExportResult } from "@opentelemetry/core"
@@ -530,9 +530,9 @@ function observedMetricExporter(
 /** Executes the real Consul, Vault, Collector, transport, and operations scenario. */
 async function run(): Promise<void> {
   const runId = crypto.randomUUID()
-  const consulContainer = `likego-enterprise-consul-${runId}`
-  const vaultContainer = `likego-enterprise-vault-${runId}`
-  const collectorContainer = `likego-enterprise-otel-${runId}`
+  const consulContainer = `go-like-enterprise-consul-${runId}`
+  const vaultContainer = `go-like-enterprise-vault-${runId}`
+  const collectorContainer = `go-like-enterprise-otel-${runId}`
   const usedPorts = new Set<number>()
   const consulPort = await allocatePort(usedPorts)
   const vaultPort = await allocatePort(usedPorts)
@@ -541,7 +541,7 @@ async function run(): Promise<void> {
   const vaultAddress = `http://127.0.0.1:${vaultPort}`
   const collectorAddress = `http://127.0.0.1:${collectorPort}`
   const vaultToken = `enterprise-root-${runId}`
-  const temporary = await mkdtemp(resolve(tmpdir(), "likego-enterprise-platform-"))
+  const temporary = await mkdtemp(resolve(tmpdir(), "go-like-enterprise-platform-"))
   const logPath = resolve(temporary, "runtime.log")
   const collectorConfig = resolve(Here, "../../../../packages/otel/test/e2e/collector.yaml")
   const cleanupErrors: Error[] = []
@@ -643,7 +643,7 @@ async function run(): Promise<void> {
     logger.info({ component: "enterprise", secret: vaultToken }, "runtime starting")
 
     const resource = resourceFromAttributes({
-      "service.name": "likego-enterprise-platform",
+      "service.name": "go-like-enterprise-platform",
       "deployment.environment.name": "e2e"
     })
     const telemetryEvidence: TelemetryEvidence = {
@@ -822,8 +822,8 @@ async function run(): Promise<void> {
 
     await waitUntil("Collector trace and metric acknowledgements", () =>
       Boolean(
-        telemetryEvidence.spanNames.has(`likego.client ${echoServiceName}/${echoEndpointName}`) &&
-        telemetryEvidence.spanNames.has(`likego.server ${echoServiceName}/${echoEndpointName}`) &&
+        telemetryEvidence.spanNames.has(`go-like.client ${echoServiceName}/${echoEndpointName}`) &&
+        telemetryEvidence.spanNames.has(`go-like.server ${echoServiceName}/${echoEndpointName}`) &&
         telemetryEvidence.metricNames.has("enterprise.calls")
       )
     )
@@ -884,7 +884,7 @@ async function run(): Promise<void> {
       await waitUntil(
         "start:prepared readiness",
         () =>
-          programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"enterprise-platform-runtime"'),
+          programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"enterprise-platform-runtime"'),
         30_000
       )
       let programPayload: unknown = null

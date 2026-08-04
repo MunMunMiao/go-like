@@ -1,7 +1,7 @@
-# `@likego/transport-memory`
+# `@go-like/transport-memory`
 
-`@likego/transport-memory` 是 LikeGo 内部 unary `Message` 的进程内 Transport provider。它完整实现
-`@likego/transport` 的 `Transport`、`Client`、`Listener` 与 `Socket` SPI，但不会注册全局 handler、不会绕过
+`@go-like/transport-memory` 是 go-like 内部 unary `Message` 的进程内 Transport provider。它完整实现
+`@go-like/transport` 的 `Transport`、`Client`、`Listener` 与 `Socket` SPI，但不会注册全局 handler、不会绕过
 Discovery/Selector/Client middleware，也不会提供 Registry provider。
 
 ## 显式所有权
@@ -10,8 +10,8 @@ Discovery/Selector/Client middleware，也不会提供 Registry provider。
 实例；不同实例即使使用相同 URL 也完全隔离。应用应在 composition root 显式持有该实例：
 
 ```ts
-import { background } from "@likego/context"
-import { newMemoryTransport } from "@likego/transport-memory"
+import { background } from "@go-like/context"
+import { newMemoryTransport } from "@go-like/transport-memory"
 
 const transport = newMemoryTransport()
 const listener = await transport.listen(background(), "memory://orders")
@@ -42,7 +42,7 @@ work queue；总并发和内存上限由尚未 `recv()` 的 response slot 与尚
 每个 I/O 首先检查调用方 Context，已启动后的取消只终止当前等待或 exchange，不会关闭共享 Client 或无关
 Listener。common `timeout` 与 dial `withTimeout` 取最早的非零值。`withConnClose` 在首个 `recv()` 后关闭逻辑
 Client。TLS 与自定义 Message codec 在 memory provider 中没有真实语义，因此显式请求时返回
-`LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY`；不支持的选项不会被静默忽略。
+`GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY`；不支持的选项不会被静默忽略。
 
 该 provider 适合单进程服务组合、确定性集成测试和无需网络序列化的内部调用。跨进程通信应选择
-`@likego/transport-http` 或其他真实 wire provider。
+`@go-like/transport-http` 或其他真实 wire provider。

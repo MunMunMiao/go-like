@@ -8,9 +8,9 @@ const NodeImage =
   "node:24.18.1-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7"
 const NetshootImage =
   "docker.io/nicolaka/netshoot:v0.16@sha256:b09d9b21381f47a79b3cbcb30da25266dc17186ea00ae65e99fdc51396f48e70"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 
 interface CommandEnvironment {
   readonly [name: string]: string | undefined
@@ -261,14 +261,14 @@ async function cleanupProject(
     failures.push(failure(error, "registry-mdns compose cleanup failed"))
   }
   const containers = await command(
-    ["docker", "ps", "--all", "--quiet", "--filter", `label=likego.run=${run}`],
+    ["docker", "ps", "--all", "--quiet", "--filter", `label=go-like.run=${run}`],
     env,
     true
   )
   if (containers.code !== 0 || containers.stdout !== "")
     failures.push(new Error("registry-mdns containers remain"))
   const networks = await command(
-    ["docker", "network", "ls", "--quiet", "--filter", `label=likego.run=${run}`],
+    ["docker", "network", "ls", "--quiet", "--filter", `label=go-like.run=${run}`],
     env,
     true
   )
@@ -392,15 +392,15 @@ async function runNormal(
   ipv6Segment: string
 ): Promise<NormalPhaseEvidence> {
   const file = `packages/registry/mdns/test/e2e/compose.${family}.yaml`
-  const project = `likego-mdns-${run}`
+  const project = `go-like-mdns-${run}`
   const artifacts = resolve(root, "packages/registry/mdns/.artifacts/docker", run)
   await mkdir(artifacts, { recursive: true })
   const env = environment({
-    LIKEGO_ARTIFACTS: artifacts,
-    LIKEGO_IPV6_SEGMENT: ipv6Segment,
-    LIKEGO_MODE: "normal",
-    LIKEGO_ROOT: root,
-    LIKEGO_RUN: run
+    GO_LIKE_ARTIFACTS: artifacts,
+    GO_LIKE_IPV6_SEGMENT: ipv6Segment,
+    GO_LIKE_MODE: "normal",
+    GO_LIKE_ROOT: root,
+    GO_LIKE_RUN: run
   })
   let primary: Error | null = null
   const cleanup: Error[] = []
@@ -420,7 +420,7 @@ async function runNormal(
     const collision = await json(resolve(artifacts, "collider-result.json"))
     validateNormalObserver(observer, family)
     verify(
-      collision.valid === true && collision.code === "LIKEGO_REGISTRY_PROTOCOL",
+      collision.valid === true && collision.code === "GO_LIKE_REGISTRY_PROTOCOL",
       "collision did not fail closed"
     )
     const packets = await inspectPacketCapture(resolve(artifacts, `${family}.pcap`))
@@ -468,15 +468,15 @@ async function auditPublisher(container: string, env: CommandEnvironment): Promi
 /** Executes a true SIGKILL crash and proves TTL expiry without a goodbye. */
 async function runCrash(root: string, run: string): Promise<CrashPhaseEvidence> {
   const file = "packages/registry/mdns/test/e2e/compose.ipv4.yaml"
-  const project = `likego-mdns-${run}`
+  const project = `go-like-mdns-${run}`
   const artifacts = resolve(root, "packages/registry/mdns/.artifacts/docker", run)
   await mkdir(artifacts, { recursive: true })
   const env = environment({
-    LIKEGO_ARTIFACTS: artifacts,
-    LIKEGO_IPV6_SEGMENT: "10fe",
-    LIKEGO_MODE: "crash",
-    LIKEGO_ROOT: root,
-    LIKEGO_RUN: run
+    GO_LIKE_ARTIFACTS: artifacts,
+    GO_LIKE_IPV6_SEGMENT: "10fe",
+    GO_LIKE_MODE: "crash",
+    GO_LIKE_ROOT: root,
+    GO_LIKE_RUN: run
   })
   let primary: Error | null = null
   const cleanup: Error[] = []

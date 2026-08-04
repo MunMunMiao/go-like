@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-h3",
+  "name": "@go-like/example-h3",
   "private": true,
-  "description": "Stable H3 Fetch router composed with the LikeGo Node host.",
+  "description": "Stable H3 Fetch router composed with the go-like Node host.",
   "type": "module",
   "exports": {
     ".": "./src/app.ts"
@@ -19,9 +19,9 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- tsx test/node-e2e.ts"
   },
   "dependencies": {
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/web": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/web": "workspace:*",
     "h3": "2.0.1-rc.26"
   },
   "devDependencies": {

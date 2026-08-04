@@ -165,7 +165,7 @@ export function cursor(value: string): ListOption {
 
 /** Resolves write options from normative defaults and ordered reducers. */
 export function writeOptions(
-  ...options: readonly WriteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly WriteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): WriteOptions {
   let candidate = DefaultWriteOptions
   for (const option of options) {
@@ -177,7 +177,7 @@ export function writeOptions(
 
 /** Resolves delete options from normative defaults and ordered reducers. */
 export function deleteOptions(
-  ...options: readonly DeleteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly DeleteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): DeleteOptions {
   let candidate = DefaultDeleteOptions
   for (const option of options) {
@@ -189,7 +189,7 @@ export function deleteOptions(
 
 /** Resolves list options from normative defaults and ordered reducers. */
 export function listOptions(
-  ...options: readonly ListOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly ListOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): ListOptions {
   let candidate = DefaultListOptions
   for (const option of options) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause } from "@likego/context"
+import { background, withCancelCause } from "@go-like/context"
 
 import { etcdSource, jsonEtcdDecoder, type EtcdFetch } from "../src/index"
 import { deferred } from "./helpers"
@@ -81,7 +81,7 @@ describe("etcd configuration protocol boundaries", () => {
         source(async function fetchEtcd() {
           return range(body)
         }).load(background())
-      ).rejects.toMatchObject({ code: "LIKEGO_ETCD_PROTOCOL", operation: "range" })
+      ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_PROTOCOL", operation: "range" })
     }
   })
 
@@ -116,7 +116,7 @@ describe("etcd configuration protocol boundaries", () => {
       const failure = await source(fetch)
         .load(background())
         .catch((error: unknown) => error)
-      expect(failure).toMatchObject({ code: "LIKEGO_ETCD_TRANSPORT", operation: "range" })
+      expect(failure).toMatchObject({ code: "GO_LIKE_ETCD_TRANSPORT", operation: "range" })
       expect(String(failure)).not.toContain("secret")
     }
 
@@ -124,7 +124,7 @@ describe("etcd configuration protocol boundaries", () => {
       source(async function invalidJson() {
         return new Response("not-json")
       }).load(background())
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_PROTOCOL", operation: "range" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_PROTOCOL", operation: "range" })
   })
 
   test("lets cancellation win a Fetch that cancels synchronously but settles late", async () => {
@@ -167,7 +167,7 @@ describe("etcd configuration protocol boundaries", () => {
         source(async function unavailable() {
           return response
         }).load(background())
-      ).rejects.toMatchObject({ code: "LIKEGO_ETCD_HTTP", status: 503 })
+      ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_HTTP", status: 503 })
     }
   })
 
@@ -187,7 +187,7 @@ describe("etcd configuration protocol boundaries", () => {
       const watcher = await config.watch?.(background(), "1")
       if (watcher === undefined) throw new Error("watcher missing")
       await expect(watcher.next(background())).rejects.toMatchObject({
-        code: "LIKEGO_ETCD_PROTOCOL",
+        code: "GO_LIKE_ETCD_PROTOCOL",
         operation: "watch"
       })
       await watcher.stop(background())
@@ -213,7 +213,7 @@ describe("etcd configuration protocol boundaries", () => {
     const invalidWatcher = await invalid.watch?.(background(), "1")
     if (invalidWatcher === undefined) throw new Error("watcher missing")
     await expect(invalidWatcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_PROTOCOL"
+      code: "GO_LIKE_ETCD_PROTOCOL"
     })
     await invalidWatcher.stop(background())
 
@@ -300,7 +300,7 @@ describe("etcd configuration protocol boundaries", () => {
     const terminalWatcher = await terminal.watch?.(background(), "1")
     if (terminalWatcher === undefined) throw new Error("watcher missing")
     await expect(terminalWatcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_HTTP",
+      code: "GO_LIKE_ETCD_HTTP",
       status: 401
     })
     await terminalWatcher.stop(background())
@@ -312,7 +312,7 @@ describe("etcd configuration protocol boundaries", () => {
       return blocked.promise
     })
     await expect(config.watch?.(background(), "invalid")).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_PROTOCOL"
+      code: "GO_LIKE_ETCD_PROTOCOL"
     })
     const watcher = await config.watch?.(background(), null)
     if (watcher === undefined) throw new Error("watcher missing")

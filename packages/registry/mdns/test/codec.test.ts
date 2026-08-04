@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 
 import { base32 } from "../src/base32"
 import {
@@ -76,18 +76,18 @@ async function rawItems(json: string): Promise<readonly Uint8Array[]> {
   await writer.write(encoder.encode(json))
   await writer.close()
   const encoded = base64url(new Uint8Array(await reading))
-  const chunkSize = 255 - "Likego-Chunk-000=".length
+  const chunkSize = 255 - "Go-Like-Chunk-000=".length
   const count = Math.ceil(encoded.length / chunkSize)
   const items: Uint8Array[] = [
-    encoder.encode("Likego-Wire-Version=2"),
-    encoder.encode("Likego-Encoding=deflate+base64url"),
-    encoder.encode("Likego-Instance-Content-Hash=unused"),
-    encoder.encode(`Likego-Chunk-Count=${String(count).padStart(3, "0")}`)
+    encoder.encode("Go-Like-Wire-Version=2"),
+    encoder.encode("Go-Like-Encoding=deflate+base64url"),
+    encoder.encode("Go-Like-Instance-Content-Hash=unused"),
+    encoder.encode(`Go-Like-Chunk-Count=${String(count).padStart(3, "0")}`)
   ]
   for (let index = 0; index < count; index += 1) {
     items.push(
       encoder.encode(
-        `Likego-Chunk-${String(index).padStart(3, "0")}=${encoded.slice(index * chunkSize, (index + 1) * chunkSize)}`
+        `Go-Like-Chunk-${String(index).padStart(3, "0")}=${encoded.slice(index * chunkSize, (index + 1) * chunkSize)}`
       )
     )
   }
@@ -123,13 +123,13 @@ describe("canonical mDNS ServiceInstance codec", () => {
     const items = await encodeInstanceTXT(current, 65_536)
     const texts = items.map((item) => decoder.decode(item))
     expect(texts.slice(0, 4).map((text) => text.split("=", 1)[0])).toEqual([
-      "Likego-Wire-Version",
-      "Likego-Encoding",
-      "Likego-Instance-Content-Hash",
-      "Likego-Chunk-Count"
+      "Go-Like-Wire-Version",
+      "Go-Like-Encoding",
+      "Go-Like-Instance-Content-Hash",
+      "Go-Like-Chunk-Count"
     ])
-    expect(texts[0]).toBe("Likego-Wire-Version=2")
-    expect(texts[1]).toBe("Likego-Encoding=deflate+base64url")
+    expect(texts[0]).toBe("Go-Like-Wire-Version=2")
+    expect(texts[1]).toBe("Go-Like-Encoding=deflate+base64url")
     expect(items.every((item) => item.byteLength <= 255)).toBe(true)
     const decoded = await decodeInstanceTXT(items, 65_536)
     expect(decoded).toEqual(current)
@@ -138,29 +138,29 @@ describe("canonical mDNS ServiceInstance codec", () => {
 
   test("rejects malformed schema, encoding, chunk, hash, and decoded ceilings", async () => {
     const items = await encodeInstanceTXT(fixture(), 65_536)
-    await expect(decodeInstanceTXT(remove(items, "Likego-Encoding"), 65_536)).rejects.toMatchObject(
-      { code: "LIKEGO_REGISTRY_PROTOCOL" }
+    await expect(decodeInstanceTXT(remove(items, "Go-Like-Encoding"), 65_536)).rejects.toMatchObject(
+      { code: "GO_LIKE_REGISTRY_PROTOCOL" }
     )
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Wire-Version", "1"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Wire-Version", "1"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Encoding", "gzip"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Encoding", "gzip"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Chunk-Count", "abc"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Chunk-Count", "abc"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Instance-Content-Hash", "wrong"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Instance-Content-Hash", "wrong"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Unknown", "value"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Unknown", "value"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(
-      decodeInstanceTXT(replace(items, "Likego-Chunk-000", "%"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(replace(items, "Go-Like-Chunk-000", "%"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await expect(decodeInstanceTXT(items, 16)).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     await expect(encodeInstanceTXT(fixture(), 8)).rejects.toThrow(RangeError)
   })
@@ -172,11 +172,11 @@ describe("canonical mDNS ServiceInstance codec", () => {
     if (firstChunk === undefined) throw new Error("fixture chunk is missing")
     duplicate.push(firstChunk.slice())
     await expect(decodeInstanceTXT(duplicate, 65_536)).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     await expect(
-      decodeInstanceTXT(remove(items, "Likego-Chunk-000"), 65_536)
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+      decodeInstanceTXT(remove(items, "Go-Like-Chunk-000"), 65_536)
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
   })
 
   test("rejects malformed decoded metadata and identity shapes", async () => {
@@ -186,7 +186,7 @@ describe("canonical mDNS ServiceInstance codec", () => {
       '{"name":"s","version":"v","metadata":[],"endpoints":["http://127.0.0.1/"]}'
     ]) {
       await expect(decodeInstanceTXT(await rawItems(json), 65_536)).rejects.toMatchObject({
-        code: "LIKEGO_REGISTRY_PROTOCOL"
+        code: "GO_LIKE_REGISTRY_PROTOCOL"
       })
     }
   })

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { ProbeRegistry } from "@likego/health"
+import type { Context } from "@go-like/context"
+import type { ProbeRegistry } from "@go-like/health"
 import { contextHandler, type Handler } from "./context"
 
 const defaultLivePath = "/livez"
@@ -57,7 +57,7 @@ function snapshotPath(path: string, label: string): string {
   ) {
     throw new TypeError(`${label} must be an absolute pathname`)
   }
-  const parsed = new URL(path, "http://likego.local")
+  const parsed = new URL(path, "http://go-like.local")
   if (parsed.pathname !== path || parsed.search !== "" || parsed.hash !== "") {
     throw new TypeError(`${label} must be an absolute normalized pathname`)
   }

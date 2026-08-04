@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
 
 import { newSnapshotQueue } from "../src/watcher"
 
@@ -96,7 +96,7 @@ describe("mDNS watcher snapshot queue", () => {
     const overflow = queue.push([instance("second")])
     if (overflow === null) throw new Error("expected watcher overflow")
     expect(overflow).toMatchObject({
-      code: "LIKEGO_WATCHER_OVERFLOW",
+      code: "GO_LIKE_WATCHER_OVERFLOW",
       bufferSize: 1
     })
     expect(queue.push([])).toBe(overflow)
@@ -123,7 +123,7 @@ describe("mDNS watcher snapshot queue", () => {
     expect(queue.settled()).toBe(terminal)
     const pending = queue.next(background())
     const stopped = queue.stop()
-    expect(stopped).toMatchObject({ code: "LIKEGO_WATCHER_STOPPED" })
+    expect(stopped).toMatchObject({ code: "GO_LIKE_WATCHER_STOPPED" })
     expect(queue.stop()).toBe(stopped)
     await expect(pending).rejects.toBe(stopped)
     await expect(queue.next(background())).rejects.toBe(stopped)
@@ -178,7 +178,7 @@ describe("mDNS watcher snapshot queue", () => {
       })
     )
     const stopped = queue.push([instance("lost-race")])
-    expect(stopped).toMatchObject({ code: "LIKEGO_WATCHER_STOPPED" })
+    expect(stopped).toMatchObject({ code: "GO_LIKE_WATCHER_STOPPED" })
     await expect(pending).rejects.toBe(stopped)
     await queue.settled()
   })

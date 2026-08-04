@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { compareStoreKeys } from "@likego/store/provider"
+import type { Context } from "@go-like/context"
+import { compareStoreKeys } from "@go-like/store/provider"
 
 import {
   decodeRow,

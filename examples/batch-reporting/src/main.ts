@@ -1,12 +1,12 @@
 import process from "node:process"
 
-import { newBullMqWorkerServer } from "@likego/bullmq"
-import { background, type Context } from "@likego/context"
-import { afterStart, name, newApp, server, type Server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import { newCronerServer } from "@likego/croner"
-import { newFileStore } from "@likego/store-file"
-import { newNodeFileStoreHost } from "@likego/store-file/node"
+import { newBullMqWorkerServer } from "@go-like/bullmq"
+import { background, type Context } from "@go-like/context"
+import { afterStart, name, newApp, server, type Server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newCronerServer } from "@go-like/croner"
+import { newFileStore } from "@go-like/store-file"
+import { newNodeFileStoreHost } from "@go-like/store-file/node"
 import { Queue, Worker } from "bullmq"
 import { Cron } from "croner"
 
@@ -18,8 +18,8 @@ import type { ReportOutcome } from "./processor"
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://127.0.0.1:46379")
 const schedule = process.env.CRON_SCHEDULE ?? "*/10 * * * * *"
 const checkpointDirectory = process.env.CHECKPOINT_DIR ?? ".artifacts/checkpoints"
-const queueName = process.env.QUEUE_NAME ?? "likego-batch-reporting"
-const prefix = process.env.QUEUE_PREFIX ?? "likego-example"
+const queueName = process.env.QUEUE_NAME ?? "go-like-batch-reporting"
+const prefix = process.env.QUEUE_PREFIX ?? "go-like-example"
 const connection = Object.freeze({
   host: redisUrl.hostname,
   port: Number(redisUrl.port || "6379"),
@@ -69,7 +69,7 @@ const worker = newBullMqWorkerServer(() => {
         job.attemptsMade,
         async (report) => {
           process.stdout.write(
-            `LIKEGO_REPORT_PUBLISHED=${JSON.stringify({ window: report.window.id, attemptsMade: job.attemptsMade })}\n`
+            `GO_LIKE_REPORT_PUBLISHED=${JSON.stringify({ window: report.window.id, attemptsMade: job.attemptsMade })}\n`
           )
         },
         signal
@@ -114,7 +114,7 @@ const app = newApp(
   server(store, queueServer(queue), worker, scheduler),
   afterStart(async function announceReady(): Promise<void> {
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "batch-reporting", worker: queueName, schedule })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "batch-reporting", worker: queueName, schedule })}\n`
     )
     await cron?.trigger()
   })

@@ -1,5 +1,5 @@
-import { background, cause, withCancelCause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { background, cause, withCancelCause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 
 import {
@@ -98,26 +98,26 @@ export interface Config<T extends ConfigValue = ConfigObject> {
 
 export interface ConfigAlreadyLoadedError extends Error {
   readonly name: "ConfigAlreadyLoadedError"
-  readonly code: "LIKEGO_CONFIG_ALREADY_LOADED"
+  readonly code: "GO_LIKE_CONFIG_ALREADY_LOADED"
   readonly status: "loading" | "loaded" | "closing" | "closed" | "failed"
 }
 
 export interface ConfigSourceError extends Error {
   readonly name: "ConfigSourceError"
-  readonly code: "LIKEGO_CONFIG_SOURCE"
+  readonly code: "GO_LIKE_CONFIG_SOURCE"
   readonly sourceName: string
   readonly phase: "load" | "watch" | "next" | "stop"
 }
 
 export interface ConfigNotFoundError extends Error {
   readonly name: "ConfigNotFoundError"
-  readonly code: "LIKEGO_CONFIG_NOT_FOUND"
+  readonly code: "GO_LIKE_CONFIG_NOT_FOUND"
   readonly key: string
 }
 
 export interface ConfigValidationError extends Error {
   readonly name: "ConfigValidationError"
-  readonly code: "LIKEGO_CONFIG_VALIDATION"
+  readonly code: "GO_LIKE_CONFIG_VALIDATION"
   readonly reason: "issues" | "threw" | "malformed-result" | "invalid-output"
   readonly issues: readonly StandardSchemaV1.Issue[]
 }
@@ -223,7 +223,7 @@ function captureSources(sources: readonly ConfigSource[]): readonly CapturedSour
 
 /** Configures the complete ordered source list, matching Kratos `WithSource`. */
 export function source(
-  /** likego-typed-rest: preserves the Go-style functional-option ABI. */
+  /** go-like-typed-rest: preserves the Go-style functional-option ABI. */
   ...sources: readonly ConfigSource[]
 ): ConfigOption {
   const captured = captureSources(sources)
@@ -329,7 +329,7 @@ function isWellFormedKey(value: string): boolean {
   return true
 }
 
-/** Captures one Kratos-style dotted key while retaining LikeGo's unsafe-key boundary. */
+/** Captures one Kratos-style dotted key while retaining go-like's unsafe-key boundary. */
 function capturePath(key: string): readonly string[] {
   if (typeof key !== "string" || key.length === 0 || !isWellFormedKey(key)) {
     throw new TypeError("invalid configuration key")
@@ -526,7 +526,7 @@ function observeObserver(observer: Observer, key: string, value: Value): void {
 
 /** Captures Go-style options and returns one Kratos-style configuration manager. */
 export function newConfig<const Options extends readonly ConfigOption<ConfigValue>[]>(
-  /** likego-typed-rest: preserves the Go-style functional-option ABI. */
+  /** go-like-typed-rest: preserves the Go-style functional-option ABI. */
   ...options: Options
 ): Config<ConfigOutput<Options>> {
   const settings: ConfigSettings = {

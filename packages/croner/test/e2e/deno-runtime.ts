@@ -1,5 +1,5 @@
-import { background, type Context } from "@likego/context"
-import { newCronerServer } from "@likego/croner"
+import { background, type Context } from "@go-like/context"
+import { newCronerServer } from "@go-like/croner"
 import { Cron } from "croner"
 
 Deno.test("built cron package runs native Croner through package names", async () => {

@@ -1,20 +1,20 @@
-# @likego/transport-http
+# @go-like/transport-http
 
-`@likego/transport` 的 HTTP 实现。它同时实现 `dial` 与 `listen`，不再额外定义 client/server/host 生命周期。
+`@go-like/transport` 的 HTTP 实现。它同时实现 `dial` 与 `listen`，不再额外定义 client/server/host 生命周期。
 
 ```ts
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 const transport = newNodeHTTPTransport()
 const listener = await transport.listen(ctx, "127.0.0.1:9000")
 const client = await transport.dial(ctx, listener.addr())
 ```
 
-Node HTTPS client 使用 `@likego/transport` 的公共 TLS 配置：
+Node HTTPS client 使用 `@go-like/transport` 的公共 TLS 配置：
 
 ```ts
-import { secure, tlsConfig } from "@likego/transport"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+import { secure, tlsConfig } from "@go-like/transport"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 const transport = newNodeHTTPTransport()
 transport.init(
@@ -32,8 +32,8 @@ const client = await transport.dial(ctx, "catalog.internal:443")
 Node HTTPS server 在同一个 Transport 构造器上配置客户端证书认证和 ALPN：
 
 ```ts
-import { secure, tlsConfig } from "@likego/transport"
-import { allowHTTP1, clientAuth, newNodeHTTPTransport } from "@likego/transport-http/node"
+import { secure, tlsConfig } from "@go-like/transport"
+import { allowHTTP1, clientAuth, newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 const transport = newNodeHTTPTransport(clientAuth("require"), allowHTTP1(false))
 transport.init(
@@ -51,7 +51,7 @@ const listener = await transport.listen(ctx, "127.0.0.1:9443")
 `clientAuth("require")` 会用 `caCertificate` 验证客户端证书；`allowHTTP1(false)` 只允许 HTTP/2。
 默认值分别是 `"none"` 和 `true`。这些是 Node transport construction options，不会公开内部 Host SPI。
 
-内部微服务 Server 由 `@likego/server` 组合：
+内部微服务 Server 由 `@go-like/server` 组合：
 
 ```ts
 const rpc = newServer(

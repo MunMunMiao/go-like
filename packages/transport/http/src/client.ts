@@ -3,15 +3,15 @@ import {
   deadlineExceeded,
   withTimeout as withContextTimeout,
   type Context
-} from "@likego/context"
-import { type Client, type DialOptions, type Message, type Options } from "@likego/transport"
+} from "@go-like/context"
+import { type Client, type DialOptions, type Message, type Options } from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
   snapshotMessage,
   type TransportClosedError
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 import type { HTTPDialTarget } from "./address"
 import {
   assertHTTPContentLength,

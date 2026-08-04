@@ -1,12 +1,12 @@
-# @likego/server
+# @go-like/server
 
-面向内部微服务调用的 go-micro 风格 Server。它消费 `@likego/transport`，负责路由、middleware 与生命周期；
-Registry 由 App 统一管理，外部 Web 请求使用 `@likego/web`。
+面向内部微服务调用的 go-micro 风格 Server。它消费 `@go-like/transport`，负责路由、middleware 与生命周期；
+Registry 由 App 统一管理，外部 Web 请求使用 `@go-like/web`。
 
 ```ts
-import { newApp, server } from "@likego/core"
-import { signal } from "@likego/core/node"
-import { newTokenBucketLimiter } from "@likego/resilience"
+import { newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newTokenBucketLimiter } from "@go-like/resilience"
 import {
   address,
   advertise,
@@ -16,8 +16,8 @@ import {
   rateLimitMiddleware,
   transport,
   use
-} from "@likego/server"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+} from "@go-like/server"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 const catalogLimiter = newTokenBucketLimiter({
   capacity: 100,

@@ -14,13 +14,13 @@ import { fileURLToPath } from "node:url"
 import { errorValue } from "./result"
 
 const RepositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
-const NativeSource = resolve(RepositoryRoot, "e2e/harness/native/likego_e2e_posix_filesystem.c")
+const NativeSource = resolve(RepositoryRoot, "e2e/harness/native/go-like_e2e_posix_filesystem.c")
 const NativeProtocol = resolve(
   RepositoryRoot,
-  "e2e/harness/native/likego_e2e_posix_filesystem_protocol.h"
+  "e2e/harness/native/go-like_e2e_posix_filesystem_protocol.h"
 )
 const NativeArtifactDirectory = resolve(RepositoryRoot, ".artifacts/e2e-native")
-const NativeBinary = resolve(NativeArtifactDirectory, "likego-e2e-posix-filesystem")
+const NativeBinary = resolve(NativeArtifactDirectory, "go-like-e2e-posix-filesystem")
 
 const ProtocolMagic = 0x5346474c
 const ProtocolVersion = 1
@@ -178,7 +178,7 @@ async function runNativeSelfTest(binary: string): Promise<void> {
   if (
     result.error !== undefined ||
     result.status !== 0 ||
-    !stdout.toString().includes("likego_e2e_posix_filesystem self-test: PASS")
+    !stdout.toString().includes("go-like_e2e_posix_filesystem self-test: PASS")
   ) {
     throw new Error(
       `prerequisite-native-filesystem-self-test-failed: ${errorSummary(
@@ -531,7 +531,7 @@ class FilesystemSession {
       if (root.path !== canonicalPlatformRoot) {
         throw new Error("native filesystem broker changed the canonical platform temp root")
       }
-      const userComponent = `likego-${process.getuid()}`
+      const userComponent = `go-like-${process.getuid()}`
       const userRoot = await openChild(
         broker,
         root.handleId,

@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import {
   newEtcdStoreHttpError,

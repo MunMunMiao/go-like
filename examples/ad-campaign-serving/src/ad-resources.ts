@@ -1,6 +1,6 @@
-import type { MemoryCache } from "@likego/cache-memory"
-import type { Context } from "@likego/context"
-import type { CircuitBreaker } from "@likego/resilience"
+import type { MemoryCache } from "@go-like/cache-memory"
+import type { Context } from "@go-like/context"
+import type { CircuitBreaker } from "@go-like/resilience"
 
 import {
   adRequestFingerprint,
@@ -154,7 +154,7 @@ export function newMemoryCreativeSource(
   })
 }
 
-/** Creates a cache-first creative gateway protected by a LikeGo circuit breaker. */
+/** Creates a cache-first creative gateway protected by a go-like circuit breaker. */
 export function newCachedCreativeGateway(
   cache: MemoryCache,
   source: CreativeSource,

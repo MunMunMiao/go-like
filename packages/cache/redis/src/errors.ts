@@ -27,7 +27,7 @@ function isOperationError(value: Error): value is RedisCacheOperationError {
   return (
     value.name === "RedisCacheOperationError" &&
     "code" in value &&
-    value.code === "LIKEGO_CACHE_REDIS_OPERATION" &&
+    value.code === "GO_LIKE_CACHE_REDIS_OPERATION" &&
     "operation" in value &&
     isOperation(value.operation) &&
     "cause" in value &&
@@ -45,7 +45,7 @@ export function newRedisCacheOperationError(
   const error = new Error(`Redis Cache ${operation} failed`, { cause })
   Object.defineProperties(error, {
     name: { enumerable: true, value: "RedisCacheOperationError" },
-    code: { enumerable: true, value: "LIKEGO_CACHE_REDIS_OPERATION" },
+    code: { enumerable: true, value: "GO_LIKE_CACHE_REDIS_OPERATION" },
     operation: { enumerable: true, value: operation }
   })
   if (!isOperationError(error)) throw new TypeError("Redis Cache error decoration failed")
@@ -57,7 +57,7 @@ function isProtocolError(value: Error): value is RedisCacheProtocolError {
   return (
     value.name === "RedisCacheProtocolError" &&
     "code" in value &&
-    value.code === "LIKEGO_CACHE_REDIS_PROTOCOL" &&
+    value.code === "GO_LIKE_CACHE_REDIS_PROTOCOL" &&
     "operation" in value &&
     value.operation === "get"
   )
@@ -65,10 +65,10 @@ function isProtocolError(value: Error): value is RedisCacheProtocolError {
 
 /** Creates the stable secret-safe error for a foreign or corrupted cache value. */
 export function newRedisCacheProtocolError(): RedisCacheProtocolError {
-  const error = new Error("Redis Cache value is not a canonical LikeGo carrier")
+  const error = new Error("Redis Cache value is not a canonical go-like carrier")
   Object.defineProperties(error, {
     name: { enumerable: true, value: "RedisCacheProtocolError" },
-    code: { enumerable: true, value: "LIKEGO_CACHE_REDIS_PROTOCOL" },
+    code: { enumerable: true, value: "GO_LIKE_CACHE_REDIS_PROTOCOL" },
     operation: { enumerable: true, value: "get" }
   })
   if (!isProtocolError(error)) throw new TypeError("Redis Cache protocol error decoration failed")

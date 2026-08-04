@@ -1,5 +1,5 @@
-import type { StoreRecord, StoreRecordInput } from "@likego/store"
-import { snapshotStoreRecord, snapshotStoreRecordInput } from "@likego/store/provider"
+import type { StoreRecord, StoreRecordInput } from "@go-like/store"
+import { snapshotStoreRecord, snapshotStoreRecordInput } from "@go-like/store/provider"
 
 import { newEtcdStoreProtocolError } from "./errors"
 import type { EtcdStoreOperation } from "./types"
@@ -194,7 +194,7 @@ export function storeKey(value: string, allowEmpty: boolean): string {
   return value
 }
 
-/** Encodes one validated Store input into the stable LikeGo etcd payload. */
+/** Encodes one validated Store input into the stable go-like etcd payload. */
 export function encodeRecordPayload(
   value: StoreRecordInput,
   operation: string,
@@ -234,7 +234,7 @@ function decodeMetadata(
   return Object.fromEntries(entries)
 }
 
-/** Decodes one LikeGo payload and retains no mutable JSON carrier. */
+/** Decodes one go-like payload and retains no mutable JSON carrier. */
 function decodePayload(
   key: string,
   revision: string,

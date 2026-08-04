@@ -1,4 +1,4 @@
-import { background, cause, type Context } from "@likego/context"
+import { background, cause, type Context } from "@go-like/context"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 
 import type { Config, ConfigObject, ConfigSourceWatcher, ConfigValue } from "../src/index"
@@ -69,7 +69,7 @@ export function readConfig(config: Config<ConfigObject>): Promise<ConfigObject> 
   const schema = {
     "~standard": {
       version: 1,
-      vendor: "likego-test-identity",
+      vendor: "go-like-test-identity",
       validate(value: unknown) {
         return isConfigObject(value)
           ? { value }

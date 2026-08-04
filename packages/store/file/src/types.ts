@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import type { Store } from "@likego/store"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import type { Store } from "@go-like/store"
 
 /** Identifies the lifecycle state of one File Store lock owner. */
 export type FileStoreState = "idle" | "starting" | "running" | "stopping" | "stopped" | "failed"
@@ -8,7 +8,7 @@ export type FileStoreState = "idle" | "starting" | "running" | "stopping" | "sto
 /** Describes a File Store operation attempted outside its owned lock lifetime. */
 export interface FileStoreStateError extends Error {
   readonly name: "FileStoreStateError"
-  readonly code: "LIKEGO_FILE_STORE_STATE"
+  readonly code: "GO_LIKE_FILE_STORE_STATE"
   readonly operation: string
   readonly state: FileStoreState
 }
@@ -42,12 +42,12 @@ export type FileStoreCorruptionReason = "encoding" | "json" | "schema" | "checks
 /** Describes a stable secret-safe snapshot corruption failure. */
 export interface FileStoreCorruptionError extends Error {
   readonly name: "FileStoreCorruptionError"
-  readonly code: "LIKEGO_FILE_STORE_CORRUPTION"
+  readonly code: "GO_LIKE_FILE_STORE_CORRUPTION"
   readonly reason: FileStoreCorruptionReason
 }
 
 /** Describes a stable failure to acquire a directory already owned by another Store. */
 export interface FileStoreLockedError extends Error {
   readonly name: "FileStoreLockedError"
-  readonly code: "LIKEGO_FILE_STORE_LOCKED"
+  readonly code: "GO_LIKE_FILE_STORE_LOCKED"
 }

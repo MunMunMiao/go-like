@@ -1,20 +1,20 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 import { kubernetesPodOwner } from "./options"
 import type { KubernetesPodOwner } from "./types"
 
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567"
-const wireMarker = "likego.registry-kubernetes.v2"
+const wireMarker = "go-like.registry-kubernetes.v2"
 const maximumPayloadBytes = 196_608
 
 export const managedByLabel = "endpointslice.kubernetes.io/managed-by"
-export const managedByValue = "registry-kubernetes.likego.dev"
+export const managedByValue = "registry-kubernetes.go-like.dev"
 export const serviceNameLabel = "kubernetes.io/service-name"
-export const identityLabel = "registry.likego.dev/identity"
-export const wireAnnotation = "registry.likego.dev/wire-version"
-export const instanceAnnotation = "registry.likego.dev/service-instance"
-export const contentAnnotation = "registry.likego.dev/content"
+export const identityLabel = "registry.go-like.dev/identity"
+export const wireAnnotation = "registry.go-like.dev/wire-version"
+export const instanceAnnotation = "registry.go-like.dev/service-instance"
+export const contentAnnotation = "registry.go-like.dev/content"
 
 /** Describes one EndpointSlice-compatible address family. */
 export type AddressType = "IPv4" | "IPv6" | "FQDN"
@@ -31,7 +31,7 @@ export interface SliceCandidate {
   readonly port: number
 }
 
-/** Captures one verified LikeGo-managed EndpointSlice. */
+/** Captures one verified go-like-managed EndpointSlice. */
 export interface ManagedSlice extends SliceCandidate {
   readonly owner: KubernetesPodOwner | null
   readonly resourceVersion: string
@@ -137,7 +137,7 @@ function hostname(host: string): boolean {
 
 /** Produces a stable valid FQDN when an endpoint URL has no native Kubernetes address. */
 function fallbackHost(identity: string): string {
-  return `${identity.slice(3, 23)}.registry.likego.invalid`
+  return `${identity.slice(3, 23)}.registry.go-like.invalid`
 }
 
 /** Projects the first endpoint URL to the EndpointSlice validation fields. */
@@ -201,9 +201,9 @@ export async function encodeCandidate(value: ServiceInstance): Promise<SliceCand
     throw new RangeError(`Kubernetes service payload exceeds ${maximumPayloadBytes} bytes`)
   }
   const [identityHash, contentHash, serviceHash] = await Promise.all([
-    hash("likego.registry-kubernetes.identity.v2", [instance.name, instance.id]),
-    hash("likego.registry-kubernetes.content.v2", instance),
-    hash("likego.registry-kubernetes.service.v2", instance.name)
+    hash("go-like.registry-kubernetes.identity.v2", [instance.name, instance.id]),
+    hash("go-like.registry-kubernetes.content.v2", instance),
+    hash("go-like.registry-kubernetes.service.v2", instance.name)
   ])
   const identity = `ki-${identityHash}`
   const projected = projection(instance, identity)
@@ -211,7 +211,7 @@ export async function encodeCandidate(value: ServiceInstance): Promise<SliceCand
     identity,
     content: `kc-${contentHash}`,
     serviceLabel: `ks-${serviceHash}`,
-    name: `likego-${identityHash}`,
+    name: `go-like-${identityHash}`,
     instance,
     addressType: projected.addressType,
     addresses: projected.addresses,
@@ -257,7 +257,7 @@ export function encodeSlice(
     metadata,
     addressType: candidate.addressType,
     endpoints: [{ addresses: candidate.addresses }],
-    ports: [{ name: "likego", protocol: "TCP", port: candidate.port }]
+    ports: [{ name: "go-like", protocol: "TCP", port: candidate.port }]
   })
 }
 

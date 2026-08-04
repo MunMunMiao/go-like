@@ -1,9 +1,9 @@
-import { withFilter, withRetry, type CallOption, type CallRequest } from "@likego/client"
-import type { Context } from "@likego/context"
-import { filterVersion } from "@likego/registry"
-import { exponentialBackoff } from "@likego/resilience"
-import type { Handler } from "@likego/server"
-import type { Message } from "@likego/transport"
+import { withFilter, withRetry, type CallOption, type CallRequest } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import { filterVersion } from "@go-like/registry"
+import { exponentialBackoff } from "@go-like/resilience"
+import type { Handler } from "@go-like/server"
+import type { Message } from "@go-like/transport"
 
 import {
   findAmountMinor,
@@ -142,7 +142,7 @@ export async function fetchPrice(
 
 export const pricingMediaType = jsonMediaType
 
-/** Creates the Pricing.Get handler registered directly on a LikeGo Server. */
+/** Creates the Pricing.Get handler registered directly on a go-like Server. */
 export function newPricingHandler(onCall?: () => void): Handler {
   return function pricing(_ctx: Context, message: Message): Message {
     const request = decodePricingRequest(message.body)

@@ -1,5 +1,5 @@
-import { type ServiceInstance } from "@likego/registry"
-import { snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { snapshotServiceInstance } from "@go-like/registry/provider"
 
 import { base32 } from "./base32"
 
@@ -80,7 +80,7 @@ export function hostLabel(instance: ServiceInstance): Promise<string> {
   const selected = snapshotServiceInstance(instance)
   return hash(
     "lh-",
-    JSON.stringify(["likego.host.v2", identityPreimage(selected), selected.endpoints])
+    JSON.stringify(["go-like.host.v2", identityPreimage(selected), selected.endpoints])
   )
 }
 

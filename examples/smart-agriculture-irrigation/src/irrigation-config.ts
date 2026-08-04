@@ -1,8 +1,8 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@likego/config"
+import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
 
 import { validateIrrigationPolicy, type IrrigationPolicy } from "./irrigation-policy"
 
-/** Creates the LikeGo Config server that owns the irrigation policy value. */
+/** Creates the go-like Config server that owns the irrigation policy value. */
 export function newIrrigationConfig(policy: IrrigationPolicy): Config<ConfigObject> {
   validateIrrigationPolicy(policy)
   return newConfig(

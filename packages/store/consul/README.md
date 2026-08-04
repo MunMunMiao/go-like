@@ -1,13 +1,13 @@
-# `@likego/store-consul`
+# `@go-like/store-consul`
 
-`@likego/store-consul` 是 `@likego/store` 的 Consul KV provider。它只使用调用方注入的标准 Web Fetch，
+`@go-like/store-consul` 是 `@go-like/store` 的 Consul KV provider。它只使用调用方注入的标准 Web Fetch，
 不依赖 Node Consul SDK、运行时全局 `fetch`、gRPC 或 Proto。
 
 ## 使用
 
 ```ts
-import { background } from "@likego/context"
-import { newConsulStore } from "@likego/store-consul"
+import { background } from "@go-like/context"
+import { newConsulStore } from "@go-like/store-consul"
 
 const store = newConsulStore({
   fetch,
@@ -23,21 +23,21 @@ const record = await store.read(background(), "orders/1001")
 
 ## KV 根隔离
 
-`root` 默认是 `likego/store`。构造时会移除首尾 `/`，拒绝空路径、空 segment、`.`、`..`、
+`root` 默认是 `go-like/store`。构造时会移除首尾 `/`，拒绝空路径、空 segment、`.`、`..`、
 不完整 UTF-16 以及超过 1,024 UTF-8 bytes 的 root。逻辑 key `orders/1001` 在默认配置下只映射到
-物理 key `likego/store/orders/1001`。
+物理 key `go-like/store/orders/1001`。
 
 同一 `root` 的 Store 共享 revision、CAS 和 TTL 状态；不同 `root` 完全隔离，分页 cursor 也绑定 root。
 read/list 只请求当前
-root，因此 root 外的 Consul KV 不会进入结果。当前 root 内被查询到的非 LikeGo envelope、损坏 base64、
+root，因此 root 外的 Consul KV 不会进入结果。当前 root 内被查询到的非 go-like envelope、损坏 base64、
 错误 revision 或越界 key 会统一返回 `ConsulStoreProtocolError`，不会被静默跳过。
 
 ## Consul 映射
 
 | Store 语义         | Consul 2.0.2 映射                                                           |
 | ------------------ | --------------------------------------------------------------------------- |
-| root               | `<root>/<logical-key>`；默认 `likego/store`，root 外 KV 永不混入            |
-| value              | LikeGo versioned JSON envelope；二进制 value 使用标准 base64                |
+| root               | `<root>/<logical-key>`；默认 `go-like/store`，root 外 KV 永不混入            |
+| value              | go-like versioned JSON envelope；二进制 value 使用标准 base64                |
 | revision           | KV `ModifyIndex` 的十进制字符串，不解释其业务含义                           |
 | create if absent   | `PUT /v1/kv/:key?cas=0`                                                     |
 | write CAS          | `PUT /v1/kv/:key?cas=<ModifyIndex>`                                         |
@@ -91,9 +91,9 @@ TLS trust、client certificate、proxy、连接池和 Fetch 生命周期均由�
 ## 验证
 
 ```sh
-bun run --filter @likego/store-consul typecheck
-bun run --filter @likego/store-consul test:unit:coverage
-bun run --filter @likego/store-consul build
+bun run --filter @go-like/store-consul typecheck
+bun run --filter @go-like/store-consul test:unit:coverage
+bun run --filter @go-like/store-consul build
 bun run test:e2e:suites -- --suite store-consul-docker
 ```
 

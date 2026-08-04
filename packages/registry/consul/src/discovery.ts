@@ -1,12 +1,12 @@
-import { background, cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+import { background, cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 import {
   newRegistryProtocolError,
   newWatcherOverflowError,
   newWatcherStoppedError,
   snapshotServiceInstances
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 import { decodeHealthResponse, type DecodedRegistration } from "./codec"
 import { boundaryError } from "./errors"

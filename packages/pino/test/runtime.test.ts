@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background, canceled, withCancelCause } from "@go-like/context"
+import type { Server } from "@go-like/core"
 
 import { pinoDrainTimeout, type PinoDrainTimeoutError } from "../src/index"
 import { delay, fakePinoServer, FakeDestination, FakeLogger, withoutForce } from "./helpers"
@@ -51,7 +51,7 @@ describe("native Pino destination lifecycle", () => {
 
     await expect(server.start(background())).rejects.toMatchObject({
       name: "PinoDestinationClosedError",
-      code: "LIKEGO_PINO_DESTINATION_CLOSED"
+      code: "GO_LIKE_PINO_DESTINATION_CLOSED"
     })
     expect(destination.endCalls).toBe(0)
     expect(destination.destroyCalls).toBe(0)
@@ -71,7 +71,7 @@ describe("native Pino destination lifecycle", () => {
 
     await expect(server.start(background())).rejects.toMatchObject({
       name: "PinoDestinationClosedError",
-      code: "LIKEGO_PINO_DESTINATION_CLOSED"
+      code: "GO_LIKE_PINO_DESTINATION_CLOSED"
     })
     expect(destination.endCalls).toBe(0)
     expect(destination.destroyCalls).toBe(0)
@@ -88,7 +88,7 @@ describe("native Pino destination lifecycle", () => {
 
     await expect(server.start(background())).rejects.toMatchObject({
       name: "PinoDestinationClosedError",
-      code: "LIKEGO_PINO_DESTINATION_CLOSED"
+      code: "GO_LIKE_PINO_DESTINATION_CLOSED"
     })
     expect(native.endCalls).toBe(0)
     expect(native.destroyCalls).toBe(0)
@@ -124,7 +124,7 @@ describe("native Pino destination lifecycle", () => {
 
     await expect(server.start(background())).rejects.toMatchObject({
       name: "PinoDestinationClosedError",
-      code: "LIKEGO_PINO_DESTINATION_CLOSED"
+      code: "GO_LIKE_PINO_DESTINATION_CLOSED"
     })
     expect(destination.endCalls).toBe(0)
     expect(destination.destroyCalls).toBe(0)
@@ -258,7 +258,7 @@ describe("native Pino destination lifecycle", () => {
     destination.close()
     await expect(running).rejects.toMatchObject({
       name: "PinoDestinationClosedError",
-      code: "LIKEGO_PINO_DESTINATION_CLOSED"
+      code: "GO_LIKE_PINO_DESTINATION_CLOSED"
     })
   })
 

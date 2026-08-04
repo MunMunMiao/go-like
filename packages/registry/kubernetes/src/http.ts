@@ -1,4 +1,4 @@
-import { newRegistryProtocolError } from "@likego/registry/provider"
+import { newRegistryProtocolError } from "@go-like/registry/provider"
 
 import { newHttpError, newTransportError } from "./errors"
 import type { OperationOptions } from "./options"
@@ -7,8 +7,8 @@ import type { KubernetesHttpError, KubernetesOperation } from "./types"
 /** Reports whether one failure may be retried without changing semantic input. */
 export function retryable(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("code" in value)) return false
-  if (value.code === "LIKEGO_KUBERNETES_TRANSPORT") return true
-  if (value.code !== "LIKEGO_KUBERNETES_HTTP" || !("status" in value)) return false
+  if (value.code === "GO_LIKE_KUBERNETES_TRANSPORT") return true
+  if (value.code !== "GO_LIKE_KUBERNETES_HTTP" || !("status" in value)) return false
   return (
     typeof value.status === "number" &&
     (value.status === 408 || value.status === 429 || value.status >= 500)
@@ -21,7 +21,7 @@ export function conflict(value: unknown): value is KubernetesHttpError {
     typeof value === "object" &&
     value !== null &&
     "code" in value &&
-    value.code === "LIKEGO_KUBERNETES_HTTP" &&
+    value.code === "GO_LIKE_KUBERNETES_HTTP" &&
     "status" in value &&
     value.status === 409
   )
@@ -33,7 +33,7 @@ export function notFound(value: unknown): value is KubernetesHttpError {
     typeof value === "object" &&
     value !== null &&
     "code" in value &&
-    value.code === "LIKEGO_KUBERNETES_HTTP" &&
+    value.code === "GO_LIKE_KUBERNETES_HTTP" &&
     "status" in value &&
     value.status === 404
   )
@@ -45,7 +45,7 @@ export function gone(value: unknown): value is KubernetesHttpError {
     typeof value === "object" &&
     value !== null &&
     "code" in value &&
-    value.code === "LIKEGO_KUBERNETES_HTTP" &&
+    value.code === "GO_LIKE_KUBERNETES_HTTP" &&
     "status" in value &&
     value.status === 410
   )

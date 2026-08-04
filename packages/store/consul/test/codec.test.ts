@@ -9,9 +9,9 @@ import {
   encodeRecordPayload
 } from "../src/codec"
 
-const KeyPrefix = "likego/store/"
+const KeyPrefix = "go-like/store/"
 
-/** Wraps one LikeGo wire payload in a real Consul KV response row. */
+/** Wraps one go-like wire payload in a real Consul KV response row. */
 function consulRow(payload: string, overrides: Readonly<Record<string, unknown>> = {}): string {
   return JSON.stringify([
     Object.assign(
@@ -26,7 +26,7 @@ function consulRow(payload: string, overrides: Readonly<Record<string, unknown>>
   ])
 }
 
-/** Creates one valid version-one LikeGo wire payload. */
+/** Creates one valid version-one go-like wire payload. */
 function payload(overrides: Readonly<Record<string, unknown>> = {}): string {
   return JSON.stringify(
     Object.assign(
@@ -106,7 +106,7 @@ describe("Consul Store wire codec", () => {
     )
   })
 
-  test("rejects malformed Consul rows and malformed LikeGo payloads without reflecting bodies", () => {
+  test("rejects malformed Consul rows and malformed go-like payloads without reflecting bodies", () => {
     const malformedRows = [
       "not-json",
       "{}",
@@ -137,7 +137,7 @@ describe("Consul Store wire codec", () => {
       } catch (error) {
         expect(error).toMatchObject({
           name: "ConsulStoreProtocolError",
-          code: "LIKEGO_CONSUL_STORE_PROTOCOL",
+          code: "GO_LIKE_CONSUL_STORE_PROTOCOL",
           operation: "read"
         })
         expect(String(error)).not.toContain(malformed)

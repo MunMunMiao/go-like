@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel, withValue } from "@likego/context"
+import { background, canceled, withCancel, withValue } from "@go-like/context"
 
 import {
   appendToClientContext,

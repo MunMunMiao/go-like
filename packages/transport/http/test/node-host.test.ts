@@ -9,7 +9,7 @@ import type { Socket } from "node:net"
 
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
 
 import { newNodeHTTPHost, newNodeHTTPHostWithFactory } from "../src/node-host"
 import type { HTTPHandler, HTTPHost, HTTPHostHandle, HTTPHostListenOptions } from "../src/types"
@@ -893,7 +893,7 @@ describe("Node HTTP host", () => {
           "world",
           Object.freeze({
             status: 201,
-            headers: Object.freeze({ "x-likego-node": "ok" })
+            headers: Object.freeze({ "x-go-like-node": "ok" })
           })
         )
       })
@@ -908,7 +908,7 @@ describe("Node HTTP host", () => {
         })
       )
       expect(response.status).toBe(201)
-      expect(response.headers.get("x-likego-node")).toBe("ok")
+      expect(response.headers.get("x-go-like-node")).toBe("ok")
       expect(await response.text()).toBe("world")
       expect(envelopeAddress).toBe(address)
       expect(envelopeRemote.length).toBeGreaterThan(0)

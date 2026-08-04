@@ -1,4 +1,4 @@
-import { providerOptions, type ProviderOptions } from "@likego/registry/provider"
+import { providerOptions, type ProviderOptions } from "@go-like/registry/provider"
 
 import type { ConsulFetch, ConsulRegistryOptions } from "./types"
 

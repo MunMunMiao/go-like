@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/transport",
+  "name": "@go-like/transport",
   "version": "0.0.1",
-  "description": "Portable internal service transport contracts for LikeGo.",
+  "description": "Portable internal service transport contracts for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -28,9 +28,9 @@
     "test:e2e:runtimes": "bun test/e2e/package-runtime.ts && tsx test/e2e/package-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/package-runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/metadata": "0.0.1",
-    "@likego/struct": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/metadata": "0.0.1",
+    "@go-like/struct": "0.0.1"
   },
   "license": "MIT"
 }

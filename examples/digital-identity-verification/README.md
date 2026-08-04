@@ -16,16 +16,16 @@
 - `src/service.ts`：隐私最小化命令、校验和 Context-first 幂等核验用例。
 - `src/provider.ts`：内存结果仓储、供应商、allowlist、timeout 与 Circuit Breaker。
 - `src/http.ts`：标准 Fetch 核验入口、health 和供应商 readiness 组合。
-- `src/main.ts`：配置演示供应商并运行常驻 LikeGo HTTP App；这是唯一直接执行入口。
+- `src/main.ts`：配置演示供应商并运行常驻 go-like HTTP App；这是唯一直接执行入口。
 - `test/main.test.ts`：供应商准入、幂等冲突、超时、熔断、health 和最小化输出。
 
-## LikeGo 能力
+## go-like 能力
 
-`@likego/resilience` 为每个允许的供应商提供独立 Circuit Breaker，`@likego/context` 为调用设置确定的超时边界，`@likego/health` 与 `@likego/web/health` 发布 `/readyz`。测试实际触发超时、打开熔断器并观察 readiness 失败。
+`@go-like/resilience` 为每个允许的供应商提供独立 Circuit Breaker，`@go-like/context` 为调用设置确定的超时边界，`@go-like/health` 与 `@go-like/web/health` 发布 `/readyz`。测试实际触发超时、打开熔断器并观察 readiness 失败。
 
 ```bash
-bun run --filter @likego/example-digital-identity-verification typecheck
-bun run --filter @likego/example-digital-identity-verification test:unit
+bun run --filter @go-like/example-digital-identity-verification typecheck
+bun run --filter @go-like/example-digital-identity-verification test:unit
 ```
 
 ## Docker 判定
@@ -39,10 +39,10 @@ bun run --filter @likego/example-digital-identity-verification test:unit
 ## 直接运行
 
 ```sh
-bun run --filter @likego/example-digital-identity-verification start
+bun run --filter @go-like/example-digital-identity-verification start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后调用核验接口：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后调用核验接口：
 
 ```sh
 curl -sS http://127.0.0.1:3000/v1/identity-verifications \
@@ -50,4 +50,4 @@ curl -sS http://127.0.0.1:3000/v1/identity-verifications \
   -d '{"requestId":"request-demo","applicantReference":"applicant-demo","providerId":"trusted-demo","documentDigest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
 ```
 
-按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，LikeGo 会有序停止 HTTP Server。
+按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，go-like 会有序停止 HTTP Server。

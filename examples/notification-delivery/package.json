@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-notification-delivery",
+  "name": "@go-like/example-notification-delivery",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,16 +12,16 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@likego/broker": "workspace:*",
-    "@likego/broker-memory": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/event": "workspace:*",
-    "@likego/resilience": "workspace:*",
-    "@likego/store": "workspace:*",
-    "@likego/store-memory": "workspace:*",
-    "@likego/web": "workspace:*",
-    "@likego/winston": "workspace:*",
+    "@go-like/broker": "workspace:*",
+    "@go-like/broker-memory": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/event": "workspace:*",
+    "@go-like/resilience": "workspace:*",
+    "@go-like/store": "workspace:*",
+    "@go-like/store-memory": "workspace:*",
+    "@go-like/web": "workspace:*",
+    "@go-like/winston": "workspace:*",
     "winston": "3.19.0"
   },
   "license": "MIT"

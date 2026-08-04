@@ -31,12 +31,12 @@ if (mode === "mark-started") {
 const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
 try {
   if (mode === "network-then-wait") {
-    await createNetwork(ownedDocker, [`likego-e2e-network-${randomUUID()}`])
+    await createNetwork(ownedDocker, [`go-like-e2e-network-${randomUUID()}`])
     await Bun.sleep(24 * 60 * 60 * 1_000)
   }
   if (mode === "sanitizer-canary") {
     const canary = process.argv[3]
-    const environmentCanary = process.env.LIKEGO_C6_SECRET
+    const environmentCanary = process.env.GO_LIKE_C6_SECRET
     if (canary === undefined || canary.length === 0 || environmentCanary !== canary) {
       throw new Error("example-task sanitizer fixture canary is unavailable")
     }
@@ -44,12 +44,12 @@ try {
       ownedDocker,
       [
         "--env",
-        `LIKEGO_C6_SECRET=${canary}`,
+        `GO_LIKE_C6_SECRET=${canary}`,
         "--entrypoint",
         "sh",
         "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241",
         "-c",
-        'printf "%s\\n" "$LIKEGO_C6_SECRET"; sleep 1'
+        'printf "%s\\n" "$GO_LIKE_C6_SECRET"; sleep 1'
       ],
       { knownSecrets: [canary] }
     )

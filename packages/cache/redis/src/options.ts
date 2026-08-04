@@ -1,6 +1,6 @@
 import type { RedisCacheClientFactory, RedisCacheErrorHandler, RedisCacheOptions } from "./types"
 
-const DefaultPrefix = "likego:cache:"
+const DefaultPrefix = "go-like:cache:"
 const DefaultConnectTimeoutMs = 5_000
 const DefaultCommandTimeoutMs = 5_000
 const MaximumTimeoutMs = 2_147_483_647

@@ -12,29 +12,29 @@ test("creates an isolated raw Registry without mutating the prom-client global r
   register.clear()
   const registry = new Registry()
   const counter = new Counter({
-    name: "likego_requests_total",
+    name: "go_like_requests_total",
     help: "Total requests handled by the test.",
     registers: [registry]
   })
   counter.inc(2)
 
   expect(registry).toBeInstanceOf(Registry)
-  expect(await registry.metrics()).toContain("likego_requests_total 2")
-  expect(await register.metrics()).not.toContain("likego_requests_total")
+  expect(await registry.metrics()).toContain("go_like_requests_total 2")
+  expect(await register.metrics()).not.toContain("go_like_requests_total")
   register.clear()
 })
 
 test("preserves official duplicate-registration behavior", () => {
   const registry = new Registry()
-  new Counter({ name: "likego_duplicate_total", help: "first", registers: [registry] })
+  new Counter({ name: "go_like_duplicate_total", help: "first", registers: [registry] })
 
   expect(() => {
-    new Counter({ name: "likego_duplicate_total", help: "second", registers: [registry] })
-  }).toThrow("A metric with the name likego_duplicate_total has already been registered")
+    new Counter({ name: "go_like_duplicate_total", help: "second", registers: [registry] })
+  }).toThrow("A metric with the name go_like_duplicate_total has already been registered")
 })
 
 test("accepts a raw Registry from a second physical prom-client installation", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "likego-prom-client-copy-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-prom-client-copy-"))
   try {
     const installed = await realpath(join(import.meta.dir, "../node_modules/prom-client"))
     await cp(dirname(installed), join(temporary, "node_modules"), {
@@ -75,7 +75,7 @@ test("accepts a raw Registry from a second physical prom-client installation", a
 test("serves GET and HEAD with registry-native content metadata", async () => {
   const registry = new Registry()
   const counter = new Counter({
-    name: "likego_jobs_total",
+    name: "go_like_jobs_total",
     help: "Total jobs.",
     registers: [registry]
   })
@@ -90,7 +90,7 @@ test("serves GET and HEAD with registry-native content metadata", async () => {
   expect(get.headers.get("Content-Length")).toBe(
     String(new TextEncoder().encode(payload).byteLength)
   )
-  expect(payload).toContain("likego_jobs_total 3")
+  expect(payload).toContain("go_like_jobs_total 3")
 
   const head = await handler(new Request("https://service.test/metrics", { method: "HEAD" }))
   expect(head.status).toBe(200)
@@ -161,7 +161,7 @@ test("keeps concurrent scrapes independent", async () => {
       calls += 1
       const current = calls
       await gate
-      return `likego_concurrent ${current}\n`
+      return `go_like_concurrent ${current}\n`
     }
   })
   const handler = createPrometheusHandler(registry)
@@ -171,14 +171,14 @@ test("keeps concurrent scrapes independent", async () => {
   release()
 
   const responses = await Promise.all([first, second])
-  expect(await responses[0]?.text()).toBe("likego_concurrent 1\n")
-  expect(await responses[1]?.text()).toBe("likego_concurrent 2\n")
+  expect(await responses[0]?.text()).toBe("go_like_concurrent 1\n")
+  expect(await responses[1]?.text()).toBe("go_like_concurrent 2\n")
 })
 
 test("keeps a bounded application-owned label schema intact", async () => {
   const registry = new Registry()
   const counter = new Counter({
-    name: "likego_operations_total",
+    name: "go_like_operations_total",
     help: "Operations by bounded outcome.",
     labelNames: ["outcome"],
     registers: [registry]
@@ -190,13 +190,13 @@ test("keeps a bounded application-owned label schema intact", async () => {
     new Request("https://service.test/metrics")
   )
   const body = await response.text()
-  expect(body).toContain('likego_operations_total{outcome="success"} 1')
-  expect(body).toContain('likego_operations_total{outcome="failure"} 1')
+  expect(body).toContain('go_like_operations_total{outcome="success"} 1')
+  expect(body).toContain('go_like_operations_total{outcome="failure"} 1')
 })
 
 test("leaves Registry cleanup under explicit application ownership", async () => {
   const registry = new Registry()
-  new Counter({ name: "likego_cleanup_total", help: "cleanup", registers: [registry] })
+  new Counter({ name: "go_like_cleanup_total", help: "cleanup", registers: [registry] })
   expect(registry.getMetricsAsArray()).toHaveLength(1)
 
   registry.clear()

@@ -1,5 +1,5 @@
-import type { Client } from "@likego/client"
-import { contextHandler, type Handler } from "@likego/web"
+import type { Client } from "@go-like/client"
+import { contextHandler, type Handler } from "@go-like/web"
 
 import { echoEndpointName, echoServiceName } from "./echo"
 

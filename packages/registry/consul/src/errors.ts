@@ -1,9 +1,9 @@
 import type { ConsulHttpError, ConsulOperation, ConsulTransportError } from "./types"
 
 const httpName: ConsulHttpError["name"] = "ConsulHttpError"
-const httpCode: ConsulHttpError["code"] = "LIKEGO_CONSUL_HTTP"
+const httpCode: ConsulHttpError["code"] = "GO_LIKE_CONSUL_HTTP"
 const transportName: ConsulTransportError["name"] = "ConsulTransportError"
-const transportCode: ConsulTransportError["code"] = "LIKEGO_CONSUL_TRANSPORT"
+const transportCode: ConsulTransportError["code"] = "GO_LIKE_CONSUL_TRANSPORT"
 
 /** Narrows an untrusted boundary rejection without retaining arbitrary carrier graphs. */
 export function boundaryError(value: unknown, message: string): Error {

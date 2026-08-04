@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import { createRequire } from "node:module"
 import process from "node:process"
 
-import { background, canceled, type Context } from "@likego/context"
-import { newCronerServer } from "@likego/croner"
+import { background, canceled, type Context } from "@go-like/context"
+import { newCronerServer } from "@go-like/croner"
 import { Cron } from "croner"
 
 interface Deferred<T> {

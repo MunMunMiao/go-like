@@ -1,4 +1,4 @@
-import { providerOptions, type ProviderOptions } from "@likego/registry/provider"
+import { providerOptions, type ProviderOptions } from "@go-like/registry/provider"
 
 import type { EtcdFetch, EtcdRegistryOptions } from "./types"
 
@@ -96,7 +96,7 @@ export function captureOptions(value: EtcdRegistryOptions): CapturedOptions {
   }
   const fetch = value.fetch
   const address = value.address
-  const prefix = value.prefix ?? "/likego/registry/v1/"
+  const prefix = value.prefix ?? "/go-like/registry/v1/"
   const token = value.token
   const retryInitialMs = value.retryInitialMs ?? 250
   const retryMaximumMs = value.retryMaximumMs ?? 30_000

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Metadata } from "@likego/metadata"
+import type { Context } from "@go-like/context"
+import type { Metadata } from "@go-like/metadata"
 
 /** Describes one service instance registered with or returned by discovery. */
 export interface ServiceInstance {
@@ -134,7 +134,7 @@ export interface EWMASelectorOptions {
 /** Describes a stable failure for an invalid Registry operation state. */
 export interface RegistryStateError extends Error {
   readonly name: "RegistryStateError"
-  readonly code: "LIKEGO_REGISTRY_STATE"
+  readonly code: "GO_LIKE_REGISTRY_STATE"
   readonly operation: string
   readonly state: string
 }
@@ -142,31 +142,31 @@ export interface RegistryStateError extends Error {
 /** Describes an operation attempted through a stopped Watcher. */
 export interface WatcherStoppedError extends Error {
   readonly name: "WatcherStoppedError"
-  readonly code: "LIKEGO_WATCHER_STOPPED"
+  readonly code: "GO_LIKE_WATCHER_STOPPED"
 }
 
 /** Describes terminal loss of raw watch events caused by a full buffer. */
 export interface WatcherOverflowError extends Error {
   readonly name: "WatcherOverflowError"
-  readonly code: "LIKEGO_WATCHER_OVERFLOW"
+  readonly code: "GO_LIKE_WATCHER_OVERFLOW"
   readonly bufferSize: number
 }
 
 /** Describes a fail-closed conflict or malformed provider wire payload. */
 export interface RegistryProtocolError extends Error {
   readonly name: "RegistryProtocolError"
-  readonly code: "LIKEGO_REGISTRY_PROTOCOL"
+  readonly code: "GO_LIKE_REGISTRY_PROTOCOL"
 }
 
 /** Describes a request outside a provider's honest capability snapshot. */
 export interface UnsupportedRegistryCapabilityError extends Error {
   readonly name: "UnsupportedRegistryCapabilityError"
-  readonly code: "LIKEGO_UNSUPPORTED_REGISTRY_CAPABILITY"
+  readonly code: "GO_LIKE_UNSUPPORTED_REGISTRY_CAPABILITY"
   readonly capability: string
 }
 
 /** Describes a selector call with no available endpoint. */
 export interface NoAvailableEndpointError extends Error {
   readonly name: "NoAvailableEndpointError"
-  readonly code: "LIKEGO_NO_AVAILABLE_ENDPOINT"
+  readonly code: "GO_LIKE_NO_AVAILABLE_ENDPOINT"
 }

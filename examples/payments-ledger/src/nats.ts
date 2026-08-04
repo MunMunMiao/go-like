@@ -1,6 +1,6 @@
 import { SQL } from "bun"
 
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 import type { JetStreamClient } from "@nats-io/jetstream"
 
 import { requireActiveContext, requireIdentifier, type OutboxPublishResult } from "./payment"

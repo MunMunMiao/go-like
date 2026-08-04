@@ -1,8 +1,8 @@
-import { background, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import type { Listener, Message, Socket } from "@likego/transport"
-import { endpoint as endpointHeader, request as serviceHeader } from "@likego/transport/headers"
-import { newMemoryTransport } from "@likego/transport-memory"
+import { background, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import type { Listener, Message, Socket } from "@go-like/transport"
+import { endpoint as endpointHeader, request as serviceHeader } from "@go-like/transport/headers"
+import { newMemoryTransport } from "@go-like/transport-memory"
 
 import {
   enrollmentFingerprint,

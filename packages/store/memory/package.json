@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/store-memory",
+  "name": "@go-like/store-memory",
   "version": "0.0.1",
-  "description": "Portable process-local Store provider for LikeGo.",
+  "description": "Portable process-local Store provider for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -24,8 +24,8 @@
     "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/store": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/store": "0.0.1"
   },
   "license": "MIT"
 }

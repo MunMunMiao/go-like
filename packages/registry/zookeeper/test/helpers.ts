@@ -1,5 +1,5 @@
 import { newAuthenticationError, newOperationError } from "../src/errors"
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import type {
   ZookeeperClient,
   ZookeeperClientFactory,

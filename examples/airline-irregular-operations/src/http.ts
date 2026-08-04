@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { contextHandler, type Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import { contextHandler, type Handler } from "@go-like/web"
 import type { DisruptionOutcome, ResolveDisruption, ResolveDisruptionCommand } from "./service"
 
 function isOutcome(value: string): value is DisruptionOutcome {

@@ -25,7 +25,7 @@ export type {
 /** Creates a lifecycle-only Server over official application-configured providers. */
 export function newOtelServer(
   providers: OtelProviders,
-  ...options: readonly OtelOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI. */
+  ...options: readonly OtelOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI. */
 ): OtelServer {
   const nativeProviders: {
     readonly tracerProvider?: TracerProvider

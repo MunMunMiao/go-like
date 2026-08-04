@@ -1,5 +1,5 @@
-import { struct, type Infer } from "@likego/struct"
-import { endpoint } from "@likego/transport"
+import { struct, type Infer } from "@go-like/struct"
+import { endpoint } from "@go-like/transport"
 
 const transferQuoteCommand = struct.object({
   requestId: struct.string(),

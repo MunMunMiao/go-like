@@ -12,6 +12,7 @@ import type {
 } from "../e2e/harness/process"
 import { createTempDirectory, removeTempDirectory } from "../e2e/harness/temp"
 import {
+  assertRequiredRuntimeVersions,
   parseDenoVersion,
   parseNodeVersion,
   parseTypeScriptVersion,
@@ -21,6 +22,8 @@ import {
   type RuntimeProbeDependencies,
   type RuntimeProbeRunner
 } from "../e2e/runtime-versions"
+
+const RepresentativeNodeVersion = "26.0.0"
 
 function result(stdout = "", exitCode = 0): CommandResult {
   return Object.freeze({
@@ -66,7 +69,7 @@ function probeVersions(overrides: Partial<Record<string, string>> = {}): {
     }),
     runner: async (_root: string, definition: CommandDefinition) => {
       const executable = definition.command[0] ?? ""
-      if (executable === "node") return result(overrides.node ?? `v${RequiredRuntimeVersions.node}`)
+      if (executable === "node") return result(overrides.node ?? `v${RepresentativeNodeVersion}`)
       if (executable === "deno") {
         return result(
           overrides.deno ??
@@ -111,7 +114,7 @@ async function writeVersionShim(path: string, body: string): Promise<void> {
 }
 
 async function expectPathMismatch(tool: Exclude<RequiredTool, "bun" | "docker">): Promise<void> {
-  const directory = await createTempDirectory(`likego-${tool}-version-`)
+  const directory = await createTempDirectory(`go-like-${tool}-version-`)
   const marker = join(directory.path, "consumer-started")
   try {
     await writeVersionShim(
@@ -152,18 +155,31 @@ async function expectPathMismatch(tool: Exclude<RequiredTool, "bun" | "docker">)
 }
 
 test("runtime version parsers accept exact supported formats", () => {
-  expect(parseNodeVersion("v26.5.1\n")).toBe("26.5.1")
+  expect(parseNodeVersion("v26.0.0\n")).toBe("26.0.0")
   expect(parseDenoVersion("deno 2.9.4 (stable)\nv8 14\ntypescript 7.0.2\n")).toBe("2.9.4")
   expect(parseTypeScriptVersion("Version 7.0.2\n")).toBe("7.0.2")
 })
 
 test("runtime version parsers reject malformed or ambiguous output", () => {
-  expect(() => parseNodeVersion("26.5.1")).toThrow("cannot parse Node.js version")
-  expect(() => parseNodeVersion("v26.5.1\nextra")).toThrow("cannot parse Node.js version")
+  expect(() => parseNodeVersion("26.0.0")).toThrow("cannot parse Node.js version")
+  expect(() => parseNodeVersion("v26.0.0\nextra")).toThrow("cannot parse Node.js version")
   expect(() => parseDenoVersion("typescript 7.0.2")).toThrow("cannot parse Deno version")
   expect(() => parseTypeScriptVersion("typescript 7.0.2")).toThrow(
     "cannot parse TypeScript version"
   )
+})
+
+test("Node runtime requirement accepts every 26.x patch but rejects adjacent majors", () => {
+  expect(() =>
+    assertRequiredRuntimeVersions([
+      Object.freeze({ tool: "node", required: RequiredRuntimeVersions.node, actual: "26.5.0" })
+    ])
+  ).not.toThrow()
+  expect(() =>
+    assertRequiredRuntimeVersions([
+      Object.freeze({ tool: "node", required: RequiredRuntimeVersions.node, actual: "27.0.0" })
+    ])
+  ).toThrow("node required=26.x actual=27.0.0")
 })
 
 test("tool union probes only explicit definition requirements in fixed order", async () => {
@@ -177,7 +193,7 @@ test("tool union probes only explicit definition requirements in fixed order", a
   const runner: RuntimeProbeRunner = async (_root, definition) => {
     const executable = definition.command[0] ?? ""
     calls.push(executable)
-    return executable === "node" ? result(`v${RequiredRuntimeVersions.node}`) : result("29.6.2")
+    return executable === "node" ? result(`v${RepresentativeNodeVersion}`) : result("29.6.2")
   }
   const tools = requiredToolsForPlan([
     selectedDefinition("docker-only", ["docker"]),
@@ -280,7 +296,7 @@ test("version mismatch reports required and actual before any selected consumer 
   }
   expect(started).toBe(0)
   expect(String(failure)).toContain("prerequisite-version-mismatch")
-  expect(logs.join("")).toContain("node=0.0.1(required=26.5.1)")
+  expect(logs.join("")).toContain("node=0.0.1(required=26.x)")
   expect(logs.join("")).toContain("selected=1 started=0 passed=0 failed=0 notRun=1")
   expect(logs.join("")).toContain("status=failed")
 })

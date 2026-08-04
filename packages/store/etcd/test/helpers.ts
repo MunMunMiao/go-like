@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import { decodeBase64, encodeBase64 } from "../src/codec"
 import type { EtcdStoreFetch } from "../src/types"

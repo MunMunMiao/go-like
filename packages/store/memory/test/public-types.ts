@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { expiresIn, type Store } from "../../src/index"
 
 import {

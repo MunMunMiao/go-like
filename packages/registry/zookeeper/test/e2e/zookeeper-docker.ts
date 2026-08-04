@@ -1,17 +1,17 @@
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { newZookeeperRegistry, type ZookeeperRegistry } from "@likego/registry-zookeeper"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { newZookeeperRegistry, type ZookeeperRegistry } from "@go-like/registry-zookeeper"
 import { createConnection, createServer } from "node:net"
 import * as zookeeper from "node-zookeeper-client"
 
 const image =
   "zookeeper:3.9.5@sha256:4c6f15fbd5491a3e01b0108c046891125553329a4956848ba3014cedff5386ee"
 const operationTimeoutMs = 15_000
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly stdout: string
@@ -217,12 +217,12 @@ function exists(client: zookeeper.Client, path: string): Promise<boolean> {
 
 /** Runs the publisher process that the parent deliberately kills. */
 async function publisherChild(): Promise<never> {
-  const address = process.env.LIKEGO_ZOOKEEPER_ADDRESS
-  const root = process.env.LIKEGO_ZOOKEEPER_ROOT
+  const address = process.env.GO_LIKE_ZOOKEEPER_ADDRESS
+  const root = process.env.GO_LIKE_ZOOKEEPER_ROOT
   if (address === undefined || root === undefined) throw new Error("publisher config missing")
   const subject = registry(address, root)
   await subject.register(background(), fixture("docker-sigkill", "initial"))
-  console.log("LIKEGO_ZOOKEEPER_CHILD_READY")
+  console.log("GO_LIKE_ZOOKEEPER_CHILD_READY")
   return await new Promise<never>(function resident(): void {})
 }
 
@@ -234,7 +234,7 @@ async function waitForChild(child: ReturnType<typeof Bun.spawn>): Promise<void> 
   const deadline = Date.now() + 20_000
   let text = ""
   try {
-    while (!text.includes("LIKEGO_ZOOKEEPER_CHILD_READY")) {
+    while (!text.includes("GO_LIKE_ZOOKEEPER_CHILD_READY")) {
       const remaining = deadline - Date.now()
       if (remaining <= 0) throw new Error("publisher readiness timed out")
       const chunk = await Promise.race([
@@ -255,8 +255,8 @@ async function waitForChild(child: ReturnType<typeof Bun.spawn>): Promise<void> 
 async function main(): Promise<void> {
   const identity = crypto.randomUUID()
   const suffix = identity.replaceAll("-", "")
-  const containerName = `likego-zookeeper-${identity}`
-  const root = `/likego/e2e/${suffix}`
+  const containerName = `go-like-zookeeper-${identity}`
+  const root = `/go-like/e2e/${suffix}`
   const port = await freePort()
   const address = `127.0.0.1:${port}`
   let remoteRemaining = -1
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
       "--name",
       containerName,
       "--label",
-      "likego.suite=registry-zookeeper",
+      "go-like.suite=registry-zookeeper",
       "--label",
       DockerOwnerLabel,
       "-p",
@@ -322,9 +322,9 @@ async function main(): Promise<void> {
     child = Bun.spawn([process.execPath, import.meta.path], {
       env: {
         ...process.env,
-        LIKEGO_ZOOKEEPER_PUBLISHER: "1",
-        LIKEGO_ZOOKEEPER_ADDRESS: address,
-        LIKEGO_ZOOKEEPER_ROOT: sigkillRoot
+        GO_LIKE_ZOOKEEPER_PUBLISHER: "1",
+        GO_LIKE_ZOOKEEPER_ADDRESS: address,
+        GO_LIKE_ZOOKEEPER_ROOT: sigkillRoot
       },
       stdout: "pipe",
       stderr: "pipe"
@@ -371,5 +371,5 @@ async function main(): Promise<void> {
   ensure(remaining.code !== 0, "Docker container remained")
 }
 
-if (process.env.LIKEGO_ZOOKEEPER_PUBLISHER === "1") await publisherChild()
+if (process.env.GO_LIKE_ZOOKEEPER_PUBLISHER === "1") await publisherChild()
 else await main()

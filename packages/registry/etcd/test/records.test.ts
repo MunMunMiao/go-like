@@ -1,4 +1,4 @@
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { decodeRecord, encodeRecord } from "../src/codec"
@@ -6,8 +6,8 @@ import { instances, type ManagedDecodedRecord } from "../src/records"
 
 /** Creates one verified managed record for direct snapshot tests. */
 async function managed(value: ServiceInstance): Promise<ManagedDecodedRecord> {
-  const encoded = await encodeRecord("/likego/registry/v1/", value)
-  const decoded = await decodeRecord("/likego/registry/v1/", encoded.key, encoded.value)
+  const encoded = await encodeRecord("/go-like/registry/v1/", value)
+  const decoded = await decodeRecord("/go-like/registry/v1/", encoded.key, encoded.value)
   return Object.freeze({
     key: encoded.key,
     value: encoded.value,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-cybersecurity-alert-triage",
+  "name": "@go-like/example-cybersecurity-alert-triage",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,16 +12,16 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {
-    "@likego/config": "workspace:*",
-    "@likego/config-etcd": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/health": "workspace:*",
-    "@likego/registry": "workspace:*",
-    "@likego/registry-etcd": "workspace:*",
-    "@likego/store": "workspace:*",
-    "@likego/store-etcd": "workspace:*",
-    "@likego/web": "workspace:*"
+    "@go-like/config": "workspace:*",
+    "@go-like/config-etcd": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/health": "workspace:*",
+    "@go-like/registry": "workspace:*",
+    "@go-like/registry-etcd": "workspace:*",
+    "@go-like/store": "workspace:*",
+    "@go-like/store-etcd": "workspace:*",
+    "@go-like/web": "workspace:*"
   },
   "license": "MIT"
 }

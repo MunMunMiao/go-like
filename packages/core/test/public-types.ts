@@ -1,5 +1,5 @@
-import { background, type Context } from "@likego/context"
-import type { Registrar } from "@likego/registry"
+import { background, type Context } from "@go-like/context"
+import type { Registrar } from "@go-like/registry"
 import * as Core from "../src/index"
 import {
   afterStart,

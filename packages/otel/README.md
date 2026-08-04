@@ -1,9 +1,9 @@
-# `@likego/otel`
+# `@go-like/otel`
 
 面向应用自行配置的 OpenTelemetry `TracerProvider`、`MeterProvider` 与显式遥测插桩适配器。
 
 本包不创建 exporter、processor、reader、provider 或 `Resource`，也不复制 endpoint、headers、batch、
-interval、temporality、aggregation 等 OpenTelemetry 配置。应用继续使用官方 SDK 的完整原生 API；LikeGo
+interval、temporality、aggregation 等 OpenTelemetry 配置。应用继续使用官方 SDK 的完整原生 API；go-like
 只在 `start(ctx)` 接纳后承接 provider 的一次性 `shutdown()` 生命周期。
 
 ## 显式链路插桩
@@ -16,19 +16,19 @@ interval、temporality、aggregation 等 OpenTelemetry 配置。应用继续使�
 - `traceBroker(broker, tracer, propagator?)`：包装 Broker publish/consume。
 
 它们使用官方 OpenTelemetry API 创建 span。raw Client 在 Message header 传播；类型化 Client 委托原
-Client 完整调用，并通过 LikeGo Context metadata 传播，因此不会复制 codec、retry 或 middleware 语义。
+Client 完整调用，并通过 go-like Context metadata 传播，因此不会复制 codec、retry 或 middleware 语义。
 Server 同时从已解码的 Context metadata 与 Message header 提取；Broker 与 Web 使用各自 header；
 不会安装全局 provider、Context Manager、propagator 或自动 instrumentation。Web wrapper 只观测到
 `Response` headers 到达，不读取、clone、tee、锁定或接管 request/response body。
 
 失败 span 保留既有 outcome 与 Error status，但不调用 `recordException`，因此不会复制原始 Error、message、
 stack 或 cause。插桩只可增加格式为 `^[A-Za-z][A-Za-z0-9_.-]{0,63}$` 的 `error.type`，以及格式为
-`^[A-Z0-9_.-]{1,64}$` 的 `likego.error.code`；非法、过长或读取失败的字段会被省略。需要记录原始错误时，
+`^[A-Z0-9_.-]{1,64}$` 的 `go-like.error.code`；非法、过长或读取失败的字段会被省略。需要记录原始错误时，
 应用应在自己的原生 Tracer 边界显式处理。
 
 ```ts
-import { traceBroker, traceClient, traceUnaryMiddleware, traceWebHandler } from "@likego/otel"
-import { middleware } from "@likego/server"
+import { traceBroker, traceClient, traceUnaryMiddleware, traceWebHandler } from "@go-like/otel"
+import { middleware } from "@go-like/server"
 
 const clientWithTrace = traceClient(client, tracer, propagator)
 const serverTraceOption = middleware(traceUnaryMiddleware(tracer, propagator))
@@ -45,7 +45,7 @@ ack/nak/term 仍由应用通过 provider 原生对象决定。
 ## 显式请求指标
 
 `newRequestMetrics(meter)` 使用应用提供的官方 `Meter` 创建固定的
-`likego.request.completed` Counter（unit `{request}`）与 `likego.request.duration` Histogram（unit `s`）。Client 与 unary
+`go-like.request.completed` Counter（unit `{request}`）与 `go-like.request.duration` Histogram（unit `s`）。Client 与 unary
 Server 共享低基数的 `component`、`operation`、`outcome` 属性；指标记录失败不会替换业务结果。
 `measureClient(...)` 包住完整 raw 或 typed 调用，所以 typed response decode/validation 失败会记录为失败，
 不会被提前标记成功。
@@ -56,14 +56,14 @@ import {
   newClient,
   withDiscovery,
   withTransport
-} from "@likego/client"
+} from "@go-like/client"
 import {
   measureClient,
   measureClientMiddleware,
   measureUnaryMiddleware,
   newRequestMetrics
-} from "@likego/otel"
-import { middleware } from "@likego/server"
+} from "@go-like/otel"
+import { middleware } from "@go-like/server"
 
 const requestMetrics = newRequestMetrics(meterProvider.getMeter("orders"))
 const existingClientWithMetrics = measureClient(client, requestMetrics)
@@ -79,8 +79,8 @@ const serverMetricsOption = middleware(measureUnaryMiddleware(requestMetrics))
 `MeterProvider`，也不会为 Web 或 Broker 猜测 route/topic 基数策略。
 
 ```ts
-import { newApp, server } from "@likego/core"
-import { otelShutdownTimeout, newOtelServer } from "@likego/otel"
+import { newApp, server } from "@go-like/core"
+import { otelShutdownTimeout, newOtelServer } from "@go-like/otel"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -126,11 +126,11 @@ await running
 
 - provider 始终是应用创建并直接使用的官方对象。
 - 构造 `newOtelServer(...)` 不转移所有权，也不调用 provider。
-- `start(ctx)` 接纳前取消时，LikeGo 不调用 `shutdown()`，provider 仍完全归应用。
-- `start(ctx)` 成功后，provider 的 stop contract 转移给 LikeGo。应用不得再自行调用同一 provider 的
+- `start(ctx)` 接纳前取消时，go-like 不调用 `shutdown()`，provider 仍完全归应用。
+- `start(ctx)` 成功后，provider 的 stop contract 转移给 go-like。应用不得再自行调用同一 provider 的
   `shutdown()`。
 - 可以只传 `tracerProvider` 或只传 `meterProvider`；如果同时传入，两者不得是同一 shutdown identity。
-- LikeGo 不安装全局 provider、context manager、propagator 或自动 instrumentation。
+- go-like 不安装全局 provider、context manager、propagator 或自动 instrumentation。
 
 ## 终态与超时
 
@@ -152,7 +152,7 @@ timeout 接受 `0..2_147_483_647` 的整数毫秒值。计时在调用任何 pro
 ## 原生配置与诊断
 
 exporter failure、重试、header、TLS、temporality、aggregation 与诊断 hook 全部由应用通过官方 API 配置。
-LikeGo 不拦截 exporter，也不自动记录 Collector 响应体。应用若记录上游 OTLP Error，应先净化可能来自远端
+go-like 不拦截 exporter，也不自动记录 Collector 响应体。应用若记录上游 OTLP Error，应先净化可能来自远端
 响应的非可信字段。
 
 真实服务测试使用固定 digest 的 OpenTelemetry Collector Contrib 0.157.0：

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
-import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@likego/core"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
+import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@go-like/core"
 import type { ConsumerMessages, ConsumerNotification, JsMsg } from "@nats-io/jetstream"
 import {
   natsJetStreamCloseTimeout,
@@ -172,7 +172,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
       .catch((value: unknown) => value)) as NatsJetStreamAlreadyStartedError
     expect(error).toMatchObject({
       name: "NatsJetStreamAlreadyStartedError",
-      code: "LIKEGO_NATS_JETSTREAM_ALREADY_STARTED",
+      code: "GO_LIKE_NATS_JETSTREAM_ALREADY_STARTED",
       status: "running"
     })
     await server.stop(background())
@@ -355,7 +355,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
     const failure = (await observedStopping) as NatsJetStreamCloseTimeoutError
     expect(failure).toMatchObject({
       name: "NatsJetStreamCloseTimeoutError",
-      code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT",
+      code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT",
       timeoutMs: 0,
       forced: true
     })
@@ -379,7 +379,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
     const running = server.start(background())
     await nextTurn()
     const failure = await server.stop(background()).catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT" })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT" })
     expect(messages.stopCalls).toBe(1)
     await expect(running).rejects.toBe(failure)
     await Bun.sleep(5)
@@ -393,7 +393,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
     const running = server.start(background())
     await nextTurn()
     const failure = await server.stop(background()).catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT" })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT" })
     expect(messages.stopCalls).toBe(1)
     await expect(running).rejects.toBe(failure)
   })
@@ -479,7 +479,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
       )) as NatsJetStreamUnexpectedExitError
       expect(failure).toMatchObject({
         name: "NatsJetStreamUnexpectedExitError",
-        code: "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT"
+        code: "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT"
       })
       await expect(server.stop(background())).rejects.toBe(failure)
       expect(messages.closeCalls).toBe(0)
@@ -508,7 +508,7 @@ describe("NATS JetStream native ConsumerMessages lifecycle", () => {
     const server = newNatsJetStreamServer(messages)
     const running = server.start(background())
     const failure = await running.catch((value: unknown) => value)
-    expect(failure).toMatchObject({ code: "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT", cause: null })
+    expect(failure).toMatchObject({ code: "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT", cause: null })
     expect(messages.closeCalls).toBe(0)
   })
 

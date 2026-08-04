@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 /** Enumerates the permit policies supported by this example. */
 export type PermitType = "renovation" | "restaurant"

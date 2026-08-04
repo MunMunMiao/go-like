@@ -3,4 +3,4 @@ export {
   newUnsupportedRegistryCapabilityError,
   newWatcherOverflowError,
   newWatcherStoppedError
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"

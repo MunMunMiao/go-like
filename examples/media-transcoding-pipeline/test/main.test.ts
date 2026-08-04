@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { name, newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
 import { newMediaTranscodingService, newSubmitTranscode } from "../src/service"
@@ -87,7 +87,7 @@ describe("media transcoding pipeline", () => {
     })
   })
 
-  test("lets LikeGo Core start and drain the worker without orphans", async () => {
+  test("lets go-like Core start and drain the worker without orphans", async () => {
     const service = newMediaTranscodingService()
     const app = newApp(name("media-transcoding-pipeline-test"), server(service.worker))
     const running = app.run()

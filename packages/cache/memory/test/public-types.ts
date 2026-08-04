@@ -1,5 +1,5 @@
-import { expiresIn, type Cache } from "@likego/cache"
-import { background } from "@likego/context"
+import { expiresIn, type Cache } from "@go-like/cache"
+import { background } from "@go-like/context"
 
 import {
   clock,

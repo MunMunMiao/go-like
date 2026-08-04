@@ -1,10 +1,10 @@
 ---
-"@likego/client": patch
-"@likego/core": patch
-"@likego/metadata": patch
-"@likego/server": patch
-"@likego/transport": patch
-"@likego/transport-http": patch
+"@go-like/client": patch
+"@go-like/core": patch
+"@go-like/metadata": patch
+"@go-like/server": patch
+"@go-like/transport": patch
+"@go-like/transport-http": patch
 ---
 
 增加显式 unary 调用路由、安全重试、有界关闭与保留已完成 response 的原生 `AggregateError`，

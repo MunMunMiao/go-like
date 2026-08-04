@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newVaultStore } from "@likego/store-vault"
+import type { Context } from "@go-like/context"
+import { newVaultStore } from "@go-like/store-vault"
 
 export interface PlatformRuntimeState {
   publish(ctx: Context): Promise<void>
@@ -20,7 +20,7 @@ export function newPlatformRuntimeState(
     },
     address,
     mount: "secret",
-    root: "likego/examples/enterprise-platform/runtime",
+    root: "go-like/examples/enterprise-platform/runtime",
     token
   })
   const key = `instances/${instanceId}`

@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test"
 
-import { secure, timeout, withTimeout } from "@likego/transport"
-import type { Message, Options } from "@likego/transport"
+import { secure, timeout, withTimeout } from "@go-like/transport"
+import type { Message, Options } from "@go-like/transport"
 import {
   executor,
   maxMessageBytes,
   newHTTPTransport,
   type HTTPExecutor
-} from "@likego/transport-http"
+} from "@go-like/transport-http"
 import {
   applyHTTPCommonOptions,
   applyHTTPDialOptions,

@@ -17,8 +17,8 @@ export interface PriceQuote {
 }
 
 const Products: Readonly<Record<string, Product>> = Object.freeze({
-  "sku-001": Object.freeze({ id: "sku-001", name: "LikeGo Mug" }),
-  "sku-002": Object.freeze({ id: "sku-002", name: "LikeGo T-Shirt" })
+  "sku-001": Object.freeze({ id: "sku-001", name: "go-like Mug" }),
+  "sku-002": Object.freeze({ id: "sku-002", name: "go-like T-Shirt" })
 })
 
 const Prices: Readonly<Record<string, Readonly<Record<string, number>>>> = Object.freeze({

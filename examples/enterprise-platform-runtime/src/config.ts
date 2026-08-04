@@ -1,4 +1,4 @@
-import type { ConfigObject, ConfigSchema } from "@likego/config"
+import type { ConfigObject, ConfigSchema } from "@go-like/config"
 
 export interface RuntimeConfig extends ConfigObject {
   readonly release: number
@@ -9,7 +9,7 @@ export interface RuntimeConfig extends ConfigObject {
 export const runtimeConfigSchema: ConfigSchema<RuntimeConfig> = Object.freeze({
   "~standard": Object.freeze({
     version: 1,
-    vendor: "likego-enterprise-example",
+    vendor: "go-like-enterprise-example",
     validate(value: unknown) {
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
         return { issues: [{ message: "runtime configuration is invalid" }] }

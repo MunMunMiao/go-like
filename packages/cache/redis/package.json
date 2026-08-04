@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/cache-redis",
+  "name": "@go-like/cache-redis",
   "version": "0.0.1",
-  "description": "Lifecycle-owned Redis Cache provider for LikeGo using the official node-redis client.",
+  "description": "Lifecycle-owned Redis Cache provider for go-like using the official node-redis client.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,9 +25,9 @@
     "test:e2e": "bun test/e2e/redis-docker.ts"
   },
   "dependencies": {
-    "@likego/cache": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
+    "@go-like/cache": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
     "@redis/client": "6.2.0"
   },
   "devDependencies": {

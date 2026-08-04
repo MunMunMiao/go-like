@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import vm from "node:vm"
 
-import { background, canceled, withCancelCause } from "@likego/context"
+import { background, canceled, withCancelCause } from "@go-like/context"
 import { newProbeRegistry, type ProbeRegistry } from "../src/index"
 
 const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve))

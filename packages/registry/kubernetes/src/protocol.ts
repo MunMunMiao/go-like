@@ -1,4 +1,4 @@
-import { newRegistryProtocolError } from "@likego/registry/provider"
+import { newRegistryProtocolError } from "@go-like/registry/provider"
 
 import {
   decodeManagedSlice,
@@ -21,12 +21,12 @@ function exact(options: OperationOptions, name: string): string {
   return `${collection(options)}/${encodeURIComponent(name)}`
 }
 
-/** Creates the canonical LikeGo-managed label selector. */
+/** Creates the canonical go-like-managed label selector. */
 function selector(): string {
   return `${managedByLabel}=${managedByValue}`
 }
 
-/** Reads all LikeGo-managed slices in one consistent namespace snapshot. */
+/** Reads all go-like-managed slices in one consistent namespace snapshot. */
 export async function listSlices(
   options: OperationOptions,
   signal: AbortSignal

@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
-import { newRoundRobinSelector, type ServiceInstance } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
+import { newRoundRobinSelector, type ServiceInstance } from "@go-like/registry"
 
 import type { KitchenAssignment, KitchenStation, RouteKitchenTicketCommand } from "./service"
 
@@ -84,7 +84,7 @@ function instancesFor(station: KitchenStation): readonly ServiceInstance[] {
   return pastryInstances
 }
 
-/** Creates an in-memory router backed by LikeGo readiness probes and endpoint selection. */
+/** Creates an in-memory router backed by go-like readiness probes and endpoint selection. */
 export function newMemoryKitchenRoutingStore(
   initialReadiness: KitchenReadiness = defaultReadiness
 ): KitchenRoutingStore {

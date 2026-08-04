@@ -3,11 +3,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { background } from "@likego/context"
-import { logWebHandler, newPinoServer } from "@likego/pino"
+import { background } from "@go-like/context"
+import { logWebHandler, newPinoServer } from "@go-like/pino"
 import pino from "pino"
 
-const directory = await mkdtemp(join(tmpdir(), "likego-pino-native-"))
+const directory = await mkdtemp(join(tmpdir(), "go-like-pino-native-"))
 try {
   const sonicPath = join(directory, "sonic.log")
   const sonic = pino.destination({ dest: sonicPath, mkdir: true, sync: false })

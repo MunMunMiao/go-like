@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
 
-import { background, cause, withCancelCause, type Context } from "@likego/context"
-import { newTokenBucketLimiter } from "@likego/resilience"
-import { struct } from "@likego/struct"
-import { endpoint } from "@likego/transport"
+import { background, cause, withCancelCause, type Context } from "@go-like/context"
+import { newTokenBucketLimiter } from "@go-like/resilience"
+import { struct } from "@go-like/struct"
+import { endpoint } from "@go-like/transport"
 import type {
   AcceptHandler,
   Client,
@@ -12,9 +12,9 @@ import type {
   Message,
   Options,
   Transport
-} from "@likego/transport"
-import { decodeServiceError } from "@likego/transport/provider"
-import { newMemoryTransport } from "@likego/transport-memory"
+} from "@go-like/transport"
+import { decodeServiceError } from "@go-like/transport/provider"
+import { newMemoryTransport } from "@go-like/transport-memory"
 
 import {
   address,
@@ -36,8 +36,8 @@ function fixtureListener(
   requests: readonly Message[] = [
     {
       header: {
-        "Likego-Service": "orders",
-        "Likego-Endpoint": "get"
+        "Go-Like-Service": "orders",
+        "Go-Like-Endpoint": "get"
       },
       body: new Uint8Array([1])
     }
@@ -132,8 +132,8 @@ function fixtureTransport(listener: Listener, kind = "http", tls = false): Trans
 async function exchange(client: Client, service: string, endpoint: string): Promise<Message> {
   await client.send(background(), {
     header: {
-      "Likego-Service": service,
-      "Likego-Endpoint": endpoint
+      "Go-Like-Service": service,
+      "Go-Like-Endpoint": endpoint
     },
     body: new Uint8Array()
   })
@@ -172,23 +172,23 @@ test("adapts one typed endpoint at the Message boundary", async () => {
           [
             {
               header: {
-                "Likego-Service": "calculator",
-                "Likego-Endpoint": "increment",
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment",
                 "content-type": "Application/JSON; charset=utf-8"
               },
               body: new TextEncoder().encode("1")
             },
             {
               header: {
-                "Likego-Service": "calculator",
-                "Likego-Endpoint": "increment"
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment"
               },
               body: new TextEncoder().encode("2")
             },
             {
               header: {
-                "Likego-Service": "calculator",
-                "Likego-Endpoint": "increment",
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment",
                 "Content-Type": "application/json"
               },
               body: new TextEncoder().encode("9")
@@ -246,8 +246,8 @@ test("rejects malformed typed request metadata and handler values", async () => 
           [
             {
               header: {
-                "Likego-Service": "calculator",
-                "Likego-Endpoint": "increment",
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment",
                 "Content-Type": "application/json",
                 "content-type": "application/json"
               },
@@ -255,8 +255,8 @@ test("rejects malformed typed request metadata and handler values", async () => 
             },
             {
               header: {
-                "Likego-Service": "calculator",
-                "Likego-Endpoint": "increment",
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment",
                 "Content-Type": "application/json"
               },
               body: new TextEncoder().encode("1")
@@ -676,24 +676,24 @@ test("encodes routing and handler failures without leaking internal errors", asy
   ][] = [
     [
       {
-        header: { "Likego-Endpoint": "get" },
+        header: { "Go-Like-Endpoint": "get" },
         body: new Uint8Array()
       },
       (_ctx, request) => request,
       "invalid_request"
     ],
     ...[
-      { "Likego-Service": "orders/admin", "Likego-Endpoint": "get" },
-      { "Likego-Service": "orders", "Likego-Endpoint": "get*" },
-      { "Likego-Service": "orders\u0000", "Likego-Endpoint": "get" },
-      { "Likego-Service": "orders", "Likego-Endpoint": "get\u001f" },
-      { "Likego-Service": "orders\u007f", "Likego-Endpoint": "get" },
-      { "Likego-Service": "orders", "Likego-Endpoint": "get\udfff" },
-      { "Likego-Service": " orders", "Likego-Endpoint": "get" },
-      { "Likego-Service": "orders", "Likego-Endpoint": "get " },
-      { "Likego-Service": "orders admin", "Likego-Endpoint": "get" },
-      { "Likego-Service": "订单", "Likego-Endpoint": "get" },
-      { "Likego-Service": "orders", "Likego-Endpoint": "😀" }
+      { "Go-Like-Service": "orders/admin", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get*" },
+      { "Go-Like-Service": "orders\u0000", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get\u001f" },
+      { "Go-Like-Service": "orders\u007f", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get\udfff" },
+      { "Go-Like-Service": " orders", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get " },
+      { "Go-Like-Service": "orders admin", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "订单", "Go-Like-Endpoint": "get" },
+      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "😀" }
     ].map(
       (header) =>
         [
@@ -705,10 +705,10 @@ test("encodes routing and handler failures without leaking internal errors", asy
     [
       {
         header: {
-          "Likego-Service": "orders",
-          "Likego-Endpoint": "get",
-          "Likego-Metadata": "v1.%5B%5B%22trace%22%2C%5B%22one%22%5D%5D%5D",
-          "likego-metadata": "v1.%5B%5B%22trace%22%2C%5B%22two%22%5D%5D%5D"
+          "Go-Like-Service": "orders",
+          "Go-Like-Endpoint": "get",
+          "Go-Like-Metadata": "v1.%5B%5B%22trace%22%2C%5B%22one%22%5D%5D%5D",
+          "go-like-metadata": "v1.%5B%5B%22trace%22%2C%5B%22two%22%5D%5D%5D"
         },
         body: new Uint8Array()
       },
@@ -718,8 +718,8 @@ test("encodes routing and handler failures without leaking internal errors", asy
     [
       {
         header: {
-          "Likego-Service": "inventory",
-          "Likego-Endpoint": "get"
+          "Go-Like-Service": "inventory",
+          "Go-Like-Endpoint": "get"
         },
         body: new Uint8Array()
       },
@@ -729,9 +729,9 @@ test("encodes routing and handler failures without leaking internal errors", asy
     [
       {
         header: {
-          "Likego-Service": "orders",
-          "Likego-Endpoint": "get",
-          "Likego-Metadata": "invalid"
+          "Go-Like-Service": "orders",
+          "Go-Like-Endpoint": "get",
+          "Go-Like-Metadata": "invalid"
         },
         body: new Uint8Array()
       },
@@ -741,8 +741,8 @@ test("encodes routing and handler failures without leaking internal errors", asy
     [
       {
         header: {
-          "Likego-Service": "orders",
-          "Likego-Endpoint": "get"
+          "Go-Like-Service": "orders",
+          "Go-Like-Endpoint": "get"
         },
         body: new Uint8Array()
       },
@@ -872,30 +872,30 @@ test("selects one operation middleware sequence while global middleware stays ou
   const exactSecond = recordingMiddleware("exact-second", events)
   const staleExact = recordingMiddleware("stale-exact", events)
   const terminal: Handler = (_ctx, request) => {
-    const service = request.header["Likego-Service"] ?? ""
-    const endpoint = request.header["Likego-Endpoint"] ?? ""
+    const service = request.header["Go-Like-Service"] ?? ""
+    const endpoint = request.header["Go-Like-Endpoint"] ?? ""
     events.push(`handler:${service}/${endpoint}`)
     return request
   }
   const requests = [
     {
-      header: { "Likego-Service": "orders", "Likego-Endpoint": "get" },
+      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get" },
       body: new Uint8Array()
     },
     {
-      header: { "Likego-Service": "orders", "Likego-Endpoint": "getById" },
+      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "getById" },
       body: new Uint8Array()
     },
     {
-      header: { "Likego-Service": "orders", "Likego-Endpoint": "list" },
+      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "list" },
       body: new Uint8Array()
     },
     {
-      header: { "Likego-Service": "inventory", "Likego-Endpoint": "list" },
+      header: { "Go-Like-Service": "inventory", "Go-Like-Endpoint": "list" },
       body: new Uint8Array()
     },
     {
-      header: { "Likego-Service": "blocked", "Likego-Endpoint": "list" },
+      header: { "Go-Like-Service": "blocked", "Go-Like-Endpoint": "list" },
       body: new Uint8Array()
     }
   ]

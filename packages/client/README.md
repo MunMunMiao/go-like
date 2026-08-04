@@ -1,6 +1,6 @@
-# @likego/client
+# @go-like/client
 
-`@likego/client` 是 LikeGo 的内部服务调用组合包。它按服务名读取 Discovery 快照并选择端点，再通过 Transport
+`@go-like/client` 是 go-like 的内部服务调用组合包。它按服务名读取 Discovery 快照并选择端点，再通过 Transport
 完成 unary `send`/`recv` 交换。
 
 ## unary Client
@@ -19,10 +19,10 @@ import {
   withFilter,
   withRetry,
   withTransport
-} from "@likego/client"
-import { background } from "@likego/context"
-import { filterLabel, filterVersion } from "@likego/registry"
-import { exponentialBackoff } from "@likego/resilience"
+} from "@go-like/client"
+import { background } from "@go-like/context"
+import { filterLabel, filterVersion } from "@go-like/registry"
+import { exponentialBackoff } from "@go-like/resilience"
 
 const client = newClient(
   withDiscovery(serviceDiscovery),
@@ -121,11 +121,11 @@ Client，没有空闲 owner 才执行 `dial`。同一 owner 不会被并发调�
 配置 Discovery 后，Client 会为自身创建独立的 round-robin Selector；`withSelector(...)` 只用于覆盖默认选择策略。
 只使用直接地址的 Client 构造时仅需提供 Transport。`withAddress` 使用一个 transport-opaque 地址并完全绕过
 Discovery 与 Selector；没有 `withAddress` 的调用才要求 Client 配置 Discovery。`withFilter` 按声明顺序应用
-`@likego/registry` 的 `filterVersion`、`filterLabel` 或用户自定义 Filter，空结果稳定抛出
+`@go-like/registry` 的 `filterVersion`、`filterLabel` 或用户自定义 Filter，空结果稳定抛出
 `NoAvailableEndpointError`。这是 go-micro Selector Filter 的直接 TypeScript 表达，不额外引入 Client 专属过滤 DSL。
 
 默认调用严格执行一次。只有 `withRetry` 同时声明 `authorization`、最大尝试次数和失败判定后才允许重放；backoff
-复用 `@likego/resilience` 的 Context-aware 实现。每次 attempt 从最新 watcher 快照重新选择，但重放的是调用开始时
+复用 `@go-like/resilience` 的 Context-aware 实现。每次 attempt 从最新 watcher 快照重新选择，但重放的是调用开始时
 已经复制的同一 Message。没有并存的 feedback/close failure 时，最终 `ServiceError`、Context error 或 Transport
 primary 保留原始 identity；若主失败与 attempt 清理失败同时存在，顶层为 `AggregateError`，`errors[0]` 始终是
 primary，其后按 feedback、close 排序。调用 Context 控制调用方的取消与截止时间，注入的 Transport 仍可实施自己的
@@ -146,14 +146,14 @@ Provider-neutral Metadata 不设 header-token、键数、值长或总量配额�
 character 都能完整表达；仅空 key、非 well-formed UTF-16 等 Metadata 本身无法表达的条目会从观察投影省略。
 任何投影失败都绝不会阻止 dial，也不会把已成功响应改成失败；原始 Message 始终是完整 wire 事实。
 
-调用 Context 中原有的多值 `fromClientContext` 会通过公共 `Likego-Metadata` 保留头传播到服务端，并出现在实际 wire
+调用 Context 中原有的多值 `fromClientContext` 会通过公共 `Go-Like-Metadata` 保留头传播到服务端，并出现在实际 wire
 header 投影中。编码保留键顺序与多值顺序，拒绝业务请求覆盖保留头；空 metadata 不产生该 header，超过 16 KiB
 或无法规范编码时在 discovery / transport I/O 前失败。具体 Transport provider 只需无损承载 Message headers，
 不得重新解释 metadata。
 
 ## Middleware
 
-`middleware(...)` 复用 `@likego/transport` 的 Context-first middleware 契约；第一个声明的 middleware
+`middleware(...)` 复用 `@go-like/transport` 的 Context-first middleware 契约；第一个声明的 middleware
 位于最外层。middleware 看到的是一次逻辑调用的 Context：`TransportInfo` 已经安装，实际 target 会在选择完成后更新。
 
 ```ts
@@ -185,7 +185,7 @@ selector 优先，其次是最长尾部 wildcard 前缀，最后回退到 `*`；
 业务交换完成后的 feedback 或 owner 清理失败始终作为健康 outcome 记录，即使自定义 `isFailure` classifier
 要求把所有 rejection 计为失败也不能覆盖该语义。
 
-LikeGo 当前 `ServiceInstance.endpoints` 表示 transport URL，而 `CallRequest.endpoint` 表示 operation。Client 不提供
+go-like 当前 `ServiceInstance.endpoints` 表示 transport URL，而 `CallRequest.endpoint` 表示 operation。Client 不提供
 名为 endpoint 的实例 filter，也不会把 URL 冒充服务声明的 operation；未来只有在 Registry 明确保留 operation
 声明后才应增加该能力。
 
@@ -204,7 +204,7 @@ completion callback 是严格同步的 `void` 契约。若 TypeScript 的 `void`
 完整成功。若业务交换已完成但任一后置步骤失败，Client 使用原生 `AggregateError` 报告
 `client exchange completed but cleanup failed; do not retry`。防御快照后的 response 位于标准 `cause`，冻结的
 `errors` 固定按 feedback、close 排序。`withRetry` 把这一内部已完成事实视为终态，即使调用方的
-`shouldRetry` 返回 true、调用 Context 同时取消，也绝不会重放请求或执行 backoff；用户不需要识别 LikeGo 专属错误类型。
+`shouldRetry` 返回 true、调用 Context 同时取消，也绝不会重放请求或执行 backoff；用户不需要识别 go-like 专属错误类型。
 
 每个 Client 默认最多等待 Transport Client `close` 1,000ms，可用 `closeTimeout(ms)` 修改；`0` 明确恢复旧有的
 无界等待。正值会把 deadline Context 交给 provider 并在边界后释放调用等待，迟到 fulfillment/rejection 仍持续被

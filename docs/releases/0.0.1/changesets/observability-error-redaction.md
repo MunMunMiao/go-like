@@ -1,7 +1,7 @@
 ---
-"@likego/pino": patch
-"@likego/winston": patch
-"@likego/otel": patch
+"@go-like/pino": patch
+"@go-like/winston": patch
+"@go-like/otel": patch
 ---
 
 Pino、Winston 与 OpenTelemetry 的完成遥测不再复制原始 Error、message、stack 或 cause；失败只保留

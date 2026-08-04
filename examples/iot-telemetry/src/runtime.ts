@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import { AckPolicy, RetentionPolicy, StorageType, type JetStreamManager } from "@nats-io/jetstream"
 import { nanos, type NatsConnection } from "@nats-io/transport-node"
 

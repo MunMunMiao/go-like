@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 import type {
   Client,
   DialOption,
@@ -7,8 +7,8 @@ import type {
   Option,
   Options,
   Transport
-} from "@likego/transport"
-import { newUnsupportedTransportCapabilityError } from "@likego/transport/provider"
+} from "@go-like/transport"
+import { newUnsupportedTransportCapabilityError } from "@go-like/transport/provider"
 
 import { newNodeHTTPExecutor } from "./node-client"
 import {
@@ -77,7 +77,7 @@ export function clientAuth(value: NodeHTTPClientAuth): NodeHTTPTransportOption {
  * The runtime host stays internal so applications only learn the go-micro Transport contract.
  */
 export function newNodeHTTPTransport(
-  ...options: readonly NodeHTTPTransportOption[] /* likego-typed-rest: preserves construction options. */
+  ...options: readonly NodeHTTPTransportOption[] /* go-like-typed-rest: preserves construction options. */
 ): Transport {
   const defaultExecutor = globalThis.fetch
   const transportOptions: HTTPTransportOption[] = []
@@ -130,7 +130,7 @@ export function newNodeHTTPTransport(
     },
     /** Applies common Transport options. */
     init(
-      ...values: readonly Option[] /* likego-typed-rest: preserves common transport options. */
+      ...values: readonly Option[] /* go-like-typed-rest: preserves common transport options. */
     ): void {
       Reflect.apply(transport.init, transport, values)
     },
@@ -142,7 +142,7 @@ export function newNodeHTTPTransport(
     dial(
       ctx: Context,
       address: string,
-      ...values: readonly DialOption[] /* likego-typed-rest: preserves dial options. */
+      ...values: readonly DialOption[] /* go-like-typed-rest: preserves dial options. */
     ): Promise<Client> {
       const arguments_: unknown[] = [ctx, address]
       for (const value of values) arguments_.push(value)
@@ -152,7 +152,7 @@ export function newNodeHTTPTransport(
     listen(
       ctx: Context,
       address: string,
-      ...values: readonly ListenOption[] /* likego-typed-rest: preserves listen options. */
+      ...values: readonly ListenOption[] /* go-like-typed-rest: preserves listen options. */
     ): Promise<Listener> {
       const selected: HTTPListenOption[] = []
       for (const value of values) {

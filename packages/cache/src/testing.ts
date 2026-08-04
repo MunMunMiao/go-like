@@ -1,5 +1,5 @@
-import { background, cause, withCancel, withTimeout, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { background, cause, withCancel, withTimeout, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import { expiresIn } from "./options"
 import type { Cache } from "./types"

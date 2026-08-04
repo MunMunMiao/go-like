@@ -1,9 +1,9 @@
 import { createAdaptorServer, type ServerType } from "@hono/node-server"
 import type { Socket } from "node:net"
-import { afterFunc, canceled, cause, type Context, type StopFunc } from "@likego/context"
-import type { Endpointer, Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
-import type { Handler } from "@likego/web"
+import { afterFunc, canceled, cause, type Context, type StopFunc } from "@go-like/context"
+import type { Endpointer, Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
+import type { Handler } from "@go-like/web"
 
 import {
   isError,
@@ -175,7 +175,7 @@ export function nodeShutdownTimeout(timeoutMs: number): NodeServerOption {
  * Creates the upstream Node Web adaptor without starting its listener.
  * HTTP conversion, streaming, headers, and request cleanup remain upstream responsibilities.
  *
- * @param handler - Exact LikeGo one-argument Fetch handler.
+ * @param handler - Exact go-like one-argument Fetch handler.
  * @param host - Hostname used by the upstream request URL adapter.
  * @returns An unlistened native Node server.
  */

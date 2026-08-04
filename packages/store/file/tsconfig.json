@@ -11,10 +11,10 @@
     "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo",
     "types": ["node"],
     "paths": {
-      "@likego/context": ["../../context/src/index.ts"],
-      "@likego/core": ["../../core/src/index.ts"],
-      "@likego/core/lifecycle": ["../../core/src/lifecycle.ts"],
-      "@likego/store": ["../src/index.ts"]
+      "@go-like/context": ["../../context/src/index.ts"],
+      "@go-like/core": ["../../core/src/index.ts"],
+      "@go-like/core/lifecycle": ["../../core/src/lifecycle.ts"],
+      "@go-like/store": ["../src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

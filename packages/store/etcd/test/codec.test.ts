@@ -28,7 +28,7 @@ function cursorValue(value: unknown): string {
     .replace(/=+$/u, "")
 }
 
-/** Creates one exact gateway KV around a LikeGo payload. */
+/** Creates one exact gateway KV around a go-like payload. */
 function row(
   key: string = "codec/key",
   lease: string = "0",
@@ -49,7 +49,7 @@ function row(
 
 /** Expects one secret-safe etcd protocol rejection. */
 function protocol(operation: () => unknown): void {
-  expect(operation).toThrow(expect.objectContaining({ code: "LIKEGO_ETCD_STORE_PROTOCOL" }))
+  expect(operation).toThrow(expect.objectContaining({ code: "GO_LIKE_ETCD_STORE_PROTOCOL" }))
 }
 
 describe("decimal and base64 codec", () => {

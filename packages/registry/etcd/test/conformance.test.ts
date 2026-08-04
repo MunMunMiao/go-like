@@ -1,4 +1,4 @@
-import type { Registry, ServiceInstance } from "@likego/registry"
+import type { Registry, ServiceInstance } from "@go-like/registry"
 import { test } from "bun:test"
 
 import { registryConformanceCases, type RegistryConformanceSubject } from "../../src/testing"

@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import { newZookeeperRegistry } from "@likego/registry-zookeeper"
+import type { Registry } from "@go-like/registry"
+import { newZookeeperRegistry } from "@go-like/registry-zookeeper"
 
 export type AirlineRegistryEnvironment = Readonly<Record<string, string | undefined>>
 

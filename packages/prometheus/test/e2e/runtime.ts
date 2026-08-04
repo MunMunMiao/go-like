@@ -7,10 +7,10 @@ const {
   measureUnaryMiddleware,
   measureWebHandler,
   newRequestMetrics
-} = await import("@likego/prometheus")
+} = await import("@go-like/prometheus")
 const registry = new Registry()
 const counter = new Counter({
-  name: "likego_e2e_runtime_total",
+  name: "go_like_e2e_runtime_total",
   help: "Runtime E2E counter.",
   registers: [registry]
 })
@@ -27,8 +27,8 @@ const response = await createPrometheusHandler(registry)(
 const body = await response.text()
 if (
   response.status !== 200 ||
-  !body.includes("likego_e2e_runtime_total 1") ||
-  !body.includes('likego_requests_total{component="web",operation="POST",outcome="success"} 1')
+  !body.includes("go_like_e2e_runtime_total 1") ||
+  !body.includes('go_like_requests_total{component="web",operation="POST",outcome="success"} 1')
 ) {
   throw new Error("metrics runtime E2E failed")
 }

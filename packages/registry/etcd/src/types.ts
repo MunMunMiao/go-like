@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import type { ProviderLogger, RegistrationErrorHandler } from "@likego/registry/provider"
+import type { Registry } from "@go-like/registry"
+import type { ProviderLogger, RegistrationErrorHandler } from "@go-like/registry/provider"
 
 /** Executes one borrowed standard Web Fetch request. */
 export interface EtcdFetch {
@@ -34,7 +34,7 @@ export type EtcdOperation =
 /** Describes one status-only etcd JSON-gateway error. */
 export interface EtcdHttpError extends Error {
   readonly name: "EtcdHttpError"
-  readonly code: "LIKEGO_ETCD_HTTP"
+  readonly code: "GO_LIKE_ETCD_HTTP"
   readonly operation: EtcdOperation
   readonly status: number
 }
@@ -42,7 +42,7 @@ export interface EtcdHttpError extends Error {
 /** Describes one secret-safe Fetch rejection. */
 export interface EtcdTransportError extends Error {
   readonly name: "EtcdTransportError"
-  readonly code: "LIKEGO_ETCD_TRANSPORT"
+  readonly code: "GO_LIKE_ETCD_TRANSPORT"
   readonly operation: EtcdOperation
   readonly cause: Error
 }

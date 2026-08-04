@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import type { Handler } from "@go-like/web"
 
 import { newFulfillmentHandler } from "./http"
 import { newFulfillmentWorker, type FulfillmentWorker } from "./worker"

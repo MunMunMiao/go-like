@@ -1,11 +1,11 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, CallRequest, Client } from "@likego/client"
-import type { Context } from "@likego/context"
-import type { Middleware } from "@likego/server"
-import type { Infer, Struct } from "@likego/struct"
-import type { Endpoint, Message } from "@likego/transport"
-import { endpoint, request as service } from "@likego/transport/headers"
-import type { Handler as WebHandler } from "@likego/web"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, CallRequest, Client } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import type { Middleware } from "@go-like/server"
+import type { Infer, Struct } from "@go-like/struct"
+import type { Endpoint, Message } from "@go-like/transport"
+import { endpoint, request as service } from "@go-like/transport/headers"
+import type { Handler as WebHandler } from "@go-like/web"
 import type { Logger } from "winston"
 
 type Outcome = "success" | "failure" | "canceled"
@@ -84,8 +84,8 @@ function writeCompletion(
     if (errorCode !== null) record.errorCode = errorCode
   }
   try {
-    if (outcome === "failure") logger.error("LikeGo operation completed", record)
-    else logger.info("LikeGo operation completed", record)
+    if (outcome === "failure") logger.error("go-like operation completed", record)
+    else logger.info("go-like operation completed", record)
   } catch {
     // Observability must not replace the wrapped operation's result.
   }
@@ -119,7 +119,7 @@ function routeField(headers: Readonly<Record<string, string>>, expected: string)
   return found === null || found.length === 0 ? "unknown" : found
 }
 
-/** Returns the stable unary service operation carried by LikeGo routing headers. */
+/** Returns the stable unary service operation carried by go-like routing headers. */
 function unaryOperation(message: Message): string {
   return `${routeField(message.header, service)}/${routeField(message.header, endpoint)}`
 }
@@ -155,7 +155,7 @@ export function logClient(client: Client, logger: Logger): Client {
     typeof client.call !== "function" ||
     typeof client.close !== "function"
   ) {
-    throw new TypeError("client must implement the LikeGo Client interface")
+    throw new TypeError("client must implement the go-like Client interface")
   }
   validateLogger(logger)
   const rawCall: RawClientCall = client.call
@@ -330,7 +330,7 @@ export function logBroker<PublishOptions, PublishResult, SubscribeOptions, Nativ
     typeof broker.subscribe !== "function" ||
     typeof broker.string !== "function"
   ) {
-    throw new TypeError("broker must implement the LikeGo Broker interface")
+    throw new TypeError("broker must implement the go-like Broker interface")
   }
   validateLogger(logger)
   const publish = broker.publish

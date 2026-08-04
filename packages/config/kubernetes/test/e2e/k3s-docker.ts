@@ -1,4 +1,4 @@
-import { background, withTimeout } from "@likego/context"
+import { background, withTimeout } from "@go-like/context"
 import { createServer } from "node:net"
 
 import {
@@ -9,15 +9,15 @@ import {
 
 const Image =
   "rancher/k3s:v1.36.2-k3s1@sha256:6a47cea22c4b834d4ba72c89d291696b79ebe406251f90b446e4dff03513dd87"
-const Namespace = "likego-config-test"
-const ServiceAccount = "likego-config"
-const DeniedServiceAccount = "likego-config-denied"
-const Role = "likego-config"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Namespace = "go-like-config-test"
+const ServiceAccount = "go-like-config"
+const DeniedServiceAccount = "go-like-config-denied"
+const Role = "go-like-config"
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 const VolumeTargets = ["/var/lib/cni", "/var/lib/kubelet", "/var/lib/rancher/k3s", "/var/log"]
 
 interface CommandResult {
@@ -155,7 +155,7 @@ function source(
 
 /** Runs real K3s load/watch/RBAC behavior and removes every Docker-owned resource. */
 async function main(): Promise<void> {
-  const container = `likego-config-k3s-${crypto.randomUUID()}`
+  const container = `go-like-config-k3s-${crypto.randomUUID()}`
   const port = await freePort()
   const address = `https://127.0.0.1:${port}`
   const volumes = VolumeTargets.map((_target, index) => `${container}-volume-${index}`)
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
       typeof denied === "object" &&
         denied !== null &&
         "code" in denied &&
-        denied.code === "LIKEGO_KUBERNETES_CONFIG_HTTP" &&
+        denied.code === "GO_LIKE_KUBERNETES_CONFIG_HTTP" &&
         "status" in denied &&
         denied.status === 403,
       "real RBAC denial was not a secret-safe HTTP 403"

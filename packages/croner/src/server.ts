@@ -5,8 +5,8 @@ import {
   withCancelCause,
   type CancelCauseFunc,
   type Context
-} from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import { Cron } from "croner"
 
 import {

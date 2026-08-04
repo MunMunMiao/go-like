@@ -50,11 +50,11 @@ test("k6 workload is committed TypeScript with isolated globals", async () => {
   expect(loadConfig.files).toEqual(["k6-http.ts"])
   expect(e2eConfig.exclude).toContain("load/k6-http.ts")
   expect(workload).toContain('executor: "constant-arrival-rate"')
-  expect(workload).toContain("__ENV.LIKEGO_SOAK_DURATION")
-  expect(workload).toContain("__ENV.LIKEGO_SOAK_RATE")
+  expect(workload).toContain("__ENV.GO_LIKE_SOAK_DURATION")
+  expect(workload).toContain("__ENV.GO_LIKE_SOAK_RATE")
   expect(workload).toContain('checks: ["rate==1"]')
   expect(workload).toContain('"status is 200"')
-  expect(workload).toContain('"body is likego"')
+  expect(workload).toContain('"body is go-like"')
   expect(webHost).not.toContain("catch(() => {})")
 })
 
@@ -68,7 +68,7 @@ test("k6 uses the fixed image and direct TypeScript workload argv", () => {
     "run",
     "--rm",
     "--label",
-    "io.likego.e2e.owner=owner",
+    "io.go-like.e2e.owner=owner",
     K6Image,
     "version"
   ])
@@ -79,13 +79,13 @@ test("k6 uses the fixed image and direct TypeScript workload argv", () => {
     "--name",
     "container",
     "--label",
-    "io.likego.e2e.owner=owner",
+    "io.go-like.e2e.owner=owner",
     "--add-host",
     "host.docker.internal:host-gateway",
     "--env",
-    "LIKEGO_SOAK_DURATION=10000ms",
+    "GO_LIKE_SOAK_DURATION=10000ms",
     "--env",
-    "LIKEGO_SOAK_URL=http://host.docker.internal:31000/",
+    "GO_LIKE_SOAK_URL=http://host.docker.internal:31000/",
     "--volume",
     "/repo/e2e/load/k6-http.ts:/scripts/k6-http.ts:ro",
     "--volume",
@@ -328,7 +328,7 @@ test.each([
 })
 
 test("k6 summary rejects missing and invalid metrics", async () => {
-  const directory = await createTempDirectory("likego-soak-test-")
+  const directory = await createTempDirectory("go-like-soak-test-")
   try {
     await expect(loadMetrics(join(directory.path, "missing.json"))).rejects.toThrow()
     const invalid = join(directory.path, "invalid.json")

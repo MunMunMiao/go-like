@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newConfig, objectSource, placeholderResolver, resolver, source } from "@likego/config"
+import { background } from "@go-like/context"
+import { newConfig, objectSource, placeholderResolver, resolver, source } from "@go-like/config"
 
 const config = newConfig(
   source(objectSource("one", { host: "service", endpoint: "https://${host}" })),

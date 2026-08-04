@@ -1,7 +1,7 @@
 import process from "node:process"
 
-import { newRedisCache } from "@likego/cache-redis"
-import { newClient, withDiscovery, withSelector, withTransport } from "@likego/client"
+import { newRedisCache } from "@go-like/cache-redis"
+import { newClient, withDiscovery, withSelector, withTransport } from "@go-like/client"
 import {
   afterStart,
   id,
@@ -12,20 +12,20 @@ import {
   server,
   stopTimeout,
   version
-} from "@likego/core"
-import { background } from "@likego/context"
-import { signal } from "@likego/core/node"
-import { newRoundRobinSelector } from "@likego/registry"
-import { newConsulRegistry } from "@likego/registry-consul"
+} from "@go-like/core"
+import { background } from "@go-like/context"
+import { signal } from "@go-like/core/node"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newConsulRegistry } from "@go-like/registry-consul"
 import {
   address,
   handler as serviceHandler,
   newServer,
   transport as serverTransport
-} from "@likego/server"
-import { newHTTPTransport } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+} from "@go-like/server"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import { newCatalogHandler } from "./http"
 import { newPricingHandler } from "./pricing"
@@ -50,7 +50,7 @@ const registry = newConsulRegistry({
 })
 const cache = newRedisCache({
   url: redisUrl,
-  prefix: "likego:example:commerce:",
+  prefix: "go-like:example:commerce:",
   connectTimeoutMs: 5_000,
   commandTimeoutMs: 5_000
 })
@@ -86,7 +86,7 @@ const catalogApp = newApp(
   afterStart(async function announceReady(ctx): Promise<void> {
     await catalogServer.endpoint(ctx)
     process.stdout.write(
-      `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "commerce-catalog", origin })}\n`
+      `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "commerce-catalog", origin })}\n`
     )
   })
 )

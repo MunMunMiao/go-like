@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 export type ShipmentStatus = "created" | "pickedUp" | "inTransit" | "outForDelivery" | "delivered"
 

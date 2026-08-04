@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { struct } from "@likego/struct"
+import { struct } from "@go-like/struct"
 
 import { endpoint } from "../src/index"
 import { decodeJsonBody, encodeJsonBody, jsonContentType } from "../src/json"
@@ -61,11 +61,11 @@ test("rejects malformed typed endpoint fields and non-Struct contracts", () => {
 
 test("encodes and decodes Struct JSON bodies with Web UTF-8 APIs", () => {
   const Payload = struct.object({ name: struct.string().alias("display_name") })
-  const encoded = encodeJsonBody(Payload, { name: "LikeGo" })
+  const encoded = encodeJsonBody(Payload, { name: "go-like" })
 
   expect(jsonContentType).toBe("application/json")
-  expect(new TextDecoder().decode(encoded)).toBe('{"display_name":"LikeGo"}')
-  expect(decodeJsonBody(Payload, encoded)).toEqual({ name: "LikeGo" })
+  expect(new TextDecoder().decode(encoded)).toBe('{"display_name":"go-like"}')
+  expect(decodeJsonBody(Payload, encoded)).toEqual({ name: "go-like" })
   expect(() => decodeJsonBody(Payload, new TextEncoder().encode('{"display_name":1}'))).toThrow()
   expect(() => decodeJsonBody(Payload, new TextEncoder().encode("{"))).toThrow(
     "json body is invalid"

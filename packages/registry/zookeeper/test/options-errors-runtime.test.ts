@@ -1,4 +1,4 @@
-import { background, deadlineExceeded, withCancelCause } from "@likego/context"
+import { background, deadlineExceeded, withCancelCause } from "@go-like/context"
 import { expect, test } from "bun:test"
 
 import {
@@ -36,7 +36,7 @@ test("ZooKeeper options validate addresses, roots, credentials, and bounded cont
   for (const value of ["host:", "host:no", "host:0", "host:65536"]) {
     expect(() => zookeeperAddress(value)).toThrow("port is invalid")
   }
-  expect(zookeeperRoot("/likego/registry")).toBe("/likego/registry")
+  expect(zookeeperRoot("/go-like/registry")).toBe("/go-like/registry")
   for (const value of ["/", "relative", "/tail/", "/two//parts", "/bad\u0000path"]) {
     expect(() => zookeeperRoot(value)).toThrow("absolute non-root")
   }
@@ -104,13 +104,13 @@ test("ZooKeeper options validate addresses, roots, credentials, and bounded cont
 test("errors and runtime helpers preserve stable identities and Context causes", async () => {
   const operation = newOperationError("children", -101, true)
   expect(operation).toMatchObject({
-    code: "LIKEGO_ZOOKEEPER_OPERATION",
+    code: "GO_LIKE_ZOOKEEPER_OPERATION",
     operation: "children",
     nativeCode: -101,
     retryable: true
   })
   expect(newAuthenticationError()).toMatchObject({
-    code: "LIKEGO_ZOOKEEPER_AUTHENTICATION"
+    code: "GO_LIKE_ZOOKEEPER_AUTHENTICATION"
   })
   expect(boundaryError("hidden", "safe").message).toBe("safe")
   expect(boundaryError(operation, "safe")).toBe(operation)

@@ -21,12 +21,12 @@ test("publishes stable immutable Registry error identities without classes", () 
     newNoAvailableEndpointError()
   ]
   expect(errors.map((error) => [error.name, error.code])).toEqual([
-    ["RegistryStateError", "LIKEGO_REGISTRY_STATE"],
-    ["WatcherStoppedError", "LIKEGO_WATCHER_STOPPED"],
-    ["WatcherOverflowError", "LIKEGO_WATCHER_OVERFLOW"],
-    ["RegistryProtocolError", "LIKEGO_REGISTRY_PROTOCOL"],
-    ["UnsupportedRegistryCapabilityError", "LIKEGO_UNSUPPORTED_REGISTRY_CAPABILITY"],
-    ["NoAvailableEndpointError", "LIKEGO_NO_AVAILABLE_ENDPOINT"]
+    ["RegistryStateError", "GO_LIKE_REGISTRY_STATE"],
+    ["WatcherStoppedError", "GO_LIKE_WATCHER_STOPPED"],
+    ["WatcherOverflowError", "GO_LIKE_WATCHER_OVERFLOW"],
+    ["RegistryProtocolError", "GO_LIKE_REGISTRY_PROTOCOL"],
+    ["UnsupportedRegistryCapabilityError", "GO_LIKE_UNSUPPORTED_REGISTRY_CAPABILITY"],
+    ["NoAvailableEndpointError", "GO_LIKE_NO_AVAILABLE_ENDPOINT"]
   ])
   expect(errors.every(Object.isFrozen)).toBe(true)
   expect(errors.every((error) => error instanceof Error)).toBe(true)

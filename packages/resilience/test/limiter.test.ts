@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { background, canceled, withCancel } from "@likego/context"
+import { background, canceled, withCancel } from "@go-like/context"
 
 import { newTokenBucketLimiter } from "../src/index"
 

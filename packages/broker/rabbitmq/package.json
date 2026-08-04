@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/broker-rabbitmq",
+  "name": "@go-like/broker-rabbitmq",
   "version": "0.0.1",
-  "description": "RabbitMQ AMQP 0-9-1 Broker provider for LikeGo.",
+  "description": "RabbitMQ AMQP 0-9-1 Broker provider for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,9 +25,9 @@
     "test:e2e": "bun test/e2e/rabbitmq-docker-e2e.ts"
   },
   "dependencies": {
-    "@likego/broker": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
+    "@go-like/broker": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
     "@types/node": "26.1.2",
     "amqplib": "2.0.1"
   },

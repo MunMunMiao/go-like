@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 
 import {
@@ -53,7 +53,7 @@ describe("EV charging control", () => {
     ).toThrow("charging session identity conflict")
   })
 
-  test("fails LikeGo readiness and admission when every station is offline", async () => {
+  test("fails go-like readiness and admission when every station is offline", async () => {
     const runtime = newChargingControlRuntime(stations)
     runtime.repository.setOnline(background(), "station-1", false)
     const report = await runtime.probes.check(background(), "ready")

@@ -1,10 +1,10 @@
 import type { MDNSFamily, MDNSOption, MDNSOptions } from "./types"
-import type { RegistrationErrorHandler } from "@likego/registry/provider"
+import type { RegistrationErrorHandler } from "@go-like/registry/provider"
 import { validateDNSName } from "./dns"
 
 const defaultFamilies: readonly MDNSFamily[] = Object.freeze(["ipv4"])
 const defaultOptions: MDNSOptions = Object.freeze({
-  domain: "likego.",
+  domain: "go-like.",
   interfaceIds: Object.freeze([]),
   families: defaultFamilies,
   queryTimeoutMs: 1_000,
@@ -141,7 +141,7 @@ function snapshot(value: MDNSOptions): MDNSOptions {
 
 /** Resolves immutable mDNS construction options. */
 export function mdnsOptions(
-  ...options: readonly MDNSOption[] /* likego-typed-rest: preserves Go-style functional options. */
+  ...options: readonly MDNSOption[] /* go-like-typed-rest: preserves Go-style functional options. */
 ): MDNSOptions {
   let candidate = defaultOptions
   for (const option of options) {
@@ -177,7 +177,7 @@ export function interfaces(
   ...ids: readonly (
     | string
     | number
-  )[] /* likego-typed-rest: preserves Go-style functional options. */
+  )[] /* go-like-typed-rest: preserves Go-style functional options. */
 ): MDNSOption {
   const captured = interfaceSnapshot(ids)
   /** Applies the captured interface selection to one construction snapshot. */
@@ -200,7 +200,7 @@ export function interfaces(
 
 /** Replaces the selected multicast address families. */
 export function families(
-  ...values: readonly MDNSFamily[] /* likego-typed-rest: preserves Go-style functional options. */
+  ...values: readonly MDNSFamily[] /* go-like-typed-rest: preserves Go-style functional options. */
 ): MDNSOption {
   const captured = familySnapshot(values)
   /** Applies the captured family selection to one construction snapshot. */

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-iot-telemetry",
+  "name": "@go-like/example-iot-telemetry",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,10 +12,10 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {
-    "@likego/broker": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/nats": "workspace:*",
+    "@go-like/broker": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/nats": "workspace:*",
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0"
   },

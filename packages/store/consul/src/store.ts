@@ -1,4 +1,4 @@
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 import {
   type DeleteOption,
   type ListOption,
@@ -6,7 +6,7 @@ import {
   type StoreRecord,
   type StoreRecordInput,
   type WriteOption
-} from "@likego/store"
+} from "@go-like/store"
 import {
   compareStoreKeys,
   deleteOptions,
@@ -15,7 +15,7 @@ import {
   snapshotStorePage,
   snapshotStoreRecordInput,
   writeOptions
-} from "@likego/store/provider"
+} from "@go-like/store/provider"
 
 import { decodeCursor, encodeCursor, encodeRecordPayload, type ConsulRow } from "./codec"
 import {
@@ -239,11 +239,11 @@ export function createConsulStore(construction: ConsulStoreOptions): ConsulStore
     async write(
       ctx: Context,
       rawRecord: StoreRecordInput,
-      ...reducers: readonly WriteOption[] /* likego-typed-rest: preserves Go-style Store options. */
+      ...reducers: readonly WriteOption[] /* go-like-typed-rest: preserves Go-style Store options. */
     ): Promise<StoreRecord> {
       checkContext(ctx)
       const config = writeOptions(
-        ...reducers /* likego-typed-spread: forwards exact ordered Store options. */
+        ...reducers /* go-like-typed-spread: forwards exact ordered Store options. */
       )
       if (config.expiresInMs !== null && (config.ifAbsent === true || config.ifRevision !== null)) {
         throw newConsulStoreUnsupportedCombinationError("ttl-cas")
@@ -305,11 +305,11 @@ export function createConsulStore(construction: ConsulStoreOptions): ConsulStore
     async delete(
       ctx: Context,
       rawKey: string,
-      ...reducers: readonly DeleteOption[] /* likego-typed-rest: preserves Go-style Store options. */
+      ...reducers: readonly DeleteOption[] /* go-like-typed-rest: preserves Go-style Store options. */
     ): Promise<boolean> {
       checkContext(ctx)
       const config = deleteOptions(
-        ...reducers /* likego-typed-spread: forwards exact ordered Store options. */
+        ...reducers /* go-like-typed-spread: forwards exact ordered Store options. */
       )
       const key = storeKey(rawKey, false)
       const current = await queryExact(ctx, options, "delete", key)
@@ -340,11 +340,11 @@ export function createConsulStore(construction: ConsulStoreOptions): ConsulStore
     /** Lists one code-point-sorted stable page from a recursive Consul KV query. */
     async list(
       ctx: Context,
-      ...reducers: readonly ListOption[] /* likego-typed-rest: preserves Go-style Store options. */
+      ...reducers: readonly ListOption[] /* go-like-typed-rest: preserves Go-style Store options. */
     ): Promise<StorePage> {
       checkContext(ctx)
       const config = listOptions(
-        ...reducers /* likego-typed-spread: forwards exact ordered Store options. */
+        ...reducers /* go-like-typed-spread: forwards exact ordered Store options. */
       )
       const selectedPrefix = storeKey(config.prefix, true)
       if (config.limit !== null && config.limit > MaximumListLimit) {

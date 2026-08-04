@@ -1,4 +1,4 @@
-import type { Store } from "@likego/store"
+import type { Store } from "@go-like/store"
 
 import {
   newConsulStore,

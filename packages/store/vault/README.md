@@ -1,17 +1,17 @@
-# `@likego/store-vault`
+# `@go-like/store-vault`
 
-`@likego/store-vault` 是 `@likego/store` 的 HashiCorp Vault KV v2 provider。它只使用调用方注入的
+`@go-like/store-vault` 是 `@go-like/store` 的 HashiCorp Vault KV v2 provider。它只使用调用方注入的
 标准 Web Fetch，不依赖 Vault SDK、Node API、gRPC 或 Proto。
 
 ```ts
-import { background } from "@likego/context"
-import { newVaultStore } from "@likego/store-vault"
+import { background } from "@go-like/context"
+import { newVaultStore } from "@go-like/store-vault"
 
 const store = newVaultStore({
   fetch,
   address: "http://127.0.0.1:8200",
   mount: "secret",
-  root: "likego/store",
+  root: "go-like/store",
   token: credentials.vaultToken
 })
 
@@ -23,13 +23,13 @@ const record = await store.read(background(), "orders/1001")
 
 ## KV v2 映射
 
-本包仅支持 Vault KV v2。`mount` 是已经启用 KV v2 的挂载路径；默认 `root` 为 `likego/store`。
+本包仅支持 Vault KV v2。`mount` 是已经启用 KV v2 的挂载路径；默认 `root` 为 `go-like/store`。
 每个逻辑 key 先按 UTF-8 编码，再转换为无 padding 的 base64url 单层物理 key，因此所有数据都被限制在
 `/v1/{mount}/{data|metadata|delete}/{root}/` 下，不会与 Vault 中其他业务 keyspace 混用。
 
 | Store 语义     | Vault KV v2 映射                                                                    |
 | -------------- | ----------------------------------------------------------------------------------- |
-| value/metadata | `data` 下的 LikeGo version 1 JSON envelope；二进制 value 使用标准 base64            |
+| value/metadata | `data` 下的 go-like version 1 JSON envelope；二进制 value 使用标准 base64            |
 | revision       | KV v2 metadata 的正整数 `version`，对外使用十进制字符串                             |
 | write          | `POST /v1/{mount}/data/{root}/{physical-key}`，不伪造 CAS                           |
 | read           | `GET /v1/{mount}/data/{root}/{physical-key}`                                        |
@@ -68,9 +68,9 @@ Vault 连接、token 和挂载可用性会在首次 CRUD/list 时由真实请求
 ## 验证
 
 ```sh
-bun run --filter @likego/store-vault typecheck
-bun run --filter @likego/store-vault test:unit:coverage
-bun run --filter @likego/store-vault build
+bun run --filter @go-like/store-vault typecheck
+bun run --filter @go-like/store-vault test:unit:coverage
+bun run --filter @go-like/store-vault build
 bun run test:e2e:suites -- --suite store-vault-docker
 ```
 

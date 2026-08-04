@@ -1,12 +1,12 @@
-# @likego/store-etcd
+# @go-like/store-etcd
 
-`@likego/store-etcd` 是基于标准 Web API `Fetch` 和 etcd v3 JSON gRPC gateway 的
-`@likego/store` provider。它不依赖 Node API、gRPC client 或 Protobuf runtime，可由 Bun、Node.js、
+`@go-like/store-etcd` 是基于标准 Web API `Fetch` 和 etcd v3 JSON gRPC gateway 的
+`@go-like/store` provider。它不依赖 Node API、gRPC client 或 Protobuf runtime，可由 Bun、Node.js、
 Deno 以及其他提供标准 Web API 的后端 runtime 承载。
 
 ```ts
-import { background } from "@likego/context"
-import { newEtcdStore } from "@likego/store-etcd"
+import { background } from "@go-like/context"
+import { newEtcdStore } from "@go-like/store-etcd"
 
 const store = newEtcdStore({
   fetch,
@@ -22,12 +22,12 @@ const record = await store.read(background(), "orders/1001")
 - `mod_revision` 是单条记录的 CAS token；分页 cursor 固定首屏 `header.revision`，后续页使用历史
   revision，避免翻页期间的新写入改变结果集。
 - write/delete 都使用 etcd transaction compare，失败分支返回当前 KV。响应可能丢失时执行 exact
-  readback；无法证明结果时返回 `LIKEGO_ETCD_STORE_UNCERTAIN`，不会猜测成功。
+  readback；无法证明结果时返回 `GO_LIKE_ETCD_STORE_UNCERTAIN`，不会猜测成功。
 - `ifAbsent()` 使用同一 transaction 的 `VERSION == 0` compare；两个 client 并发创建同 key 时只有一个
   transaction 能进入 success 分支。
 - TTL 使用每条记录独立 lease。客户端生命周期不撤销业务 TTL；显式 delete 或覆盖会主动撤销已废弃
-  lease。lease 在提交前丢失返回 `LIKEGO_ETCD_STORE_LEASE_LOST`。
-- 历史分页 revision 被 compact 后返回 `LIKEGO_ETCD_STORE_COMPACTED`。HTTP 错误只保留 status 与数字
+  lease。lease 在提交前丢失返回 `GO_LIKE_ETCD_STORE_LEASE_LOST`。
+- 历史分页 revision 被 compact 后返回 `GO_LIKE_ETCD_STORE_COMPACTED`。HTTP 错误只保留 status 与数字
   gRPC code，Fetch rejection、响应 body 和 bearer token 不进入公开错误。
 
 ## 所有权

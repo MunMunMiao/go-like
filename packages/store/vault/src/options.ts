@@ -11,7 +11,7 @@ export interface CapturedOptions {
   readonly cursorTtlMs: number
 }
 
-const DefaultRoot = "likego/store"
+const DefaultRoot = "go-like/store"
 const DefaultCursorTtlMs = 60_000
 const MaximumCursorTtlMs = 600_000
 

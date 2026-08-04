@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background, cause, withCancel } from "@likego/context"
+import { background, cause, withCancel } from "@go-like/context"
 import { cursor, expiresIn, ifRevision, limit, prefix } from "../../src/index"
 
 import { clock, newMemoryStore } from "../src/index"
@@ -50,11 +50,11 @@ test("concurrent compare-and-swap admits exactly one writer", async () => {
   const rejected = settled.find(({ status }) => status === "rejected")
   expect(rejected).toMatchObject({
     status: "rejected",
-    reason: { code: "LIKEGO_STORE_CONFLICT" }
+    reason: { code: "GO_LIKE_STORE_CONFLICT" }
   })
   await expect(
     store.delete(background(), "counter", ifRevision(initial.revision))
-  ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT" })
   expect(await store.delete(background(), "counter")).toBe(true)
 })
 

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
 
 import type { FulfillmentCommand, FulfillmentOrder, FulfillmentRepository } from "./service"
 
@@ -20,7 +20,7 @@ function checkContext(ctx: Context): void {
   if (failure !== null) throw failure
 }
 
-/** Creates a structural worker whose lifecycle is owned by LikeGo Core. */
+/** Creates a structural worker whose lifecycle is owned by go-like Core. */
 export function newFulfillmentWorker(repository: FulfillmentRepository): FulfillmentWorker {
   const controller = new AbortController()
   const terminal = new Promise<void>(function waitForStop(resolve): void {

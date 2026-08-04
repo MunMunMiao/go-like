@@ -1,8 +1,8 @@
-import { expiresIn, type Cache } from "@likego/cache"
-import type { Config } from "@likego/config"
-import type { Context } from "@likego/context"
-import { newTokenBucketLimiter, type RateLimiter } from "@likego/resilience"
-import { contextHandler, type Handler } from "@likego/web"
+import { expiresIn, type Cache } from "@go-like/cache"
+import type { Config } from "@go-like/config"
+import type { Context } from "@go-like/context"
+import { newTokenBucketLimiter, type RateLimiter } from "@go-like/resilience"
+import { contextHandler, type Handler } from "@go-like/web"
 import { Hono, type Context as HonoContext } from "hono"
 import type { Logger } from "pino"
 

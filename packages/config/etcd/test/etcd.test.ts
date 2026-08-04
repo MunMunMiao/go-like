@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { newConfig, onReloadError, source as configSource } from "@likego/config"
-import { background, withCancelCause, type Context } from "@likego/context"
+import { newConfig, onReloadError, source as configSource } from "@go-like/config"
+import { background, withCancelCause, type Context } from "@go-like/context"
 
 import { etcdSource, jsonEtcdDecoder, type EtcdFetch, type EtcdHttpError } from "../src/index"
 import { deferred } from "./helpers"
@@ -239,7 +239,7 @@ describe("etcd configuration source", () => {
     const failure = await source.load(background()).catch((error: unknown) => error)
     expect(failure).toMatchObject({
       name: "EtcdHttpError",
-      code: "LIKEGO_ETCD_HTTP",
+      code: "GO_LIKE_ETCD_HTTP",
       operation: "range",
       status: 401
     } satisfies Partial<EtcdHttpError>)

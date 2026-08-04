@@ -1,4 +1,4 @@
-import { canceled, type Context, type ContextError } from "@likego/context"
+import { canceled, type Context, type ContextError } from "@go-like/context"
 
 export interface ContextState {
   readonly context: Context

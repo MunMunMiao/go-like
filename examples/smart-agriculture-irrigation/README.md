@@ -1,13 +1,13 @@
 # 智慧农业灌溉
 
 该示例演示智慧农业灌溉决策微服务：标准 Fetch API 接收土壤湿度观测，应用从
-`@likego/config` 的当前不可变配置读取阈值、传感器最大时效和单次水量上限。
+`@go-like/config` 的当前不可变配置读取阈值、传感器最大时效和单次水量上限。
 
 ## 主要演示
 
-- `@likego/config` 管理完整灌溉策略；Core hook 在 HTTP Server 启动前执行 `load`，停止后执行 `close`。
-- `@likego/context` 贯穿请求、应用用例与配置读取边界。
-- `@likego/web` 提供 runtime 无关的标准 Fetch Handler。
+- `@go-like/config` 管理完整灌溉策略；Core hook 在 HTTP Server 启动前执行 `load`，停止后执行 `close`。
+- `@go-like/context` 贯穿请求、应用用例与配置读取边界。
+- `@go-like/web` 提供 runtime 无关的标准 Fetch Handler。
 - 业务策略与配置 provider、HTTP 载体相互独立。
 
 ## 源码结构
@@ -50,11 +50,11 @@ bun run --cwd examples/smart-agriculture-irrigation test:unit
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-smart-agriculture-irrigation start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-smart-agriculture-irrigation start
 ```
 
-`start` 会先构建本地 LikeGo 包，再由 `start:prepared` 把 `src/main.ts` 构建为
-`.artifacts/main.mjs` 并启动。看到 `LIKEGO_EXAMPLE_READY` 后提交新鲜观测；决策会读取
+`start` 会先构建本地 go-like 包，再由 `start:prepared` 把 `src/main.ts` 构建为
+`.artifacts/main.mjs` 并启动。看到 `GO_LIKE_EXAMPLE_READY` 后提交新鲜观测；决策会读取
 Config 发布的当前灌溉策略：
 
 ```bash

@@ -1,4 +1,4 @@
-import { cause, deadlineExceeded, type Context } from "@likego/context"
+import { cause, deadlineExceeded, type Context } from "@go-like/context"
 
 import { boundaryError } from "./errors"
 

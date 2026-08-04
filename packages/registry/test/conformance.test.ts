@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background, cause, withCancelCause, type Context } from "@likego/context"
+import { background, cause, withCancelCause, type Context } from "@go-like/context"
 import { type Registry, type ServiceInstance, type Watcher } from "../src/index"
 import { snapshotServiceInstance, snapshotServiceInstances } from "../src/provider"
 import { registryConformanceCases } from "../src/testing"

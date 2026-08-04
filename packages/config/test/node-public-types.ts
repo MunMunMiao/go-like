@@ -1,4 +1,4 @@
-import { background, type Context } from "@likego/context"
+import { background, type Context } from "@go-like/context"
 
 import type { FileCapability, FileReadResult } from "../src/file"
 import * as NodeConfig from "../src/node"

@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { fromClientContext, get, values, type Metadata } from "@likego/metadata"
+import { background } from "@go-like/context"
+import { fromClientContext, get, values, type Metadata } from "@go-like/metadata"
 import { describe, expect, test } from "bun:test"
 import { newLaboratoryResultHandler } from "../src/http"
 import {

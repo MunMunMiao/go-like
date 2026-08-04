@@ -1,5 +1,5 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { Context } from "@likego/context"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { Context } from "@go-like/context"
 import { SpanKind, type TextMapPropagator, type Tracer } from "@opentelemetry/api"
 
 import {
@@ -26,7 +26,7 @@ export function traceBroker<PublishOptions, PublishResult, SubscribeOptions, Nat
     typeof broker.subscribe !== "function" ||
     typeof broker.string !== "function"
   ) {
-    throw new TypeError("broker must implement the LikeGo Broker interface")
+    throw new TypeError("broker must implement the go-like Broker interface")
   }
   validateTracer(tracer)
   validatePropagator(propagator)
@@ -43,12 +43,12 @@ export function traceBroker<PublishOptions, PublishResult, SubscribeOptions, Nat
       options?: PublishOptions
     ): Promise<PublishResult> {
       return await tracer.startActiveSpan(
-        `likego.broker publish ${topic}`,
+        `go-like.broker publish ${topic}`,
         {
           kind: SpanKind.PRODUCER,
           attributes: {
-            "likego.kind": "broker_publish",
-            "likego.topic": topic
+            "go-like.kind": "broker_publish",
+            "go-like.topic": topic
           }
         },
         async (span) => {
@@ -88,12 +88,12 @@ export function traceBroker<PublishOptions, PublishResult, SubscribeOptions, Nat
       ): Promise<void> {
         const parent = extractHeaders(event.message.headers, propagator)
         await tracer.startActiveSpan(
-          `likego.broker consume ${topic}`,
+          `go-like.broker consume ${topic}`,
           {
             kind: SpanKind.CONSUMER,
             attributes: {
-              "likego.kind": "broker_consume",
-              "likego.topic": topic
+              "go-like.kind": "broker_consume",
+              "go-like.topic": topic
             }
           },
           parent,

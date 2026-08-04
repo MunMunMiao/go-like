@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-media-transcoding-pipeline",
+  "name": "@go-like/example-media-transcoding-pipeline",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,9 +12,9 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/web": "workspace:*"
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/web": "workspace:*"
   },
   "license": "MIT"
 }

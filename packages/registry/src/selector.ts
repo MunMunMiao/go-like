@@ -1,4 +1,4 @@
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 
 import { newNoAvailableEndpointError } from "./errors"
 import { compareCodePoints, snapshotServiceInstances } from "./snapshot"

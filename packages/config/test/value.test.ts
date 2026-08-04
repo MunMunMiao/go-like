@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause } from "@likego/context"
+import { background, withCancelCause } from "@go-like/context"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 
 import type { ConfigObject, ConfigValue } from "../src/index"
@@ -44,7 +44,7 @@ describe("Kratos-style config values", () => {
 
     await expect(config.scan(background(), schema)).rejects.toMatchObject({
       name: "ConfigNotFoundError",
-      code: "LIKEGO_CONFIG_NOT_FOUND",
+      code: "GO_LIKE_CONFIG_NOT_FOUND",
       key: ""
     })
     await config.load(background())
@@ -100,14 +100,14 @@ describe("Kratos-style config values", () => {
     expect(missing.load()).toBeNull()
     await expect(missing.scan(background(), numberSchema())).rejects.toMatchObject({
       name: "ConfigNotFoundError",
-      code: "LIKEGO_CONFIG_NOT_FOUND",
+      code: "GO_LIKE_CONFIG_NOT_FOUND",
       key: "service.missing"
     })
     await expect(
       config.value("service.port").scan(background(), numberSchema())
     ).rejects.toMatchObject({
       name: "ConfigValidationError",
-      code: "LIKEGO_CONFIG_VALIDATION",
+      code: "GO_LIKE_CONFIG_VALIDATION",
       reason: "issues"
     })
   })

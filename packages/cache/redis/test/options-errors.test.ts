@@ -22,7 +22,7 @@ test("Redis options are credential-safe immutable construction snapshots", () =>
   })
   expect(Object.isFrozen(options)).toBe(true)
   expect(captureRedisCacheOptions({ url: "redis://127.0.0.1" })).toMatchObject({
-    prefix: "likego:cache:",
+    prefix: "go-like:cache:",
     connectTimeoutMs: 5_000,
     commandTimeoutMs: 5_000,
     onError: null
@@ -71,7 +71,7 @@ test("Redis errors are stable frozen and preserve exact Error causes", () => {
   const operation = newRedisCacheOperationError("get", cause)
   expect(operation).toMatchObject({
     name: "RedisCacheOperationError",
-    code: "LIKEGO_CACHE_REDIS_OPERATION",
+    code: "GO_LIKE_CACHE_REDIS_OPERATION",
     operation: "get",
     cause
   })
@@ -79,7 +79,7 @@ test("Redis errors are stable frozen and preserve exact Error causes", () => {
   const protocol = newRedisCacheProtocolError()
   expect(protocol).toMatchObject({
     name: "RedisCacheProtocolError",
-    code: "LIKEGO_CACHE_REDIS_PROTOCOL",
+    code: "GO_LIKE_CACHE_REDIS_PROTOCOL",
     operation: "get"
   })
   expect(Object.isFrozen(protocol)).toBe(true)

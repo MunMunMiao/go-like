@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-retail-inventory-reservation",
+  "name": "@go-like/example-retail-inventory-reservation",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,11 +12,11 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@likego/cache": "workspace:*",
-    "@likego/cache-memory": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/web": "workspace:*"
+    "@go-like/cache": "workspace:*",
+    "@go-like/cache-memory": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/web": "workspace:*"
   },
   "license": "MIT"
 }

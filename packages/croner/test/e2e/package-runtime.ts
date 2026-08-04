@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 
-import { background, type Context } from "@likego/context"
-import { newCronerServer } from "@likego/croner"
+import { background, type Context } from "@go-like/context"
+import { newCronerServer } from "@go-like/croner"
 import { Cron } from "croner"
 
 const native: { value: Cron<Context> | null } = { value: null }
@@ -25,7 +25,7 @@ const server = newCronerServer<Context>(function create(ctx) {
   )
   return native.value
 })
-assert.deepEqual(Object.keys(await import("@likego/croner")), ["newCronerServer"])
+assert.deepEqual(Object.keys(await import("@go-like/croner")), ["newCronerServer"])
 assert.equal(native.value, null)
 const running = server.start(background())
 await Promise.resolve()

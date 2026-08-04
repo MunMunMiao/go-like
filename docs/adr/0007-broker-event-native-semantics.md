@@ -14,14 +14,14 @@ go-micro 与 go-zlab/go-kratos 都提供 Broker 及多种消息后端。消息�
 ack、nak、term、DLQ、durable consumer、redelivery、queue group 和事务等彼此不等价的语义。把这些能力塞进
 一个“看起来通用”的接口会迫使 provider 伪造行为，并隐藏真正的数据面所有权。
 
-LikeGo 第一版需要一个可移植的 bytes/topic 边界，以及建立在它上面的显式 typed codec 层；供应商原生事件
+go-like 第一版需要一个可移植的 bytes/topic 边界，以及建立在它上面的显式 typed codec 层；供应商原生事件
 必须完整保留，应用才能按真实 provider 语义做 settlement。
 
 ## 决策
 
 ### Broker SPI
 
-`@likego/broker` 定义泛型 `Broker<PublishOptions, PublishResult, SubscribeOptions, NativeEvent>`：
+`@go-like/broker` 定义泛型 `Broker<PublishOptions, PublishResult, SubscribeOptions, NativeEvent>`：
 
 - `publish(ctx, topic, message, options?)` 和 `subscribe(ctx, topic, handler, options?)` 都以 Context 为独立首参。
 - `BrokerMessage` 只有不可变 headers 与 detached `Uint8Array` body。
@@ -36,7 +36,7 @@ LikeGo 第一版需要一个可移植的 bytes/topic 边界，以及建立在它
 
 ### Event typed 层
 
-`@likego/event` 使用显式 `Codec<T>` 包装 Broker：
+`@go-like/event` 使用显式 `Codec<T>` 包装 Broker：
 
 - publish 在调用 provider 前编码一次，并传递 detached bytes 和固定 content-type。
 - subscribe 在收到 delivery 时只复制 bytes；应用调用 `decode()` 时才执行一次新的防御性副本解码。
@@ -49,18 +49,18 @@ Event 不建立 codec registry，不从 topic 猜 schema，也不自动捕获、
 
 ### NATS provider
 
-`@likego/nats/broker` 和 `@likego/nats/jetstream/broker` 将官方 NATS API 投影到公共 Broker：
+`@go-like/nats/broker` 和 `@go-like/nats/jetstream/broker` 将官方 NATS API 投影到公共 Broker：
 
 - Core NATS 保留 at-most-once、queue group、原生 `Msg` 与官方 drain/closed 语义。
 - JetStream 保留 PubAck、`JsMsg`、durable consumer、ack/nak/term、MaxDeliver 与 redelivery 语义。
-- 应用拥有 `NatsConnection`、JetStream manager、stream 和 durable consumer；LikeGo 只拥有一次订阅。
+- 应用拥有 `NatsConnection`、JetStream manager、stream 和 durable consumer；go-like 只拥有一次订阅。
 - provider-specific options/result/native type 通过泛型公开，不压扁成无法表达真实能力的布尔字段。
 - lifecycle Server 接收应用直接持有的原生资源或 start-time factory；Broker 入口则从借用的 Core connection
   创建 Subscription，或通过应用工厂取得 JetStream ConsumerMessages。两类入口不应混写成“只接入现成订阅”。
 
 ### Memory provider
 
-`@likego/broker-memory` 提供 exact-topic、进程内广播：
+`@go-like/broker-memory` 提供 exact-topic、进程内广播：
 
 - 每个订阅按 publish admission 顺序串行消费，不同订阅并行；无订阅时 publish 成功。
 - `native` 固定为 `null`，不发明 ack、sequence 或 durable identity。
@@ -87,7 +87,7 @@ provider 错误必须阻止 URL、header、token 和嵌套 cause graph 泄露。
   顺序组成 `AggregateError`。
 
 Broker/Event 不拥有 retry、backoff、breaker 或幂等判断。需要这些能力时，应用显式组合
-`@likego/resilience`，并对 provider 的交付保证负责。
+`@go-like/resilience`，并对 provider 的交付保证负责。
 
 ## 验证要求
 
@@ -102,6 +102,6 @@ connection、stream 与 durable consumer 没有被越权删除。
 
 ## 后果
 
-LikeGo 具备与被调研框架同角色的 Broker/Event 组合，但不会以统一接口牺牲消息系统真实语义。新增 Kafka、
+go-like 具备与被调研框架同角色的 Broker/Event 组合，但不会以统一接口牺牲消息系统真实语义。新增 Kafka、
 Redis Streams 或其他 provider 时，可以复用 bytes/topic 生命周期契约，同时通过泛型和 `native`
 保留各自的 settlement 与 delivery model。

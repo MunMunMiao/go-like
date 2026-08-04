@@ -3,7 +3,7 @@ import { join } from "node:path"
 
 import { expect, test } from "bun:test"
 
-import { background, withCancel } from "@likego/context"
+import { background, withCancel } from "@go-like/context"
 
 import {
   newNodeFileStoreHostWithIO,
@@ -13,7 +13,7 @@ import {
 import { newNodeFileStoreHost } from "../src/node"
 import { withTempDirectory } from "./helpers"
 
-const LockName = ".likego-store.lock"
+const LockName = ".go-like-store.lock"
 
 /** Creates one successful injected file handle with optional exact method overrides. */
 function injectedFile(
@@ -77,7 +77,7 @@ test("Node host performs real defensive file I/O and enforces provider-owned lea
     await handle.close(background())
     await handle.close(background())
     await expect(handle.read(background(), "snapshot")).rejects.toMatchObject({
-      code: "LIKEGO_FILE_STORE_STATE",
+      code: "GO_LIKE_FILE_STORE_STATE",
       state: "stopped"
     })
   })

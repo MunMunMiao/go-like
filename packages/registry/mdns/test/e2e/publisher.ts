@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 
 import {
   artifactDirectory,
@@ -43,7 +43,7 @@ async function collide(endpoint: string): Promise<void> {
     await provider.deregister(background(), candidate)
   } catch (error) {
     code = errorCode(error)
-    valid = code === "LIKEGO_REGISTRY_PROTOCOL"
+    valid = code === "GO_LIKE_REGISTRY_PROTOCOL"
   }
   await writeArtifact("collider-result.json", JSON.stringify({ valid, code }))
   verify(valid, `collision did not fail closed: ${String(code)}`)
@@ -105,7 +105,7 @@ async function normal(): Promise<void> {
   await lateProvider.deregister(background(), late)
   await writeArtifact("late-sent")
   process.stdout.write(
-    `LIKEGO_REGISTRY_MDNS_PUBLISHER=${JSON.stringify({ valid: true, family, artifacts: artifactDirectory() })}\n`
+    `GO_LIKE_REGISTRY_MDNS_PUBLISHER=${JSON.stringify({ valid: true, family, artifacts: artifactDirectory() })}\n`
   )
 }
 
@@ -123,19 +123,19 @@ async function crash(): Promise<void> {
   )
   await writeArtifact("publisher-crash-ready")
   process.stdout.write(
-    `LIKEGO_REGISTRY_MDNS_PUBLISHER=${JSON.stringify({ valid: true, family, phase: "awaiting-kill" })}\n`
+    `GO_LIKE_REGISTRY_MDNS_PUBLISHER=${JSON.stringify({ valid: true, family, phase: "awaiting-kill" })}\n`
   )
   await new Promise<void>(function forever(): void {})
 }
 
-const role = process.env.LIKEGO_ROLE ?? "publisher"
+const role = process.env.GO_LIKE_ROLE ?? "publisher"
 if (role === "cooperator") {
   await waitForArtifact("publisher-address")
   await cooperate(primaryService(await readArtifact("publisher-address"), "one"))
 } else if (role === "collider") {
   await waitForArtifact("publisher-address")
   await collide(await readArtifact("publisher-address"))
-} else if ((process.env.LIKEGO_MODE ?? "normal") === "crash") {
+} else if ((process.env.GO_LIKE_MODE ?? "normal") === "crash") {
   await crash()
 } else {
   await normal()

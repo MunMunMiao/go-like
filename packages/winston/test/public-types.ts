@@ -1,7 +1,7 @@
-import type { Broker } from "@likego/broker"
-import type { Client } from "@likego/client"
-import type { Server } from "@likego/core"
-import type { Middleware } from "@likego/server"
+import type { Broker } from "@go-like/broker"
+import type { Client } from "@go-like/client"
+import type { Server } from "@go-like/core"
+import type { Middleware } from "@go-like/server"
 import winston, { type Logger } from "winston"
 
 import {

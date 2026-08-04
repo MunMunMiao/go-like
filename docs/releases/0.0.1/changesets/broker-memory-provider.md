@@ -1,5 +1,5 @@
 ---
-"@likego/broker-memory": patch
+"@go-like/broker-memory": patch
 ---
 
 增加进程内 exact-topic Broker provider，支持广播、每订阅 FIFO、并行订阅处理、Context-first 排空与

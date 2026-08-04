@@ -16,9 +16,9 @@
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合派单服务、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/context` 把取消状态传入派单仓储，使用 `@likego/web` 暴露可嵌入任意标准 Fetch 运行时的入口，并使用 `@likego/health` 把健康配送容量纳入服务 readiness。
+使用 `@go-like/context` 把取消状态传入派单仓储，使用 `@go-like/web` 暴露可嵌入任意标准 Fetch 运行时的入口，并使用 `@go-like/health` 把健康配送容量纳入服务 readiness。
 
 ## 验证矩阵
 
@@ -30,8 +30,8 @@
 | 标准 Fetch 入口             | `test/main.test.ts` 的 HTTP 用例   |
 
 ```bash
-bun run --filter @likego/example-last-mile-dispatch typecheck
-bun run --filter @likego/example-last-mile-dispatch test:unit
+bun run --filter @go-like/example-last-mile-dispatch typecheck
+bun run --filter @go-like/example-last-mile-dispatch test:unit
 ```
 
 ## Docker 判定
@@ -45,10 +45,10 @@ bun run --filter @likego/example-last-mile-dispatch test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-last-mile-dispatch start
+bun run --filter @go-like/example-last-mile-dispatch start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后提交配送派单请求：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后提交配送派单请求：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/dispatches \
@@ -56,4 +56,4 @@ curl -sS http://127.0.0.1:3000/v1/dispatches \
   -d '{"deliveryId":"delivery-demo","requiredCapacity":2}'
 ```
 
-按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，LikeGo 会有序停止 HTTP Server。
+按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，go-like 会有序停止 HTTP Server。

@@ -13,13 +13,13 @@ SaaS 订阅在账期中途升降级时，只能对剩余服务时间收取或退
 ## 架构与职责
 
 - `src/service.ts`：整数金额规则、按比例计费用例与进程内幂等仓储。
-- `src/config.ts`：构造 LikeGo Config，并把当前调整上限组合进计费用例。
+- `src/config.ts`：构造 go-like Config，并把当前调整上限组合进计费用例。
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合 Config、计费服务、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-主要演示 `@likego/config` 如何从真实 `objectSource` 执行 `load`、发布不可变配置值，再把计费调整上限组合进业务 Handler；应用通过 Core 的 `beforeStart / afterStop` hook 调用 `load / close`，同时使用 `@likego/context` 维持 Context-first 用例边界，并用 `@likego/web` 暴露不拥有 listener 的标准 Web API。
+主要演示 `@go-like/config` 如何从真实 `objectSource` 执行 `load`、发布不可变配置值，再把计费调整上限组合进业务 Handler；应用通过 Core 的 `beforeStart / afterStop` hook 调用 `load / close`，同时使用 `@go-like/context` 维持 Context-first 用例边界，并用 `@go-like/web` 暴露不拥有 listener 的标准 Web API。
 
 ## 验证矩阵
 
@@ -31,17 +31,17 @@ SaaS 订阅在账期中途升降级时，只能对剩余服务时间收取或退
 | Config 当前值驱动计费上限      | `test/main.test.ts` 的配置组合用例 |
 
 ```bash
-bun run --filter @likego/example-subscription-billing typecheck
-bun run --filter @likego/example-subscription-billing test:unit
+bun run --filter @go-like/example-subscription-billing typecheck
+bun run --filter @go-like/example-subscription-billing test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-subscription-billing start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-subscription-billing start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后提交账期变更：
+看到 `GO_LIKE_EXAMPLE_READY` 后提交账期变更：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/subscription-changes \

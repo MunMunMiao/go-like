@@ -1,4 +1,4 @@
-import type { Server } from "@likego/core"
+import type { Server } from "@go-like/core"
 import type {
   NodeServerAlreadyStartedError,
   NodeServerForceCloseError,
@@ -32,13 +32,13 @@ const stopping: Promise<void> = server.stop({} as never)
 void [running, endpoint, stopping]
 
 declare const alreadyStarted: NodeServerAlreadyStartedError
-const alreadyCode: "LIKEGO_NODE_SERVER_ALREADY_STARTED" = alreadyStarted.code
+const alreadyCode: "GO_LIKE_NODE_SERVER_ALREADY_STARTED" = alreadyStarted.code
 void alreadyCode
 
 declare const forceClose: NodeServerForceCloseError
-const forceCode: "LIKEGO_NODE_SERVER_FORCE_CLOSE" = forceClose.code
+const forceCode: "GO_LIKE_NODE_SERVER_FORCE_CLOSE" = forceClose.code
 void forceCode
 
 declare const unexpectedClose: NodeServerUnexpectedCloseError
-const unexpectedCode: "LIKEGO_NODE_SERVER_UNEXPECTED_CLOSE" = unexpectedClose.code
+const unexpectedCode: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE" = unexpectedClose.code
 void unexpectedCode

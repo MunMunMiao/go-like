@@ -9,17 +9,17 @@ import type {
 } from "./types"
 
 const httpName: ConsulStoreHttpError["name"] = "ConsulStoreHttpError"
-const httpCode: ConsulStoreHttpError["code"] = "LIKEGO_CONSUL_STORE_HTTP"
+const httpCode: ConsulStoreHttpError["code"] = "GO_LIKE_CONSUL_STORE_HTTP"
 const transportName: ConsulStoreTransportError["name"] = "ConsulStoreTransportError"
-const transportCode: ConsulStoreTransportError["code"] = "LIKEGO_CONSUL_STORE_TRANSPORT"
+const transportCode: ConsulStoreTransportError["code"] = "GO_LIKE_CONSUL_STORE_TRANSPORT"
 const protocolName: ConsulStoreProtocolError["name"] = "ConsulStoreProtocolError"
-const protocolCode: ConsulStoreProtocolError["code"] = "LIKEGO_CONSUL_STORE_PROTOCOL"
+const protocolCode: ConsulStoreProtocolError["code"] = "GO_LIKE_CONSUL_STORE_PROTOCOL"
 const uncertainName: ConsulStoreUncertainError["name"] = "ConsulStoreUncertainError"
-const uncertainCode: ConsulStoreUncertainError["code"] = "LIKEGO_CONSUL_STORE_UNCERTAIN"
+const uncertainCode: ConsulStoreUncertainError["code"] = "GO_LIKE_CONSUL_STORE_UNCERTAIN"
 const combinationName: ConsulStoreUnsupportedCombinationError["name"] =
   "ConsulStoreUnsupportedCombinationError"
 const combinationCode: ConsulStoreUnsupportedCombinationError["code"] =
-  "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION"
+  "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION"
 
 /** Narrows a boundary rejection without stringifying arbitrary carrier graphs. */
 export function boundaryError(value: unknown, message: string): Error {

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newCircuitBreaker, retry } from "@likego/resilience"
+import type { Context } from "@go-like/context"
+import { newCircuitBreaker, retry } from "@go-like/resilience"
 import type { NotificationProvider } from "./provider"
 
 const publicId = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/

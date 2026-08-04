@@ -58,7 +58,7 @@ test("deterministic ServiceInstance records round-trip and fail closed", () => {
     "unsupported wire"
   )
   expect(() =>
-    decodeRecord("/root", record.path, bytes(["likego.registry-zookeeper.v2", null]))
+    decodeRecord("/root", record.path, bytes(["go-like.registry-zookeeper.v2", null]))
   ).toThrow("invalid ServiceInstance")
   expect(() => decodeRecord("/other", record.path, record.data)).toThrow("path does not match")
   expect(() =>

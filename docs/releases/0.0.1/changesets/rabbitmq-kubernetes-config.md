@@ -1,6 +1,6 @@
 ---
-"@likego/broker-rabbitmq": minor
-"@likego/config-kubernetes": minor
+"@go-like/broker-rabbitmq": minor
+"@go-like/config-kubernetes": minor
 ---
 
 新增 RabbitMQ Broker provider 与 Kubernetes Config provider；两者分别保留 AMQP 原生 delivery 语义和

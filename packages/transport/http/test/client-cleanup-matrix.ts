@@ -1,6 +1,6 @@
-import { background, canceled, withCancel } from "@likego/context"
-import { logger, type Client, type Message, type TransportLogLevel } from "@likego/transport"
-import { executor, newHTTPTransport, type HTTPExecutor } from "@likego/transport-http"
+import { background, canceled, withCancel } from "@go-like/context"
+import { logger, type Client, type Message, type TransportLogLevel } from "@go-like/transport"
+import { executor, newHTTPTransport, type HTTPExecutor } from "@go-like/transport-http"
 
 /** Reports the portable HTTP client cleanup ownership matrix. */
 export interface HTTPClientCleanupMatrixResult {
@@ -54,7 +54,7 @@ function httpExecutor(
 /** Creates one immutable transport message fixture. */
 function message(value: string): Message {
   return Object.freeze({
-    header: Object.freeze({ "Likego-Cleanup-Matrix": value }),
+    header: Object.freeze({ "Go-Like-Cleanup-Matrix": value }),
     body: new TextEncoder().encode(value)
   })
 }

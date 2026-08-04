@@ -3,16 +3,16 @@ import { dirname, join } from "node:path"
 
 import { expect, test } from "bun:test"
 
-import { background, withCancel } from "@likego/context"
+import { background, withCancel } from "@go-like/context"
 import { expiresIn, ifRevision, limit, prefix } from "../../src/index"
 
 import { newFileStore, type FileStoreHost } from "../src/index"
 import { newNodeFileStoreHost } from "../src/node"
 import { delay, startStore, stopStore, withTempDirectory } from "./helpers"
 
-const SnapshotName = ".likego-store.snapshot"
-const TempName = ".likego-store.tmp"
-const LockName = ".likego-store.lock"
+const SnapshotName = ".go-like-store.snapshot"
+const TempName = ".go-like-store.tmp"
+const LockName = ".go-like-store.lock"
 
 /** Wraps a real host and fails exactly one atomic rename after its temp write. */
 function failOneRename(host: FileStoreHost, failure: Error): FileStoreHost {
@@ -53,7 +53,7 @@ test("construction is I/O-free and every directory has one admitted owner", asyn
 
     const firstHandle = await startStore(first)
     expect(acquisitions).toBe(1)
-    await expect(startStore(second)).rejects.toMatchObject({ code: "LIKEGO_FILE_STORE_LOCKED" })
+    await expect(startStore(second)).rejects.toMatchObject({ code: "GO_LIKE_FILE_STORE_LOCKED" })
     await stopStore(firstHandle)
 
     const replacement = newFileStore(host, directory)
@@ -178,7 +178,7 @@ test("corrupt snapshots fail closed with secret-safe stable errors and release t
     const error = await corrupted.start(background()).catch((failure: unknown) => failure)
     expect(error).toMatchObject({
       name: "FileStoreCorruptionError",
-      code: "LIKEGO_FILE_STORE_CORRUPTION"
+      code: "GO_LIKE_FILE_STORE_CORRUPTION"
     })
     expect(String(error)).not.toContain(directory)
     expect(String(error)).not.toContain("secret-key")

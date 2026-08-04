@@ -1,4 +1,4 @@
-# LikeGo Go 框架实证对齐与修复计划
+# go-like Go 框架实证对齐与修复计划
 
 日期：2026-07-26
 状态：已实施并验收
@@ -9,26 +9,26 @@
 本计划针对当前审计发现的具体问题，对照最新版 Go、go-micro、go-kratos 和
 go-zlab/go-kratos 的真实源码与运行行为，区分以下三类情况：
 
-1. LikeGo 有意采用了更适合 TypeScript、Promise、标准 Web API 或结构式 Server 的设计；
+1. go-like 有意采用了更适合 TypeScript、Promise、标准 Web API 或结构式 Server 的设计；
 2. 设计本身合理，但某条实现路径没有贯彻既有契约；
 3. 与 Go 框架无直接产品语义关系的本地测试、Docker、构建或文档缺陷。
 
 本轮确认需要修复 9 组问题，其中高优先级 2 组、中优先级 2 组、低优先级 5 组。没有发现需要推翻
-LikeGo 当前分层、Server 接口、Context 公共 API、Registry provider 范围或 examples 目录模型的证据。
+go-like 当前分层、Server 接口、Context 公共 API、Registry provider 范围或 examples 目录模型的证据。
 
 核心判断如下：
 
 - 内部 HTTP Transport 不应让 3xx 绕过 Discovery/Selector 重新选择目的端；portable Fetch 当前默认跟随
   307 是实现缺陷。
-- `@likego/context` 让自定义 `StopFunc` 异常向外传播，与 Go 一致；Core waiter 保留已胜出的 Promise
+- `@go-like/context` 让自定义 `StopFunc` 异常向外传播，与 Go 一致；Core waiter 保留已胜出的 Promise
   结果是有意增强，Client 私有旧副本才是缺陷。
-- Croner one-shot/factory ownership 是合理增强；factory 内重入 `stop()` 后任务仍被恢复运行，违反 LikeGo
+- Croner one-shot/factory ownership 是合理增强；factory 内重入 `stop()` 后任务仍被恢复运行，违反 go-like
   自身 Server 契约。
 - Client/Server operation middleware 的 exact、最长前缀和 `*` fallback 设计正确；只缺少与 canonical
   `service/endpoint` 一致的构造期校验。
 - Consul/etcd 的 per-identity FIFO 和 replacement rollback 应保留；空 identity state 永久留在 Map 中没有
   产品价值，应安全回收。
-- LikeGo 在 examples 数量、跨 runtime 与显式 Docker cleanup 证据上覆盖更细；这不等于整体成熟度强于
+- go-like 在 examples 数量、跨 runtime 与显式 Docker cleanup 证据上覆盖更细；这不等于整体成熟度强于
   多年运行的上游。本轮只修真实的 false-green、漏跑和 owner 协议缺口，不再增加一套全 examples
   source-inventory 框架。
 
@@ -42,7 +42,7 @@ LikeGo 当前分层、Server 接口、Context 公共 API、Registry provider 范
 | go-kratos | 最新正式版 `v3.0.0`，同时为 `main` HEAD：[`668db92c2c001e9552594ba5a8aede8456af6d7e`](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e) | App/Server lifecycle、HTTP Client、middleware matcher、Registry 清理 |
 | go-zlab/go-kratos | 根 release `v1.0.0`、`transport/cron/v1.0.0`：[`2a47dd8baf53b79023005781d456ef8e1e4abfb1`](https://github.com/go-zlab/go-kratos/commit/2a47dd8baf53b79023005781d456ef8e1e4abfb1) | Cron Server 实现与第三方 Server 适配方式 |
 | go-zlab 默认分支 | [`ecd00dd24491d09642c76542f94e392c6d639336`](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336) | 确认 Cron 相关文件与正式 module tag 相同 |
-| LikeGo | 当前工作区，Git 基线 `078e24c3b6ebc9228968acf3489cddc7e552b0c4` 加未提交实现 | 比较当前真实代码，不把未发布状态描述成 release |
+| go-like | 当前工作区，Git 基线 `078e24c3b6ebc9228968acf3489cddc7e552b0c4` 加未提交实现 | 比较当前真实代码，不把未发布状态描述成 release |
 
 Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 [`61daed1ec4d5a94d689bc8fab9bc960c6af73ead`](https://github.com/go-kratos/examples/commit/61daed1ec4d5a94d689bc8fab9bc960c6af73ead)，
@@ -57,16 +57,16 @@ Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 2. 使用本机 Go `1.26.5`、Bun `1.3.14`、Node.js、Deno 和真实 Croner `10.0.1` 编写最小复现。
 3. HTTP redirect 使用两个真实本地监听端点；Registry 行为使用真实 etcd `3.7.1` Docker。
 4. 对上游运行定向 Go tests；遇到上游自身的环境或交互式测试限制时单独记录，不把失败伪装成通过。
-5. 对 LikeGo 先运行现有测试，再运行当前测试未覆盖的独立复现，用于证明门禁盲区。
+5. 对 go-like 先运行现有测试，再运行当前测试未覆盖的独立复现，用于证明门禁盲区。
 
 关键实验结果：
 
 - Go 默认 HTTP Client 对 307 保留 POST body、自定义 header 和同 hostname 不同 port 的 Authorization；第二
   端点收到请求。go-micro raw `net.Conn` Transport 返回 307 error，第二端点零请求；Kratos 继承
   `http.Client` 默认行为，第二端点收到请求。
-- LikeGo 高层 Client 经过真实 `newClient`、HTTP Transport 和双端点 307 后，第二端点收到 POST body、
-  自定义 metadata、`Likego-Service` 与 `Likego-Endpoint`，并把第二端点的 200 当成成功。
-- Go 自定义 `context.AfterFunc` stopper 抛出时会 panic；LikeGo Client 当前复现结果为 waiter 超时且出现
+- go-like 高层 Client 经过真实 `newClient`、HTTP Transport 和双端点 307 后，第二端点收到 POST body、
+  自定义 metadata、`Go-Like-Service` 与 `Go-Like-Endpoint`，并把第二端点的 200 当成成功。
+- Go 自定义 `context.AfterFunc` stopper 抛出时会 panic；go-like Client 当前复现结果为 waiter 超时且出现
   `unhandled: stop boom`。
 - Croner factory 内同步调用同一 Server 的 `stop()` 后，当前结果为 `start` 已 resolve，但 native Cron 仍
   `running=true`、`stopped=false`。
@@ -86,19 +86,19 @@ Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 - go-zlab Cron 的 `TestServer` 会等待真实 OS signal；`TestTransport_Kind` 又因用 `reflect.DeepEqual`
   比较 `string` 与 Kratos `transport.Kind` 而报告 `expect cron, got cron`。只有
   `go test -run '^$' ./...` 的 compile-only 检查通过。本轮使用独立最小程序验证其 Start/Stop 行为，
-  不把现有交互测试或类型断言失败当成 LikeGo 的质量 oracle。
+  不把现有交互测试或类型断言失败当成 go-like 的质量 oracle。
 
 ## 4. 逐项判定矩阵
 
-| 优先级 | 问题 | Go / 上游事实 | LikeGo 设计判定 | 处理 |
+| 优先级 | 问题 | Go / 上游事实 | go-like 设计判定 | 处理 |
 | --- | --- | --- | --- | --- |
 | P1 | portable Fetch 跟随 307 | go-micro 不跟随；Kratos 继承 Go 默认跟随 | 内部节点已由 Selector 决定，portable 与 Node native 语义不一致 | 修复为 `redirect: "manual"` |
 | P1 | Client waiter 遇 throwing `StopFunc` 悬挂 | Go custom stopper 可 panic；上游没有 Promise waiter | Context 正确；Core 增强正确；Client 私有副本无意偏离 | 删除副本并复用 Core |
-| P3 | Croner factory 内 stop 后任务复活 | 上游不承诺 factory 自同步重入安全 | LikeGo one-shot 设计正确；这是防御性实现缺口 | 封闭 factory 自重入路径 |
-| P2 | operation selector 接受永不匹配值 | Kratos matcher 宽松并 silent miss；go-micro 无同层 matcher | LikeGo canonical operation 与对称 Client/Server `use` 是有意设计 | 只补构造期校验 |
+| P3 | Croner factory 内 stop 后任务复活 | 上游不承诺 factory 自同步重入安全 | go-like one-shot 设计正确；这是防御性实现缺口 | 封闭 factory 自重入路径 |
+| P2 | operation selector 接受永不匹配值 | Kratos matcher 宽松并 silent miss；go-micro 无同层 matcher | go-like canonical operation 与对称 Client/Server `use` 是有意设计 | 只补构造期校验 |
 | P3 | Consul/etcd identity Map 不回收 | go-micro、Kratos 注销时清理本地状态 | FIFO/rollback 正确；永久空状态不是有意缓存 | 引用计数后安全删除 |
-| P2 | example coverage false-green、默认可运行案例漏跑 | 上游没有 LikeGo 同等级门禁 | 严格门禁是有意设计；配置和筛选实现有缺口 | 修阈值和外部服务声明 |
-| P3 | 三个 provider Docker harness 忽略 owner | 上游多依赖 job-scoped service，无同类协议 | LikeGo owner 协议是有意增强，但执行不完整 | 接入现有 owner label |
+| P2 | example coverage false-green、默认可运行案例漏跑 | 上游没有 go-like 同等级门禁 | 严格门禁是有意设计；配置和筛选实现有缺口 | 修阈值和外部服务声明 |
+| P3 | 三个 provider Docker harness 忽略 owner | 上游多依赖 job-scoped service，无同类协议 | go-like owner 协议是有意增强，但执行不完整 | 接入现有 owner label |
 | P3 | 完整 verify 重复 build 三次 | Go build cache 可复用，不能直接类比 tsdown | 独立命令自包含正确；组合命令重复无价值 | 只优化组合 `verify` |
 | P3 | locale 文档漏 Store Memory；`tsc-alias` 未使用 | 与 Go 产品语义无直接关系 | 本地文档遗漏和死依赖 | 补文档、删依赖 |
 
@@ -117,7 +117,7 @@ Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 
 1. 在 portable Fetch 构造的标准 `RequestInit` 中固定 `redirect: "manual"`。
 2. 不增加“允许 redirect”公共选项；首版内部 Transport 没有第二套路由协议。
-3. 新增同 origin 与跨 origin 两组真实双端点 307 回归，发送 body、自定义 header、LikeGo
+3. 新增同 origin 与跨 origin 两组真实双端点 307 回归，发送 body、自定义 header、go-like
    service/endpoint/metadata；两组均断言 redirect destination 请求数为零，跨 origin 用例额外锁定内部 metadata
    不会泄漏到其他 origin。
 4. 断言 307 继续经过现有 `receiveMessage` 产生相同的 HTTP status error，不创建新错误类型。
@@ -129,11 +129,11 @@ Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 验收：
 
 ```sh
-bun run --filter @likego/transport-http test:coverage
-bun run --filter @likego/transport-http smoke:bun
-bun run --filter @likego/transport-http smoke:node
-bun run --filter @likego/transport-http smoke:deno
-bun run --filter @likego/transport-http e2e:node
+bun run --filter @go-like/transport-http test:coverage
+bun run --filter @go-like/transport-http smoke:bun
+bun run --filter @go-like/transport-http smoke:node
+bun run --filter @go-like/transport-http smoke:deno
+bun run --filter @go-like/transport-http e2e:node
 ```
 
 ### Task 2：统一 Client 的 Context waiter
@@ -151,15 +151,15 @@ bun run --filter @likego/transport-http e2e:node
 实施：
 
 1. 删除 `resolver.ts` 的私有 `waitForContext`。
-2. `resolver.ts` 与 `index.ts` 复用现有 `@likego/core/lifecycle` 导出。
-3. 在 Client runtime dependencies 中加入精确版本 `"@likego/core": "0.0.1"`；发布 tarball 不能依赖
+2. `resolver.ts` 与 `index.ts` 复用现有 `@go-like/core/lifecycle` 导出。
+3. 在 Client runtime dependencies 中加入精确版本 `"@go-like/core": "0.0.1"`；发布 tarball 不能依赖
    workspace 偶然解析。
-4. 从根目录执行 `bun add --cwd packages/client --exact @likego/core@0.0.1` 同步 manifest 与 `bun.lock`，并
+4. 从根目录执行 `bun add --cwd packages/client --exact @go-like/core@0.0.1` 同步 manifest 与 `bun.lock`，并
    核对 lockfile 的 Client workspace dependency record；不手改 lockfile。
 5. 同步 Client package contract 与 repository dependency contract；两处都要锁定这条精确直接依赖。
 6. 新增 operation fulfilled、operation rejected 两种 throwing `StopFunc` 回归，断言原 operation 结果胜出、
    waiter 必定结算且没有 unhandled rejection。
-7. 不修改 `@likego/context.afterFunc`，也不新建 util package。
+7. 不修改 `@go-like/context.afterFunc`，也不新建 util package。
 
 依赖图不会成环：`client → core → registry → metadata → context`；Core、Registry、Metadata、Context 均不
 反向依赖 Client，现有 Client TypeScript references 也已包含 Core。
@@ -167,9 +167,9 @@ bun run --filter @likego/transport-http e2e:node
 验收：
 
 ```sh
-bun run --filter @likego/client test:coverage
-bun run --filter @likego/client typecheck
-bun run --filter @likego/client build
+bun run --filter @go-like/client test:coverage
+bun run --filter @go-like/client typecheck
+bun run --filter @go-like/client build
 bun test packages/client/test/package-contract.test.ts test/repository-contract.test.ts
 ```
 
@@ -217,8 +217,8 @@ starting -> failed
 bun test --isolate --no-orphans \
   packages/croner/test/lifecycle.test.ts \
   packages/croner/test/construction.test.ts
-bun run --filter @likego/croner typecheck
-bun run --filter @likego/croner test:coverage
+bun run --filter @go-like/croner typecheck
+bun run --filter @go-like/croner test:coverage
 bun run test:e2e:prepared -- --suite cron-native
 ```
 
@@ -249,10 +249,10 @@ Croner 是真实进程内调度器，不需要为了形式套 Docker；上述 E2
 验收：
 
 ```sh
-bun run --filter @likego/client test:coverage
-bun run --filter @likego/server test:coverage
-bun run --filter @likego/client typecheck
-bun run --filter @likego/server typecheck
+bun run --filter @go-like/client test:coverage
+bun run --filter @go-like/server test:coverage
+bun run --filter @go-like/client typecheck
+bun run --filter @go-like/server typecheck
 ```
 
 ### Task 5：回收 Consul/etcd 空 identity state
@@ -287,10 +287,10 @@ bun run --filter @likego/server typecheck
 验收必须包含真实服务：
 
 ```sh
-bun run --filter @likego/registry-consul test:coverage
-bun run --filter @likego/registry-etcd test:coverage
-bun run --filter @likego/registry-consul typecheck
-bun run --filter @likego/registry-etcd typecheck
+bun run --filter @go-like/registry-consul test:coverage
+bun run --filter @go-like/registry-etcd test:coverage
+bun run --filter @go-like/registry-consul typecheck
+bun run --filter @go-like/registry-etcd typecheck
 bun run test:e2e:prepared -- --suite registry-consul-docker
 bun run test:e2e:prepared -- --suite registry-etcd-docker
 ```
@@ -324,7 +324,7 @@ bun run test:e2e:prepared -- --suite registry-etcd-docker
 验收：
 
 ```sh
-bun run --filter @likego/example-enterprise-platform-runtime test:coverage
+bun run --filter @go-like/example-enterprise-platform-runtime test:coverage
 bun test test/repository-contract.test.ts
 bun run test:examples
 bun run test:examples:programs
@@ -353,8 +353,8 @@ bun run test:examples:docker
 
 仅给资源添加 label 不能在 harness 被杀死后执行清理，不能把 label 本身写成 cleanup 证明。完整最小修复为：
 
-1. 三个 harness 复用现有 owner 格式校验，fail closed 读取 `LIKEGO_E2E_OWNER`；Docker resource 同时保留
-   随机 run label，并增加 `io.likego.e2e.owner=<owner>`。
+1. 三个 harness 复用现有 owner 格式校验，fail closed 读取 `GO_LIKE_E2E_OWNER`；Docker resource 同时保留
+   随机 run label，并增加 `io.go-like.e2e.owner=<owner>`。
 2. 给现有 `runCommand` 的私有 CommandDefinition 增加可选 AbortSignal；pre-aborted signal 必须在
    `Bun.spawn` 前原样拒绝。timeout 或运行中 abort 胜出时复用已有 process-tree termination，abort 必须原样
    抛出 signal reason；正常退出和 abort 后都移除 listener。分别补 timeout、pre-abort、运行中 abort 与
@@ -404,7 +404,7 @@ bun run verify:file-inventory
 
 ```sh
 bun scripts/verify-example-programs.cli.ts
-bun run --filter '@likego/example-*' --parallel --if-present e2e:node:prepared
+bun run --filter '@go-like/example-*' --parallel --if-present e2e:node:prepared
 ```
 
 3. 同步根脚本契约测试；不引入 task runner、构建缓存层或新依赖。
@@ -433,7 +433,7 @@ bun run verify
 实施：
 
 1. 在默认、简体中文、繁体中文（香港）、繁体中文（台湾）、阿拉伯语、西班牙语、法语和俄语 package
-   reference 中补充 `@likego/store-memory`；以实际文件清单为准，共八份。
+   reference 中补充 `@go-like/store-memory`；以实际文件清单为准，共八份。
 2. 在现有 doc-site test 循环断言每份 package reference 包含该精确包名。
 3. 使用 Bun 删除根直接开发依赖：`bun remove tsc-alias`。
 4. 更新 lockfile 和 workspace 固定依赖期望；不寻找替代依赖，当前 tsdown 已完成构建产物处理。
@@ -455,10 +455,10 @@ bun run verify:doc
 
 1. 不复制 Kratos 默认 redirect 行为；它继承的是通用 `net/http.Client` 默认值，会绕过内部 Selector 的首次
    节点决策。
-2. 不改变 `@likego/context` 的 throwing custom `StopFunc` 行为；异常隔离只发生在 Promise waiter 边界。
+2. 不改变 `@go-like/context` 的 throwing custom `StopFunc` 行为；异常隔离只发生在 Promise waiter 边界。
 3. 不把 Client operation `use()` 删除为 go-micro 的全局 wrapper，也不补 Kratos Regex/Path/Match；当前对称
    Client/Server API 是有意设计。
-4. 不把 go-zlab Cron 的构造期 scheduler 和 `Name()` 搬入 LikeGo；Croner 只适配 native lifecycle，仍是普通
+4. 不把 go-zlab Cron 的构造期 scheduler 和 `Name()` 搬入 go-like；Croner 只适配 native lifecycle，仍是普通
    结构式 Server。
 5. 不新增 Registry provider。当前 Registry 范围已经由产品决策冻结。
 6. 不增加全 examples source-inventory 框架，不把 root 404 改成失败，也不把 examples 改回单文件片段。

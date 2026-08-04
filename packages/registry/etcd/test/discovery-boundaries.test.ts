@@ -1,5 +1,5 @@
-import { background, withCancelCause } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { newEtcdRegistry, type EtcdFetch } from "../src/index"
@@ -114,7 +114,7 @@ test("stop aborts one pending wait and remains idempotent", async () => {
   const watcher = await registry.watch(background(), "orders")
   const pending = watcher.next(background())
   await watcher.stop(background())
-  await expect(pending).rejects.toMatchObject({ code: "LIKEGO_WATCHER_STOPPED" })
+  await expect(pending).rejects.toMatchObject({ code: "GO_LIKE_WATCHER_STOPPED" })
   await watcher.stop(background())
 })
 
@@ -146,7 +146,7 @@ test("replacement watcher fails closed when its bounded queue overflows", async 
   )
   await Bun.sleep(20)
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_OVERFLOW"
+    code: "GO_LIKE_WATCHER_OVERFLOW"
   })
   await watcher.stop(background())
   await registry.deregister(background(), updated)
@@ -179,7 +179,7 @@ test("resident watch protocol corruption rejects pending next", async () => {
   })
   const watcher = await registry.watch(background(), "orders")
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   expect(watches).toBe(1)
   await watcher.stop(background())
@@ -227,7 +227,7 @@ test("resident watch rejects malformed frame carriers and cancellation states", 
     const value = registryWithWatch(() => watchResponse([bytes], true))
     const watcher = await value.registry.watch(background(), "orders")
     await expect(watcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     expect(value.watchCalls()).toBe(1)
     await watcher.stop(background())
@@ -239,7 +239,7 @@ test("resident watch rejects invalid UTF-8 and post-creation cancellation withou
     const invalidUtf8 = registryWithWatch(() => watchResponse([bytes], true))
     const invalidWatcher = await invalidUtf8.registry.watch(background(), "orders")
     await expect(invalidWatcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     await invalidWatcher.stop(background())
   }
@@ -290,7 +290,7 @@ test("resident watch counts an initial UTF-8 BOM toward the raw byte limit", asy
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("resident watch rejects a chunked frame above the 1 MiB raw byte limit", async () => {
@@ -306,7 +306,7 @@ test("resident watch rejects a chunked frame above the 1 MiB raw byte limit", as
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("resident watch rejects a partial frame as soon as its raw bytes exceed 1 MiB", async () => {
@@ -337,7 +337,7 @@ test("resident watch rejects a partial frame as soon as its raw bytes exceed 1 M
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("resident watch ignores body cancellation failure after a terminal frame error", async () => {
@@ -346,7 +346,7 @@ test("resident watch ignores body cancellation failure after a terminal frame er
   )
   const watcher = await value.registry.watch(background(), "orders")
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   await watcher.stop(background())
 })

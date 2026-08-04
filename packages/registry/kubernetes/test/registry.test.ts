@@ -4,8 +4,8 @@ import {
   type Context,
   withCancelCause,
   withTimeout
-} from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+} from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { encodeCandidate, encodeSlice } from "../src/codec"
@@ -31,7 +31,7 @@ function registry(api: FakeKubernetes, timeoutMs = 5_000) {
   return newKubernetesRegistry({
     fetch: api.fetch,
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4,
     watchTimeoutSeconds: 5,
@@ -66,7 +66,7 @@ test("register, replace, discover, stale-deregister, and exact deregister use on
   expect(await value.register(background(), initial)).toBeUndefined()
   const names = api.names()
   expect(names).toHaveLength(1)
-  expect(names[0]).toMatch(/^likego-[a-z2-7]{52}$/)
+  expect(names[0]).toMatch(/^go-like-[a-z2-7]{52}$/)
   expect(await value.getService(background(), "orders")).toEqual([initial])
 
   expect(await value.register(background(), updated)).toBeUndefined()
@@ -90,7 +90,7 @@ test("stale deregister cannot delete an identical instance taken over by another
   const common = {
     fetch: api.fetch,
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4
   } as const
@@ -120,7 +120,7 @@ test("registration rejects foreign collision and malformed input before mutation
   const candidate = await encodeCandidate(instance("initial"))
   api.putForeign(candidate.name)
   await expect(value.register(background(), instance("initial"))).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   expect(api.object(candidate.name)).not.toBeNull()
   await expect(value.deregister(background(), instance("initial"))).resolves.toBeUndefined()
@@ -139,7 +139,7 @@ test("registration rejects foreign collision and malformed input before mutation
 test("registration rejects a valid readback for a different instance revision", async () => {
   const api = fakeKubernetes()
   const wrong = await encodeCandidate(instance("updated"))
-  const wrongWire = JSON.parse(encodeSlice(wrong, "likego-test", null)) as Record<string, unknown>
+  const wrongWire = JSON.parse(encodeSlice(wrong, "go-like-test", null)) as Record<string, unknown>
   const wrongMetadata = wrongWire.metadata as Record<string, unknown>
   wrongMetadata.resourceVersion = "99"
   const value = newKubernetesRegistry({
@@ -149,12 +149,12 @@ test("registration rejects a valid readback for a different instance revision", 
       return api.fetch(request)
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4
   })
   await expect(value.register(background(), instance("initial"))).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 
   const ownerApi = fakeKubernetes()
@@ -169,11 +169,11 @@ test("registration rejects a valid readback for a different instance revision", 
       return Response.json(body, { status: 201 })
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     owner: { name: "orders-pod", uid: "pod-uid" }
   })
   await expect(strippedOwner.register(background(), instance("initial"))).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
 })
 
@@ -211,9 +211,9 @@ test("watch returns complete replacement snapshots and owns only next/stop", asy
   })
   await expect(watcher.stop(background())).resolves.toBeUndefined()
   await observedPending
-  expect(pendingFailure).toMatchObject({ code: "LIKEGO_WATCHER_STOPPED" })
+  expect(pendingFailure).toMatchObject({ code: "GO_LIKE_WATCHER_STOPPED" })
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_STOPPED"
+    code: "GO_LIKE_WATCHER_STOPPED"
   })
   await expect(watcher.stop(background())).resolves.toBeUndefined()
 })
@@ -231,14 +231,14 @@ test("watch emits an existing snapshot and fails closed on malformed frames and 
   await malformed.next(background())
   api.sendWatchFrame({ type: "UNKNOWN", object: {} })
   await expect(malformed.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   await malformed.stop(background())
 
   const overflowValue = newKubernetesRegistry({
     fetch: api.fetch,
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4,
     watchTimeoutSeconds: 5,
@@ -250,7 +250,7 @@ test("watch emits an existing snapshot and fails closed on malformed frames and 
   await overflowValue.deregister(background(), instance("updated"))
   await Bun.sleep(10)
   await expect(overflow.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_OVERFLOW",
+    code: "GO_LIKE_WATCHER_OVERFLOW",
     bufferSize: 1
   })
   await overflow.stop(background())
@@ -291,7 +291,7 @@ test("watch frame syntax, shape, revision, status, and UTF-8 errors fail closed"
     const failure = watcher.next(background()).catch((error: unknown) => error)
     api.sendWatchBytes(malformed.bytes)
     if (malformed.close) api.closeWatches()
-    expect(await failure).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+    expect(await failure).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await watcher.stop(background())
   }
 })
@@ -347,7 +347,7 @@ test("watch retries a failed event relist without skipping the event revision", 
       return api.fetch(request)
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4
   })
@@ -401,7 +401,7 @@ test("watch counts an initial UTF-8 BOM toward the raw byte limit", async () => 
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("watch rejects a chunked frame above the 1 MiB raw byte limit", async () => {
@@ -417,7 +417,7 @@ test("watch rejects a chunked frame above the 1 MiB raw byte limit", async () =>
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("watch rejects a partial frame as soon as its raw bytes exceed 1 MiB", async () => {
@@ -433,7 +433,7 @@ test("watch rejects a partial frame as soon as its raw bytes exceed 1 MiB", asyn
   ])
   await watcher.stop(background())
   await observed
-  expect(outcome).toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  expect(outcome).toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("watch tolerates reader cancellation failure and aborts a retry wait on stop", async () => {
@@ -463,7 +463,7 @@ test("watch tolerates reader cancellation failure and aborts a retry wait on sto
       return cancelApi.fetch(request)
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4
   })
@@ -505,7 +505,7 @@ test("watch tolerates reader cancellation failure and aborts a retry wait on sto
       return retryApi.fetch(request)
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 100,
     retryMaximumMs: 100
   })
@@ -528,14 +528,14 @@ test("discovery validates names and normalizes get and watch admission failures"
         { status: 403 }
       ),
     address: "https://kubernetes.example",
-    namespace: "likego-test"
+    namespace: "go-like-test"
   })
   await expect(denied.getService(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_KUBERNETES_HTTP",
+    code: "GO_LIKE_KUBERNETES_HTTP",
     status: 403
   })
   await expect(denied.watch(background(), "orders")).rejects.toMatchObject({
-    code: "LIKEGO_KUBERNETES_HTTP",
+    code: "GO_LIKE_KUBERNETES_HTTP",
     status: 403
   })
 })
@@ -552,7 +552,7 @@ test("watch admission closes an admitted stream when its caller cancels concurre
       return api.fetch(request)
     },
     address: "https://kubernetes.example",
-    namespace: "likego-test"
+    namespace: "go-like-test"
   })
   const [ctx, cancel] = withCancelCause(background())
   cancelAdmission = () => cancel(failure)
@@ -601,7 +601,7 @@ test("caller cancellation aborts the exact standard Fetch request", async () => 
   const value = newKubernetesRegistry({
     fetch,
     address: "https://kubernetes.example",
-    namespace: "likego-test"
+    namespace: "go-like-test"
   })
   const [ctx, cancel] = withCancelCause(background())
   const failure = new Error("caller canceled")
@@ -640,7 +640,7 @@ test("watch admission links caller cancellation and its common timeout", async (
   const canceled = newKubernetesRegistry({
     fetch: heldWatchApi(cancelAdmitted),
     address: "https://kubernetes.example",
-    namespace: "likego-test"
+    namespace: "go-like-test"
   })
   const [ctx, cancel] = withCancelCause(background())
   const cancelFailure = new Error("watch admission canceled")
@@ -656,7 +656,7 @@ test("watch admission links caller cancellation and its common timeout", async (
   const timed = newKubernetesRegistry({
     fetch: heldWatchApi(timeoutAdmitted),
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     timeoutMs: 1
   })
   const timedWatch = timed.watch(background(), "orders")

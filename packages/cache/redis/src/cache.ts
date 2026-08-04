@@ -1,8 +1,8 @@
-import { cause, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
-import type { Cache, PutOption } from "@likego/cache"
-import { putOptions } from "@likego/cache/provider"
+import { cause, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
+import type { Cache, PutOption } from "@go-like/cache"
+import { putOptions } from "@go-like/cache/provider"
 
 import { decodeRedisCacheValue, encodeRedisCacheValue } from "./codec"
 import { newRedisConnection, type RedisConnectionFactory } from "./connection"
@@ -20,7 +20,7 @@ function newRedisCacheStateError(operation: string, state: RedisCacheState): Err
   const error = new Error(`Redis Cache ${operation} is unavailable while ${state}`)
   Object.defineProperties(error, {
     name: { enumerable: true, value: "RedisCacheStateError" },
-    code: { enumerable: true, value: "LIKEGO_CACHE_REDIS_STATE" },
+    code: { enumerable: true, value: "GO_LIKE_CACHE_REDIS_STATE" },
     operation: { enumerable: true, value: operation },
     state: { enumerable: true, value: state }
   })
@@ -188,7 +188,7 @@ export function createRedisCache(
       ctx: Context,
       rawKey: string,
       rawValue: Uint8Array,
-      ...functionalOptions: readonly PutOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+      ...functionalOptions: readonly PutOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
     ): Promise<void> {
       const release = admit(ctx, "put")
       try {

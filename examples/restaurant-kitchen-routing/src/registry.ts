@@ -1,6 +1,6 @@
-import type { Registry } from "@likego/registry"
-import { domain, interfaces, newMDNSRegistry, type MDNSOption } from "@likego/registry-mdns"
-import { newNodeMDNSHost } from "@likego/registry-mdns/node"
+import type { Registry } from "@go-like/registry"
+import { domain, interfaces, newMDNSRegistry, type MDNSOption } from "@go-like/registry-mdns"
+import { newNodeMDNSHost } from "@go-like/registry-mdns/node"
 
 export type KitchenRegistryEnvironment = Readonly<Record<string, string | undefined>>
 

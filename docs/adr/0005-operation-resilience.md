@@ -10,11 +10,11 @@ Kratos 通过 middleware 提供 circuit breaker 与 rate limiter，而 go-micro 
 策略。这些行为对使用标准 Fetch 的 TypeScript 服务仍然有价值，但通用 RPC client 或隐式 Fetch
 middleware 必须猜测请求体能否重放，以及操作是否具备幂等性。
 
-LikeGo 还要求 Context 保持为独立首参，并要求 portable production code 只使用 ECMAScript 与标准 Web API。
+go-like 还要求 Context 保持为独立首参，并要求 portable production code 只使用 ECMAScript 与标准 Web API。
 
 ## 决策
 
-`@likego/resilience` 提供三个相互独立、作用于操作范围的 primitive：
+`@go-like/resilience` 提供三个相互独立、作用于操作范围的 primitive：
 
 - `retry(ctx, operation, options)` 要求显式提供 `idempotent` 或 `caller-approved` 授权、有限的 attempt
   count，以及由调用方拥有的 failure predicate。`exponentialBackoff` 提供有界 delay policy。Context
@@ -29,16 +29,16 @@ LikeGo 还要求 Context 保持为独立首参，并要求 portable production c
 
 调用侧只增加两个薄适配器：
 
-- `@likego/client` 的 `circuitBreakerMiddleware(options)` 在 middleware 闭包中按已安装的 canonical
+- `@go-like/client` 的 `circuitBreakerMiddleware(options)` 在 middleware 闭包中按已安装的 canonical
   `service/endpoint` operation 懒建 breaker。它包围一次完整逻辑调用，所以显式 retry 的多个 attempt 只记录
   一个 outcome；open 时不会进入 Discovery、Selector 或 Transport I/O。Context 取消保持中立，表示业务交换
   已完成交换的原生 `AggregateError` 固定记为健康；response 位于 `cause`，后置错误按顺序位于 `errors`。
-- `@likego/server` 的 `rateLimitMiddleware(limiter)` 一个实例只使用调用方传入的一个 limiter，与 Kratos Server
+- `@go-like/server` 的 `rateLimitMiddleware(limiter)` 一个实例只使用调用方传入的一个 limiter，与 Kratos Server
   middleware 的共享策略一致。拒绝时返回 canonical `rate_limited`、HTTP 语义状态 429 和
   `retryAfterMs`。需要按 operation 隔离时，由 `use(selector, ...)` 组合不同 limiter 实例。
 
 该 package 不调用 Fetch、不 clone `Request`、不缓存请求体、不选择端点，也不转换 `Response`。授权 retry
-的 Fetch 调用方必须在每次 retry operation 内构造全新的 `Request`。LikeGo 不会重放 streaming body 或
+的 Fetch 调用方必须在每次 retry operation 内构造全新的 `Request`。go-like 不会重放 streaming body 或
 其他无法重新构造的请求体。
 
 有状态 factory 返回结构化的冻结对象，`exponentialBackoff` 则返回无状态的 callable policy。契约不包含
@@ -65,5 +65,5 @@ Token-bucket decision 是同步且非阻塞的。Wall-clock 调整不能凭空�
 
 应用可以围绕 Fetch 调用、registry selection、broker operation 或其他任意 Context-aware operation 显式
 组合 primitive；内部 unary Client/Server 则使用上述薄 middleware。代价是有意保留的显式性：调用方必须
-自行声明幂等性、failure classification、attempt bound 与 `Request` 重建方式。LikeGo 不移植 Kratos 的
+自行声明幂等性、failure classification、attempt bound 与 `Request` 重建方式。go-like 不移植 Kratos 的
 概率型 SRE breaker、BBR、CPU sampler 或完成反馈协议，也不把 token bucket 冒充这些算法。

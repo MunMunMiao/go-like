@@ -1,5 +1,5 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { Context } from "@likego/context"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { Context } from "@go-like/context"
 import type {
   Msg,
   NatsConnection,
@@ -18,7 +18,7 @@ import {
 /** Exposes official NATS Core publish options while reserving headers for BrokerMessage. */
 export type NatsCoreBrokerPublishOptions = Omit<PublishOptions, "headers">
 
-/** Exposes iterator subscription options while reserving callback ownership for LikeGo. */
+/** Exposes iterator subscription options while reserving callback ownership for go-like. */
 export type NatsCoreBrokerSubscribeOptions = Omit<SubscriptionOptions, "callback">
 
 /** Creates native publish options with BrokerMessage as the only header source. */
@@ -31,7 +31,7 @@ function publishOptions(
   return Object.assign({}, options, { headers: messageHeaders })
 }
 
-/** Reports whether a native subscribe result has the official lifecycle surface LikeGo owns. */
+/** Reports whether a native subscribe result has the official lifecycle surface go-like owns. */
 function isSubscription(value: unknown): value is Subscription {
   if (typeof value !== "object" || value === null) return false
   return (

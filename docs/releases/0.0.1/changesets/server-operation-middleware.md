@@ -1,5 +1,5 @@
 ---
-"@likego/server": minor
+"@go-like/server": minor
 ---
 
 增加 `use(selector, ...middleware)` operation middleware，按精确 selector、最长尾部通配前缀与 `*`

@@ -4,11 +4,11 @@ import { join, resolve } from "node:path"
 const packageRoot = resolve(import.meta.dir, "../..")
 const artifactRoot = join(packageRoot, ".artifacts")
 const fixtures = join(packageRoot, "test/fixtures/tls")
-const owner = process.env.LIKEGO_E2E_OWNER
+const owner = process.env.GO_LIKE_E2E_OWNER
 if (owner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(owner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const label = `io.likego.e2e.owner=${owner}`
+const label = `io.go-like.e2e.owner=${owner}`
 const payloadVolume = `${owner}-payload`
 const payloadContainer = `${owner}-stager`
 const lanes = Object.freeze([
@@ -142,7 +142,7 @@ try {
       "--mount",
       `type=volume,src=${payloadVolume},dst=/payload,readonly`,
       "--env",
-      "LIKEGO_TRANSPORT_HTTP_TLS_E2E_ROOT=file:///payload/tls/",
+      "GO_LIKE_TRANSPORT_HTTP_TLS_E2E_ROOT=file:///payload/tls/",
       lane.image,
       "node",
       "/payload/work/node-secure-e2e.mjs"
@@ -150,7 +150,7 @@ try {
     if (!result.stdout.includes(`"runtime":"${lane.runtime}"`)) {
       throw new Error(`${lane.name} did not report the expected runtime: ${result.stdout}`)
     }
-    if (!result.stdout.includes("LIKEGO_NODE_HTTP_HOST_SECURE_E2E_V1=")) {
+    if (!result.stdout.includes("GO_LIKE_NODE_HTTP_HOST_SECURE_E2E_V1=")) {
       throw new Error(`${lane.name} omitted the secure-host evidence marker`)
     }
   }

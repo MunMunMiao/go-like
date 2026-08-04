@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/store-consul",
+  "name": "@go-like/store-consul",
   "version": "0.0.1",
-  "description": "Portable Consul KV Store provider using standard Web Fetch for LikeGo.",
+  "description": "Portable Consul KV Store provider using standard Web Fetch for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,9 +25,9 @@
     "test:e2e": "bun test/e2e/consul-docker.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
-    "@likego/store": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/store": "0.0.1"
   },
   "license": "MIT"
 }

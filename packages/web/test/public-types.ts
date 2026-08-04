@@ -1,4 +1,4 @@
-import type { ProbeRegistry } from "@likego/health"
+import type { ProbeRegistry } from "@go-like/health"
 import * as WebPackage from "../src/index"
 import {
   contextHandler,

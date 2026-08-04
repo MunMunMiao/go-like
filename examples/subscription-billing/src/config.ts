@@ -5,8 +5,8 @@ import {
   type Config,
   type ConfigObject,
   type ConfigValue
-} from "@likego/config"
-import type { Context } from "@likego/context"
+} from "@go-like/config"
+import type { Context } from "@go-like/context"
 
 import {
   newChangeSubscription,

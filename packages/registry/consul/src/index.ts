@@ -1,5 +1,5 @@
-import { type ServiceInstance, type Watcher } from "@likego/registry"
-import type { Context } from "@likego/context"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
+import type { Context } from "@go-like/context"
 
 import { newDiscoveryManager } from "./discovery"
 import { captureOptions, operationOptions } from "./options"

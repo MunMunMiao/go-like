@@ -1,12 +1,12 @@
-# `@likego/metadata`
+# `@go-like/metadata`
 
-`@likego/metadata` 提供可移植、不可变的多值请求 metadata，以及相互隔离的 client/server Context 域。
+`@go-like/metadata` 提供可移植、不可变的多值请求 metadata，以及相互隔离的 client/server Context 域。
 所有 key 在写入时归一为小写；value 保持声明顺序。`clone`、`append`、`set`、`remove`、`merge` 均返回新快照，
 不会保留调用方对象或数组。公共包不把 metadata 预设成 HTTP header。
 
 ```ts
-import { background } from "@likego/context"
-import { appendToClientContext, fromClientContext, newMetadata, values } from "@likego/metadata"
+import { background } from "@go-like/context"
+import { appendToClientContext, fromClientContext, newMetadata, values } from "@go-like/metadata"
 
 const initial = newMetadata({ "Trace-ID": "trace-1", baggage: ["a=1", "b=2"] })
 const ctx = appendToClientContext(background(), "Trace-ID", "trace-2", "tenant", "storefront")
@@ -24,7 +24,7 @@ patch 中同名 key 的完整多值数组替换 base，对其他 key 不做修�
 `propagateToClientContext(ctx, options?)` 只从当前 server metadata 复制显式选中的 key：
 
 ```ts
-import { propagateToClientContext } from "@likego/metadata"
+import { propagateToClientContext } from "@go-like/metadata"
 
 const downstream = propagateToClientContext(ctx, {
   exact: ["trace-id"],
@@ -44,6 +44,6 @@ cookie 等 server metadata 意外带给下游；空 prefix 和其他非法规则
 - 输入只接受普通对象或 null-prototype 对象，不执行 getter，不接受 symbol key。
 
 控制字符、非 HTTP-token key、单项或总 payload 大小等协议规则由具体 provider 在 wire 边界负责。该包不自动进行
-wire 编码。当前 `@likego/transport` 的 `Message.header` 是单值
+wire 编码。当前 `@go-like/transport` 的 `Message.header` 是单值
 `Readonly<Record<string, string>>`，因此 provider 必须为具体协议显式定义多值投影；公共层不会用逗号拼接、覆盖
 或 JSON 编码来伪造无损传播。

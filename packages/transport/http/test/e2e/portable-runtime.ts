@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { executor, newHTTPTransport } from "@likego/transport-http"
+import { background } from "@go-like/context"
+import { executor, newHTTPTransport } from "@go-like/transport-http"
 
 const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"
 let redirect = ""

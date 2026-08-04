@@ -1,5 +1,5 @@
 ---
-"@likego/transport-http": patch
+"@go-like/transport-http": patch
 ---
 
 新增 Node-only 安全 HTTP transport：公共 `newNodeHTTPTransport(...)` 通过 `clientAuth(...)` 与

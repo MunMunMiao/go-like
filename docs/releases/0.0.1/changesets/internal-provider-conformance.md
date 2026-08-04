@@ -1,8 +1,8 @@
 ---
-"@likego/cache": minor
-"@likego/registry": minor
-"@likego/store": minor
-"@likego/transport": minor
+"@go-like/cache": minor
+"@go-like/registry": minor
+"@go-like/store": minor
+"@go-like/transport": minor
 ---
 
 将 provider conformance helpers 收回 workspace 内部，删除四个公共 `./testing` 子路径。应用只需要学习

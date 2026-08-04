@@ -1,6 +1,6 @@
-import { background } from "@likego/context"
-import type { Registry, ServiceInstance, Watcher } from "@likego/registry"
-import type { RegistrationErrorHandler } from "@likego/registry/provider"
+import { background } from "@go-like/context"
+import type { Registry, ServiceInstance, Watcher } from "@go-like/registry"
+import type { RegistrationErrorHandler } from "@go-like/registry/provider"
 
 import * as KubernetesPackage from "../src/index"
 import {

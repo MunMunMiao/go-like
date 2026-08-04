@@ -1,4 +1,4 @@
-import type { Registry, ServiceInstance } from "@likego/registry"
+import type { Registry, ServiceInstance } from "@go-like/registry"
 import { test } from "bun:test"
 
 import { registryConformanceCases, type RegistryConformanceSubject } from "../../src/testing"
@@ -10,7 +10,7 @@ function registry(api: FakeKubernetes): Registry {
   return newKubernetesRegistry({
     fetch: api.fetch,
     address: "https://kubernetes.example",
-    namespace: "likego-test",
+    namespace: "go-like-test",
     retryInitialMs: 1,
     retryMaximumMs: 4,
     watchTimeoutSeconds: 5

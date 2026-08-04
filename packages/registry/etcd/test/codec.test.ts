@@ -1,4 +1,4 @@
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import {
@@ -20,17 +20,17 @@ const instance: ServiceInstance = {
 }
 
 test("canonical record binds deterministic identity, content, payload, and key", async () => {
-  const record = await encodeRecord("/likego/registry/v1/", instance)
+  const record = await encodeRecord("/go-like/registry/v1/", instance)
   expect(record.identity).toBe(await registrationIdentity(instance))
-  expect(record.key).toBe(`${recordPrefix("/likego/registry/v1/")}${record.identity}`)
-  expect(await decodeRecord("/likego/registry/v1/", record.key, record.value)).toEqual({
+  expect(record.key).toBe(`${recordPrefix("/go-like/registry/v1/")}${record.identity}`)
+  expect(await decodeRecord("/go-like/registry/v1/", record.key, record.value)).toEqual({
     identity: record.identity,
     content: record.content,
     instance: record.instance
   })
   await expect(
-    decodeRecord("/likego/registry/v1/", `${record.key}-other`, record.value)
-  ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+    decodeRecord("/go-like/registry/v1/", `${record.key}-other`, record.value)
+  ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("byte codec rejects malformed Base64 and invalid UTF-8", () => {
@@ -42,27 +42,27 @@ test("byte codec rejects malformed Base64 and invalid UTF-8", () => {
 })
 
 test("record decoder rejects malformed and oversized managed values", async () => {
-  const record = await encodeRecord("/likego/registry/v1/", instance)
-  await expect(decodeRecord("/likego/registry/v1/", record.key, "not-json")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+  const record = await encodeRecord("/go-like/registry/v1/", instance)
+  await expect(decodeRecord("/go-like/registry/v1/", record.key, "not-json")).rejects.toMatchObject({
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
-  await expect(decodeRecord("/likego/registry/v1/", record.key, "[]")).rejects.toThrow(
+  await expect(decodeRecord("/go-like/registry/v1/", record.key, "[]")).rejects.toThrow(
     "unsupported wire shape"
   )
   const fields: unknown[] = JSON.parse(record.value)
   fields[1] = 1
   await expect(
-    decodeRecord("/likego/registry/v1/", record.key, JSON.stringify(fields))
+    decodeRecord("/go-like/registry/v1/", record.key, JSON.stringify(fields))
   ).rejects.toThrow("fields are invalid")
   const invalid: unknown[] = JSON.parse(record.value)
   const carrier = invalid[3] as Record<string, unknown>
   carrier.name = ""
   await expect(
-    decodeRecord("/likego/registry/v1/", record.key, JSON.stringify(invalid))
+    decodeRecord("/go-like/registry/v1/", record.key, JSON.stringify(invalid))
   ).rejects.toThrow("invalid ServiceInstance")
   await expect(
-    decodeRecord("/likego/registry/v1/", record.key, "x".repeat(1_048_577))
+    decodeRecord("/go-like/registry/v1/", record.key, "x".repeat(1_048_577))
   ).rejects.toThrow("payload ceiling")
   const oversized = { ...instance, metadata: { value: "x".repeat(1_048_576) } }
-  await expect(encodeRecord("/likego/registry/v1/", oversized)).rejects.toThrow("payload exceeds")
+  await expect(encodeRecord("/go-like/registry/v1/", oversized)).rejects.toThrow("payload exceeds")
 })

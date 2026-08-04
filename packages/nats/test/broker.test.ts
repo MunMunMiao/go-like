@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@likego/context"
+import { background, withCancelCause, type Context } from "@go-like/context"
 import { headers, type Msg, type NatsConnection } from "@nats-io/transport-node"
 import { newNatsCoreBroker } from "../src/broker"
 import { FakeSubscription, coreMessage, deferred, nextTurn } from "./broker-helpers"
@@ -194,7 +194,7 @@ describe("NATS Core Broker", () => {
 
     expect(failure).toMatchObject({
       name: "NatsCoreUnexpectedExitError",
-      code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT"
+      code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT"
     })
     await expect(subscriptionOwner.unsubscribe(background())).rejects.toBe(failure)
   })
@@ -240,7 +240,7 @@ describe("NATS Core Broker", () => {
       () => {}
     )
     await expect(passive.unsubscribe(background())).rejects.toMatchObject({
-      code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT"
+      code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT"
     })
 
     const stoppingSubscription = new FakeSubscription()
@@ -308,7 +308,7 @@ describe("NATS Core Broker", () => {
       invokeTimeout?.()
       const failure = await stopping
       expect(failure).toMatchObject({
-        code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT",
+        code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT",
         timeoutMs: 25_000,
         forced: true
       })

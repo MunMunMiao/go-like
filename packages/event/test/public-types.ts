@@ -1,5 +1,5 @@
-import type { Broker, Subscriber } from "@likego/broker"
-import { background } from "@likego/context"
+import type { Broker, Subscriber } from "@go-like/broker"
+import { background } from "@go-like/context"
 import { eventBroker, type Codec, type EventBroker, type EventMessage } from "../src/index"
 
 interface Value {

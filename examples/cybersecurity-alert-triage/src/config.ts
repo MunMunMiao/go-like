@@ -1,9 +1,9 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@likego/config"
-import { etcdSource } from "@likego/config-etcd"
-import type { Context } from "@likego/context"
-import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
-import { ifAbsent, type Store, type StoreRecord } from "@likego/store"
-import { newEtcdStore } from "@likego/store-etcd"
+import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
+import { etcdSource } from "@go-like/config-etcd"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
+import { ifAbsent, type Store, type StoreRecord } from "@go-like/store"
+import { newEtcdStore } from "@go-like/store-etcd"
 
 import {
   validateSecurityAlert,
@@ -107,7 +107,7 @@ function isStoreAbsenceConflict(value: unknown): boolean {
     return (
       value !== null &&
       typeof value === "object" &&
-      Reflect.get(value, "code") === "LIKEGO_STORE_CONFLICT" &&
+      Reflect.get(value, "code") === "GO_LIKE_STORE_CONFLICT" &&
       Reflect.get(value, "expectedRevision") === null
     )
   } catch {
@@ -132,7 +132,7 @@ export function isAlertIdConflict(value: unknown): boolean {
   }
 }
 
-/** Creates the immutable SOC rule source and LikeGo Config lifecycle. */
+/** Creates the immutable SOC rule source and go-like Config lifecycle. */
 export function newTriageConfig(rules: TriageRules): Config<ConfigObject> {
   validateTriageRules(rules)
   return newConfig(

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/core",
+  "name": "@go-like/core",
   "version": "0.0.1",
-  "description": "Kratos-style portable application lifecycle for LikeGo.",
+  "description": "Kratos-style portable application lifecycle for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -27,8 +27,8 @@
     "test:e2e:runtimes": "bun test --isolate --no-orphans test/e2e/*.test.ts && bun test/e2e/package-runtime.ts && tsx test/e2e/package-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/package-runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/registry": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/registry": "0.0.1",
     "@types/node": "26.1.2"
   },
   "license": "MIT"

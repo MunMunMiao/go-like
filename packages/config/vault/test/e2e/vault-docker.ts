@@ -1,20 +1,20 @@
-import { background, withTimeout } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { background, withTimeout } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import { vaultSource, type VaultFetch } from "../../src/index"
 
 const Image =
   "hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54"
 const Version = "2.0.3"
-const Token = "likego-integration-root"
+const Token = "go-like-integration-root"
 const RunId = crypto.randomUUID()
-const Name = `likego-config-vault-${RunId}`
-const Label = `likego.config-vault.integration=${RunId}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Name = `go-like-config-vault-${RunId}`
+const Label = `go-like.config-vault.integration=${RunId}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly stdout: string
@@ -189,7 +189,7 @@ async function main(): Promise<void> {
         if (typeof code === "string") rejectedCode = code
       }
     }
-    if (rejectedCode !== "LIKEGO_VAULT_HTTP") {
+    if (rejectedCode !== "GO_LIKE_VAULT_HTTP") {
       throw new Error("invalid Vault token did not fail through the HTTP boundary")
     }
     const first = await source.load(background())

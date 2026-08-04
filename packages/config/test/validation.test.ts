@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause } from "@likego/context"
+import { background, withCancelCause } from "@go-like/context"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { ConfigObject, ConfigSchema, ConfigValue } from "../src/index"
 import { newConfig, objectSource, schema as configSchema, source } from "../src/index"
@@ -70,7 +70,7 @@ describe("Standard Schema validation", () => {
 
     expect(failure).toMatchObject({
       name: "ConfigValidationError",
-      code: "LIKEGO_CONFIG_VALIDATION",
+      code: "GO_LIKE_CONFIG_VALIDATION",
       reason: "issues",
       issues: [
         { message: "configuration validation failed" },

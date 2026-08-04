@@ -1,6 +1,6 @@
-# @likego/broker-memory
+# @go-like/broker-memory
 
-LikeGo 的进程内 Broker provider。每个实例拥有独立的订阅集合，构造后即可使用，不创建连接，也不需要
+go-like 的进程内 Broker provider。每个实例拥有独立的订阅集合，构造后即可使用，不创建连接，也不需要
 `connect`、`disconnect` 或全局 `close`。
 
 该 provider 按精确 topic 广播。每个订阅串行处理已接纳的消息，不同订阅并行执行；`publish` 等待本次接纳的

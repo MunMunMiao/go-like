@@ -17,7 +17,7 @@ function isHttpError(value: Error): value is VaultStoreHttpError {
   return (
     value.name === "VaultStoreHttpError" &&
     "code" in value &&
-    value.code === "LIKEGO_VAULT_STORE_HTTP" &&
+    value.code === "GO_LIKE_VAULT_STORE_HTTP" &&
     "operation" in value &&
     isOperation(value.operation) &&
     "status" in value &&
@@ -30,7 +30,7 @@ function isProtocolError(value: Error): value is VaultStoreProtocolError {
   return (
     value.name === "VaultStoreProtocolError" &&
     "code" in value &&
-    value.code === "LIKEGO_VAULT_STORE_PROTOCOL" &&
+    value.code === "GO_LIKE_VAULT_STORE_PROTOCOL" &&
     "operation" in value &&
     isOperation(value.operation)
   )
@@ -41,7 +41,7 @@ function isTransportError(value: Error): value is VaultStoreTransportError {
   return (
     value.name === "VaultStoreTransportError" &&
     "code" in value &&
-    value.code === "LIKEGO_VAULT_STORE_TRANSPORT" &&
+    value.code === "GO_LIKE_VAULT_STORE_TRANSPORT" &&
     "operation" in value &&
     isOperation(value.operation) &&
     "cause" in value &&
@@ -54,7 +54,7 @@ function isUncertainError(value: Error): value is VaultStoreUncertainError {
   return (
     value.name === "VaultStoreUncertainError" &&
     "code" in value &&
-    value.code === "LIKEGO_VAULT_STORE_UNCERTAIN" &&
+    value.code === "GO_LIKE_VAULT_STORE_UNCERTAIN" &&
     "operation" in value &&
     (value.operation === "write" || value.operation === "delete") &&
     "cause" in value &&
@@ -67,7 +67,7 @@ function isSnapshotError(value: Error): value is VaultStoreSnapshotError {
   return (
     value.name === "VaultStoreSnapshotError" &&
     "code" in value &&
-    value.code === "LIKEGO_VAULT_STORE_SNAPSHOT" &&
+    value.code === "GO_LIKE_VAULT_STORE_SNAPSHOT" &&
     "reason" in value &&
     (value.reason === "invalid-cursor" ||
       value.reason === "expired-cursor" ||
@@ -88,7 +88,7 @@ export function newHttpError(operation: VaultStoreOperation, status: number): Va
   const error = new Error(`Vault Store ${operation} request failed with HTTP ${status}`)
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultStoreHttpError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_STORE_HTTP" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_STORE_HTTP" },
     operation: { enumerable: true, value: operation },
     status: { enumerable: true, value: status }
   })
@@ -102,7 +102,7 @@ export function newProtocolError(operation: VaultStoreOperation): VaultStoreProt
   const error = new Error(`Vault Store ${operation} response was malformed`)
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultStoreProtocolError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_STORE_PROTOCOL" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_STORE_PROTOCOL" },
     operation: { enumerable: true, value: operation }
   })
   if (!isProtocolError(error)) throw new TypeError("Vault Store protocol error decoration failed")
@@ -123,7 +123,7 @@ export function newTransportError(
   const error = new Error(`Vault Store ${operation} transport failed`, { cause: safeCause })
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultStoreTransportError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_STORE_TRANSPORT" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_STORE_TRANSPORT" },
     operation: { enumerable: true, value: operation }
   })
   if (!isTransportError(error)) throw new TypeError("Vault Store transport error decoration failed")
@@ -142,7 +142,7 @@ export function newUncertainError(
   const error = new Error(`Vault Store ${operation} outcome is uncertain`, { cause })
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultStoreUncertainError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_STORE_UNCERTAIN" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_STORE_UNCERTAIN" },
     operation: { enumerable: true, value: operation }
   })
   if (!isUncertainError(error)) throw new TypeError("Vault Store uncertain error decoration failed")
@@ -159,7 +159,7 @@ export function newSnapshotError(
   const error = new Error(`Vault Store pagination snapshot failed: ${reason}`)
   Object.defineProperties(error, {
     name: { enumerable: true, value: "VaultStoreSnapshotError" },
-    code: { enumerable: true, value: "LIKEGO_VAULT_STORE_SNAPSHOT" },
+    code: { enumerable: true, value: "GO_LIKE_VAULT_STORE_SNAPSHOT" },
     reason: { enumerable: true, value: reason }
   })
   if (!isSnapshotError(error)) throw new TypeError("Vault Store snapshot error decoration failed")

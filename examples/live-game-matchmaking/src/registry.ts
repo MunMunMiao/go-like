@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import { newKubernetesRegistry } from "@likego/registry-kubernetes"
+import type { Registry } from "@go-like/registry"
+import { newKubernetesRegistry } from "@go-like/registry-kubernetes"
 
 export type GameRegistryEnvironment = Readonly<Record<string, string | undefined>>
 

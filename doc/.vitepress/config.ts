@@ -94,42 +94,150 @@ function route(prefix: string, path: string): string {
 }
 
 /** Creates one complete localized default-theme configuration. */
-function theme(prefix: string, labels: Labels): LocaleTheme {
+function theme(
+  prefix: string,
+  labels: Labels,
+  includeCanonicalEnglishPages = false,
+  includeSimplifiedChinesePages = false,
+  includeTraditionalChineseTaiwanPages = false,
+  includeSpanishPages = false,
+  includeFrenchPages = false,
+  includeRussianPages = false,
+  includeArabicPages = false,
+  includeHongKongPages = false
+): LocaleTheme {
+  const guideItems: NavigationItem[] = [
+    { text: labels.gettingStarted, link: route(prefix, "guide/getting-started") },
+    { text: labels.architecture, link: route(prefix, "guide/architecture") },
+    { text: labels.serviceCall, link: route(prefix, "guide/service-call") },
+    { text: labels.streaming, link: route(prefix, "guide/streaming") },
+    { text: labels.configRegistryStore, link: route(prefix, "guide/config-registry-store") },
+    { text: labels.brokerEvents, link: route(prefix, "guide/broker-events") },
+    { text: labels.healthObservability, link: route(prefix, "guide/health-observability") }
+  ]
+  const referenceItems: NavigationItem[] = [
+    { text: labels.packages, link: route(prefix, "reference/packages") },
+    { text: labels.verification, link: route(prefix, "reference/verification") }
+  ]
+
+  if (includeCanonicalEnglishPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "Clinic Appointment Booking", link: route(prefix, "guide/zero-to-one") },
+      { text: "Comparison", link: route(prefix, "guide/comparison") },
+      { text: "Migration", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push(
+      { text: "Providers", link: route(prefix, "reference/providers") },
+      { text: "Claims and evidence", link: route(prefix, "reference/claims") },
+      { text: "Terminology", link: route(prefix, "reference/terminology") }
+    )
+  }
+
+  if (includeSimplifiedChinesePages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "诊所预约：从 0 到 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "工具比较", link: route(prefix, "guide/comparison") },
+      { text: "迁移与接入", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({ text: "包与 provider 参考", link: route(prefix, "reference/providers") })
+  }
+
+  if (includeTraditionalChineseTaiwanPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "診所預約：從 0 到 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "工具比較", link: route(prefix, "guide/comparison") },
+      { text: "遷移與導入", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "套件與 provider 參考",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
+  if (includeSpanishPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "Sistema de citas: de 0 a 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "Comparación de herramientas", link: route(prefix, "guide/comparison") },
+      { text: "Migración y adopción", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "Referencia de paquetes y providers",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
+  if (includeFrenchPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "Rendez-vous en clinique : de 0 à 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "Comparaison des outils", link: route(prefix, "guide/comparison") },
+      { text: "Migration et adoption", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "Référence des paquets et fournisseurs",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
+  if (includeRussianPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "Запись на приём: от 0 до 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "Сравнение инструментов", link: route(prefix, "guide/comparison") },
+      { text: "Миграция и внедрение", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "Справочник пакетов и провайдеров",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
+  if (includeArabicPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "حجز مواعيد العيادة: من 0 إلى 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "مقارنة go-like بالأدوات الأخرى", link: route(prefix, "guide/comparison") },
+      { text: "الترحيل والتبنّي", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "مرجع الحزم والمزوّدات",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
+  if (includeHongKongPages) {
+    guideItems.splice(
+      1,
+      0,
+      { text: "診所預約：由 0 到 1", link: route(prefix, "guide/zero-to-one") },
+      { text: "go-like 同其他工具點樣分工", link: route(prefix, "guide/comparison") },
+      { text: "遷移同接入", link: route(prefix, "guide/migration") }
+    )
+    referenceItems.push({
+      text: "套件同 provider 參考",
+      link: route(prefix, "reference/providers")
+    })
+  }
+
   return {
     nav: [
       { text: labels.guide, link: route(prefix, "guide/getting-started") },
       { text: labels.reference, link: route(prefix, "reference/packages") }
     ],
     sidebar: {
-      [route(prefix, "guide/")]: [
-        {
-          text: labels.guide,
-          items: [
-            { text: labels.gettingStarted, link: route(prefix, "guide/getting-started") },
-            { text: labels.architecture, link: route(prefix, "guide/architecture") },
-            { text: labels.serviceCall, link: route(prefix, "guide/service-call") },
-            { text: labels.streaming, link: route(prefix, "guide/streaming") },
-            {
-              text: labels.configRegistryStore,
-              link: route(prefix, "guide/config-registry-store")
-            },
-            { text: labels.brokerEvents, link: route(prefix, "guide/broker-events") },
-            {
-              text: labels.healthObservability,
-              link: route(prefix, "guide/health-observability")
-            }
-          ]
-        }
-      ],
-      [route(prefix, "reference/")]: [
-        {
-          text: labels.reference,
-          items: [
-            { text: labels.packages, link: route(prefix, "reference/packages") },
-            { text: labels.verification, link: route(prefix, "reference/verification") }
-          ]
-        }
-      ]
+      [route(prefix, "guide/")]: [{ text: labels.guide, items: guideItems }],
+      [route(prefix, "reference/")]: [{ text: labels.reference, items: referenceItems }]
     },
     outline: { label: labels.outline, level: [2, 3] },
     darkModeSwitchLabel: labels.appearance,
@@ -294,56 +402,72 @@ const TaiwanChinese: Labels = {
 }
 
 const config: SiteConfig = {
-  title: "LikeGo",
+  title: "go-like",
   description: "Go-style microservice building blocks for TypeScript backends",
   head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
   cleanUrls: true,
   lastUpdated: true,
   vite: { cacheDir: "../.artifacts/vitepress-cache" },
   locales: {
-    root: { label: "English", lang: "en-Latn", link: "/", themeConfig: theme("", English) },
+    root: {
+      label: "English",
+      lang: "en-Latn",
+      link: "/",
+      themeConfig: theme("", English, true)
+    },
     "ar-Arab": {
       label: "العربية",
       lang: "ar-Arab",
       link: "/ar-Arab/",
       dir: "rtl",
-      themeConfig: theme("/ar-Arab", Arabic)
+      themeConfig: theme("/ar-Arab", Arabic, false, false, false, false, false, false, true)
     },
     "es-Latn": {
       label: "Español",
       lang: "es-Latn",
       link: "/es-Latn/",
-      themeConfig: theme("/es-Latn", Spanish)
+      themeConfig: theme("/es-Latn", Spanish, false, false, false, true)
     },
     "fr-Latn": {
       label: "Français",
       lang: "fr-Latn",
       link: "/fr-Latn/",
-      themeConfig: theme("/fr-Latn", French)
+      themeConfig: theme("/fr-Latn", French, false, false, false, false, true)
     },
     "ru-Cyrl": {
       label: "Русский",
       lang: "ru-Cyrl",
       link: "/ru-Cyrl/",
-      themeConfig: theme("/ru-Cyrl", Russian)
+      themeConfig: theme("/ru-Cyrl", Russian, false, false, false, false, false, true)
     },
     "zh-Hans": {
       label: "简体中文",
       lang: "zh-Hans",
       link: "/zh-Hans/",
-      themeConfig: theme("/zh-Hans", SimplifiedChinese)
+      themeConfig: theme("/zh-Hans", SimplifiedChinese, false, true)
     },
     "zh-Hant-HK": {
       label: "繁體中文（香港）",
       lang: "zh-Hant-HK",
       link: "/zh-Hant-HK/",
-      themeConfig: theme("/zh-Hant-HK", HongKongChinese)
+      themeConfig: theme(
+        "/zh-Hant-HK",
+        HongKongChinese,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      )
     },
     "zh-Hant-TW": {
       label: "繁體中文（台灣）",
       lang: "zh-Hant-TW",
       link: "/zh-Hant-TW/",
-      themeConfig: theme("/zh-Hant-TW", TaiwanChinese)
+      themeConfig: theme("/zh-Hant-TW", TaiwanChinese, false, false, true)
     }
   },
   themeConfig: {
@@ -372,7 +496,7 @@ const config: SiteConfig = {
         }
       }
     },
-    socialLinks: [{ icon: "github", link: "https://github.com/MunMunMiao/likego" }]
+    socialLinks: [{ icon: "github", link: "https://github.com/MunMunMiao/go-like" }]
   }
 }
 

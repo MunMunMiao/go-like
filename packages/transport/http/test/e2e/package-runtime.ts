@@ -1,13 +1,13 @@
-import { background } from "@likego/context"
-import * as HTTP from "@likego/transport-http"
-import * as HTTPNode from "@likego/transport-http/node"
+import { background } from "@go-like/context"
+import * as HTTP from "@go-like/transport-http"
+import * as HTTPNode from "@go-like/transport-http/node"
 
 if (Object.keys(HTTP).join(",") !== "executor,maxMessageBytes,newHTTPTransport") {
-  throw new Error(`unexpected @likego/transport-http exports: ${Object.keys(HTTP).join(",")}`)
+  throw new Error(`unexpected @go-like/transport-http exports: ${Object.keys(HTTP).join(",")}`)
 }
 if (Object.keys(HTTPNode).join(",") !== "allowHTTP1,clientAuth,newNodeHTTPTransport") {
   throw new Error(
-    `unexpected @likego/transport-http/node exports: ${Object.keys(HTTPNode).join(",")}`
+    `unexpected @go-like/transport-http/node exports: ${Object.keys(HTTPNode).join(",")}`
   )
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import { background, type Context } from "@likego/context"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import { background, type Context } from "@go-like/context"
 
 import { eventBroker, type Codec, type EventMessage } from "../src/index"
 

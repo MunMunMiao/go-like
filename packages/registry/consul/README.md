@@ -1,6 +1,6 @@
-# `@likego/registry-consul`
+# `@go-like/registry-consul`
 
-基于 Consul HTTP API 与标准 Web `fetch` 实现的 `@likego/registry` provider。
+基于 Consul HTTP API 与标准 Web `fetch` 实现的 `@go-like/registry` provider。
 
 本包直接实现根 Registry 契约，不引入 Consul 专属的第二套服务模型：
 
@@ -14,9 +14,9 @@
 ## 使用
 
 ```ts
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { newConsulRegistry } from "@likego/registry-consul"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { newConsulRegistry } from "@go-like/registry-consul"
 
 const registry = newConsulRegistry({
   fetch,
@@ -60,7 +60,7 @@ Consul TTL 最小值为 2 秒。`register` 只有在 Agent 接受服务且 TTL c
 ## 发现与 Watch
 
 `getService(ctx, name)` 读取 `passing=true` 的 Consul health snapshot，仅还原带
-`Likego-Service-Instance=1` 标记且通过 payload 校验的记录；其他应用注册的 Consul 服务会被忽略。
+`Go-Like-Service-Instance=1` 标记且通过 payload 校验的记录；其他应用注册的 Consul 服务会被忽略。
 
 Watcher 使用 Consul blocking query。已有实例时，第一次 `next(ctx)` 返回当前完整快照；没有实例时，它等待
 首次变化。后续每次变化都返回完整 replacement snapshot，注销最后一个实例时返回空数组。单次
@@ -109,16 +109,16 @@ thenable 不会替换 heartbeat 错误，也不会阻塞后续 `deregister`。
 | --------------------- | ------------------------- | --------------------------------------------------------- |
 | `consul-fetch`        | 应用                      | 仅借用；本包不调用 `close`、`destroy` 或同类能力。        |
 | `consul-process`      | 应用/运维                 | 仅通过 HTTP 使用；本包不启动、停止或配置 Consul 进程。    |
-| private TTL heartbeat | `@likego/registry-consul` | 由 `register` 创建，由 replacement 或 `deregister` 终止。 |
-| Consul Watcher        | `@likego/registry-consul` | 由 `watch` 创建，由 `watcher.stop(ctx)` 终止。            |
+| private TTL heartbeat | `@go-like/registry-consul` | 由 `register` 创建，由 replacement 或 `deregister` 终止。 |
+| Consul Watcher        | `@go-like/registry-consul` | 由 `watch` 创建，由 `watcher.stop(ctx)` 终止。            |
 
 ## 验证
 
 ```bash
-bun run --filter '@likego/registry-consul' typecheck
-bun run --filter '@likego/registry-consul' test:unit
-bun run --filter '@likego/registry-consul' build
-LIKEGO_E2E_OWNER=local bun run --filter '@likego/registry-consul' test:e2e
+bun run --filter '@go-like/registry-consul' typecheck
+bun run --filter '@go-like/registry-consul' test:unit
+bun run --filter '@go-like/registry-consul' build
+GO_LIKE_E2E_OWNER=local bun run --filter '@go-like/registry-consul' test:e2e
 ```
 
 Docker 集成使用固定 digest 的真实 Consul，验证 ServiceInstance 注册/发现/注销、replacement

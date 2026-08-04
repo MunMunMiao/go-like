@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@go-like/store"
 
 import { encodeBase64, encodeRecordPayload } from "../src/codec"
 import { newConsulStore, type ConsulFetch } from "../src/index"
@@ -15,7 +15,7 @@ function expiredRow(key: string, revision: number, session: string | null): obje
     Date.now() - 1
   )
   return {
-    Key: `likego/store/${key}`,
+    Key: `go-like/store/${key}`,
     ModifyIndex: revision,
     Value: encodeBase64(new TextEncoder().encode(payload)),
     Session: session
@@ -30,7 +30,7 @@ function activeRow(key: string, revision: number): object {
     null
   )
   return {
-    Key: `likego/store/${key}`,
+    Key: `go-like/store/${key}`,
     ModifyIndex: revision,
     Value: encodeBase64(new TextEncoder().encode(payload)),
     Session: null
@@ -69,18 +69,18 @@ describe("Consul Store CRUD, CAS, and pagination", () => {
     )
 
     const corrupt = await backend.fetch(
-      new Request("http://consul.test/v1/kv/likego/store/corrupt", {
+      new Request("http://consul.test/v1/kv/go-like/store/corrupt", {
         method: "PUT",
-        body: "not-a-likego-envelope"
+        body: "not-a-go-like-envelope"
       })
     )
     expect(await corrupt.text()).toBe("true")
     await expect(first.list(background())).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_PROTOCOL",
+      code: "GO_LIKE_CONSUL_STORE_PROTOCOL",
       operation: "list"
     })
     const removed = await backend.fetch(
-      new Request("http://consul.test/v1/kv/likego/store/corrupt", { method: "DELETE" })
+      new Request("http://consul.test/v1/kv/go-like/store/corrupt", { method: "DELETE" })
     )
     expect(await removed.text()).toBe("true")
 
@@ -152,24 +152,24 @@ describe("Consul Store CRUD, CAS, and pagination", () => {
         ifRevision(initial.revision)
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       expectedRevision: initial.revision,
       actualRevision: updated.revision
     })
     await expect(
       first.write(background(), { key: "missing", value: Uint8Array.of(1) }, ifRevision("999"))
-    ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT", actualRevision: null })
+    ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT", actualRevision: null })
     await expect(
       first.delete(background(), "cas", ifRevision(initial.revision))
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       actualRevision: updated.revision
     })
     expect(await first.delete(background(), "cas", ifRevision(updated.revision))).toBe(true)
     await expect(
       first.delete(background(), "cas", ifRevision(updated.revision))
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       actualRevision: null
     })
     backend.reset()
@@ -330,7 +330,7 @@ describe("Consul Store TTL sessions", () => {
         ifRevision(persistent.revision)
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
+      code: "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION",
       combination: "ttl-cas"
     })
     await expect(
@@ -341,7 +341,7 @@ describe("Consul Store TTL sessions", () => {
         ifAbsent()
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
+      code: "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION",
       combination: "ttl-cas"
     })
     expect(backend.requests).toHaveLength(beforeCombination)
@@ -359,7 +359,7 @@ describe("Consul Store TTL sessions", () => {
         ifRevision(ttl.revision)
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
+      code: "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION",
       combination: "cas-existing-ttl"
     })
     expect(backend.requests).toHaveLength(beforeExisting + 1)
@@ -419,7 +419,7 @@ describe("Consul Store uncertain-response readback", () => {
     })
     await expect(
       store.write(background(), { key: "unproven", value: Uint8Array.of(1) })
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_UNCERTAIN", operation: "write" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_UNCERTAIN", operation: "write" })
     expect(requests).toBe(3)
   })
 
@@ -439,7 +439,7 @@ describe("Consul Store uncertain-response readback", () => {
     })
     await expect(
       write.write(background(), { key: "unavailable", value: Uint8Array.of(1) })
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_UNCERTAIN", operation: "write" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_UNCERTAIN", operation: "write" })
 
     const backend = fakeConsul()
     let deleteLost = false
@@ -456,7 +456,7 @@ describe("Consul Store uncertain-response readback", () => {
     const deleting = newConsulStore({ fetch: deleteFetch, address: "http://consul.test" })
     await deleting.write(background(), { key: "delete-unavailable", value: Uint8Array.of(1) })
     await expect(deleting.delete(background(), "delete-unavailable")).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_STORE_UNCERTAIN",
+      code: "GO_LIKE_CONSUL_STORE_UNCERTAIN",
       operation: "delete"
     })
     backend.reset()
@@ -475,7 +475,7 @@ describe("Consul Store uncertain-response readback", () => {
     })
     await expect(
       persistent.write(background(), { key: "plain-false", value: Uint8Array.of(1) })
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_UNCERTAIN" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_UNCERTAIN" })
 
     const ttlFalse = [
       new Response(null, { status: 404 }),
@@ -494,7 +494,7 @@ describe("Consul Store uncertain-response readback", () => {
     })
     await expect(
       ttl.write(background(), { key: "ttl-false", value: Uint8Array.of(1) }, expiresIn(10_000))
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_UNCERTAIN" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_UNCERTAIN" })
 
     const ttlDenied = [
       new Response(null, { status: 404 }),
@@ -513,7 +513,7 @@ describe("Consul Store uncertain-response readback", () => {
     })
     await expect(
       denied.write(background(), { key: "ttl-denied", value: Uint8Array.of(1) }, expiresIn(10_000))
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_STORE_HTTP", status: 400 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: 400 })
   })
 
   test("aggregates primary TTL write and newly created session cleanup failures", async () => {
@@ -572,14 +572,14 @@ describe("Consul Store uncertain-response readback", () => {
         { key: "race", value: Uint8Array.of(2) },
         ifRevision(current.revision)
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT", actualRevision: current.revision })
+    ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT", actualRevision: current.revision })
     rejectDelete = true
     expect(await store.delete(background(), "race")).toBe(false)
     rejectDelete = true
     await expect(
       store.delete(background(), "race", ifRevision(current.revision))
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       actualRevision: current.revision
     })
     await store.delete(background(), "race")
@@ -606,7 +606,7 @@ describe("Consul Store uncertain-response readback", () => {
     expect(await expiring.delete(background(), "expired")).toBe(false)
     await expect(
       expiring.delete(background(), "expired-cas", ifRevision("78"))
-    ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT", actualRevision: null })
+    ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT", actualRevision: null })
     await expect(
       expiring.write(
         background(),
@@ -614,7 +614,7 @@ describe("Consul Store uncertain-response readback", () => {
         ifAbsent()
       )
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       expectedRevision: null,
       actualRevision: "80"
     })
@@ -622,7 +622,7 @@ describe("Consul Store uncertain-response readback", () => {
     const disappearingBackend = fakeConsul()
     const key = "expired-disappeared"
     await disappearingBackend.fetch(
-      new Request(`http://consul.test/v1/kv/likego/store/${key}`, {
+      new Request(`http://consul.test/v1/kv/go-like/store/${key}`, {
         method: "PUT",
         body: encodeRecordPayload(
           { key, value: Uint8Array.of(1), metadata: {} },

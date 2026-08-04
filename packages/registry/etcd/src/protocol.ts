@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newRegistryProtocolError } from "@likego/registry/provider"
+import { background } from "@go-like/context"
+import { newRegistryProtocolError } from "@go-like/registry/provider"
 
 import { decodeBytes, encodeBytes, prefixRangeEnd, recordPrefix, type EncodedRecord } from "./codec"
 import { postJson, retryable } from "./http"

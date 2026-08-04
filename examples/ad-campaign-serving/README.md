@@ -19,15 +19,15 @@
 - `src/http.ts`：广告投放的标准 Fetch 路由。
 - `src/main.ts`：唯一 App 组装根，预置演示活动并管理 HTTP 生命周期。
 
-## LikeGo 能力
+## go-like 能力
 
-本例实际运行 `@likego/cache-memory`、`@likego/resilience` 的 Token Bucket 与 Circuit Breaker；Memory Cache 不伪造 Server 生命周期。测试证明缓存命中、限流、熔断以及失败不扣预算，而不是只在依赖清单中声明能力。
+本例实际运行 `@go-like/cache-memory`、`@go-like/resilience` 的 Token Bucket 与 Circuit Breaker；Memory Cache 不伪造 Server 生命周期。测试证明缓存命中、限流、熔断以及失败不扣预算，而不是只在依赖清单中声明能力。
 
 ## 验证
 
 ```bash
-bun run --filter @likego/example-ad-campaign-serving typecheck
-bun run --filter @likego/example-ad-campaign-serving test:unit
+bun run --filter @go-like/example-ad-campaign-serving typecheck
+bun run --filter @go-like/example-ad-campaign-serving test:unit
 ```
 
 本例无需 Docker：素材源、预算仓储和 Cache 都是明确的进程内实现，不宣称具备多实例预算一致性。生产环境应以具备条件更新的预算数据库和共享缓存替换它们。
@@ -35,12 +35,12 @@ bun run --filter @likego/example-ad-campaign-serving test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-ad-campaign-serving start
+bun run --filter @go-like/example-ad-campaign-serving start
 ```
 
-`start` 会先构建本地 LikeGo 包，再由 `start:prepared` 把 `src/main.ts` 构建为
+`start` 会先构建本地 go-like 包，再由 `start:prepared` 把 `src/main.ts` 构建为
 `.artifacts/main.mjs` 并启动。程序预置一项首页体育活动和素材。看到
-`LIKEGO_EXAMPLE_READY` 后请求广告：
+`GO_LIKE_EXAMPLE_READY` 后请求广告：
 
 ```bash
 curl -i http://127.0.0.1:3000/v1/ads:serve \

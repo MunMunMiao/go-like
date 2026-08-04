@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import {
   newBullMqWorkerServerWithFactory,

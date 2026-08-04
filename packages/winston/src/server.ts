@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type { Logger } from "winston"
 
 import {
@@ -141,7 +141,7 @@ export function newWinstonServer(logger: Logger): WinstonServer {
     if (transferred && !stopStarted) void beginStop(error).catch(consumeFailure)
   }
 
-  /** Treats finish as clean only after LikeGo initiated logger.end(). */
+  /** Treats finish as clean only after go-like initiated logger.end(). */
   function nativeFinish(): void {
     if (finished) return
     finished = true

@@ -1,6 +1,6 @@
-# @likego/resilience
+# @go-like/resilience
 
-面向 LikeGo 服务、可移植且感知 Context 的韧性原语。
+面向 go-like 服务、可移植且感知 Context 的韧性原语。
 
 该包提供：
 
@@ -13,13 +13,13 @@
 构造新的输入，并继续负责判断重放是否安全。
 
 ```ts
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import {
   exponentialBackoff,
   newCircuitBreaker,
   newTokenBucketLimiter,
   retry
-} from "@likego/resilience"
+} from "@go-like/resilience"
 
 const ctx = background()
 const backoff = exponentialBackoff({ initialDelayMs: 25, maxDelayMs: 500 })

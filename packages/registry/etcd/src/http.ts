@@ -1,5 +1,5 @@
-import { deadlineExceeded } from "@likego/context"
-import { newRegistryProtocolError } from "@likego/registry/provider"
+import { deadlineExceeded } from "@go-like/context"
+import { newRegistryProtocolError } from "@go-like/registry/provider"
 
 import { newHttpError, newTransportError } from "./errors"
 import type { OperationOptions } from "./options"
@@ -98,9 +98,9 @@ export async function postWatch(
 export function retryable(value: unknown): boolean {
   if (value === deadlineExceeded) return true
   if (typeof value !== "object" || value === null || !("code" in value)) return false
-  if (value.code === "LIKEGO_ETCD_TRANSPORT") return true
+  if (value.code === "GO_LIKE_ETCD_TRANSPORT") return true
   if (
-    value.code !== "LIKEGO_ETCD_HTTP" ||
+    value.code !== "GO_LIKE_ETCD_HTTP" ||
     !("status" in value) ||
     typeof value.status !== "number"
   ) {

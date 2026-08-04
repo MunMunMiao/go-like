@@ -1,4 +1,4 @@
-import type { Store } from "@likego/store"
+import type { Store } from "@go-like/store"
 
 /** Executes one borrowed standard Web Fetch request. */
 export interface VaultFetch {
@@ -24,7 +24,7 @@ export type VaultStoreOperation = "read" | "write" | "delete" | "list"
 /** Describes one stable Vault non-success response without retaining its body. */
 export interface VaultStoreHttpError extends Error {
   readonly name: "VaultStoreHttpError"
-  readonly code: "LIKEGO_VAULT_STORE_HTTP"
+  readonly code: "GO_LIKE_VAULT_STORE_HTTP"
   readonly operation: VaultStoreOperation
   readonly status: number
 }
@@ -32,14 +32,14 @@ export interface VaultStoreHttpError extends Error {
 /** Describes one malformed Vault response without retaining its body. */
 export interface VaultStoreProtocolError extends Error {
   readonly name: "VaultStoreProtocolError"
-  readonly code: "LIKEGO_VAULT_STORE_PROTOCOL"
+  readonly code: "GO_LIKE_VAULT_STORE_PROTOCOL"
   readonly operation: VaultStoreOperation
 }
 
 /** Describes one Fetch failure; secret-bearing requests replace the foreign rejection graph. */
 export interface VaultStoreTransportError extends Error {
   readonly name: "VaultStoreTransportError"
-  readonly code: "LIKEGO_VAULT_STORE_TRANSPORT"
+  readonly code: "GO_LIKE_VAULT_STORE_TRANSPORT"
   readonly operation: VaultStoreOperation
   readonly cause: Error
 }
@@ -47,7 +47,7 @@ export interface VaultStoreTransportError extends Error {
 /** Describes one mutation whose exact outcome could not be proved by Vault readback. */
 export interface VaultStoreUncertainError extends Error {
   readonly name: "VaultStoreUncertainError"
-  readonly code: "LIKEGO_VAULT_STORE_UNCERTAIN"
+  readonly code: "GO_LIKE_VAULT_STORE_UNCERTAIN"
   readonly operation: "write" | "delete"
   readonly cause: Error
 }
@@ -55,7 +55,7 @@ export interface VaultStoreUncertainError extends Error {
 /** Identifies one bounded process-local pagination snapshot failure. */
 export interface VaultStoreSnapshotError extends Error {
   readonly name: "VaultStoreSnapshotError"
-  readonly code: "LIKEGO_VAULT_STORE_SNAPSHOT"
+  readonly code: "GO_LIKE_VAULT_STORE_SNAPSHOT"
   readonly reason: "invalid-cursor" | "expired-cursor" | "capacity"
 }
 

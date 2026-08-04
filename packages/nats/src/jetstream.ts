@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type { ConsumerMessages } from "@nats-io/jetstream"
 
 /** Creates official ConsumerMessages for lifecycle ownership at start time. */
@@ -12,21 +12,21 @@ export type NatsJetStreamMessagesSource = ConsumerMessages | NatsJetStreamMessag
 /** Describes a rejected attempt to restart a one-shot JetStream server. */
 export interface NatsJetStreamAlreadyStartedError extends Error {
   readonly name: "NatsJetStreamAlreadyStartedError"
-  readonly code: "LIKEGO_NATS_JETSTREAM_ALREADY_STARTED"
+  readonly code: "GO_LIKE_NATS_JETSTREAM_ALREADY_STARTED"
   readonly status: Exclude<NatsJetStreamServerState, "idle">
 }
 
 /** Describes ConsumerMessages that closed outside their owner stop. */
 export interface NatsJetStreamUnexpectedExitError extends Error {
   readonly name: "NatsJetStreamUnexpectedExitError"
-  readonly code: "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT"
+  readonly code: "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT"
   readonly cause: Error | null
 }
 
 /** Describes ConsumerMessages that required stop after their close boundary. */
 export interface NatsJetStreamCloseTimeoutError extends Error {
   readonly name: "NatsJetStreamCloseTimeoutError"
-  readonly code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT"
+  readonly code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT"
   readonly timeoutMs: number
   readonly forced: true
 }
@@ -49,14 +49,14 @@ interface NatsJetStreamStopOperation {
 const alreadyStartedName: NatsJetStreamAlreadyStartedError["name"] =
   "NatsJetStreamAlreadyStartedError"
 const alreadyStartedCode: NatsJetStreamAlreadyStartedError["code"] =
-  "LIKEGO_NATS_JETSTREAM_ALREADY_STARTED"
+  "GO_LIKE_NATS_JETSTREAM_ALREADY_STARTED"
 const unexpectedExitName: NatsJetStreamUnexpectedExitError["name"] =
   "NatsJetStreamUnexpectedExitError"
 const unexpectedExitCode: NatsJetStreamUnexpectedExitError["code"] =
-  "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT"
+  "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT"
 const closeTimeoutName: NatsJetStreamCloseTimeoutError["name"] = "NatsJetStreamCloseTimeoutError"
 const closeTimeoutCode: NatsJetStreamCloseTimeoutError["code"] =
-  "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT"
+  "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT"
 const forced: NatsJetStreamCloseTimeoutError["forced"] = true
 const maximumTimerDelayMs = 2_147_483_647
 
@@ -303,7 +303,7 @@ function ownMessagesStop(
 /** Creates a one-shot structural Server that owns only ConsumerMessages lifecycle. */
 export function newNatsJetStreamServer(
   source: NatsJetStreamMessagesSource,
-  ...options: readonly NatsJetStreamOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly NatsJetStreamOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): Server {
   const config: NatsJetStreamConfig = { closeTimeoutMs: 25_000 }
   for (const option of options) option(config)

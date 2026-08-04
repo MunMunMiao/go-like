@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/nats",
+  "name": "@go-like/nats",
   "version": "0.0.1",
-  "description": "Lifecycle-only LikeGo Server adapters for official NATS Core Subscriptions and JetStream ConsumerMessages.",
+  "description": "Lifecycle-only go-like Server adapters for official NATS Core Subscriptions and JetStream ConsumerMessages.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -29,9 +29,9 @@
     "test:e2e:jetstream": "bun test/e2e/jetstream-docker-e2e.ts"
   },
   "dependencies": {
-    "@likego/broker": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
+    "@go-like/broker": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
     "@types/node": "26.1.2"

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
 import { waitForContext } from "../src/lifecycle"
 
 interface CustomAfterContext extends Context {

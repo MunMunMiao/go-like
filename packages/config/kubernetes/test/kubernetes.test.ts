@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { newConfig, onReloadError, source as configSource } from "@likego/config"
-import { background, withCancelCause, type Context } from "@likego/context"
+import { newConfig, onReloadError, source as configSource } from "@go-like/config"
+import { background, withCancelCause, type Context } from "@go-like/context"
 
 import {
   jsonKubernetesDecoder,
@@ -455,7 +455,7 @@ describe("Kubernetes configuration source", () => {
     const failure = await unauthorized.load(background()).catch((error: unknown) => error)
     expect(failure).toMatchObject({
       name: "KubernetesConfigHttpError",
-      code: "LIKEGO_KUBERNETES_CONFIG_HTTP",
+      code: "GO_LIKE_KUBERNETES_CONFIG_HTTP",
       operation: "get",
       status: 403
     } satisfies Partial<KubernetesConfigHttpError>)
@@ -476,7 +476,7 @@ describe("Kubernetes configuration source", () => {
     })
     const decodeFailure = await decoder.load(background()).catch((error: unknown) => error)
     expect(String(decodeFailure)).not.toContain("private-secret-value")
-    expect(decodeFailure).toMatchObject({ code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL" })
+    expect(decodeFailure).toMatchObject({ code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL" })
   })
 
   test("validates JSON decoder and constructor boundaries", () => {
@@ -550,7 +550,7 @@ describe("Kubernetes configuration source", () => {
     })
     const admissionFailure = await admission.load(background()).catch((error: unknown) => error)
     expect(admissionFailure).toMatchObject({
-      code: "LIKEGO_KUBERNETES_CONFIG_TRANSPORT",
+      code: "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT",
       operation: "get"
     })
     expect(String(admissionFailure)).not.toContain("private-token")
@@ -574,7 +574,7 @@ describe("Kubernetes configuration source", () => {
       timeoutMs: 1
     })
     await expect(body.load(background())).rejects.toMatchObject({
-      code: "LIKEGO_KUBERNETES_CONFIG_TRANSPORT",
+      code: "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT",
       operation: "get"
     })
   })

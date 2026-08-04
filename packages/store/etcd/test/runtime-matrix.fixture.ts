@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newEtcdStore } from "@likego/store-etcd"
+import { background } from "@go-like/context"
+import { newEtcdStore } from "@go-like/store-etcd"
 
 let calls = 0
 let path = ""

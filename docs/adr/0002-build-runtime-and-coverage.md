@@ -6,7 +6,7 @@
 
 ## 背景
 
-LikeGo 使用 Bun 管理 monorepo，但发布包需要在支持其公共 API 的 Node.js、Deno 与 Bun 后端中使用。开发时的
+go-like 使用 Bun 管理 monorepo，但发布包需要在支持其公共 API 的 Node.js、Deno 与 Bun 后端中使用。开发时的
 workspace 源码解析、发布包构建和真实服务验证是不同职责，不应由额外生成物串在一起。
 
 ## 决策

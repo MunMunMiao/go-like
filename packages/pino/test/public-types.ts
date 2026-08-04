@@ -1,8 +1,8 @@
-import type { Broker } from "@likego/broker"
-import type { Client } from "@likego/client"
-import { background } from "@likego/context"
-import type { Server } from "@likego/core"
-import type { Middleware } from "@likego/server"
+import type { Broker } from "@go-like/broker"
+import type { Client } from "@go-like/client"
+import { background } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import type { Middleware } from "@go-like/server"
 import pino, { type Logger } from "pino"
 
 import {

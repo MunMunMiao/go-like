@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import type { FileStore } from "../src/index"
 
 export interface StartedStore {
@@ -14,7 +14,7 @@ export interface StartedStore {
 export async function withTempDirectory(
   run: (directory: string) => PromiseLike<void>
 ): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), "likego-store-file-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-store-file-"))
   try {
     await run(directory)
   } finally {
@@ -28,14 +28,14 @@ export async function startStore(store: FileStore): Promise<StartedStore> {
   void running.catch(() => {})
   for (;;) {
     try {
-      await store.read(background(), "__likego_test_readiness__")
+      await store.read(background(), "__go-like_test_readiness__")
       return Object.freeze({ store, running })
     } catch (value) {
       if (
         typeof value === "object" &&
         value !== null &&
         "code" in value &&
-        value.code === "LIKEGO_FILE_STORE_STATE" &&
+        value.code === "GO_LIKE_FILE_STORE_STATE" &&
         "state" in value
       ) {
         if (value.state === "starting") {

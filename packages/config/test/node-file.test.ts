@@ -4,7 +4,7 @@ import { join } from "node:path"
 
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancel, withCancelCause, withTimeout, type Context } from "@likego/context"
+import { background, withCancel, withCancelCause, withTimeout, type Context } from "@go-like/context"
 
 import { fileSource, type FileWatcher } from "../src/file"
 import {
@@ -1495,7 +1495,7 @@ describe("Node file watcher lifecycle", () => {
 })
 
 test("real filesystem observes ordinary writes without residual Node watcher owners", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-config-node-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-config-node-"))
   const path = join(directory, "config.json")
   try {
     await writeFile(path, '{"value":1}')

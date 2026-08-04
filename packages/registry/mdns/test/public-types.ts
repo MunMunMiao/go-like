@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Registry } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import type { Registry } from "@go-like/registry"
 import {
   domain,
   families,
@@ -84,7 +84,7 @@ const options: readonly MDNSOption[] = [
 const registry: Registry = newMDNSRegistry(host, ...options)
 const concrete: MDNSRegistry = newMDNSRegistry(host)
 const snapshot: MDNSOptions = {
-  domain: "likego.",
+  domain: "go-like.",
   interfaceIds: [],
   families: ["ipv4"],
   queryTimeoutMs: 1_000,

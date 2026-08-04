@@ -300,7 +300,7 @@ describe("native ZooKeeper adapter", function nativeAdapter(): void {
     const authenticationClient = newNativeZookeeperClient(options())
     latest().connectEvent = "authenticationFailed"
     await expect(authenticationClient.connect(new AbortController().signal)).rejects.toMatchObject({
-      code: "LIKEGO_ZOOKEEPER_AUTHENTICATION"
+      code: "GO_LIKE_ZOOKEEPER_AUTHENTICATION"
     })
 
     const preAborted = newNativeZookeeperClient(options())
@@ -365,14 +365,14 @@ describe("native ZooKeeper adapter", function nativeAdapter(): void {
     const probe = latest()
     const signal = new AbortController().signal
 
-    await client.mkdirp("/likego", signal)
-    expect(probe.mkdirpCalls).toEqual(["/likego"])
-    expect(await client.children("/likego", signal)).toEqual({ names: ["a", "z"] })
+    await client.mkdirp("/go-like", signal)
+    expect(probe.mkdirpCalls).toEqual(["/go-like"])
+    expect(await client.children("/go-like", signal)).toEqual({ names: ["a", "z"] })
 
     let watchCalls = 0
     expect(
       await client.watchChildren(
-        "/likego",
+        "/go-like",
         function watched(): void {
           watchCalls += 1
         },
@@ -382,19 +382,19 @@ describe("native ZooKeeper adapter", function nativeAdapter(): void {
     probe.watchListener?.(null)
     expect(watchCalls).toBe(1)
 
-    const firstData = await client.data("/likego/a", signal)
+    const firstData = await client.data("/go-like/a", signal)
     firstData[0] = 99
     expect(probe.data[0]).toBe(1)
 
     await client.mutate([], signal)
     const mutations: readonly ZookeeperMutation[] = [
-      { kind: "create-ephemeral", path: "/likego/a", data: new TextEncoder().encode("wire") },
-      { kind: "delete", path: "/likego/b" }
+      { kind: "create-ephemeral", path: "/go-like/a", data: new TextEncoder().encode("wire") },
+      { kind: "delete", path: "/go-like/b" }
     ]
     await client.mutate(mutations, signal)
-    expect(probe.transactionCalls).toEqual(["create:/likego/a:wire:22", "remove:/likego/b:-1"])
-    expect(await client.remove("/likego/a", signal)).toBe(true)
-    expect(probe.removeCalls).toEqual(["/likego/a:-1"])
+    expect(probe.transactionCalls).toEqual(["create:/go-like/a:wire:22", "remove:/go-like/b:-1"])
+    expect(await client.remove("/go-like/a", signal)).toBe(true)
+    expect(probe.removeCalls).toEqual(["/go-like/a:-1"])
   })
 
   test("callback operations preserve aborts and sanitize every native failure shape", async function callbackFailures() {

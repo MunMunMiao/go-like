@@ -1,5 +1,5 @@
-import type { Struct } from "@likego/struct"
-import { isStruct } from "@likego/struct/runtime"
+import type { Struct } from "@go-like/struct"
+import { isStruct } from "@go-like/struct/runtime"
 
 /** Describes one typed internal unary endpoint without prescribing an IDL. */
 export interface Endpoint<Request extends Struct = Struct, Response extends Struct = Struct> {

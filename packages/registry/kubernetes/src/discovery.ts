@@ -1,11 +1,11 @@
-import { background, cause, deadlineExceeded, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+import { background, cause, deadlineExceeded, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 import {
   newRegistryProtocolError,
   newWatcherOverflowError,
   newWatcherStoppedError
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 import { boundaryError, newHttpError } from "./errors"
 import { gone, retryable } from "./http"

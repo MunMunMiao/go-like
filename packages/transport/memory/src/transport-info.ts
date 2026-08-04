@@ -1,7 +1,7 @@
-import type { Context } from "@likego/context"
-import { newMetadata, type Metadata } from "@likego/metadata"
-import { newServerContext, type Message, type TransportInfo } from "@likego/transport"
-import { endpoint as endpointHeader, request as serviceHeader } from "@likego/transport/headers"
+import type { Context } from "@go-like/context"
+import { newMetadata, type Metadata } from "@go-like/metadata"
+import { newServerContext, type Message, type TransportInfo } from "@go-like/transport"
+import { endpoint as endpointHeader, request as serviceHeader } from "@go-like/transport/headers"
 
 const emptyMetadata = newMetadata()
 
@@ -29,7 +29,7 @@ function routingHeader(header: Readonly<Record<string, string>>, name: string): 
   return found
 }
 
-/** Derives the internal operation carried by the LikeGo routing headers. */
+/** Derives the internal operation carried by the go-like routing headers. */
 function operation(header: Readonly<Record<string, string>>): string {
   const service = routingHeader(header, serviceHeader)
   const endpoint = routingHeader(header, endpointHeader)

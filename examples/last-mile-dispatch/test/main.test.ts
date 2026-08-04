@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newDispatchHandler } from "../src/http"
 import {
@@ -58,7 +58,7 @@ describe("last mile dispatch", () => {
     })
   })
 
-  test("reports exhausted healthy capacity through LikeGo readiness", async () => {
+  test("reports exhausted healthy capacity through go-like readiness", async () => {
     const service = newDispatchService([{ courierId: "probe-courier", capacity: 1, healthy: true }])
     expect((await service.probes.check(background(), "ready")).ok).toBe(true)
     await newDispatchHandler(service.dispatch)(

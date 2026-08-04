@@ -92,13 +92,13 @@ describe("stable provider errors", () => {
     ]
     for (const error of errors) expect(Object.isFrozen(error)).toBeTrue()
     expect(errors.map((error) => error.code)).toEqual([
-      "LIKEGO_ETCD_STORE_HTTP",
-      "LIKEGO_ETCD_STORE_TRANSPORT",
-      "LIKEGO_ETCD_STORE_PROTOCOL",
-      "LIKEGO_ETCD_STORE_COMPACTED",
-      "LIKEGO_ETCD_STORE_LEASE_LOST",
-      "LIKEGO_ETCD_STORE_UNCERTAIN",
-      "LIKEGO_ETCD_STORE_CLEANUP"
+      "GO_LIKE_ETCD_STORE_HTTP",
+      "GO_LIKE_ETCD_STORE_TRANSPORT",
+      "GO_LIKE_ETCD_STORE_PROTOCOL",
+      "GO_LIKE_ETCD_STORE_COMPACTED",
+      "GO_LIKE_ETCD_STORE_LEASE_LOST",
+      "GO_LIKE_ETCD_STORE_UNCERTAIN",
+      "GO_LIKE_ETCD_STORE_CLEANUP"
     ])
     expect(JSON.stringify(errors)).not.toContain("native detail")
   })

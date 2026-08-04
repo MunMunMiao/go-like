@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import type { DeleteOption, ListOption, Store, StoreRecord, WriteOption } from "@likego/store"
+import { cause, type Context } from "@go-like/context"
+import type { DeleteOption, ListOption, Store, StoreRecord, WriteOption } from "@go-like/store"
 import {
   compareStoreKeys,
   deleteOptions,
@@ -9,7 +9,7 @@ import {
   snapshotStoreRecord,
   snapshotStoreRecordInput,
   writeOptions
-} from "@likego/store/provider"
+} from "@go-like/store/provider"
 
 /** Returns one millisecond timestamp for deterministic expiry decisions. */
 export type MemoryStoreClock = () => number
@@ -209,7 +209,7 @@ export function newMemoryStoreAtRevision(
     async write(
       ctx: Context,
       value,
-      ...options: readonly WriteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+      ...options: readonly WriteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
     ): Promise<StoreRecord> {
       checkContext(ctx)
       const input = snapshotStoreRecordInput(value)
@@ -240,7 +240,7 @@ export function newMemoryStoreAtRevision(
     async delete(
       ctx: Context,
       key: string,
-      ...options: readonly DeleteOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+      ...options: readonly DeleteOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
     ): Promise<boolean> {
       checkContext(ctx)
       const selectedKey = storeKey(key)
@@ -262,7 +262,7 @@ export function newMemoryStoreAtRevision(
     },
     async list(
       ctx: Context,
-      ...options: readonly ListOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+      ...options: readonly ListOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
     ) {
       checkContext(ctx)
       const resolved = listOptions(...options)
@@ -305,7 +305,7 @@ export function newMemoryStoreAtRevision(
 
 /** Creates one immediately usable process-local Store without resident resources. */
 export function newMemoryStore(
-  ...options: readonly MemoryStoreOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly MemoryStoreOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): MemoryStore {
   return newMemoryStoreAtRevision(0, options)
 }

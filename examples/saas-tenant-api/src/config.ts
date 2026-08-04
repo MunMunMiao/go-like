@@ -1,4 +1,4 @@
-import type { ConfigObject, ConfigSchema, ConfigValue } from "@likego/config"
+import type { ConfigObject, ConfigSchema, ConfigValue } from "@go-like/config"
 
 /** Safe tokens accepted in tenant configuration and public projections. */
 const TenantToken = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
@@ -124,7 +124,7 @@ function validateTenantDocument(input: ConfigObject): TenantDocument | null {
 export const tenantDocumentSchema: ConfigSchema<TenantDocument> = Object.freeze({
   "~standard": Object.freeze({
     version: 1,
-    vendor: "@likego/example-saas-tenant-api",
+    vendor: "@go-like/example-saas-tenant-api",
     validate(value: unknown) {
       const parsed = configObject(value) ? validateTenantDocument(value) : null
       return parsed === null

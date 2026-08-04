@@ -1,5 +1,5 @@
 ---
-"@likego/server": minor
+"@go-like/server": minor
 ---
 
 以 `newServer(transport(), address(), handler(service, endpoint, fn), middleware(), listenOption())`

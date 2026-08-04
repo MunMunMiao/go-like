@@ -5,8 +5,8 @@ export const options = {
   scenarios: {
     steady: {
       executor: "constant-arrival-rate",
-      duration: __ENV.LIKEGO_SOAK_DURATION,
-      rate: Number(__ENV.LIKEGO_SOAK_RATE || "20"),
+      duration: __ENV.GO_LIKE_SOAK_DURATION,
+      rate: Number(__ENV.GO_LIKE_SOAK_RATE || "20"),
       timeUnit: "1s",
       preAllocatedVUs: 32,
       maxVUs: 32
@@ -20,10 +20,10 @@ export const options = {
   }
 }
 
-export default function requestLikeGo() {
-  const response = http.get(__ENV.LIKEGO_SOAK_URL)
+export default function requestGoLike() {
+  const response = http.get(__ENV.GO_LIKE_SOAK_URL)
   check(response, {
     "status is 200": (value) => value.status === 200,
-    "body is likego": (value) => value.body === "likego"
+    "body is go-like": (value) => value.body === "go-like"
   })
 }

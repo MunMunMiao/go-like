@@ -1,7 +1,7 @@
 ---
-"@likego/client": minor
-"@likego/transport": minor
-"@likego/transport-http": minor
+"@go-like/client": minor
+"@go-like/transport": minor
+"@go-like/transport-http": minor
 ---
 
 删除与 go-micro Transport 平行的 FetchTransport、StreamClient 及对应 HTTP 工厂。内部服务通信统一使用

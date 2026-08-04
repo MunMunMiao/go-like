@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@likego/context"
+import { background, withCancelCause, type Context } from "@go-like/context"
 import type { ConfigSourceWatcher } from "../src/index"
 import { newConfig, onReloadError, onTerminalError, source, objectSource } from "../src/index"
 import {

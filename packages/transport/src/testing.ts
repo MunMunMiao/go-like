@@ -1,5 +1,5 @@
-import { background, canceled, withCancel, withTimeout, withValue } from "@likego/context"
-import type { Context } from "@likego/context"
+import { background, canceled, withCancel, withTimeout, withValue } from "@go-like/context"
+import type { Context } from "@go-like/context"
 
 import { timeout } from "./options"
 import type { Client, Listener, Message, Option, Socket, Transport } from "./types"
@@ -502,7 +502,7 @@ async function closesPendingAccept(
       const repeated = await invokeOutcome(() =>
         listener?.accept(ownerCtx, unexpectedHandler.resolve)
       )
-      requireCode(repeated, "LIKEGO_TRANSPORT_STATE", "repeated Listener.accept")
+      requireCode(repeated, "GO_LIKE_TRANSPORT_STATE", "repeated Listener.accept")
     },
     [async (ctx) => closeListener(ctx, listener), async (ctx) => consumeAccept(ctx, accepting)],
     options.operationTimeoutMs,
@@ -534,7 +534,7 @@ async function cancelsAccept(
       const repeated = await invokeOutcome(() =>
         activeListener.accept(ownerCtx, unexpectedHandler.resolve)
       )
-      requireCode(repeated, "LIKEGO_TRANSPORT_STATE", "repeated Listener.accept")
+      requireCode(repeated, "GO_LIKE_TRANSPORT_STATE", "repeated Listener.accept")
     },
     [async (ctx) => closeListener(ctx, listener), async (ctx) => consumeAccept(ctx, accepting)],
     options.operationTimeoutMs,
@@ -664,12 +664,12 @@ async function checksSocketLifecycle(
             await socket.close(ownerCtx)
             requireCode(
               await invokeOutcome(() => socket.recv(ownerCtx)),
-              "LIKEGO_TRANSPORT_CLOSED",
+              "GO_LIKE_TRANSPORT_CLOSED",
               "closed handler Socket.recv"
             )
             requireCode(
               await invokeOutcome(() => socket.send(ownerCtx, received.value)),
-              "LIKEGO_TRANSPORT_CLOSED",
+              "GO_LIKE_TRANSPORT_CLOSED",
               "closed handler Socket.send"
             )
             await Promise.all([socket.close(ownerCtx), socket.close(ownerCtx)])
@@ -719,12 +719,12 @@ async function checksSocketLifecycle(
       await client.close(ownerCtx)
       requireCode(
         await invokeOutcome(() => activeClient.send(ownerCtx, message)),
-        "LIKEGO_TRANSPORT_CLOSED",
+        "GO_LIKE_TRANSPORT_CLOSED",
         "closed Socket.send"
       )
       requireCode(
         await invokeOutcome(() => activeClient.recv(ownerCtx)),
-        "LIKEGO_TRANSPORT_CLOSED",
+        "GO_LIKE_TRANSPORT_CLOSED",
         "closed Socket.recv"
       )
       await Promise.all([client.close(ownerCtx), client.close(ownerCtx)])
@@ -873,7 +873,7 @@ async function cancelsStartedSockets(
       if (
         sendAfterRecvCancel.rejected &&
         sendAfterRecvCancel.value !== canceled &&
-        errorCode(sendAfterRecvCancel.value) !== "LIKEGO_TRANSPORT_CLOSED"
+        errorCode(sendAfterRecvCancel.value) !== "GO_LIKE_TRANSPORT_CLOSED"
       )
         fail("client Socket.send after recv cancellation returned an unrelated failure")
       const recvHealth = await exchange(ownerCtx, recvClient, "client-recv-health")
@@ -1177,7 +1177,7 @@ async function preservesSocketOrder(
       const activeClient = client
       requireCode(
         await invokeOutcome(() => activeClient.recv(ownerCtx)),
-        "LIKEGO_TRANSPORT_STATE",
+        "GO_LIKE_TRANSPORT_STATE",
         "recv before send"
       )
       const firstSend = client.send(ownerCtx, {

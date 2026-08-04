@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Transport } from "@likego/transport"
+import type { Context } from "@go-like/context"
+import type { Transport } from "@go-like/transport"
 
 import { newMemoryTransport, type MemoryTransport } from "../src/index"
 

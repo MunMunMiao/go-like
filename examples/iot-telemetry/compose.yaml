@@ -1,4 +1,4 @@
-name: likego-iot-telemetry
+name: go-like-iot-telemetry
 
 services:
   nats:

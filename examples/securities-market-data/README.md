@@ -16,9 +16,9 @@
 - `src/http.ts`：标准 Web API 报价摄取及 `/livez`、`/readyz` 路由。
 - `src/main.ts`：唯一可执行入口，组合行情服务、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-主要演示 `@likego/health` 注册行情进程 liveness 和指定证券 snapshot readiness：服务启动后可存活，但只有摄取该证券首笔合法报价才会就绪；探针通过 `@likego/web/health` 暴露标准 `/livez`、`/readyz` Handler。
+主要演示 `@go-like/health` 注册行情进程 liveness 和指定证券 snapshot readiness：服务启动后可存活，但只有摄取该证券首笔合法报价才会就绪；探针通过 `@go-like/web/health` 暴露标准 `/livez`、`/readyz` Handler。
 
 ## 验证矩阵
 
@@ -30,8 +30,8 @@
 | 首笔行情驱动 readiness          | `test/main.test.ts` 的健康探针用例   |
 
 ```bash
-bun run --filter @likego/example-securities-market-data typecheck
-bun run --filter @likego/example-securities-market-data test:unit
+bun run --filter @go-like/example-securities-market-data typecheck
+bun run --filter @go-like/example-securities-market-data test:unit
 ```
 
 ## Docker 判定
@@ -45,7 +45,7 @@ bun run --filter @likego/example-securities-market-data test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-securities-market-data start
+bun run --filter @go-like/example-securities-market-data start
 ```
 
 程序以 `LIKE` 为 readiness 所需证券。启动后先摄取报价，再检查健康状态：

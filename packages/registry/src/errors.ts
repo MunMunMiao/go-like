@@ -8,19 +8,19 @@ import type {
 } from "./types"
 
 const registryStateName: RegistryStateError["name"] = "RegistryStateError"
-const registryStateCode: RegistryStateError["code"] = "LIKEGO_REGISTRY_STATE"
+const registryStateCode: RegistryStateError["code"] = "GO_LIKE_REGISTRY_STATE"
 const watcherStoppedName: WatcherStoppedError["name"] = "WatcherStoppedError"
-const watcherStoppedCode: WatcherStoppedError["code"] = "LIKEGO_WATCHER_STOPPED"
+const watcherStoppedCode: WatcherStoppedError["code"] = "GO_LIKE_WATCHER_STOPPED"
 const watcherOverflowName: WatcherOverflowError["name"] = "WatcherOverflowError"
-const watcherOverflowCode: WatcherOverflowError["code"] = "LIKEGO_WATCHER_OVERFLOW"
+const watcherOverflowCode: WatcherOverflowError["code"] = "GO_LIKE_WATCHER_OVERFLOW"
 const registryProtocolName: RegistryProtocolError["name"] = "RegistryProtocolError"
-const registryProtocolCode: RegistryProtocolError["code"] = "LIKEGO_REGISTRY_PROTOCOL"
+const registryProtocolCode: RegistryProtocolError["code"] = "GO_LIKE_REGISTRY_PROTOCOL"
 const unsupportedCapabilityName: UnsupportedRegistryCapabilityError["name"] =
   "UnsupportedRegistryCapabilityError"
 const unsupportedCapabilityCode: UnsupportedRegistryCapabilityError["code"] =
-  "LIKEGO_UNSUPPORTED_REGISTRY_CAPABILITY"
+  "GO_LIKE_UNSUPPORTED_REGISTRY_CAPABILITY"
 const noAvailableEndpointName: NoAvailableEndpointError["name"] = "NoAvailableEndpointError"
-const noAvailableEndpointCode: NoAvailableEndpointError["code"] = "LIKEGO_NO_AVAILABLE_ENDPOINT"
+const noAvailableEndpointCode: NoAvailableEndpointError["code"] = "GO_LIKE_NO_AVAILABLE_ENDPOINT"
 
 /** Validates and preserves one public non-empty error detail. */
 function detail(value: string, name: string): string {

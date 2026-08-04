@@ -1,4 +1,4 @@
-import { cause, type Context } from "@likego/context"
+import { cause, type Context } from "@go-like/context"
 import type { Store, StoreRecord } from "../src/index"
 
 import {

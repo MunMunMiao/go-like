@@ -1,4 +1,4 @@
-import type { Server } from "@likego/core"
+import type { Server } from "@go-like/core"
 
 /** Default Pino destination shutdown boundary. */
 export const defaultPinoDrainTimeoutMs = 25_000
@@ -21,7 +21,7 @@ export interface DestinationLifecycle {
   once(
     event: string,
     listener: (
-      ...values: unknown[] /* likego-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
+      ...values: unknown[] /* go-like-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
     ) => void
   ): this
 
@@ -29,7 +29,7 @@ export interface DestinationLifecycle {
   on(
     event: string,
     listener: (
-      ...values: unknown[] /* likego-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
+      ...values: unknown[] /* go-like-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
     ) => void
   ): this
 
@@ -37,7 +37,7 @@ export interface DestinationLifecycle {
   removeListener(
     event: string,
     listener: (
-      ...values: unknown[] /* likego-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
+      ...values: unknown[] /* go-like-typed-rest: preserves Pino DestinationStream's EventEmitter-compatible listener ABI. */
     ) => void
   ): this
 }
@@ -55,18 +55,18 @@ export interface PinoServer extends Server {}
 
 export interface PinoAlreadyStartedError extends Error {
   readonly name: "PinoAlreadyStartedError"
-  readonly code: "LIKEGO_PINO_ALREADY_STARTED"
+  readonly code: "GO_LIKE_PINO_ALREADY_STARTED"
   readonly status: "starting" | "running" | "stopping" | "stopped" | "failed"
 }
 
 export interface PinoDrainTimeoutError extends Error {
   readonly name: "PinoDrainTimeoutError"
-  readonly code: "LIKEGO_PINO_DRAIN_TIMEOUT"
+  readonly code: "GO_LIKE_PINO_DRAIN_TIMEOUT"
   readonly timeoutMs: number
   readonly forceSupported: boolean
 }
 
 export interface PinoDestinationClosedError extends Error {
   readonly name: "PinoDestinationClosedError"
-  readonly code: "LIKEGO_PINO_DESTINATION_CLOSED"
+  readonly code: "GO_LIKE_PINO_DESTINATION_CLOSED"
 }

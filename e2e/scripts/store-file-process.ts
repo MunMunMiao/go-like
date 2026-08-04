@@ -2,13 +2,13 @@ import { mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { background } from "@likego/context"
-import { newFileStore, type FileStore } from "@likego/store-file"
-import { newNodeFileStoreHost } from "@likego/store-file/node"
+import { background } from "@go-like/context"
+import { newFileStore, type FileStore } from "@go-like/store-file"
+import { newNodeFileStoreHost } from "@go-like/store-file/node"
 
-const SnapshotName = ".likego-store.snapshot"
-const TempName = ".likego-store.tmp"
-const LockName = ".likego-store.lock"
+const SnapshotName = ".go-like-store.snapshot"
+const TempName = ".go-like-store.tmp"
+const LockName = ".go-like-store.lock"
 
 /** Fails the real-filesystem gate unless one condition is true. */
 function ensure(condition: boolean, message: string): asserts condition {
@@ -37,14 +37,14 @@ async function startStore(store: FileStore): Promise<StartedStore> {
   void running.catch(() => {})
   for (;;) {
     try {
-      await store.read(background(), "__likego_e2e_readiness__")
+      await store.read(background(), "__go-like_e2e_readiness__")
       return Object.freeze({ store, running })
     } catch (value) {
       if (
         typeof value === "object" &&
         value !== null &&
         "code" in value &&
-        value.code === "LIKEGO_FILE_STORE_STATE" &&
+        value.code === "GO_LIKE_FILE_STORE_STATE" &&
         "state" in value
       ) {
         if (value.state === "starting") {
@@ -69,7 +69,7 @@ async function child(directory: string): Promise<never> {
   const store = newFileStore(newNodeFileStoreHost(), directory)
   await startStore(store)
   await writeFile(join(directory, TempName), "incomplete crash residue")
-  console.log("LIKEGO_STORE_FILE_CHILD_READY")
+  console.log("GO_LIKE_STORE_FILE_CHILD_READY")
   return await new Promise<never>(function resident(): void {})
 }
 
@@ -79,7 +79,7 @@ async function waitForChild(process: ReturnType<typeof Bun.spawn>): Promise<void
   const reader = process.stdout.getReader()
   const decoder = new TextDecoder()
   let text = ""
-  while (!text.includes("LIKEGO_STORE_FILE_CHILD_READY")) {
+  while (!text.includes("GO_LIKE_STORE_FILE_CHILD_READY")) {
     const chunk = await reader.read()
     if (chunk.done) throw new Error("File Store child exited before readiness")
     text += decoder.decode(chunk.value, { stream: true })
@@ -95,7 +95,7 @@ function errorCode(value: unknown): unknown {
 
 /** Executes process-crash, stale-lock, temp-residue, checksum, and recovery evidence. */
 async function main(): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), "likego-store-file-process-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-store-file-process-"))
   let childProcess: ReturnType<typeof Bun.spawn> | null = null
   try {
     const initial = newFileStore(newNodeFileStoreHost(), directory)
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
       return value
     })
     ensure(
-      errorCode(lockedFailure) === "LIKEGO_FILE_STORE_LOCKED",
+      errorCode(lockedFailure) === "GO_LIKE_FILE_STORE_LOCKED",
       "a stale crash lock was not rejected fail closed"
     )
 
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
       return value
     })
     ensure(
-      errorCode(corruption) === "LIKEGO_FILE_STORE_CORRUPTION",
+      errorCode(corruption) === "GO_LIKE_FILE_STORE_CORRUPTION",
       "checksum corruption did not fail closed"
     )
 

@@ -1,5 +1,5 @@
-import { background, type Context } from "@likego/context"
-import { type Metadata } from "@likego/metadata"
+import { background, type Context } from "@go-like/context"
+import { type Metadata } from "@go-like/metadata"
 
 import * as RegistryPackage from "../src/index"
 import {

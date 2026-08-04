@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/config-vault",
+  "name": "@go-like/config-vault",
   "version": "0.0.1",
-  "description": "Portable standard Fetch Vault KV v2 configuration source for LikeGo.",
+  "description": "Portable standard Fetch Vault KV v2 configuration source for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,9 +25,9 @@
     "test:e2e": "bun test/e2e/vault-docker.ts"
   },
   "dependencies": {
-    "@likego/config": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1"
+    "@go-like/config": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1"
   },
   "license": "MIT"
 }

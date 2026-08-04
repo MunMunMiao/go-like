@@ -1,7 +1,7 @@
-import type { BrokerEvent, Subscriber } from "@likego/broker"
-import { registerSubscriberTerminal } from "@likego/broker/provider"
-import { background, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { BrokerEvent, Subscriber } from "@go-like/broker"
+import { registerSubscriberTerminal } from "@go-like/broker/provider"
+import { background, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 type NativeBrokerKind = "core" | "jetstream"
 type NativeBrokerOperation = "closed" | "drain" | "unsubscribe" | "close" | "stop"
@@ -45,7 +45,7 @@ function newUnexpectedExitError(kind: NativeBrokerKind, exitCause: Error | null)
         new Error("NATS Core subscription closed outside its owner stop", { cause: exitCause }),
         {
           name: "NatsCoreUnexpectedExitError",
-          code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT",
+          code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT",
           cause: exitCause
         }
       )
@@ -58,7 +58,7 @@ function newUnexpectedExitError(kind: NativeBrokerKind, exitCause: Error | null)
       }),
       {
         name: "NatsJetStreamUnexpectedExitError",
-        code: "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT",
+        code: "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT",
         cause: exitCause
       }
     )
@@ -75,7 +75,7 @@ function newDrainTimeoutError(kind: NativeBrokerKind): Error {
         ),
         {
           name: "NatsCoreDrainTimeoutError",
-          code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT",
+          code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT",
           timeoutMs: nativeBrokerShutdownTimeoutMs,
           forced: true
         }
@@ -89,7 +89,7 @@ function newDrainTimeoutError(kind: NativeBrokerKind): Error {
       ),
       {
         name: "NatsJetStreamCloseTimeoutError",
-        code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT",
+        code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT",
         timeoutMs: nativeBrokerShutdownTimeoutMs,
         forced: true
       }

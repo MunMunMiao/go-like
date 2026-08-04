@@ -1,4 +1,4 @@
-import { background, deadlineExceeded, withCancelCause } from "@likego/context"
+import { background, deadlineExceeded, withCancelCause } from "@go-like/context"
 import { expect, test } from "bun:test"
 
 import { boundaryError, newHttpError, newTransportError, rollbackFailure } from "../src/errors"
@@ -19,7 +19,7 @@ test("provider errors are stable, ordered, and secret-safe", () => {
   })
   expect(newHttpError("get", 403)).toMatchObject({
     name: "ConsulHttpError",
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     operation: "get",
     status: 403
   })

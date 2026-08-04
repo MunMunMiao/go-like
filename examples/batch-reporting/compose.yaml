@@ -1,4 +1,4 @@
-name: likego-batch-reporting
+name: go-like-batch-reporting
 
 services:
   redis:

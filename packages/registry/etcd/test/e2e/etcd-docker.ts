@@ -1,16 +1,16 @@
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { createServer } from "node:net"
 
 import { newEtcdRegistry, type EtcdFetch } from "../../src/index"
 
 const Image =
   "gcr.io/etcd-development/etcd:v3.7.1@sha256:a9983dd6d9283138ab926daa307c6c25623636703ecf5645d5df4d666ce9eba2"
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 /** Creates one deterministic real-backend ServiceInstance revision. */
 function fixture(endpoint = "http://127.0.0.1:8080/"): ServiceInstance {
@@ -81,7 +81,7 @@ async function eventually(
 
 /** Runs the publisher process that the parent deliberately kills. */
 async function publisherChild(): Promise<never> {
-  const address = process.env.LIKEGO_ETCD_ADDRESS
+  const address = process.env.GO_LIKE_ETCD_ADDRESS
   if (address === undefined) throw new Error("publisher child address is missing")
   const registry = newEtcdRegistry({
     fetch,
@@ -91,7 +91,7 @@ async function publisherChild(): Promise<never> {
     ttlMs: 2_000
   })
   await registry.register(background(), fixture())
-  console.log("LIKEGO_ETCD_CHILD_READY")
+  console.log("GO_LIKE_ETCD_CHILD_READY")
   return await new Promise<never>(
     /** Keeps the publisher alive until the parent sends SIGKILL. */
     function resident(): void {}
@@ -104,7 +104,7 @@ async function waitForChild(child: ReturnType<typeof Bun.spawn>): Promise<void> 
   const reader = child.stdout.getReader()
   const decoder = new TextDecoder()
   let text = ""
-  while (!text.includes("LIKEGO_ETCD_CHILD_READY")) {
+  while (!text.includes("GO_LIKE_ETCD_CHILD_READY")) {
     const chunk = await reader.read()
     if (chunk.done) {
       const code = await child.exited
@@ -117,7 +117,7 @@ async function waitForChild(child: ReturnType<typeof Bun.spawn>): Promise<void> 
 
 /** Runs all real etcd lifecycle evidence and always removes its container. */
 async function main(): Promise<void> {
-  const name = `likego-etcd-${crypto.randomUUID()}`
+  const name = `go-like-etcd-${crypto.randomUUID()}`
   const port = await freePort()
   let child: ReturnType<typeof Bun.spawn> | null = null
   try {
@@ -132,13 +132,13 @@ async function main(): Promise<void> {
       `127.0.0.1:${port}:2379`,
       Image,
       "/usr/local/bin/etcd",
-      "--name=likego",
+      "--name=go-like",
       "--data-dir=/etcd-data",
       "--listen-client-urls=http://0.0.0.0:2379",
       "--advertise-client-urls=http://0.0.0.0:2379",
       "--listen-peer-urls=http://0.0.0.0:2380",
       "--initial-advertise-peer-urls=http://0.0.0.0:2380",
-      "--initial-cluster=likego=http://0.0.0.0:2380"
+      "--initial-cluster=go-like=http://0.0.0.0:2380"
     )
     const address = `http://127.0.0.1:${port}`
     await eventually(
@@ -202,9 +202,9 @@ async function main(): Promise<void> {
 
     child = Bun.spawn([process.execPath, import.meta.path], {
       env: {
-        LIKEGO_ETCD_PUBLISHER: "1",
-        LIKEGO_ETCD_ADDRESS: address,
-        LIKEGO_E2E_OWNER: DockerOwner
+        GO_LIKE_ETCD_PUBLISHER: "1",
+        GO_LIKE_ETCD_ADDRESS: address,
+        GO_LIKE_E2E_OWNER: DockerOwner
       },
       stdout: "pipe",
       stderr: "inherit"
@@ -237,5 +237,5 @@ async function main(): Promise<void> {
   }
 }
 
-if (process.env.LIKEGO_ETCD_PUBLISHER === "1") await publisherChild()
+if (process.env.GO_LIKE_ETCD_PUBLISHER === "1") await publisherChild()
 else await main()

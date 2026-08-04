@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newRoundRobinSelector, type ServiceInstance } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { newRoundRobinSelector, type ServiceInstance } from "@go-like/registry"
 
 export type DisruptionOutcome = "rebooked" | "refunded"
 

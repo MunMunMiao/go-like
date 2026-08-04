@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 
 import type { CampaignDefinition } from "../src/campaigns"
@@ -117,7 +117,7 @@ describe("ad campaign serving", () => {
     expect(service.circuitState()).toBe("open")
   })
 
-  test("rejects traffic beyond the LikeGo token-bucket admission capacity", async () => {
+  test("rejects traffic beyond the go-like token-bucket admission capacity", async () => {
     const service = newAdCampaignService(campaigns, creatives, 1)
     const first = await service.handler(
       new Request("https://example.test/v1/ads:serve", {

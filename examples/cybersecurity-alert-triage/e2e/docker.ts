@@ -1,7 +1,7 @@
-import { background } from "@likego/context"
-import type { Config, ConfigObject } from "@likego/config"
-import type { ServiceInstance } from "@likego/registry"
-import { newEtcdRegistry, type EtcdRegistry } from "@likego/registry-etcd"
+import { background } from "@go-like/context"
+import type { Config, ConfigObject } from "@go-like/config"
+import type { ServiceInstance } from "@go-like/registry"
+import { newEtcdRegistry, type EtcdRegistry } from "@go-like/registry-etcd"
 
 import {
   closeOwnedDockerContext,
@@ -21,8 +21,8 @@ import { newTriageAlert } from "../src/service"
 const Image =
   "gcr.io/etcd-development/etcd:v3.7.1@sha256:a9983dd6d9283138ab926daa307c6c25623636703ecf5645d5df4d666ce9eba2"
 const RunId = crypto.randomUUID()
-const Name = `likego-example-security-etcd-${RunId}`
-const ConfigKey = `likego/examples/security/${RunId}/config`
+const Name = `go-like-example-security-etcd-${RunId}`
+const ConfigKey = `go-like/examples/security/${RunId}/config`
 
 interface CommandResult {
   readonly stdout: string
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
     registry = newEtcdRegistry({
       fetch,
       address,
-      prefix: `/likego/examples/security/${RunId}/registry/`,
+      prefix: `/go-like/examples/security/${RunId}/registry/`,
       ttlMs: 2_000
     })
     registered = Object.freeze({
@@ -271,11 +271,11 @@ async function main(): Promise<void> {
       const deadline = Date.now() + 30_000
       while (
         Date.now() < deadline &&
-        !programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')
+        !programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')
       ) {
         await Bun.sleep(25)
       }
-      if (!programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')) {
+      if (!programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"cybersecurity-alert-triage"')) {
         throw new Error("start:prepared did not report readiness")
       }
       const ready = await fetch(`http://127.0.0.1:${programPort}/readyz`)

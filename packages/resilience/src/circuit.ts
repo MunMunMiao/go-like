@@ -1,4 +1,4 @@
-import type { Context, ContextError } from "@likego/context"
+import type { Context, ContextError } from "@go-like/context"
 
 import { circuitOpen } from "./errors"
 import { activeContext, inspectContext, monotonicNow, readContextFailure } from "./internal"

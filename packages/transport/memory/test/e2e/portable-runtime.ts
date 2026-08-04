@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newMemoryTransport } from "@likego/transport-memory"
+import { background } from "@go-like/context"
+import { newMemoryTransport } from "@go-like/transport-memory"
 
 const transport = newMemoryTransport()
 const listener = await transport.listen(background(), "memory://portable-runtime")

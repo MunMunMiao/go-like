@@ -11,7 +11,7 @@
 
 ## 背景
 
-go-kratos、go-zlab/go-kratos 与 go-micro 都把服务注册和服务发现作为独立能力。LikeGo 已有配置中心，但
+go-kratos、go-zlab/go-kratos 与 go-micro 都把服务注册和服务发现作为独立能力。go-like 已有配置中心，但
 配置 watch 不能替代服务注册、TTL、passing health、catalog、局域网发现或端点选择。
 
 Registry 还必须与 Transport 解耦：服务发现提供事实，应用通过显式 resolver 决定如何把 Service/Node
@@ -21,7 +21,7 @@ Registry 还必须与 Transport 解耦：服务发现提供事实，应用通过
 
 ### 公共 Registry 契约
 
-`@likego/registry` 只依赖标准 ECMAScript 与 Web API，定义：
+`@go-like/registry` 只依赖标准 ECMAScript 与 Web API，定义：
 
 - 不可变 `Value`、`Endpoint`、`Node`、`Service` 与 raw `Result`；
 - `Registry`、`Registrar`、`Watcher`、`RegistrationHandle` 与 capability snapshot；
@@ -62,7 +62,7 @@ point 排序；声明顺序有语义的 Node addresses、Endpoint 和递归 Valu
 
 ### Consul provider
 
-`@likego/registry-consul` 使用应用注入的标准 Fetch 调用 Consul Agent HTTP API，不依赖 Node Consul SDK。
+`@go-like/registry-consul` 使用应用注入的标准 Fetch 调用 Consul Agent HTTP API，不依赖 Node Consul SDK。
 
 - 每次 register 生成独立 256-bit token；远端 ID 同时包含 logical identity 与 token。
 - 同 identity 的 generation 使用栈语义：停止 non-current handle 不改远端；停止 current handle 恢复前一份
@@ -75,15 +75,15 @@ point 排序；声明顺序有语义的 Node addresses、Endpoint 和递归 Valu
 
 ### mDNS provider
 
-`@likego/registry-mdns` 根入口实现 portable DNS/TXT codec、cache、registration 和 watcher；生产图不引入
+`@go-like/registry-mdns` 根入口实现 portable DNS/TXT codec、cache、registration 和 watcher；生产图不引入
 Node-only mDNS SDK。应用注入结构式 `MDNSHost`，一个 family/interface 对应一个 datagram owner。
 
-- wire 使用独立的 LikeGo service namespace 与 `Likego-` TXT 字段；
+- wire 使用独立的 go-like service namespace 与 `Go-Like-` TXT 字段；
 - payload 使用 canonical UTF-8 JSON、deflate+base64url、连续 chunk 与 hash 校验；
 - packet、TXT、decode、Value depth/node count 都有固定上限；
 - probe、announce、refresh、query、TTL0 goodbye、crash expiry 和 cooperating responder rescue 都由同一
   portable 状态机实现；
-- `@likego/registry-mdns/node` 隔离 `node:dgram`、网卡枚举、wildcard bind、membership 与 multicast
+- `@go-like/registry-mdns/node` 隔离 `node:dgram`、网卡枚举、wildcard bind、membership 与 multicast
   interface 选择；Node host 不进入 portable 根入口。
 
 Node host 的 socket 映射以真实平台行为为准：IPv4/IPv6 multicast 使用 wildcard bind，再按接口加入组播；
@@ -92,7 +92,7 @@ Node host 的 socket 映射以真实平台行为为准：IPv4/IPv6 multicast 使
 
 ### etcd provider
 
-`@likego/registry-etcd` 通过应用注入的标准 Fetch 调用 etcd v3 JSON gateway，不依赖 gRPC、Protobuf 或
+`@go-like/registry-etcd` 通过应用注入的标准 Fetch 调用 etcd v3 JSON gateway，不依赖 gRPC、Protobuf 或
 Node SDK。
 
 - 每个 cooperating publisher 使用独立 token key 与 lease；多 Node generation 通过一个 transaction 完成
@@ -104,7 +104,7 @@ Node SDK。
 
 ### Kubernetes EndpointSlice provider
 
-`@likego/registry-kubernetes` 只通过注入的标准 Fetch 使用 namespaced
+`@go-like/registry-kubernetes` 只通过注入的标准 Fetch 使用 namespaced
 `discovery.k8s.io/v1 EndpointSlice`。它不创建 core Service、CRD 或全局 controller，也不依赖 Kubernetes
 SDK。
 
@@ -117,7 +117,7 @@ SDK。
 
 ### ZooKeeper provider
 
-`@likego/registry-zookeeper` 使用 `node-zookeeper-client` 管理 Node.js/Bun 原生会话，因此不声明 Deno 或
+`@go-like/registry-zookeeper` 使用 `node-zookeeper-client` 管理 Node.js/Bun 原生会话，因此不声明 Deno 或
 portable Web API 支持。
 
 - 每次 registration 使用独立 ephemeral token child；最后一个 token 消失后逻辑实例才消失。
@@ -154,7 +154,7 @@ Selector 只消费 resolver 输出的 `ServiceInstance` snapshot，不持有 res
 
 ### 服务调用组合
 
-`@likego/client` 只提供一种 unary Client。配置 Discovery 后，它按服务名懒建立唯一 watcher；同一服务的并发
+`@go-like/client` 只提供一种 unary Client。配置 Discovery 后，它按服务名懒建立唯一 watcher；同一服务的并发
 首次调用共享一次接纳。首次接纳以 watcher 的第一个 replacement snapshot 作为 barrier，再执行 fresh get 发布
 当前完整 snapshot，避免 watch/get 竞态；之后每个 replacement snapshot（包括空 snapshot）都原子替换缓存，
 因此服务清空时 fail closed。watcher 终止时保留最后完整 snapshot，并在固定一秒退避后重建。
@@ -165,7 +165,7 @@ Discovery 或 Selector。
 出现原始 endpoint 之前等待；每个调用 Context 仅限制自己的等待，不停止或取消共享 watcher。ready 状态单调，
 首次就绪后的空 replacement snapshot 仍立即 fail closed，filter 结果也不会伪装 discovery readiness。
 
-每次 attempt 都从当前 snapshot 选择端点；selection 成功后恰好执行一次 feedback。LikeGo 不新增
+每次 attempt 都从当前 snapshot 选择端点；selection 成功后恰好执行一次 feedback。go-like 不新增
 `ResidentClient` 或公开 pool。高层 Client 按 address 保留至多一个空闲 Transport Client，成功调用可跨次
 复用，活跃 lease 不共享；失败 attempt 与多余并发 owner 立即关闭。portable Fetch 的物理连接复用继续归
 runtime；Node HTTP provider 在同一个 Transport Client 内拥有并复用 H1 keep-alive connection 或 H2 session，
@@ -178,7 +178,7 @@ feedback 的 `SelectionOutcome` 对齐 Kratos `DoneInfo`。Client 始终报告 `
 `error` 做健康分类，扩展字段不改变既有算法。
 
 业务调用默认只尝试一次，也不创建私有业务 timeout。只有每次 `call` 显式传入带重放授权的
-`withRetry(...)`，才会通过 `@likego/resilience` 执行有界 attempt；每次 attempt 从 watcher 的最新快照重新选择，
+`withRetry(...)`，才会通过 `@go-like/resilience` 执行有界 attempt；每次 attempt 从 watcher 的最新快照重新选择，
 但复用调用开始时已快照的同一 Message。注入的 Transport provider 仍可拥有 provider-specific 默认策略，例如 HTTP Transport
 的响应头 admission timeout。
 
@@ -188,12 +188,12 @@ feedback 的 `SelectionOutcome` 对齐 Kratos `DoneInfo`。Client 始终报告 `
 后置失败才按“主调用、feedback、close”组成 `AggregateError`。这样普通 Client 无需私有后台任务或全局 logger，
 也不会把 close timeout、反馈失败、资源 orphan 或已经发生的业务事实静默丢掉。
 
-该组合只面向内部 `Message` Transport，不依赖 `@likego/web`。外部入站 HTTP、router、middleware 和
+该组合只面向内部 `Message` Transport，不依赖 `@go-like/web`。外部入站 HTTP、router、middleware 和
 Request/Response 策略继续由 Web 层与应用拥有。
 
 ### 韧性组合
 
-`@likego/resilience` 提供显式 retry/backoff、circuit breaker 与 token-bucket limiter。应用可以先从 Registry
+`@go-like/resilience` 提供显式 retry/backoff、circuit breaker 与 token-bucket limiter。应用可以先从 Registry
 取得 snapshot，再选择 endpoint，并在明确幂等的 operation 内创建新请求。Registry、selector 与 Transport
 不会自动重放请求或推断幂等性。
 
@@ -226,6 +226,6 @@ outlier-ejection selector 留给后续真实需求。Registry 不引入 gRPC/Pro
 
 ## 后果
 
-LikeGo 获得与被调研 Go 工具包同角色的 Registry 能力，同时保持 provider、Transport 和 Web 的边界清晰。
+go-like 获得与被调研 Go 工具包同角色的 Registry 能力，同时保持 provider、Transport 和 Web 的边界清晰。
 应用可以替换 provider、resolver 或 Server host，而不改变公共生命周期；每个 resident 资源只有一个 owner，
 所有发现与选择失败都在调用点显式可见。

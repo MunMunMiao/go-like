@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/context",
+  "name": "@go-like/context",
   "version": "0.0.1",
-  "description": "Portable Go-style context propagation for LikeGo.",
+  "description": "Portable Go-style context propagation for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",

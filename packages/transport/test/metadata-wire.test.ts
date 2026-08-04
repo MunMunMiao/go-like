@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { newMetadata } from "@likego/metadata"
+import { newMetadata } from "@go-like/metadata"
 
 import { decodeMetadataHeader, encodeMetadataHeader } from "../src/provider"
 
@@ -51,7 +51,7 @@ test("metadata header rejects malformed, duplicate, non-canonical, and oversized
     expect(() => decodeMetadataHeader(value)).toThrow(
       expect.objectContaining({
         name: "TransportProtocolError",
-        code: "LIKEGO_TRANSPORT_PROTOCOL"
+        code: "GO_LIKE_TRANSPORT_PROTOCOL"
       })
     )
   }

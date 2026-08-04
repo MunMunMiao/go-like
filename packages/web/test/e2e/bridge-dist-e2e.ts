@@ -8,9 +8,9 @@ const root = resolve(directory, "../../../..")
 
 await runFrameworkDistConsumerMain({
   root,
-  prefix: "likego-web-bridge-",
+  prefix: "go-like-web-bridge-",
   consumer: resolve(directory, "fixtures/bridge-dist-consumer.mjs"),
-  builtPackages: ["@likego/context", "@likego/core", "@likego/web"],
+  builtPackages: ["@go-like/context", "@go-like/core", "@go-like/web"],
   vendorPackages: [
     {
       name: "@hono/node-server",

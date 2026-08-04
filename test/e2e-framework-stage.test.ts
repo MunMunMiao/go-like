@@ -16,24 +16,24 @@ async function matchingTempEntries(prefix: string): Promise<readonly string[]> {
 }
 
 test("framework staging rejects source exports and removes its failed invocation stage", async () => {
-  const fixture = await createTempDirectory("likego-stage-fixture-")
+  const fixture = await createTempDirectory("go-like-stage-fixture-")
   const packageDist = await createTempSubdirectory(fixture, ["packages", "web", "dist"])
   await writeFile(
     join(packageDist, "package.json"),
     JSON.stringify({
-      name: "@likego/web",
+      name: "@go-like/web",
       type: "module",
       exports: { ".": "./src/index.ts" }
     })
   )
-  const prefix = `likego-stage-negative-${randomUUID()}-`
+  const prefix = `go-like-stage-negative-${randomUUID()}-`
   try {
     await expect(
       runFrameworkDistConsumer({
         root: fixture.path,
         prefix,
         consumer: resolve("packages/web/test/e2e/fixtures/bridge-dist-consumer.mjs"),
-        builtPackages: ["@likego/web"],
+        builtPackages: ["@go-like/web"],
         vendorPackages: []
       })
     ).rejects.toThrow("dist exports workspace source")
@@ -44,23 +44,23 @@ test("framework staging rejects source exports and removes its failed invocation
 })
 
 test("framework staging removes its stage after the committed consumer fails", async () => {
-  const fixture = await createTempDirectory("likego-stage-consumer-")
+  const fixture = await createTempDirectory("go-like-stage-consumer-")
   const packageDist = await createTempSubdirectory(fixture, ["packages", "web", "dist"])
   await writeFile(
     join(packageDist, "package.json"),
-    JSON.stringify({ name: "@likego/web", type: "module", exports: { ".": "./index.js" } })
+    JSON.stringify({ name: "@go-like/web", type: "module", exports: { ".": "./index.js" } })
   )
   await writeFile(join(packageDist, "index.js"), "export const staged = true\n")
   const consumer = join(fixture.path, "consumer.mjs")
   await writeFile(consumer, "throw new Error('expected consumer failure')\n")
-  const prefix = `likego-consumer-negative-${randomUUID()}-`
+  const prefix = `go-like-consumer-negative-${randomUUID()}-`
   try {
     await expect(
       runFrameworkDistConsumer({
         root: fixture.path,
         prefix,
         consumer,
-        builtPackages: ["@likego/web"],
+        builtPackages: ["@go-like/web"],
         vendorPackages: []
       })
     ).rejects.toThrow("framework dist consumer exited 1")
@@ -71,16 +71,16 @@ test("framework staging removes its stage after the committed consumer fails", a
 })
 
 test("framework staging aborts its Node consumer and removes the stage", async () => {
-  const fixture = await createTempDirectory("likego-stage-abort-")
+  const fixture = await createTempDirectory("go-like-stage-abort-")
   const packageDist = await createTempSubdirectory(fixture, ["packages", "web", "dist"])
   await writeFile(
     join(packageDist, "package.json"),
-    JSON.stringify({ name: "@likego/web", type: "module", exports: { ".": "./index.js" } })
+    JSON.stringify({ name: "@go-like/web", type: "module", exports: { ".": "./index.js" } })
   )
   await writeFile(join(packageDist, "index.js"), "export const staged = true\n")
   const consumer = join(fixture.path, "consumer.mjs")
   await writeFile(consumer, "setInterval(() => {}, 1_000)\n")
-  const prefix = `likego-abort-negative-${randomUUID()}-`
+  const prefix = `go-like-abort-negative-${randomUUID()}-`
   const controller = new AbortController()
   const abort = setTimeout(() => controller.abort(new Error("expected staging abort")), 100)
   try {
@@ -89,7 +89,7 @@ test("framework staging aborts its Node consumer and removes the stage", async (
         root: fixture.path,
         prefix,
         consumer,
-        builtPackages: ["@likego/web"],
+        builtPackages: ["@go-like/web"],
         vendorPackages: [],
         signal: controller.signal
       })
@@ -102,7 +102,7 @@ test("framework staging aborts its Node consumer and removes the stage", async (
 })
 
 test("framework staging rejects vendor packages that resolve into workspace packages", async () => {
-  const fixture = await createTempDirectory("likego-stage-vendor-")
+  const fixture = await createTempDirectory("go-like-stage-vendor-")
   const vendor = await createTempSubdirectory(fixture, ["packages", "vendor"])
   await writeFile(
     join(vendor, "package.json"),
@@ -110,7 +110,7 @@ test("framework staging rejects vendor packages that resolve into workspace pack
   )
   const consumer = join(fixture.path, "consumer.mjs")
   await writeFile(consumer, "throw new Error('consumer must not run')\n")
-  const prefix = `likego-vendor-negative-${randomUUID()}-`
+  const prefix = `go-like-vendor-negative-${randomUUID()}-`
   try {
     await expect(
       runFrameworkDistConsumer({

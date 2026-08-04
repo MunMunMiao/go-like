@@ -1,23 +1,23 @@
-import { background, withTimeout } from "@likego/context"
+import { background, withTimeout } from "@go-like/context"
 import {
   newConfig,
   source as configSource,
   type Config,
   type ConfigObject,
   type ConfigValue
-} from "@likego/config"
+} from "@go-like/config"
 import { consulSource, type ConsulFetch } from "../../src/index"
 
 const Image =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
 const Version = "2.0.2"
 const RunId = crypto.randomUUID()
-const Name = `likego-config-consul-${RunId}`
-const Label = `likego.config-consul.integration=${RunId}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Name = `go-like-config-consul-${RunId}`
+const Label = `go-like.config-consul.integration=${RunId}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly stdout: string
@@ -100,7 +100,7 @@ async function waitForConsul(address: string): Promise<void> {
       const leader = await fetch(`${address}/v1/status/leader`)
       const elected = leader.ok && (await leader.text()).length > 2
       if (elected) {
-        const kv = await fetch(`${address}/v1/kv/__likego_readiness?consistent`)
+        const kv = await fetch(`${address}/v1/kv/__go-like_readiness?consistent`)
         await kv.arrayBuffer()
         if ((kv.ok || kv.status === 404) && kv.headers.has("X-Consul-Index")) return
       }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/transport-memory",
+  "name": "@go-like/transport-memory",
   "version": "0.0.1",
-  "description": "Portable process-local transport for LikeGo internal services.",
+  "description": "Portable process-local transport for go-like internal services.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,9 +25,9 @@
     "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && deno run --sloppy-imports --config ../../../deno.json test/e2e/portable-runtime.ts && tsx test/e2e/package-runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/metadata": "0.0.1",
-    "@likego/transport": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/metadata": "0.0.1",
+    "@go-like/transport": "0.0.1"
   },
   "license": "MIT"
 }

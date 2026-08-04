@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { name, newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
 import { newTelecomProvisioningHandler } from "../src/http"
@@ -68,7 +68,7 @@ describe("telecom service provisioning", () => {
     ).rejects.toThrow("SIM is already assigned to another subscriber")
   })
 
-  test("calls the internal service through LikeGo Memory Transport", async () => {
+  test("calls the internal service through go-like Memory Transport", async () => {
     const repository = newMemoryProvisioningRepository()
     const service = newTelecomProvisioningMicroservice(newProvisionTelecomService(repository))
     const handler = newTelecomProvisioningHandler(service.client)

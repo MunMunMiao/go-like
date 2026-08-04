@@ -79,8 +79,8 @@ function manifestStrings(value: unknown): readonly string[] {
 
 async function validatedBuiltPackage(root: string, packageName: string): Promise<string> {
   const components = packageComponents(packageName)
-  if (components.length !== 2 || components[0] !== "@likego") {
-    throw new Error(`built framework staging only accepts @likego packages: ${packageName}`)
+  if (components.length !== 2 || components[0] !== "@go-like") {
+    throw new Error(`built framework staging only accepts @go-like packages: ${packageName}`)
   }
   const packageRoot = resolve(root, "packages", components[1] ?? "", "dist")
   const metadata = await lstat(packageRoot)
@@ -264,7 +264,7 @@ export async function runFrameworkDistConsumer(
       environment: Object.freeze({
         NODE_OPTIONS: undefined,
         NODE_PATH: undefined,
-        LIKEGO_E2E_FRAMEWORK_STAGE: directory.path
+        GO_LIKE_E2E_FRAMEWORK_STAGE: directory.path
       })
     })
     const failure = commandFailure(result)

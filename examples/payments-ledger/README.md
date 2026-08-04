@@ -8,19 +8,19 @@
 - `src/post-payment.ts`：幂等入账、双录分录与 Outbox 原子事务。
 - `src/postgres.ts`：迁移、延迟约束、不可变触发器与账户写入。
 - `src/nats.ts`：短租约领取、JetStream `PubAck` 与失败释放。
-- `src/worker.ts`：把 outbox publisher 承接为结构式 LikeGo Server。
+- `src/worker.ts`：把 outbox publisher 承接为结构式 go-like Server。
 - `src/http.ts`：标准 Web API 支付入口。
 - `src/main.ts`：连接 PostgreSQL 与 NATS、组装所有 Server，并直接启动完整小程序。
 
 本示例展示一个最小但可审计的支付入账服务：PostgreSQL 是唯一金融事实源；一笔支付在同一个数据库事务内写入
 双录分录、幂等结果和 outbox 事件；事务提交后，独立 publisher 再把 outbox 事件可靠发布到 NATS
-JetStream。LikeGo 管理请求 Context 与标准 Handler 边界；SQL、NATS 和进程生命周期由应用拥有。LikeGo 不充当
+JetStream。go-like 管理请求 Context 与标准 Handler 边界；SQL、NATS 和进程生命周期由应用拥有。go-like 不充当
 账本、ORM 或跨系统事务协调器。
 
 `src/main.ts` 创建标准 Web `Handler`，同时把
 `publishNextOutbox(...)` 轮询包装为结构式 Server，并通过
 `newApp(name("payments-ledger"), server(dependencies, publisher, web))` 一次性把全部 Server
-交给 `@likego/core`。App
+交给 `@go-like/core`。App
 成功接纳后由 Core 调用 Server 的 `start(ctx)`，并在停止时调用 `stop(ctx)`；停止会取消当前 publisher
 Context、清除 poll timer，并等待已接纳 attempt 收敛。Core 会并发请求停止 Web、publisher 与依赖资源；
 需要依赖顺序时，由相应 Server 在自己的 `stop(ctx)` 内负责。
@@ -31,7 +31,7 @@ Context、清除 poll timer，并等待已接纳 attempt 收敛。Core 会并发
 
 ```bash
 docker compose -f examples/payments-ledger/compose.yaml up -d --wait
-bun run --filter @likego/example-payments-ledger start
+bun run --filter @go-like/example-payments-ledger start
 ```
 
 默认监听 `http://127.0.0.1:3000`，并连接 Compose 暴露的 `127.0.0.1:35432` 与
@@ -86,7 +86,7 @@ Idempotency-Key: <租户内唯一、1..128 字节的可见 ASCII 字符串>
 支付调用方
     │ HTTP
     ▼
-标准 Request/Response Handler + LikeGo Web Context
+标准 Request/Response Handler + go-like Web Context
     │ 单个 PostgreSQL transaction
     ├── idempotency_request
     ├── ledger_transaction
@@ -142,23 +142,23 @@ transaction 完成。可变的发布状态只存在于 outbox，不回写历史�
 PostgreSQL transaction 绝不跨越 NATS 网络调用。JetStream 是通知和分发通道，不是账本事实源；事件顺序也不
 替代数据库 journal 顺序。
 
-## LikeGo 包映射
+## go-like 包映射
 
 | 能力              | 采用方式与边界                                                                                                |
 | ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| `@likego/context` | 作为 HTTP 与 publisher attempt 的独立首参语义；终止的 Context 不启动金融事务。                                |
-| `@likego/web`     | `contextHandler(...)` 承接标准 `Request`/`Response`，租户由接收 Context 的服务端 resolver 注入。              |
+| `@go-like/context` | 作为 HTTP 与 publisher attempt 的独立首参语义；终止的 Context 不启动金融事务。                                |
+| `@go-like/web`     | `contextHandler(...)` 承接标准 `Request`/`Response`，租户由接收 Context 的服务端 resolver 注入。              |
 | TypeScript + JSON | 声明请求与 outbox event shape；required presence、字符串类型、金额和账户规则由应用显式检查。                  |
-| Bun `SQL`         | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 LikeGo SQL 抽象。                          |
+| Bun `SQL`         | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 go-like SQL 抽象。                          |
 | 官方 NATS SDK     | `@nats-io/transport-node` 拥有连接，`@nats-io/jetstream` 发布并保留真实 `PubAck`。                            |
-| `@likego/store`   | **禁止用于账本、余额、幂等行或 outbox。** Store 没有关系 transaction、数据库约束、索引查询或 migration 契约。 |
+| `@go-like/store`   | **禁止用于账本、余额、幂等行或 outbox。** Store 没有关系 transaction、数据库约束、索引查询或 migration 契约。 |
 
-LikeGo 当前没有 SQL/ORM 抽象。实现应直接选择一个支持参数化查询、连接池和 scoped transaction 的 PostgreSQL
+go-like 当前没有 SQL/ORM 抽象。实现应直接选择一个支持参数化查询、连接池和 scoped transaction 的 PostgreSQL
 driver，并固定其版本；不要为了本示例先造通用 database package。
 
 ## 生产不变量
 
-1. PostgreSQL 中已提交的 journal/posting 是唯一金融事实；JetStream、日志、缓存和 LikeGo Store 都不是。
+1. PostgreSQL 中已提交的 journal/posting 是唯一金融事实；JetStream、日志、缓存和 go-like Store 都不是。
 2. 每个 transaction 在数据库提交点至少有两条 posting，且按货币求和严格为零。
 3. 金额全程使用十进制字符串与 PostgreSQL `bigint`，任何边界都不经过浮点数。
 4. journal/posting 只能追加；纠错使用可追溯的冲正 transaction。
@@ -221,7 +221,7 @@ outbox；posting 总和为 `0`；不平衡 transaction 在 commit 时返回 SQLS
 ## 非目标
 
 - 不实现支付授权、卡数据采集、清算、退款工作流、拒付、FX、税务或余额授信策略。
-- 不提供通用会计平台、ORM、数据库迁移框架或新的 LikeGo SQL package。
+- 不提供通用会计平台、ORM、数据库迁移框架或新的 go-like SQL package。
 - 不承诺 PostgreSQL 与 NATS 的分布式 exactly-once transaction，也不把 JetStream 当账本备份。
 - 不为第一版增加 Redis、Kafka、CDC、事件溯源框架或全局事件顺序。
 - 不在应用启动时自动执行生产 migration；生产 schema 变更由独立部署步骤负责。

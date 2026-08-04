@@ -3,10 +3,10 @@ import { mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { type ConfigSourceWatcher } from "@likego/config"
-import { background, withTimeout } from "@likego/context"
-import { fileSource } from "@likego/config/file"
-import { newNodeFileCapability } from "@likego/config/node"
+import { type ConfigSourceWatcher } from "@go-like/config"
+import { background, withTimeout } from "@go-like/context"
+import { fileSource } from "@go-like/config/file"
+import { newNodeFileCapability } from "@go-like/config/node"
 
 async function nextWithin(watcher: ConfigSourceWatcher): Promise<void> {
   const [ctx, cancel] = withTimeout(background(), 2_000)
@@ -42,7 +42,7 @@ async function notifyWith(
   return value
 }
 
-const directory = await mkdtemp(join(tmpdir(), "likego-config-node-runtime-"))
+const directory = await mkdtemp(join(tmpdir(), "go-like-config-node-runtime-"))
 const path = join(directory, "config.json")
 const replacement = join(directory, ".config.next")
 let watcher: ConfigSourceWatcher | null = null

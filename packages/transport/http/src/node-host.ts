@@ -15,10 +15,10 @@ import {
 } from "node:http2"
 import type { Socket } from "node:net"
 
-import { canceled, cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import type { TLSConfig, TLSEncodedBytes } from "@likego/transport"
-import { newTransportStateError } from "@likego/transport/provider"
+import { canceled, cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import type { TLSConfig, TLSEncodedBytes } from "@go-like/transport"
+import { newTransportStateError } from "@go-like/transport/provider"
 
 import { normalizeHTTPError } from "./errors"
 import type {

@@ -23,7 +23,7 @@ function hasErrorCode(value: unknown): value is { readonly code: string } {
 
 /** Ensures Node can resolve workspace dependencies in an isolated package mount. */
 async function ensureWorkspaceLinks(): Promise<void> {
-  const scope = resolve(packageRoot, "node_modules/@likego")
+  const scope = resolve(packageRoot, "node_modules/@go-like")
   await mkdir(scope, { recursive: true })
   for (const name of ["context", "core", "web"]) {
     const link = resolve(scope, name)
@@ -130,8 +130,8 @@ function metadataVersion(value: unknown): string {
 
 await ensureWorkspaceLinks()
 
-const { background } = await import("@likego/context")
-const { nodeShutdownTimeout, newNodeServer, port: listenPort } = await import("@likego/web/node")
+const { background } = await import("@go-like/context")
+const { nodeShutdownTimeout, newNodeServer, port: listenPort } = await import("@go-like/web/node")
 const hostMetadata: unknown = JSON.parse(
   await readFile(new URL("../package.json", import.meta.resolve("@hono/node-server")), "utf8")
 )
@@ -340,7 +340,7 @@ try {
   forced = error
 }
 verify(
-  hasErrorCode(forced) && forced.code === "LIKEGO_NODE_SERVER_FORCE_CLOSE",
+  hasErrorCode(forced) && forced.code === "GO_LIKE_NODE_SERVER_FORCE_CLOSE",
   "force close error"
 )
 const stableForced = await forceRunning.catch((error: unknown) => error)

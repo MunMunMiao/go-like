@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { ConfigSource } from "@likego/config"
+import { background } from "@go-like/context"
+import type { ConfigSource } from "@go-like/config"
 
 import * as ConsulConfig from "../src/index"
 import { consulSource, type ConsulFetch, type ConsulSourceOptions } from "../src/index"

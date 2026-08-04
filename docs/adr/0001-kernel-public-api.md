@@ -15,7 +15,7 @@ Context 类以及 Health 的双参数顺序都不能成为兼容性包袱。
 
 ## 决策
 
-### `@likego/context`
+### `@go-like/context`
 
 - `Context`、`ContextError`、`TimeoutContextError`、`CancelFunc`、`CancelCauseFunc`、`StopFunc` 是类型导出。
 - `ContextError` 与 `TimeoutContextError` 不导出运行时构造函数；调用方只依赖稳定的哨兵对象标识。
@@ -27,7 +27,7 @@ Context 类以及 Health 的双参数顺序都不能成为兼容性包袱。
 
 #### Context 计时与 `afterFunc` 最终契约
 
-机器可审计的契约标记：`LIKEGO_CONTEXT_TIMING_AFTERFUNC_V2`。
+机器可审计的契约标记：`GO_LIKE_CONTEXT_TIMING_AFTERFUNC_V2`。
 
 1. 在读取时间或分配资源前，先拒绝 nullish parent，并验证 parent 的结构形态：`deadline`、
    `done`、`err`、`value` 都必须可调用。
@@ -73,7 +73,7 @@ Context 类以及 Health 的双参数顺序都不能成为兼容性包袱。
 10. 无 deadline 的第一个返回值使用 Go zero time 对应的 `0001-01-01T00:00:00.000Z`；`withValue` 在 parent
     校验后拒绝 `null` 和 `undefined` key。其他 key 使用 JavaScript identity，明确属于宿主映射。
 
-### `@likego/core`
+### `@go-like/core`
 
 ```ts
 export interface Server<H extends ServerHandle = ServerHandle> {
@@ -90,7 +90,7 @@ export interface ServerHandle {
 `server`、`hardDrainTimeout` 选项函数，以及 `ServerAlreadyStartedError`、`UnexpectedExitError`、
 `DrainTimeoutError`。`Server` 接口与 `server(...)` 选项函数分别遵循类型和值的命名规则，并由类型测试锁定。
 
-`waitForContext(ctx, operation)` 只从 `@likego/core/lifecycle` 子路径导出；Context 必须是首参。它只约束
+`waitForContext(ctx, operation)` 只从 `@go-like/core/lifecycle` 子路径导出；Context 必须是首参。它只约束
 调用方的等待过程，不中止或修改 operation。
 
 `AppHandle` 可扩展基础 handle，并提供 `diagnostics()` 与只读 `status()`；endpoint、readiness 和 health
@@ -104,26 +104,26 @@ deadline 计时器的插入顺序。没有可信 force 的适配器不得把 tim
 必须保持 pending，最终由 Core 报告 orphan。应用覆盖已有 adapter 边界时，App 总预算必须
 严格更大，并由组合生命周期测试证明实际终态或 timeout 证据先于 App 的孤儿分类发生。
 
-### `@likego/web`
+### `@go-like/web`
 
 - 根入口导出标准单参数 `Handler`，以及 `ContextHandler`、`ContextHandlerOptions`、`contextHandler`。
 - `Handler` 始终只有一个 `Request` 参数；Context 只能通过显式桥接进入。
-- `@likego/web/health` 提供探针 HTTP Handler；`@likego/web/node` 提供 Node listener lifecycle；
-  `@likego/web/node/testing` 只提供 Node host 测试接缝。
-- Web 框架拥有 router、middleware 和 response mapping；LikeGo 不定义第二套路由 API。
+- `@go-like/web/health` 提供探针 HTTP Handler；`@go-like/web/node` 提供 Node listener lifecycle；
+  `@go-like/web/node/testing` 只提供 Node host 测试接缝。
+- Web 框架拥有 router、middleware 和 response mapping；go-like 不定义第二套路由 API。
 
-### `@likego/transport` 与 `@likego/transport-http`
+### `@go-like/transport` 与 `@go-like/transport-http`
 
-- `@likego/transport` 根入口定义内部微服务通信的 `Transport`、`Client`、`Listener`、`Socket`、`Message`
-  与 options；`./headers` 固定 `Likego-` wire header。
-- `@likego/transport-http` 根入口同时提供标准 Fetch unary client、注入式 `HTTPHost` listener server 和
+- `@go-like/transport` 根入口定义内部微服务通信的 `Transport`、`Client`、`Listener`、`Socket`、`Message`
+  与 options；`./headers` 固定 `Go-Like-` wire header。
+- `@go-like/transport-http` 根入口同时提供标准 Fetch unary client、注入式 `HTTPHost` listener server 和
   Core lifecycle `newHTTPServer`；`./node` 提供真实 Node HTTP Server。
 - Transport 与 Web 的 handler/ownership 语义独立，二者不相互重导出。
 
-### `@likego/health`
+### `@go-like/health`
 
 - `ProbeRegistry.check(ctx, kind)`，Context 是首参。
-- HTTP 路由不在本包。`createHealthHandler(...)` 从 `@likego/web/health` 返回标准 `Handler`。
+- HTTP 路由不在本包。`createHealthHandler(...)` 从 `@go-like/web/health` 返回标准 `Handler`。
 - `registerAppProbes(registry, statusSource)` 使用显式 `AppStatusSource`，不对基础 handle 使用鸭子类型判断。
 
 ## 后果

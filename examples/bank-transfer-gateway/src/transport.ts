@@ -1,13 +1,13 @@
-import { newClient, withAddress, withTransport } from "@likego/client"
-import type { Context } from "@likego/context"
+import { newClient, withAddress, withTransport } from "@go-like/client"
+import type { Context } from "@go-like/context"
 import {
   address,
   handler,
   newServer,
   transport as serverTransport,
   type Server
-} from "@likego/server"
-import { newMemoryTransport } from "@likego/transport-memory"
+} from "@go-like/server"
+import { newMemoryTransport } from "@go-like/transport-memory"
 
 import { transferQuoteEndpoint, type TransferQuote, type TransferQuoteCommand } from "./contract"
 import { newMemoryTransferNetworkDirectory, newQuoteTransfer } from "./service"

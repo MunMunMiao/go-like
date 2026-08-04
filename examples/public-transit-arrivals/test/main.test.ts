@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import {
   newHandler,
@@ -107,7 +107,7 @@ describe("public transit arrivals", () => {
     })
   })
 
-  test("reports prediction-feed freshness through LikeGo readiness", async () => {
+  test("reports prediction-feed freshness through go-like readiness", async () => {
     const runtime = newRuntime(() => 10_000, 1_000)
     expect((await runtime.probes.check(background(), "ready")).ok).toBe(false)
     await runtime.handler(

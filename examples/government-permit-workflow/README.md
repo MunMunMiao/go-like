@@ -2,7 +2,7 @@
 
 ## 主要演示
 
-演示一个政务许可微服务：公开 Fetch API 负责受理和查询申请，独立审批 Worker 按许可证类型检查材料，并由 `@likego/core` 统一控制启动和停止。
+演示一个政务许可微服务：公开 Fetch API 负责受理和查询申请，独立审批 Worker 按许可证类型检查材料，并由 `@go-like/core` 统一控制启动和停止。
 
 ## 独有业务不变量
 
@@ -14,30 +14,30 @@
 ## 源码结构
 
 - `src/permits.ts`：许可政策、审批决定、申请仓储以及提交与查询操作。
-- `src/worker.ts`：实现 LikeGo `Server` 的审批 Worker。
-- `src/service.ts`：组合 Handler，并向入口暴露实现 LikeGo `Server` 的审批 Worker。
+- `src/worker.ts`：实现 go-like `Server` 的审批 Worker。
+- `src/service.ts`：组合 Handler，并向入口暴露实现 go-like `Server` 的审批 Worker。
 - `src/http.ts`：许可受理与查询的标准 Fetch 路由。
 - `src/main.ts`：唯一 App 组装根，由 Core 按依赖顺序管理 Worker 和 HTTP Server。
 
-## LikeGo 能力
+## go-like 能力
 
-本例实际由 `@likego/core` 启动和排空自定义结构式 Server。测试证明 Worker 在生命周期外拒绝处理、运行时完成审批，并在 `stop(ctx)` 后结束 `start(ctx)` 的运行期 Promise。
+本例实际由 `@go-like/core` 启动和排空自定义结构式 Server。测试证明 Worker 在生命周期外拒绝处理、运行时完成审批，并在 `stop(ctx)` 后结束 `start(ctx)` 的运行期 Promise。
 
 ## 验证
 
 ```bash
-bun run --filter @likego/example-government-permit-workflow typecheck
-bun run --filter @likego/example-government-permit-workflow test:unit
+bun run --filter @go-like/example-government-permit-workflow typecheck
+bun run --filter @go-like/example-government-permit-workflow test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-government-permit-workflow start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-government-permit-workflow start
 ```
 
-`start` 会先构建本地 LikeGo 包，再由 `start:prepared` 把 `src/main.ts` 构建为
-`.artifacts/main.mjs` 并启动。看到 `LIKEGO_EXAMPLE_READY` 后提交申请：
+`start` 会先构建本地 go-like 包，再由 `start:prepared` 把 `src/main.ts` 构建为
+`.artifacts/main.mjs` 并启动。看到 `GO_LIKE_EXAMPLE_READY` 后提交申请：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/permits \

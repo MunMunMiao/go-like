@@ -1,12 +1,12 @@
-import { newMemoryCache, type MemoryCache } from "@likego/cache-memory"
-import type { Context } from "@likego/context"
+import { newMemoryCache, type MemoryCache } from "@go-like/cache-memory"
+import type { Context } from "@go-like/context"
 import {
   newCircuitBreaker,
   newTokenBucketLimiter,
   type CircuitState,
   type RateLimiter
-} from "@likego/resilience"
-import type { Handler } from "@likego/web"
+} from "@go-like/resilience"
+import type { Handler } from "@go-like/web"
 
 import {
   newCachedCreativeGateway,

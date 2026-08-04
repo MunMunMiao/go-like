@@ -42,7 +42,7 @@ const NetworkId = "b".repeat(64)
 const Invocation = "invocation-owned-docker"
 const Owner = "example-owned-docker-owner"
 const ExampleId = "owned-docker-example"
-const PackageName = "@likego/example-owned-docker"
+const PackageName = "@go-like/example-owned-docker"
 const WorkerPid = 4_242
 const RootPid = 4_141
 const RootStartIdentity = "synthetic:root:1"
@@ -141,7 +141,7 @@ function authority(
 }
 
 async function fixture(): Promise<Fixture> {
-  const temp = await createTempDirectory("likego-owned-docker-")
+  const temp = await createTempDirectory("go-like-owned-docker-")
   const created = await createTempSubdirectories(temp, [
     ["result"],
     ["result", "participants"],
@@ -467,7 +467,7 @@ test("environment is exact transport only and direct wrappers can clear stale au
       ownedDockerContextFromEnvironment(
         {
           ...environment,
-          LIKEGO_E2E_OWNED_DOCKER_STALE: "ambient"
+          GO_LIKE_E2E_OWNED_DOCKER_STALE: "ambient"
         },
         { identityReader: selected.identityReader }
       )
@@ -571,7 +571,7 @@ test("all ownership-label spellings and daemon selection are rejected before the
       [`--label=${DockerOwnerLabelKey}=forged`, "image"],
       [`-l=${DockerInvocationLabelKey}=forged`, "image"],
       [`-l${DockerOwnerLabelKey}=forged`, "image"],
-      [`-itlio.likego.e2e.owner=forged`, "image"],
+      [`-itlio.go-like.e2e.owner=forged`, "image"],
       ["--label-file", "labels.txt", "image"]
     ]
     for (const arguments_ of conflicts) {

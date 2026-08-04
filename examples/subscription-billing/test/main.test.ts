@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newSubscriptionBillingService } from "../src/config"
 import { newSubscriptionBillingHandler } from "../src/http"

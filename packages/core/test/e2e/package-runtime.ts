@@ -1,5 +1,5 @@
-import * as core from "@likego/core"
-import * as lifecycle from "@likego/core/lifecycle"
+import * as core from "@go-like/core"
+import * as lifecycle from "@go-like/core/lifecycle"
 
 const expectedRootExports = [
   "afterStart",
@@ -23,10 +23,10 @@ const expectedRootExports = [
 ].sort()
 const actualRootExports = Object.keys(core).sort()
 if (JSON.stringify(actualRootExports) !== JSON.stringify(expectedRootExports)) {
-  throw new Error(`unexpected @likego/core exports: ${actualRootExports.join(",")}`)
+  throw new Error(`unexpected @go-like/core exports: ${actualRootExports.join(",")}`)
 }
 if (JSON.stringify(Object.keys(lifecycle)) !== JSON.stringify(["waitForContext"])) {
-  throw new Error(`unexpected @likego/core/lifecycle exports: ${Object.keys(lifecycle).join(",")}`)
+  throw new Error(`unexpected @go-like/core/lifecycle exports: ${Object.keys(lifecycle).join(",")}`)
 }
 
 let resolveDone: () => void = () => undefined
@@ -47,5 +47,5 @@ await Promise.resolve()
 await app.stop()
 await running
 if (app.name() !== "package-runtime") {
-  throw new Error("built @likego/core lifecycle runtime failed")
+  throw new Error("built @go-like/core lifecycle runtime failed")
 }

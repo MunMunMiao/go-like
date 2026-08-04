@@ -1,12 +1,12 @@
-import { canceled, withCancel, type Context } from "@likego/context"
-import { type AcceptHandler, type Message, type TransportLogger } from "@likego/transport"
+import { canceled, withCancel, type Context } from "@go-like/context"
+import { type AcceptHandler, type Message, type TransportLogger } from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
   snapshotMessage,
   type TransportClosedError
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 import {
   assertHTTPContentLength,
   boundedHTTPBodyLength,

@@ -15,11 +15,11 @@ const Fixture = resolve("e2e/fixtures/published-consumer")
 
 function packOutput(
   files: readonly { readonly path: string; readonly mode?: number }[],
-  filename = "likego-context-0.0.1.tgz"
+  filename = "go-like-context-0.0.1.tgz"
 ): string {
   return JSON.stringify([
     {
-      name: "@likego/context",
+      name: "@go-like/context",
       filename,
       files: files.map((file) => ({ ...file, mode: file.mode ?? 0o644 }))
     }
@@ -38,13 +38,13 @@ test("published fixtures are committed TypeScript with explicit runtime boundari
       "tsconfig.authoring.json",
       "tsconfig.types.json",
       "tsconfig.node.json",
-      "authoring-stubs/likego.d.ts"
+      "authoring-stubs/go-like.d.ts"
     ])
   )
   const authoring = JSON.parse(await readFile(join(Fixture, "tsconfig.authoring.json"), "utf8"))
   expect(authoring.extends).toBeUndefined()
   expect(authoring.compilerOptions.paths).toEqual({
-    "@likego/*": ["./authoring-stubs/likego.d.ts"]
+    "@go-like/*": ["./authoring-stubs/go-like.d.ts"]
   })
   const runner = await readFile(resolve("e2e/published.ts"), "utf8")
   expect(runner).toContain('"--no-install"')
@@ -53,7 +53,7 @@ test("published fixtures are committed TypeScript with explicit runtime boundari
 })
 
 test("authoring check depends only on its committed wildcard stub", async () => {
-  const directory = await createTempDirectory("likego-published-authoring-")
+  const directory = await createTempDirectory("go-like-published-authoring-")
   try {
     await cp(Fixture, directory.path, { recursive: true })
     await verifyTempDirectory(directory)
@@ -74,7 +74,7 @@ test("authoring check depends only on its committed wildcard stub", async () => 
     expect(positive.termination).toBe("exit")
     expect(positive.cleanupFailures).toHaveLength(0)
     expect(positive.exitCode).toBe(0)
-    await unlink(join(directory.path, "authoring-stubs/likego.d.ts"))
+    await unlink(join(directory.path, "authoring-stubs/go-like.d.ts"))
     await verifyTempDirectory(directory)
     const negative = await runCommand(process.cwd(), {
       cwd: directory.path,
@@ -98,41 +98,41 @@ test("npm pack JSON accepts a complete safe inventory and rejects archive escape
     { path: "index.d.ts" },
     { path: "index.js.map" }
   ]
-  expect(parseNpmPackOutput(packOutput(valid), "@likego/context")).toBe("likego-context-0.0.1.tgz")
+  expect(parseNpmPackOutput(packOutput(valid), "@go-like/context")).toBe("go-like-context-0.0.1.tgz")
   expect(() =>
-    parseNpmPackOutput(packOutput([...valid, { path: "../escape" }]), "@likego/context")
+    parseNpmPackOutput(packOutput([...valid, { path: "../escape" }]), "@go-like/context")
   ).toThrow("unsafe entry")
   expect(() =>
-    parseNpmPackOutput(packOutput([...valid, { path: "index.js" }]), "@likego/context")
+    parseNpmPackOutput(packOutput([...valid, { path: "index.js" }]), "@go-like/context")
   ).toThrow("duplicate entry")
   expect(() =>
-    parseNpmPackOutput(packOutput([{ path: "package.json" }]), "@likego/context")
+    parseNpmPackOutput(packOutput([{ path: "package.json" }]), "@go-like/context")
   ).toThrow("incomplete runtime contract")
-  expect(() => parseNpmPackOutput(packOutput(valid, "..\\escape.tgz"), "@likego/context")).toThrow(
+  expect(() => parseNpmPackOutput(packOutput(valid, "..\\escape.tgz"), "@go-like/context")).toThrow(
     "unsafe filename"
   )
 })
 
 test("published trace accepts only staged resolutions and requires every public package", () => {
-  const stage = "/tmp/likego-published-trace"
+  const stage = "/tmp/go-like-published-trace"
   const valid = [
-    "======== Module name '@likego/context' was successfully resolved to '/tmp/likego-published-trace/node_modules/@likego/context/index.d.ts'. ========",
-    "======== Module name '@likego/core' was successfully resolved to '/tmp/likego-published-trace/node_modules/@likego/core/index.d.ts'. ========"
+    "======== Module name '@go-like/context' was successfully resolved to '/tmp/go-like-published-trace/node_modules/@go-like/context/index.d.ts'. ========",
+    "======== Module name '@go-like/core' was successfully resolved to '/tmp/go-like-published-trace/node_modules/@go-like/core/index.d.ts'. ========"
   ].join("\n")
   expect(() =>
-    validatePublishedTrace(valid, stage, ["@likego/context", "@likego/core"])
+    validatePublishedTrace(valid, stage, ["@go-like/context", "@go-like/core"])
   ).not.toThrow()
   expect(() =>
     validatePublishedTrace(
       valid.replace(
-        "/tmp/likego-published-trace/node_modules/@likego/context",
+        "/tmp/go-like-published-trace/node_modules/@go-like/context",
         `${process.cwd()}/packages/context/src`
       ),
       stage,
-      ["@likego/context", "@likego/core"]
+      ["@go-like/context", "@go-like/core"]
     )
   ).toThrow("escaped staged node_modules")
-  expect(() => validatePublishedTrace(valid, stage, ["@likego/context", "@likego/server"])).toThrow(
+  expect(() => validatePublishedTrace(valid, stage, ["@go-like/context", "@go-like/server"])).toThrow(
     "missed public packages"
   )
 })
@@ -140,13 +140,13 @@ test("published trace accepts only staged resolutions and requires every public 
 test("Node emit rewrites relative TS imports and preserves package specifiers", () => {
   expect(() =>
     validateNodeEmit(
-      'import * as context from "@likego/context"',
-      'import * as core from "@likego/core"\nimport { runPortable } from "./portable.js"'
+      'import * as context from "@go-like/context"',
+      'import * as core from "@go-like/core"\nimport { runPortable } from "./portable.js"'
     )
   ).not.toThrow()
   expect(() =>
     validateNodeEmit(
-      'import * as context from "@likego/context"',
+      'import * as context from "@go-like/context"',
       'import { runPortable } from "./portable.ts"'
     )
   ).toThrow("did not rewrite")

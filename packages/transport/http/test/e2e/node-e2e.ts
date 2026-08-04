@@ -1,16 +1,16 @@
 import { createServer, type RequestListener, type Server } from "node:http"
 import { connect, type Socket } from "node:net"
 
-import { newClient, withAddress, withTransport } from "@likego/client"
-import { background, withCancel, withCancelCause } from "@likego/context"
+import { newClient, withAddress, withTransport } from "@go-like/client"
+import { background, withCancel, withCancelCause } from "@go-like/context"
 import {
   address as serverAddress,
   handler,
   newServer,
   transport as serverTransport
-} from "@likego/server"
-import { struct } from "@likego/struct"
-import { endpoint, withConnClose } from "@likego/transport"
+} from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { endpoint, withConnClose } from "@go-like/transport"
 import { newNodeHTTPTransport } from "../../src/node"
 import type {
   HTTPHost,
@@ -41,7 +41,7 @@ const listenOptions: HTTPHostListenOptions = Object.freeze({ secure: false, tlsC
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const nodeHostModule =
-  process.env.LIKEGO_TRANSPORT_HTTP_NODE_HOST_E2E_MODULE ??
+  process.env.GO_LIKE_TRANSPORT_HTTP_NODE_HOST_E2E_MODULE ??
   new URL("../../src/node-host.ts", import.meta.url).href
 const { newNodeHTTPHost, newNodeHTTPHostWithFactory } = (await import(
   nodeHostModule
@@ -197,9 +197,9 @@ const unaryAccept = unaryListener.accept(
     const request = await socket.recv(ctx)
     unaryRequestBody = decoder.decode(request.body)
     unaryRequestHeader =
-      request.header["likego-loopback"] ?? request.header["Likego-Loopback"] ?? ""
+      request.header["go-like-loopback"] ?? request.header["Go-Like-Loopback"] ?? ""
     await socket.send(ctx, {
-      header: Object.freeze({ "Likego-Reply": "node" }),
+      header: Object.freeze({ "Go-Like-Reply": "node" }),
       body: encoder.encode("unary-response")
     })
   }
@@ -209,7 +209,7 @@ acceptedServers += 1
 const acceptedBeforeRequest = true
 const unaryClient = await transport.dial(background(), unaryListener.addr())
 await unaryClient.send(background(), {
-  header: Object.freeze({ "Likego-Loopback": "loopback" }),
+  header: Object.freeze({ "Go-Like-Loopback": "loopback" }),
   body: encoder.encode("unary-request")
 })
 const unaryResponse = await unaryClient.recv(background())
@@ -221,7 +221,7 @@ const unaryAddress = unaryListener.addr()
 await provePortReleased(unaryAddress)
 const unaryResponseBody = decoder.decode(unaryResponse.body)
 const unaryResponseHeader =
-  unaryResponse.header["likego-reply"] ?? unaryResponse.header["Likego-Reply"] ?? ""
+  unaryResponse.header["go-like-reply"] ?? unaryResponse.header["Go-Like-Reply"] ?? ""
 verify(unaryRequestBody === "unary-request", "unary request body changed")
 verify(unaryRequestHeader === "loopback", "unary request header changed")
 verify(unaryResponseBody === "unary-response", "unary response body changed")

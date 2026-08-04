@@ -80,7 +80,7 @@ test("durable JSON recognizes only its canonical private publication components"
 
 test("durable JSON writes stable bytes, reads them, syncs a private file, and closes", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-success-")
+  const directory = await createTempDirectory("go-like-durable-success-")
   let handle: DurableJsonDirectory | null = null
   try {
     handle = await openDurableJsonDirectory(directory.path, {
@@ -121,7 +121,7 @@ test("durable JSON writes stable bytes, reads them, syncs a private file, and cl
 
 test("readonly publication is complete before a second handle can observe the final name", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-readonly-atomic-")
+  const directory = await createTempDirectory("go-like-durable-readonly-atomic-")
   let writer: DurableJsonDirectory | null = null
   let reader: DurableJsonDirectory | null = null
   try {
@@ -145,7 +145,7 @@ test("readonly publication is complete before a second handle can observe the fi
 
 test("durable JSON waits for a concurrent publication link to stabilize within its bound", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-link-stabilize-")
+  const directory = await createTempDirectory("go-like-durable-link-stabilize-")
   let handle: DurableJsonDirectory | null = null
   const temporary = join(directory.path, ".durable-concurrent.tmp")
   const published = join(directory.path, "result.json")
@@ -166,7 +166,7 @@ test("durable JSON waits for a concurrent publication link to stabilize within i
 
 test("durable JSON rejects a crash-left publication link without waiting forever", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-link-crash-")
+  const directory = await createTempDirectory("go-like-durable-link-crash-")
   let handle: DurableJsonDirectory | null = null
   const temporary = join(directory.path, ".durable-crashed.tmp")
   const published = join(directory.path, "result.json")
@@ -188,7 +188,7 @@ test("durable JSON rejects a crash-left publication link without waiting forever
 
 test("durable JSON publication never replaces an existing final component", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-duplicate-")
+  const directory = await createTempDirectory("go-like-durable-duplicate-")
   let handle: DurableJsonDirectory | null = null
   try {
     handle = await openDurableJsonDirectory(directory.path)
@@ -209,7 +209,7 @@ test("durable JSON publication never replaces an existing final component", asyn
 
 test("durable JSON rejects every non-component path without reflecting its value", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-component-")
+  const directory = await createTempDirectory("go-like-durable-component-")
   let handle: DurableJsonDirectory | null = null
   try {
     handle = await openDurableJsonDirectory(directory.path)
@@ -225,7 +225,7 @@ test("durable JSON rejects every non-component path without reflecting its value
     ]) {
       let failure: unknown = null
       try {
-        await writeDurableJson(handle, component, { secret: "LIKEGO_JSON_SECRET" })
+        await writeDurableJson(handle, component, { secret: "GO_LIKE_JSON_SECRET" })
       } catch (error) {
         failure = error
       }
@@ -233,7 +233,7 @@ test("durable JSON rejects every non-component path without reflecting its value
       const message = failure instanceof Error ? failure.message : String(failure)
       expect(message).toBe("invalid durable JSON path component")
       if (component.length > 0) expect(message).not.toContain(component)
-      expect(message).not.toContain("LIKEGO_JSON_SECRET")
+      expect(message).not.toContain("GO_LIKE_JSON_SECRET")
     }
     expect(await readdir(directory.path)).toEqual([])
   } finally {
@@ -243,8 +243,8 @@ test("durable JSON rejects every non-component path without reflecting its value
 
 test("durable JSON rejects symlink and overly permissive directories and enforces containment", async () => {
   if (!Posix) return
-  const root = await createTempDirectory("likego-durable-directory-")
-  const outside = await createTempDirectory("likego-durable-outside-")
+  const root = await createTempDirectory("go-like-durable-directory-")
+  const outside = await createTempDirectory("go-like-durable-outside-")
   const privatePath = join(root.path, "private")
   const aliasPath = join(root.path, "alias")
   let handle: DurableJsonDirectory | null = null
@@ -276,7 +276,7 @@ test("durable JSON rejects symlink and overly permissive directories and enforce
 
 test("durable JSON reads reject symlink, non-regular, and overly permissive entries", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-entry-")
+  const directory = await createTempDirectory("go-like-durable-entry-")
   let handle: DurableJsonDirectory | null = null
   try {
     handle = await openDurableJsonDirectory(directory.path)
@@ -315,11 +315,11 @@ test("durable JSON reads reject symlink, non-regular, and overly permissive entr
 
 test("durable JSON rejects oversized writes and reads plus invalid UTF-8 without data disclosure", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-bounds-")
+  const directory = await createTempDirectory("go-like-durable-bounds-")
   let handle: DurableJsonDirectory | null = null
   try {
     handle = await openDurableJsonDirectory(directory.path, { maximumBytes: 64 })
-    const secret = "LIKEGO_OVERSIZE_SECRET_VALUE"
+    const secret = "GO_LIKE_OVERSIZE_SECRET_VALUE"
     let writeFailure: unknown = null
     try {
       await writeDurableJson(handle, "too-large.json", { secret: secret.repeat(4) })
@@ -343,7 +343,7 @@ test("durable JSON rejects oversized writes and reads plus invalid UTF-8 without
     })
     await expect(readDurableJson(handle, "invalid-utf8.json")).rejects.toThrow("is not valid UTF-8")
 
-    const invalidJsonSecret = "LIKEGO_INVALID_JSON_SECRET"
+    const invalidJsonSecret = "GO_LIKE_INVALID_JSON_SECRET"
     await writeFile(join(directory.path, "invalid-json.json"), invalidJsonSecret, { mode: 0o600 })
     let invalidJsonFailure: unknown = null
     try {
@@ -365,7 +365,7 @@ test("durable JSON rejects oversized writes and reads plus invalid UTF-8 without
 
 test("durable JSON handles fail closed after a directory identity swap", async () => {
   if (!Posix) return
-  const directory = await createTempDirectory("likego-durable-swap-")
+  const directory = await createTempDirectory("go-like-durable-swap-")
   const moved = `${directory.path}-moved-${randomUUID()}`
   let handle: DurableJsonDirectory | null = null
   let originalMoved = false

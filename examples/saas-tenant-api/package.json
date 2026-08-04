@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-saas-tenant-api",
+  "name": "@go-like/example-saas-tenant-api",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,21 +12,21 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {
-    "@likego/cache": "workspace:*",
-    "@likego/cache-redis": "workspace:*",
-    "@likego/config": "workspace:*",
-    "@likego/config-consul": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/pino": "workspace:*",
-    "@likego/resilience": "workspace:*",
-    "@likego/store-consul": "workspace:*",
-    "@likego/web": "workspace:*",
+    "@go-like/cache": "workspace:*",
+    "@go-like/cache-redis": "workspace:*",
+    "@go-like/config": "workspace:*",
+    "@go-like/config-consul": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/pino": "workspace:*",
+    "@go-like/resilience": "workspace:*",
+    "@go-like/store-consul": "workspace:*",
+    "@go-like/web": "workspace:*",
     "hono": "4.12.34",
     "pino": "10.3.1"
   },
   "devDependencies": {
-    "@likego/cache-memory": "workspace:*",
+    "@go-like/cache-memory": "workspace:*",
     "@types/node": "26.1.2"
   },
   "license": "MIT"

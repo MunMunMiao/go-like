@@ -1,5 +1,5 @@
-import { newClient, poolSize, poolTtl, withAddress, withTransport } from "@likego/client"
-import { background, type Context } from "@likego/context"
+import { newClient, poolSize, poolTtl, withAddress, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
 import {
   type Client as TransportClient,
   type DialOption,
@@ -9,8 +9,8 @@ import {
   type Option,
   type Options,
   type Transport
-} from "@likego/transport"
-import { newHTTPTransport } from "@likego/transport-http"
+} from "@go-like/transport"
+import { newHTTPTransport } from "@go-like/transport-http"
 import { createServer as createHTTPServer } from "node:http"
 import { mkdir, readdir } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
@@ -144,12 +144,12 @@ export async function collectSoakCleanupFailures(
   return Object.freeze(failures)
 }
 
-const WebAdmittedMarker = "LIKEGO_SOAK_WEB_DRAIN_ADMITTED="
-const WebReadyMarker = "LIKEGO_SOAK_WEB_READY="
-const WebResultMarker = "LIKEGO_SOAK_WEB_RESULT="
+const WebAdmittedMarker = "GO_LIKE_SOAK_WEB_DRAIN_ADMITTED="
+const WebReadyMarker = "GO_LIKE_SOAK_WEB_READY="
+const WebResultMarker = "GO_LIKE_SOAK_WEB_RESULT="
 
 function progress(event: Readonly<Record<string, unknown>>): void {
-  process.stderr.write(`LIKEGO_SOAK_PROGRESS=${JSON.stringify(event)}\n`)
+  process.stderr.write(`GO_LIKE_SOAK_PROGRESS=${JSON.stringify(event)}\n`)
 }
 
 function record(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -251,7 +251,7 @@ export function k6VersionCommand(owner: string): readonly string[] {
     "run",
     "--rm",
     "--label",
-    `io.likego.e2e.owner=${owner}`,
+    `io.go-like.e2e.owner=${owner}`,
     K6Image,
     "version"
   ])
@@ -272,13 +272,13 @@ export function k6RunCommand(
     "--name",
     container,
     "--label",
-    `io.likego.e2e.owner=${owner}`,
+    `io.go-like.e2e.owner=${owner}`,
     "--add-host",
     "host.docker.internal:host-gateway",
     "--env",
-    `LIKEGO_SOAK_DURATION=${requestedDurationMs}ms`,
+    `GO_LIKE_SOAK_DURATION=${requestedDurationMs}ms`,
     "--env",
-    `LIKEGO_SOAK_URL=http://host.docker.internal:${endpointPort}/`,
+    `GO_LIKE_SOAK_URL=http://host.docker.internal:${endpointPort}/`,
     "--volume",
     `${join(root, "e2e/load/k6-http.ts")}:${K6Workload}:ro`,
     "--volume",
@@ -375,7 +375,7 @@ async function sampleRunner(atMs: number): Promise<SoakSample> {
 }
 
 async function sampleWebHost(endpoint: URL, atMs: number): Promise<SoakSample> {
-  const response = await fetch(new URL("/__likego/soak/runtime", endpoint), {
+  const response = await fetch(new URL("/__go-like/soak/runtime", endpoint), {
     signal: AbortSignal.timeout(2_000)
   })
   if (!response.ok) throw new Error(`Node Web host sample failed with HTTP ${response.status}`)
@@ -619,7 +619,7 @@ async function runProviderScenario(
     cwd: ".",
     command: ["bun", "run", "--filter", packageName, "test:e2e"],
     timeoutMs: 10 * 60_000,
-    environment: { LIKEGO_E2E_OWNER: owner },
+    environment: { GO_LIKE_E2E_OWNER: owner },
     signal
   })
   const logName = packageName.endsWith("rabbitmq") ? "rabbitmq.log" : "redis.log"
@@ -640,7 +640,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
   const outputPath = resolve(Root, output)
   const artifactRoot = dirname(outputPath)
   const summaryArtifactPath = join(artifactRoot, "k6-summary.json")
-  const k6Container = `likego-soak-${crypto.randomUUID().slice(0, 12)}`
+  const k6Container = `go-like-soak-${crypto.randomUUID().slice(0, 12)}`
   const runnerSamples: SoakSample[] = []
   const webHostSamples: SoakSample[] = []
   const unexpected: unknown[] = []
@@ -690,7 +690,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
 
   try {
     await mkdir(artifactRoot, { recursive: true })
-    stageDirectory = await createTempDirectory("likego-soak-")
+    stageDirectory = await createTempDirectory("go-like-soak-")
     stageRoot = await createTempSubdirectory(stageDirectory, ["results"])
     await verifyTempDirectory(stageDirectory)
     const summaryPath = join(stageRoot, "k6-summary.json")
@@ -698,7 +698,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     web = await startWebHost()
     const endpoint = localURL(web.endpoint)
     const preflight = await fetch(endpoint)
-    if (!preflight.ok || (await preflight.text()) !== "likego") {
+    if (!preflight.ok || (await preflight.text()) !== "go-like") {
       throw new Error("standard Fetch HTTP preflight failed")
     }
 
@@ -848,14 +848,14 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
 
     if (requestedDurationMs >= LongSoakDurationMs) {
       await runProviderScenario(
-        "@likego/broker-rabbitmq",
+        "@go-like/broker-rabbitmq",
         dockerOwner,
         artifactRoot,
         interrupted.signal
       )
       rabbitConfirmInterruption = true
       await runProviderScenario(
-        "@likego/cache-redis",
+        "@go-like/cache-redis",
         dockerOwner,
         artifactRoot,
         interrupted.signal
@@ -957,9 +957,9 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
   finalizeWithCleanup(
     primary,
     cleanupFailures,
-    "LikeGo short lifecycle failed and cleanup also failed"
+    "go-like short lifecycle failed and cleanup also failed"
   )
-  if (completed === null) throw new Error("LikeGo short lifecycle completed without a result")
+  if (completed === null) throw new Error("go-like short lifecycle completed without a result")
   return completed
 }
 
@@ -975,7 +975,7 @@ async function main(): Promise<void> {
     throw new TypeError("usage: e2e/soak.ts --duration <Nms|Ns|Nm> --output <path>")
   }
   await runSoak(duration(args[1]), args[3])
-  console.log(`LIKEGO_SOAK_RESULT=${JSON.stringify({ output: resolve(Root, args[3]) })}`)
+  console.log(`GO_LIKE_SOAK_RESULT=${JSON.stringify({ output: resolve(Root, args[3]) })}`)
 }
 
 if (import.meta.main) {

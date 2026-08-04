@@ -35,16 +35,16 @@ test("runCommand passes one child-only Docker owner without mutating the parent"
   const owner = newDockerOwner("owner-env-test")
   const controller = new AbortController()
   const listenerBaseline = getEventListeners(controller.signal, "abort").length
-  const before = process.env.LIKEGO_E2E_OWNER
+  const before = process.env.GO_LIKE_E2E_OWNER
   const result = await runCommand(import.meta.dir, {
     cwd: ".",
     command: [process.execPath, fixture("environment.ts")],
     timeoutMs: 2_000,
-    environment: { LIKEGO_E2E_OWNER: owner },
+    environment: { GO_LIKE_E2E_OWNER: owner },
     signal: controller.signal
   })
   expect(result).toMatchObject({ exitCode: 0, stdout: owner, stderr: "captured", timedOut: false })
-  expect(process.env.LIKEGO_E2E_OWNER).toBe(before)
+  expect(process.env.GO_LIKE_E2E_OWNER).toBe(before)
   expect(getEventListeners(controller.signal, "abort")).toHaveLength(listenerBaseline)
 })
 
@@ -54,7 +54,7 @@ test("runCommand exposes only sanitized stream callbacks", async () => {
   const result = await runCommand(import.meta.dir, {
     cwd: ".",
     command: [process.execPath, fixture("diagnostics.ts"), "failure"],
-    environment: { LIKEGO_E2E_CANARY: secret },
+    environment: { GO_LIKE_E2E_CANARY: secret },
     knownSecrets: [secret],
     timeoutMs: 2_000,
     onStdout(value) {
@@ -74,7 +74,7 @@ test("runCommand redacts captured and forwarded output before exposing it", asyn
   const capture = await runCommand(import.meta.dir, {
     cwd: ".",
     command: [process.execPath, fixture("diagnostics.ts"), "failure"],
-    environment: { LIKEGO_E2E_CANARY: secret },
+    environment: { GO_LIKE_E2E_CANARY: secret },
     knownSecrets: [secret],
     timeoutMs: 2_000
   })
@@ -89,12 +89,12 @@ test("runCommand redacts captured and forwarded output before exposing it", asyn
   })
   expect(`${capture.stdout}${capture.stderr}`).not.toContain(secret)
   expect(capture.stdout).toContain("token=<redacted>")
-  expect(capture.stderr).toContain("-eLIKEGO_TOKEN=<redacted>")
+  expect(capture.stderr).toContain("-eGO_LIKE_TOKEN=<redacted>")
 
   const forwarded = await runCommand(import.meta.dir, {
     cwd: ".",
     command: [process.execPath, fixture("forward-diagnostics.ts")],
-    environment: { LIKEGO_E2E_CANARY: secret },
+    environment: { GO_LIKE_E2E_CANARY: secret },
     knownSecrets: [secret],
     timeoutMs: 5_000
   })
@@ -123,7 +123,7 @@ test("runCommand records signal termination without manufacturing an exit code",
 })
 
 test("runCommand preserves an in-flight abort reason and terminates the complete tree", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-e2e-abort-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-e2e-abort-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const controller = new AbortController()
@@ -166,7 +166,7 @@ test("runCommand preserves an in-flight abort reason and terminates the complete
 }, 8_000)
 
 test("runCommand terminates a descendant that inherits stdout and ignores SIGTERM", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "likego-e2e-inherited-output-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-e2e-inherited-output-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const startedAt = performance.now()
@@ -208,7 +208,7 @@ test("runCommand terminates a descendant that inherits stdout and ignores SIGTER
 
 test("runCommand rejects and terminates a silent descendant after its parent exits cleanly", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-e2e-process-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-e2e-process-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   let descendantPid: number | null = null

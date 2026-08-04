@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "likego",
+  "name": "go-like",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -63,16 +63,16 @@
     "typescript": "7.0.2",
     "vitepress": "2.0.0-alpha.19"
   },
-  "description": "LikeGo is a TypeScript monorepo for portable server lifecycle and request-handling primitives across Bun, Node.js, and Deno.",
+  "description": "go-like is a TypeScript monorepo for portable server lifecycle and request-handling primitives across Bun, Node.js, and Deno.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MunMunMiao/likego.git"
+    "url": "git+https://github.com/MunMunMiao/go-like.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/MunMunMiao/likego/issues"
+    "url": "https://github.com/MunMunMiao/go-like/issues"
   },
-  "homepage": "https://github.com/MunMunMiao/likego#readme",
+  "homepage": "https://github.com/MunMunMiao/go-like#readme",
   "overrides": {
     "vite": "8.2.0"
   }

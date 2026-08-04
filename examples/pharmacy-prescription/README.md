@@ -21,10 +21,10 @@
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-pharmacy-prescription start
+bun run --filter @go-like/example-pharmacy-prescription start
 ```
 
-程序预置处方 `rx-demo` 和 `drug-a` 库存。看到 `LIKEGO_EXAMPLE_READY` 后执行发药：
+程序预置处方 `rx-demo` 和 `drug-a` 库存。看到 `GO_LIKE_EXAMPLE_READY` 后执行发药：
 
 ```bash
 curl -i http://127.0.0.1:3000/v1/prescriptions/rx-demo/dispense \

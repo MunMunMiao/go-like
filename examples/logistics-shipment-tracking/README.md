@@ -18,10 +18,10 @@ Memory Cache 构造后即可使用，不需要伪造 Core `Server` 生命周期�
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-logistics-shipment-tracking start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-logistics-shipment-tracking start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后提交轨迹；HTTP 链路会把确认后的当前投影写入 LikeGo Cache：
+看到 `GO_LIKE_EXAMPLE_READY` 后提交轨迹；HTTP 链路会把确认后的当前投影写入 go-like Cache：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/tracking-events \

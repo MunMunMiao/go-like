@@ -38,7 +38,7 @@ export function validateMeterReading(reading: MeterReading): void {
   }
 }
 
-/** Validates the fixed tariff rates before they enter LikeGo Config. */
+/** Validates the fixed tariff rates before they enter go-like Config. */
 export function validateTariffRates(rates: TariffRates): void {
   if (
     !Number.isSafeInteger(rates.offPeakMinorPerKwh) ||

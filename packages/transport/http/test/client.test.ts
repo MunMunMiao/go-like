@@ -8,10 +8,10 @@ import {
   deadlineExceeded,
   withCancel,
   withCancelCause
-} from "@likego/context"
-import type { Client, Message, TransportLogLevel } from "@likego/transport"
-import { logger, timeout, withTimeout as withDialTimeout } from "@likego/transport"
-import { executor, newHTTPTransport, type HTTPExecutor } from "@likego/transport-http"
+} from "@go-like/context"
+import type { Client, Message, TransportLogLevel } from "@go-like/transport"
+import { logger, timeout, withTimeout as withDialTimeout } from "@go-like/transport"
+import { executor, newHTTPTransport, type HTTPExecutor } from "@go-like/transport-http"
 import { runHTTPClientCleanupMatrix } from "./client-cleanup-matrix"
 
 /** Creates one externally settled Promise. */
@@ -105,7 +105,7 @@ test("dial is validation-only and send emits a defensive standard Fetch POST", a
     return Promise.resolve(
       new Response("world", {
         status: 200,
-        headers: { "Likego-Reply": "yes" }
+        headers: { "Go-Like-Reply": "yes" }
       })
     )
   })
@@ -114,11 +114,11 @@ test("dial is validation-only and send emits a defensive standard Fetch POST", a
   expect(requests).toHaveLength(0)
 
   const body = new TextEncoder().encode("hello")
-  const headers = { "Likego-Topic": "greeting" }
+  const headers = { "Go-Like-Topic": "greeting" }
   const sent = Object.freeze({ header: headers, body })
   const send = client.send(background(), sent)
   body.fill(0)
-  headers["Likego-Topic"] = "mutated"
+  headers["Go-Like-Topic"] = "mutated"
   await send
 
   expect(requests).toHaveLength(1)
@@ -126,12 +126,12 @@ test("dial is validation-only and send emits a defensive standard Fetch POST", a
   expect(request).toBeDefined()
   expect(request?.method).toBe("POST")
   expect(request?.url).toBe("http://example.test:8080/")
-  expect(request?.headers.get("Likego-Topic")).toBe("greeting")
+  expect(request?.headers.get("Go-Like-Topic")).toBe("greeting")
   expect(await request?.text()).toBe("hello")
 
   const received = await client.recv(background())
   expect(text(received)).toBe("world")
-  expect(received.header["likego-reply"]).toBe("yes")
+  expect(received.header["go-like-reply"]).toBe("yes")
   expect(client.local()).toBe("")
   expect(client.remote()).toBe("http://example.test:8080")
 })
@@ -150,9 +150,9 @@ test("portable client does not follow a same-origin 307 redirect", async () => {
       Object.freeze({
         body: await incomingText(request),
         custom: request.headers["x-redirect-test"],
-        service: request.headers["likego-service"],
-        endpoint: request.headers["likego-endpoint"],
-        metadata: request.headers["likego-metadata"]
+        service: request.headers["go-like-service"],
+        endpoint: request.headers["go-like-endpoint"],
+        metadata: request.headers["go-like-metadata"]
       })
     )
     response.writeHead(307, { Location: "/destination" })
@@ -166,14 +166,14 @@ test("portable client does not follow a same-origin 307 redirect", async () => {
         background(),
         message("same-origin body", {
           "X-Redirect-Test": "same-origin custom",
-          "Likego-Service": "orders",
-          "Likego-Endpoint": "create",
-          "Likego-Metadata": "same-origin metadata"
+          "Go-Like-Service": "orders",
+          "Go-Like-Endpoint": "create",
+          "Go-Like-Metadata": "same-origin metadata"
         })
       )
       await expect(client.recv(background())).rejects.toMatchObject({
         name: "HTTPStatusError",
-        code: "LIKEGO_HTTP_STATUS",
+        code: "GO_LIKE_HTTP_STATUS",
         status: 307
       })
       expect(sourceRequests).toEqual([
@@ -199,7 +199,7 @@ test("portable client does not leak internal metadata across a 307 redirect orig
   let destinationRequests = 0
   const destination = createServer(function receive(request, response): void {
     destinationRequests += 1
-    destinationMetadata.push(request.headers["likego-metadata"])
+    destinationMetadata.push(request.headers["go-like-metadata"])
     response.writeHead(200)
     response.end("redirected")
   })
@@ -210,9 +210,9 @@ test("portable client does not leak internal metadata across a 307 redirect orig
       Object.freeze({
         body: await incomingText(request),
         custom: request.headers["x-redirect-test"],
-        service: request.headers["likego-service"],
-        endpoint: request.headers["likego-endpoint"],
-        metadata: request.headers["likego-metadata"]
+        service: request.headers["go-like-service"],
+        endpoint: request.headers["go-like-endpoint"],
+        metadata: request.headers["go-like-metadata"]
       })
     )
     response.writeHead(307, {
@@ -231,14 +231,14 @@ test("portable client does not leak internal metadata across a 307 redirect orig
         background(),
         message("cross-origin body", {
           "X-Redirect-Test": "cross-origin custom",
-          "Likego-Service": "payments",
-          "Likego-Endpoint": "capture",
-          "Likego-Metadata": "cross-origin secret metadata"
+          "Go-Like-Service": "payments",
+          "Go-Like-Endpoint": "capture",
+          "Go-Like-Metadata": "cross-origin secret metadata"
         })
       )
       await expect(client.recv(background())).rejects.toMatchObject({
         name: "HTTPStatusError",
-        code: "LIKEGO_HTTP_STATUS",
+        code: "GO_LIKE_HTTP_STATUS",
         status: 307
       })
       expect(sourceRequests).toEqual([
@@ -295,10 +295,10 @@ test("recv requires a prior send and permits only one active receiver", async ()
   })
   const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
 
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_STATE" })
+  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
   const send = client.send(background(), message("request"))
   const recv = client.recv(background())
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_STATE" })
+  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
   pending.resolve(new Response("response"))
   await send
   await recv
@@ -339,10 +339,10 @@ test("send validates Context and managed headers before executor I/O", async () 
   await expect(client.send(ctx, message("x"))).rejects.toBe(canceled)
   await expect(
     client.send(background(), message("x", { "Content-Length": "1" }))
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   await expect(
     client.send(background(), message("x", { Connection: "close" }))
-  ).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   expect(calls).toBe(0)
 })
 
@@ -428,7 +428,7 @@ test("close aborts in-flight work and exposes one stable closed error", async ()
   expect(closed[1].status).toBe("rejected")
   if (closed[0].status === "rejected" && closed[1].status === "rejected") {
     expect(closed[0].reason).toBe(closed[1].reason)
-    expect(closed[0].reason).toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+    expect(closed[0].reason).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   }
 })
 
@@ -463,7 +463,7 @@ test("close publishes its owner promise before an executor AbortSignal listener 
   expect(observedReentrantClose()).toBe(outerClose)
   expect(abortCalls).toBe(1)
   await expect(outerClose).resolves.toBeUndefined()
-  await expect(sending).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(sending).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   expect(client.close(background())).toBe(outerClose)
 })
 
@@ -682,7 +682,7 @@ test("executor output and response body protocol failures stay slot-local", asyn
   for (const result of invalidResults) {
     expect(result.status).toBe("rejected")
     if (result.status === "rejected") {
-      expect(result.reason).toMatchObject({ code: "LIKEGO_TRANSPORT_PROTOCOL" })
+      expect(result.reason).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
     }
   }
 
@@ -702,7 +702,7 @@ test("executor output and response body protocol failures stay slot-local", asyn
     const bodyClient = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
     await bodyClient.send(background(), message("request"))
     await expect(bodyClient.recv(background())).rejects.toMatchObject({
-      code: "LIKEGO_TRANSPORT_PROTOCOL"
+      code: "GO_LIKE_TRANSPORT_PROTOCOL"
     })
   }
 })
@@ -820,8 +820,8 @@ test("queued sends recheck Context and close before executor admission", async (
   const queuedAfter = closing.send(background(), message("queued"))
   await Promise.resolve()
   await closing.close(background())
-  await expect(active).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
-  await expect(queuedAfter).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(active).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
+  await expect(queuedAfter).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   expect(closeCalls).toBe(1)
 })
 
@@ -865,7 +865,7 @@ test("close racing received headers cancels transferred and unread response bodi
   await Promise.resolve()
   raceHeaders.resolve(new Response(raceStream, { status: 200 }))
   await racing.close(background())
-  await expect(raceSend).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(raceSend).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   await new Promise<void>(function nextTurn(resolve): void {
     setTimeout(resolve, 0)
   })
@@ -1295,7 +1295,7 @@ test("recv cancellation permanently consumes a response slot and cancels its bod
   await pullStarted.promise
   cancel()
   await expect(receiving).rejects.toBe(canceled)
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_STATE" })
+  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
   await new Promise<void>(function nextTurn(resolve): void {
     setTimeout(resolve, 0)
   })
@@ -1354,7 +1354,7 @@ test("close breaks an active reader cancellation cycle through a stable admissio
   expect(settled[0]).toEqual({ status: "fulfilled", value: undefined })
   expect(settled[1]).toEqual({
     status: "rejected",
-    reason: expect.objectContaining({ code: "LIKEGO_TRANSPORT_CLOSED" })
+    reason: expect.objectContaining({ code: "GO_LIKE_TRANSPORT_CLOSED" })
   })
   expect(reentrantCloses).toHaveLength(2)
   expect(reentrantCloses[0]).toBe(reentrantCloses[1])
@@ -1404,7 +1404,7 @@ test("close keeps joining a non-reentrant pending active reader cleanup", async 
 
   cleanup.resolve(undefined)
   await expect(owner).resolves.toBeUndefined()
-  await expect(receiving).rejects.toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+  await expect(receiving).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
 })
 
 test("recv cancellation contains a synchronous reader cancel failure", async () => {
@@ -1473,7 +1473,7 @@ test("Request construction failures become protocol errors before executor I/O",
         }
       })
       await expect(client.send(background(), message("request"))).rejects.toMatchObject({
-        code: "LIKEGO_TRANSPORT_PROTOCOL"
+        code: "GO_LIKE_TRANSPORT_PROTOCOL"
       })
     }
   } finally {

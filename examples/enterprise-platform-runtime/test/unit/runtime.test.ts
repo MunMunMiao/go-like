@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 
-import { newConfig, objectSource, schema, source as configSource } from "@likego/config"
-import { background, type Context } from "@likego/context"
-import { newProbeRegistry } from "@likego/health"
-import { createHealthHandler } from "@likego/web/health"
+import { newConfig, objectSource, schema, source as configSource } from "@go-like/config"
+import { background, type Context } from "@go-like/context"
+import { newProbeRegistry } from "@go-like/health"
+import { createHealthHandler } from "@go-like/web/health"
 
 import { runtimeConfigSchema } from "../../src/config"
 import { newEchoHandler } from "../../src/echo"

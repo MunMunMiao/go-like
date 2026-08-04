@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/registry-mdns",
+  "name": "@go-like/registry-mdns",
   "version": "0.0.1",
-  "description": "Portable mDNS Registry provider and explicit Node multicast host for LikeGo.",
+  "description": "Portable mDNS Registry provider and explicit Node multicast host for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -27,9 +27,9 @@
     "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && deno run --sloppy-imports --config ../../../deno.json test/e2e/portable-runtime.ts && tsx test/e2e/node-runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
-    "@likego/registry": "0.0.1"
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/registry": "0.0.1"
   },
   "devDependencies": {
     "@types/node": "26.1.2"

@@ -15,7 +15,7 @@ import { tmpdir } from "node:os"
 import { join, relative, resolve } from "node:path"
 
 const Root = resolve(import.meta.dir, "..")
-const NativeSource = resolve(Root, "e2e/harness/native/likego_e2e_posix_filesystem.c")
+const NativeSource = resolve(Root, "e2e/harness/native/go-like_e2e_posix_filesystem.c")
 const Posix = process.platform === "darwin" || process.platform === "linux"
 
 const ProtocolMagic = 0x5346474c
@@ -310,7 +310,7 @@ async function restoreMovedDirectory(current: string, moved: string): Promise<vo
 
 test("native child creation rejects an invocation path swap at the syscall barrier", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-child-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-child-"))
   const { root, child: invocation } = await privateRoot(temporary, "invocation")
   const victim = join(root, "victim")
   const moved = join(root, "invocation-moved")
@@ -342,7 +342,7 @@ test("native child creation rejects an invocation path swap at the syscall barri
 
 test("native durable publication stays on the retained directory and fails after a path swap", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-write-swap-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-write-swap-"))
   const { root, child: results } = await privateRoot(temporary, "results")
   const victim = join(root, "victim")
   const moved = join(root, "results-moved")
@@ -381,7 +381,7 @@ test("native durable publication stays on the retained directory and fails after
 
 test("native durable publication never follows a final-name symlink collision", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-write-collision-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-write-collision-"))
   const { root, child: results } = await privateRoot(temporary, "results")
   const canary = join(root, "canary")
   await writeFile(canary, "preserve", { mode: 0o600 })
@@ -415,7 +415,7 @@ test("native durable publication never follows a final-name symlink collision", 
 
 test("native durable publication never removes a replacement temporary entry", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-temp-swap-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-temp-swap-"))
   const { root, child: results } = await privateRoot(temporary, "results")
   const moved = join(results, "owned.tmp")
   const replacement = join(results, ".durable-temp.tmp")
@@ -452,7 +452,7 @@ test("native durable publication never removes a replacement temporary entry", a
 
 test("native reads reject a final-name inode swap after the no-follow open", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-read-swap-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-read-swap-"))
   const { root, child: results } = await privateRoot(temporary, "results")
   const original = join(results, "result.json")
   const replacement = join(results, "replacement.json")
@@ -484,7 +484,7 @@ test("native reads reject a final-name inode swap after the no-follow open", asy
 
 test("native cleanup refuses a replacement entry at the rename barrier", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-cleanup-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-cleanup-"))
   const { root, child: invocation } = await privateRoot(temporary, "invocation")
   const moved = join(root, "invocation-moved")
   await writeFile(join(invocation, "owned"), "original", { mode: 0o600 })
@@ -519,7 +519,7 @@ test("native cleanup refuses a replacement entry at the rename barrier", async (
 
 test("native cleanup never unlinks a replacement quarantine entry", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-cleanup-unlink-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-cleanup-unlink-"))
   const { root, child: invocation } = await privateRoot(temporary, "invocation")
   const moved = join(root, "owned-quarantine")
   const quarantine = join(root, ".cleanup-unlink")
@@ -560,7 +560,7 @@ for (const failure of [
 ] as const) {
   test(`native cleanup consumes the leaf after irreversible ${failure.name} failure`, async () => {
     if (!Posix) return
-    const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-cleanup-commit-"))
+    const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-cleanup-commit-"))
     const { root, child: invocation } = await privateRoot(temporary, "invocation")
     await writeFile(join(invocation, "owned"), "original", { mode: 0o600 })
     let broker: TestBroker | null = null
@@ -593,7 +593,7 @@ for (const failure of [
 
 test("native cleanup keeps the leaf active when a pre-commit failure is rolled back", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-cleanup-restore-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-cleanup-restore-"))
   const { root, child: invocation } = await privateRoot(temporary, "invocation")
   await writeFile(join(invocation, "owned"), "original", { mode: 0o600 })
   let broker: TestBroker | null = null
@@ -627,7 +627,7 @@ test("native cleanup keeps the leaf active when a pre-commit failure is rolled b
 
 test("native cleanup consumes the leaf when a pre-commit failure cannot be rolled back", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-cleanup-rollback-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-cleanup-rollback-"))
   const { root, child: invocation } = await privateRoot(temporary, "invocation")
   await writeFile(join(invocation, "owned"), "original", { mode: 0o600 })
   let broker: TestBroker | null = null
@@ -660,7 +660,7 @@ test("native cleanup consumes the leaf when a pre-commit failure cannot be rolle
 
 test("native close failure consumes the handle and does not block session teardown", async () => {
   if (!Posix) return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-close-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-close-"))
   const { root, child: results } = await privateRoot(temporary, "results")
   let broker: TestBroker | null = null
   try {
@@ -690,7 +690,7 @@ test("Darwin canonical temp aliases resolve before native root bootstrap", async
   if (lexical === "/var" || lexical.startsWith("/var/")) {
     expect(canonical === "/private/var" || canonical.startsWith("/private/var/")).toBe(true)
   }
-  const temporary = await mkdtemp(join(canonical, "likego-fs-native-canonical-"))
+  const temporary = await mkdtemp(join(canonical, "go-like-fs-native-canonical-"))
   let broker: TestBroker | null = null
   try {
     broker = await startTestBroker(await compileTestBroker(temporary, BeforeCreateChild))
@@ -706,7 +706,7 @@ test("Darwin canonical temp aliases resolve before native root bootstrap", async
 
 test("Linux path recovery uses procfs and fails closed when its configured root is unavailable", async () => {
   if (process.platform !== "linux") return
-  const temporary = await mkdtemp(join(tmpdir(), "likego-fs-native-proc-"))
+  const temporary = await mkdtemp(join(tmpdir(), "go-like-fs-native-proc-"))
   const canonical = await realpath(temporary)
   let working: TestBroker | null = null
   let unavailable: TestBroker | null = null
@@ -718,7 +718,7 @@ test("Linux path recovery uses procfs and fails closed when its configured root 
 
     unavailable = await startTestBroker(
       await compileTestBroker(canonical, BeforeCreateChild, [
-        '-DLGFS_PROC_SELF_FD_ROOT="/likego-e2e-proc-unavailable"'
+        '-DLGFS_PROC_SELF_FD_ROOT="/go-like-e2e-proc-unavailable"'
       ])
     )
     const response = await unavailable.request(OpenRoot, 0, 0, Encoder.encode(canonical))

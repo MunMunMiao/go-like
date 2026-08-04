@@ -3,7 +3,7 @@
 > 状态：可执行基线。2026-07-23 已通过类型检查、业务单测、Bun 原生覆盖率报告和固定 digest Redis Docker E2E。
 
 本示例定义一个可落地的单实例批量报表服务：Croner 负责按固定 UTC 触发调度，BullMQ 与 Redis 负责持久队列、
-重试和 stalled job 恢复，`@likego/store-file` 保存本地 checkpoint，LikeGo 负责各常驻资源的显式生命周期。
+重试和 stalled job 恢复，`@go-like/store-file` 保存本地 checkpoint，go-like 负责各常驻资源的显式生命周期。
 
 该方案按“任务可能重复执行”设计，不承诺 exactly-once，也不引入工作流引擎。
 
@@ -13,7 +13,7 @@
 
 ```bash
 docker compose -f examples/batch-reporting/compose.yaml up -d --wait
-bun run --filter @likego/example-batch-reporting start
+bun run --filter @go-like/example-batch-reporting start
 ```
 
 程序默认连接 `redis://127.0.0.1:46379`，每 10 秒检查一次已关闭窗口，并把 checkpoint 写入
@@ -31,7 +31,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
 | 报表负责人 | 每个已关闭报表窗口最终产出一份可识别、可重跑的结果。                       |
 | 数据工程师 | 窗口边界、输入快照、输出提交和 checkpoint 推进规则明确。                   |
 | 平台运维   | Redis、进程、持久卷故障后能判断是否可恢复，并能安全停机。                  |
-| 开发者     | 直接使用 Croner、BullMQ 与 LikeGo 的真实 API，不维护第二套调度或队列抽象。 |
+| 开发者     | 直接使用 Croner、BullMQ 与 go-like 的真实 API，不维护第二套调度或队列抽象。 |
 
 ## 业务目标
 
@@ -64,11 +64,11 @@ docker compose -f examples/batch-reporting/compose.yaml down
           publish report result
                   |
                   v
-       @likego/store-file checkpoint
+       @go-like/store-file checkpoint
           on persistent volume
 ```
 
-Croner、Queue、Worker 和 Store 都保留各自的原生职责。LikeGo 不定义 job schema、不代理 processor，也不把
+Croner、Queue、Worker 和 Store 都保留各自的原生职责。go-like 不定义 job schema、不代理 processor，也不把
 Queue 的生命周期错误地转交给 Worker adapter。
 
 ### 请求与数据流
@@ -104,25 +104,25 @@ src/
 └── main.ts            # 创建 Redis、Queue、Worker、Croner 并直接启动
 ```
 
-## LikeGo 包映射
+## go-like 包映射
 
 | 包                                                | 在本示例中的职责                                             | 不负责的内容                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `@likego/context`                                 | 为启动、停止和 Store 操作提供取消与 deadline。               | 不替代 BullMQ processor 的原生 `AbortSignal`。                            |
-| `@likego/croner`                                  | 接管应用创建的 paused Croner job 的启动与停止。              | cron 表达式、timezone、overlap 和活动回调排空仍归应用/Croner。            |
-| `@likego/bullmq`                                  | 接管官方 Worker 的 ready、run、pause、cancel、close 与终态。 | Queue、processor、attempts、backoff、jobId 和 stalled 参数归应用/BullMQ。 |
-| `@likego/store`                                   | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
-| `@likego/store-file` 与 `@likego/store-file/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。    | 不支持跨进程 shared writers。                                             |
+| `@go-like/context`                                 | 为启动、停止和 Store 操作提供取消与 deadline。               | 不替代 BullMQ processor 的原生 `AbortSignal`。                            |
+| `@go-like/croner`                                  | 接管应用创建的 paused Croner job 的启动与停止。              | cron 表达式、timezone、overlap 和活动回调排空仍归应用/Croner。            |
+| `@go-like/bullmq`                                  | 接管官方 Worker 的 ready、run、pause、cancel、close 与终态。 | Queue、processor、attempts、backoff、jobId 和 stalled 参数归应用/BullMQ。 |
+| `@go-like/store`                                   | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
+| `@go-like/store-file` 与 `@go-like/store-file/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。    | 不支持跨进程 shared writers。                                             |
 
 Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直接调用 `queue.close()`，不为它新增通用框架
 包。Croner callback 的在途 `queue.add()` 由应用内 admission barrier 跟踪，
-因为 `@likego/croner` 能停止后续调度，但 Croner 原生 `stop()` 不会等待已经运行的 callback。
+因为 `@go-like/croner` 能停止后续调度，但 Croner 原生 `stop()` 不会等待已经运行的 callback。
 
 ## 生产不变量
 
 1. 当前基线固定使用 UTC 计算窗口和 job identity；只有真实业务要求非 UTC 日界线时，才增加时区参数及夏令时测试。
 2. 同一 checkpoint 目录只能有一个存活 owner，应用只能运行一个副本，目录必须位于持久卷而不是容器临时层。
-3. 不自动删除 `.likego-store.lock`。进程异常退出后，运维必须先确认旧 owner 已死亡，再按恢复手册移除 stale lock。
+3. 不自动删除 `.go-like-store.lock`。进程异常退出后，运维必须先确认旧 owner 已死亡，再按恢复手册移除 stale lock。
 4. 任意时刻只允许一个逻辑窗口在途；后续窗口不能越过失败窗口推进 checkpoint。
 5. checkpoint 只能在报表输出得到持久成功确认后推进，不能在调度、入队、开始处理或仅写临时文件时推进。
 6. 输出必须使用确定性键或幂等 upsert。任何邮件、Webhook 等不可幂等副作用必须另有业务去重凭据。
@@ -151,7 +151,7 @@ Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直
 本示例的 E2E 按依赖到消费者显式启动 File Store → Queue owner → BullMQ Worker → scheduler，并按相反顺序关停：
 
 1. scheduler 关闭 admission，停止 Croner 的未来 tick，并等待已接纳的 `queue.add()` barrier。
-2. `@likego/bullmq` 调用 `pause(false)` 停止新 job admission，并等待 active processor。
+2. `@go-like/bullmq` 调用 `pause(false)` 停止新 job admission，并等待 active processor。
 3. Worker 在 hard drain 边界内未结束时，adapter 调用原生 `cancelAllJobs(reason)`；processor 从原生 signal 观察取消。
 4. 等待唯一 `close(true)` 与 Worker `closed` 真实终态；pending `start(ctx)` Promise 不能被伪装成关闭完成。
 5. application-owned Queue 在 Worker 终止后执行 `queue.close()`。
@@ -179,7 +179,7 @@ Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直
 | Redis           | `redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241`，E2E 回读为 8.10.0 | BullMQ queue、lock、retry 与 stalled 状态。 |
 | BullMQ          | `6.0.6`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
 | Croner          | `10.0.1`                                                                                                         | 定时调度。                                  |
-| LikeGo packages | workspace `0.0.1`                                                                                                | 生命周期与 checkpoint provider。            |
+| go-like packages | workspace `0.0.1`                                                                                                | 生命周期与 checkpoint provider。            |
 
 实现时默认复用上述仓库 pin。若实施日期已经需要升级，则先从 npm 官方 dist-tag 与官方镜像 registry 重新核实
 `latest`，再同时固定精确 package version 和不可变 image digest，并 fresh 读取容器内版本；Compose 不使用浮动

@@ -1,4 +1,4 @@
-import type { Cache } from "@likego/cache"
+import type { Cache } from "@go-like/cache"
 
 /** Returns one millisecond timestamp for deterministic expiry decisions. */
 export type MemoryCacheClock = () => number

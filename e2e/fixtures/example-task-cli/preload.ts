@@ -7,7 +7,7 @@ import * as Examples from "../../examples"
 import type { ExamplesRunOptions } from "../../examples"
 import { runCommand } from "../../harness/process"
 
-const FixtureModeKey = "LIKEGO_TEST_EXAMPLE_TASK_CLI_MODE"
+const FixtureModeKey = "GO_LIKE_TEST_EXAMPLE_TASK_CLI_MODE"
 const FixtureModes = Object.freeze(["scenario-failure", "timeout", "cleanup-failure"] as const)
 type FixtureMode = (typeof FixtureModes)[number]
 
@@ -53,7 +53,7 @@ mock.module(examplesUrl, () => ({
     const result = await runSingleExampleLocalRoot({ ...input, options })
     const record = result.examples[0]
     process.stdout.write(
-      `LIKEGO_EXAMPLE_TASK_CLI_FIXTURE=${JSON.stringify({
+      `GO_LIKE_EXAMPLE_TASK_CLI_FIXTURE=${JSON.stringify({
         mode,
         status: result.status,
         classification: record?.classification ?? null,

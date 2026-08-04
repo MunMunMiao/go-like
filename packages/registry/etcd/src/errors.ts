@@ -1,9 +1,9 @@
 import type { EtcdHttpError, EtcdOperation, EtcdTransportError } from "./types"
 
 const httpName: EtcdHttpError["name"] = "EtcdHttpError"
-const httpCode: EtcdHttpError["code"] = "LIKEGO_ETCD_HTTP"
+const httpCode: EtcdHttpError["code"] = "GO_LIKE_ETCD_HTTP"
 const transportName: EtcdTransportError["name"] = "EtcdTransportError"
-const transportCode: EtcdTransportError["code"] = "LIKEGO_ETCD_TRANSPORT"
+const transportCode: EtcdTransportError["code"] = "GO_LIKE_ETCD_TRANSPORT"
 
 /** Narrows an untrusted rejection without retaining a non-Error carrier. */
 export function boundaryError(value: unknown, message: string): Error {

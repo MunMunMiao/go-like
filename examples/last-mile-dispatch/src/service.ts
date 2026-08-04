@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newProbeRegistry, type ProbeRegistry } from "@likego/health"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
 
 export interface DispatchCommand {
   readonly deliveryId: string

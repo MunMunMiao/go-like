@@ -1,4 +1,4 @@
-import { newZookeeperRegistry, type ZookeeperClientFactory } from "@likego/registry-zookeeper"
+import { newZookeeperRegistry, type ZookeeperClientFactory } from "@go-like/registry-zookeeper"
 
 const unusedFactory: ZookeeperClientFactory = function unused(): never {
   throw new Error("published constructor unexpectedly performed network I/O")

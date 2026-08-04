@@ -1,5 +1,5 @@
 ---
-"@likego/client": minor
+"@go-like/client": minor
 ---
 
 增加可选的 `withBlock()` discovery wait-for-ready。它只等待服务首次出现原始 endpoint；调用 Context

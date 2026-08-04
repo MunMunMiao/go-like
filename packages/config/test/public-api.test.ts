@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import * as ConfigPackage from "../src/index"
 
 describe("config public API", () => {

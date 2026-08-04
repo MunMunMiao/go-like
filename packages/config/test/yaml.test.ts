@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 
-import { newConfig, onReloadError, source as configSource } from "@likego/config"
-import { fileSource, type FileCapability } from "@likego/config/file"
-import { decodeYaml } from "@likego/config/yaml"
-import { background } from "@likego/context"
+import { newConfig, onReloadError, source as configSource } from "@go-like/config"
+import { fileSource, type FileCapability } from "@go-like/config/file"
+import { decodeYaml } from "@go-like/config/yaml"
+import { background } from "@go-like/context"
 
 import * as YamlConfig from "../src/yaml"
 

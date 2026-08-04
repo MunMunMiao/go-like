@@ -1,11 +1,11 @@
-# @likego/config-consul
+# @go-like/config-consul
 
-`@likego/config-consul` 从精确的 Consul KV key 加载一个 JSON 配置对象，并通过 Consul HTTP 阻塞查询
+`@go-like/config-consul` 从精确的 Consul KV key 加载一个 JSON 配置对象，并通过 Consul HTTP 阻塞查询
 持续监视该对象。它只使用标准 `Request`、`Response`、`Headers`、`AbortSignal`，以及调用方提供的
 单参数 Fetch 函数；不依赖 Consul SDK 或 gRPC。
 
 ```ts
-import { consulSource } from "@likego/config-consul"
+import { consulSource } from "@go-like/config-consul"
 
 const source = consulSource({
   fetch(request) {

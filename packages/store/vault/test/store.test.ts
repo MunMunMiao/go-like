@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifAbsent, ifRevision, limit, prefix } from "@go-like/store"
 
 import { newVaultStore } from "../src/index"
 import { physicalKey } from "../src/codec"
@@ -100,7 +100,7 @@ describe("Vault Store list snapshots", () => {
     await expect(
       store.list(background(), prefix("x"), cursor(substituted.cursor!))
     ).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_SNAPSHOT",
+      code: "GO_LIKE_VAULT_STORE_SNAPSHOT",
       reason: "invalid-cursor"
     })
     await expect(store.list(background(), cursor(substituted.cursor!))).rejects.toMatchObject({
@@ -171,13 +171,13 @@ describe("Vault Store mutation certainty", () => {
     })
     backend.setFailure("write-lost-before")
     await expect(store.write(background(), input("write"))).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_UNCERTAIN",
+      code: "GO_LIKE_VAULT_STORE_UNCERTAIN",
       operation: "write"
     })
     await store.write(background(), input("delete"))
     backend.setFailure("delete-lost-before")
     await expect(store.delete(background(), "delete")).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_UNCERTAIN",
+      code: "GO_LIKE_VAULT_STORE_UNCERTAIN",
       operation: "delete"
     })
   })
@@ -207,7 +207,7 @@ describe("Vault Store protocol cleanup", () => {
     })
     backend.setFailure("malformed-read")
     await expect(store.read(background(), "malformed")).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_PROTOCOL",
+      code: "GO_LIKE_VAULT_STORE_PROTOCOL",
       operation: "read"
     })
   })
@@ -233,7 +233,7 @@ describe("Vault Store protocol cleanup", () => {
       mount: "secret"
     })
     await expect(store.read(background(), "denied")).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_HTTP",
+      code: "GO_LIKE_VAULT_STORE_HTTP",
       operation: "read",
       status: 403
     })

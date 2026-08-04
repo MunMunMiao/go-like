@@ -1,5 +1,5 @@
 ---
-"@likego/registry-kubernetes": minor
+"@go-like/registry-kubernetes": minor
 ---
 
 新增 Kubernetes `discovery.k8s.io/v1 EndpointSlice` Registry provider，支持 canonical identity、token、

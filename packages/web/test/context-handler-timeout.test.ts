@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { canceled, deadlineExceeded, type Context } from "@likego/context"
+import { canceled, deadlineExceeded, type Context } from "@go-like/context"
 
 import { contextHandler } from "../src/index"
 

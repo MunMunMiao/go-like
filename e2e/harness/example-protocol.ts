@@ -174,8 +174,8 @@ const MaximumCanonicalStringCharacters = 2 * 1024 * 1024
 const MaximumProcessId = 2_147_483_647
 const MaximumUid = 0xffff_ffff
 const MaximumExitCode = 0xffff_ffff
-const RegistrationAckDomain = "likego-e2e/registration-ack/v1"
-const GracefulControlDomain = "likego-e2e/graceful-control/v1"
+const RegistrationAckDomain = "go-like-e2e/registration-ack/v1"
+const GracefulControlDomain = "go-like-e2e/graceful-control/v1"
 const replayStates = new WeakMap<ProtocolReplayGuard, ReplayState>()
 const FailureCategories = Object.freeze([
   "primary",

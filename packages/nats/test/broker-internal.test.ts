@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import type { BrokerEvent } from "@likego/broker"
-import { registerSubscriberTerminal, subscriberTerminal } from "@likego/broker/provider"
-import { background } from "@likego/context"
+import type { BrokerEvent } from "@go-like/broker"
+import { registerSubscriberTerminal, subscriberTerminal } from "@go-like/broker/provider"
+import { background } from "@go-like/context"
 import { headers } from "@nats-io/transport-node"
 import {
   brokerEvent,
@@ -194,7 +194,7 @@ describe("NATS Broker internal boundaries", () => {
       expect((failure as AggregateError).cause).toBe(primary)
       expect((failure as AggregateError).errors[0]).toBe(primary)
       expect((failure as AggregateError).errors[1]).toMatchObject({
-        code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT",
+        code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT",
         forced: true
       })
       expect(forceCalls).toBe(1)

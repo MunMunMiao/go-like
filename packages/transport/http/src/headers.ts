@@ -1,9 +1,9 @@
-import type { Message } from "@likego/transport"
+import type { Message } from "@go-like/transport"
 import {
   newTransportProtocolError,
   snapshotMessage,
   type TransportProtocolError
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 
 const ManagedHeaders = new Set([
   "connection",
@@ -47,7 +47,7 @@ export function requestHeaders(message: Message): {
       headers.set(entry[0], entry[1])
     }
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "LIKEGO_TRANSPORT_PROTOCOL") {
+    if (error instanceof Error && "code" in error && error.code === "GO_LIKE_TRANSPORT_PROTOCOL") {
       throw error
     }
     throw headerError("invalid HTTP request header", error)

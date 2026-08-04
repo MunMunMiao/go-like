@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@likego/context"
+import { background, withCancelCause, type Context } from "@go-like/context"
 import type { JetStreamClient, PubAck } from "@nats-io/jetstream"
 import { newNatsJetStreamBroker } from "../src/jetstream-broker"
 import { FakeConsumerMessages, deferred, jetStreamMessage, nextTurn } from "./broker-helpers"
@@ -132,7 +132,7 @@ describe("NATS JetStream Broker", () => {
 
     expect(failure).toMatchObject({
       name: "NatsJetStreamUnexpectedExitError",
-      code: "LIKEGO_NATS_JETSTREAM_UNEXPECTED_EXIT"
+      code: "GO_LIKE_NATS_JETSTREAM_UNEXPECTED_EXIT"
     })
     await expect(subscriptionOwner.unsubscribe(background())).rejects.toBe(failure)
   })
@@ -189,7 +189,7 @@ describe("NATS JetStream Broker", () => {
       invokeTimeout?.()
       const failure = await stopping
       expect(failure).toMatchObject({
-        code: "LIKEGO_NATS_JETSTREAM_CLOSE_TIMEOUT",
+        code: "GO_LIKE_NATS_JETSTREAM_CLOSE_TIMEOUT",
         timeoutMs: 25_000,
         forced: true
       })

@@ -1,8 +1,8 @@
-import * as Headers from "@likego/transport/headers"
-import * as Transport from "@likego/transport"
-import { struct } from "@likego/struct"
-import { decodeJsonBody, encodeJsonBody } from "@likego/transport/json"
-import * as Provider from "@likego/transport/provider"
+import * as Headers from "@go-like/transport/headers"
+import * as Transport from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import { decodeJsonBody, encodeJsonBody } from "@go-like/transport/json"
+import * as Provider from "@go-like/transport/provider"
 
 const expectedRootExports = [
   "chain",
@@ -37,21 +37,21 @@ const expectedProviderExports = [
 
 const actualRootExports = Object.keys(Transport).sort()
 if (JSON.stringify(actualRootExports) !== JSON.stringify(expectedRootExports)) {
-  throw new Error(`unexpected @likego/transport exports: ${actualRootExports.join(",")}`)
+  throw new Error(`unexpected @go-like/transport exports: ${actualRootExports.join(",")}`)
 }
 const actualProviderExports = Object.keys(Provider).sort()
 if (JSON.stringify(actualProviderExports) !== JSON.stringify(expectedProviderExports)) {
   throw new Error(
-    `unexpected @likego/transport/provider exports: ${actualProviderExports.join(",")}`
+    `unexpected @go-like/transport/provider exports: ${actualProviderExports.join(",")}`
   )
 }
 if (
   Object.keys(Headers).length !== 18 ||
-  Headers.prefix !== "Likego-" ||
-  Headers.metadata !== "Likego-Metadata" ||
+  Headers.prefix !== "Go-Like-" ||
+  Headers.metadata !== "Go-Like-Metadata" ||
   Headers.contentType !== "Content-Type"
 ) {
-  throw new Error("unexpected @likego/transport/headers contract")
+  throw new Error("unexpected @go-like/transport/headers contract")
 }
 const body = new Uint8Array([1, 2])
 const snapshot = Provider.snapshotMessage({ header: { topic: "orders" }, body })
@@ -63,7 +63,7 @@ if (snapshot.body[0] !== 1 || snapshot.header.topic !== "orders") {
 const cause = new Error("runtime cause")
 const failure = Provider.newTransportClosedError("closed", cause)
 if (
-  failure.code !== "LIKEGO_TRANSPORT_CLOSED" ||
+  failure.code !== "GO_LIKE_TRANSPORT_CLOSED" ||
   failure.cause !== cause ||
   !Object.isFrozen(failure)
 ) {
@@ -76,4 +76,4 @@ if (decodeJsonBody(Portable, json).value !== "portable") {
   throw new Error("built Struct JSON body boundary is invalid")
 }
 
-console.log("likego-transport-runtime ok")
+console.log("go-like-transport-runtime ok")

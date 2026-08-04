@@ -5,8 +5,8 @@ import { watch as nativeWatch } from "node:fs"
 import { readFile as nativeReadFile } from "node:fs/promises"
 import { basename, dirname } from "node:path"
 
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import type { FileCapability, FileWatcher } from "./file"
 

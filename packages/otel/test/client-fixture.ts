@@ -1,18 +1,18 @@
-import { newClient, withTransport, type Client } from "@likego/client"
+import { newClient, withTransport, type Client } from "@go-like/client"
 import type {
   Client as TransportClient,
   Listener,
   Message,
   Options,
   Transport
-} from "@likego/transport"
+} from "@go-like/transport"
 
 export interface LoopbackClient {
   readonly client: Client
   readonly sent: readonly Message[]
 }
 
-/** Creates one real LikeGo Client over an in-memory structural Transport. */
+/** Creates one real go-like Client over an in-memory structural Transport. */
 export function newLoopbackClient(
   reply: (request: Message) => Message | PromiseLike<Message>
 ): LoopbackClient {

@@ -1,5 +1,5 @@
 ---
-"@likego/store-consul": patch
+"@go-like/store-consul": patch
 ---
 
 增加基于标准 Fetch 的 Consul Store，支持即时 CRUD、前缀分页、CAS、Session TTL 与 ACL。分页 cursor

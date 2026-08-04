@@ -2,7 +2,7 @@
 
 ## 主要演示
 
-演示应急调度微服务如何先执行优先级专属响应时限，再从服务实例快照中筛出区域、能力和 readiness 都匹配的响应单位，最后交给 LikeGo Registry selector 做稳定轮询分配。
+演示应急调度微服务如何先执行优先级专属响应时限，再从服务实例快照中筛出区域、能力和 readiness 都匹配的响应单位，最后交给 go-like Registry selector 做稳定轮询分配。
 
 ## 行业问题与不变量
 
@@ -16,16 +16,16 @@
 - `src/service.ts`：优先级、SLA、调度命令和 Context-first 幂等用例。
 - `src/dispatch.ts`：进程内记录仓储和 Registry selector 响应单位目录。
 - `src/http.ts`：标准 Fetch 调度入口和可嵌入服务组合。
-- `src/main.ts`：配置演示响应单位并运行常驻 LikeGo HTTP App；这是唯一直接执行入口。
+- `src/main.ts`：配置演示响应单位并运行常驻 go-like HTTP App；这是唯一直接执行入口。
 - `test/main.test.ts`：优先级时限、取消、readiness 过滤、轮询、幂等和无实例失败。
 
-## LikeGo 能力
+## go-like 能力
 
-`@likego/registry` 的 `newRoundRobinSelector` 实际选择匹配实例并接收完成反馈。测试证明连续事件轮转到不同 endpoint、精确重试不重新选择、无可用实例时 fail closed。
+`@go-like/registry` 的 `newRoundRobinSelector` 实际选择匹配实例并接收完成反馈。测试证明连续事件轮转到不同 endpoint、精确重试不重新选择、无可用实例时 fail closed。
 
 ```bash
-bun run --filter @likego/example-emergency-response-dispatch typecheck
-bun run --filter @likego/example-emergency-response-dispatch test:unit
+bun run --filter @go-like/example-emergency-response-dispatch typecheck
+bun run --filter @go-like/example-emergency-response-dispatch test:unit
 ```
 
 ## Docker 判定
@@ -39,10 +39,10 @@ bun run --filter @likego/example-emergency-response-dispatch test:unit
 ## 直接运行
 
 ```sh
-bun run --filter @likego/example-emergency-response-dispatch start
+bun run --filter @go-like/example-emergency-response-dispatch start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后，以当前时间提交调度请求：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后，以当前时间提交调度请求：
 
 ```sh
 NOW=$(($(date +%s) * 1000))
@@ -51,4 +51,4 @@ curl -sS http://127.0.0.1:3000/v1/emergency-dispatches \
   -d "{\"incidentId\":\"incident-demo\",\"service\":\"medical\",\"zone\":\"north\",\"priority\":\"critical\",\"reportedAt\":$NOW,\"dispatchBy\":$((NOW + 300000))}"
 ```
 
-按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，LikeGo 会有序停止 HTTP Server。
+按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，go-like 会有序停止 HTTP Server。

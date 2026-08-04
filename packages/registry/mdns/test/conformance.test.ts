@@ -1,6 +1,6 @@
 import { test } from "bun:test"
 
-import type { Registry, ServiceInstance } from "@likego/registry"
+import type { Registry, ServiceInstance } from "@go-like/registry"
 
 import { registryConformanceCases, type RegistryConformanceSubject } from "../../src/testing"
 import { queryTimeout } from "../src/options"

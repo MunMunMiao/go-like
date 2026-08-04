@@ -1,5 +1,5 @@
-import type { ConfigSource } from "@likego/config"
-import { background } from "@likego/context"
+import type { ConfigSource } from "@go-like/config"
+import { background } from "@go-like/context"
 
 import * as VaultConfig from "../src/index"
 import {

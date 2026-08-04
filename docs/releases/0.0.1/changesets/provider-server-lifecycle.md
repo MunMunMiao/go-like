@@ -1,8 +1,8 @@
 ---
-"@likego/broker": minor
-"@likego/bullmq": minor
-"@likego/event": minor
-"@likego/nats": minor
+"@go-like/broker": minor
+"@go-like/bullmq": minor
+"@go-like/event": minor
+"@go-like/nats": minor
 ---
 
 将 Broker、NATS Core/JetStream、BullMQ Worker 与 Event adapter 收敛为

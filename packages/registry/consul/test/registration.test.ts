@@ -1,5 +1,5 @@
-import { background, withCancelCause } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import {
@@ -90,7 +90,7 @@ test("failed admission rolls back its deterministic remote record", async () => 
   }
   const registry = newConsulRegistry({ fetch, address: "https://consul.example" })
   await expect(registry.register(background(), instance("initial"))).rejects.toMatchObject({
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     status: 403
   })
   expect(agent.remoteIds()).toEqual([])
@@ -187,7 +187,7 @@ test("ambiguous heartbeat fails closed when Agent check readback is corrupt", as
   const registry = newConsulRegistry({ fetch, address: "https://consul.example" })
 
   await expect(registry.register(background(), instance("initial"))).rejects.toMatchObject({
-    code: "LIKEGO_CONSUL_TRANSPORT"
+    code: "GO_LIKE_CONSUL_TRANSPORT"
   })
   expect(agent.remoteIds()).toEqual([])
 })
@@ -199,7 +199,7 @@ test("failed same-backend replacement restores the prior managed record", async 
   await registry.register(background(), instance("initial"))
 
   await expect(registry.register(background(), instance("updated"))).rejects.toMatchObject({
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     status: 403
   })
   expect(await registry.getService(background(), "orders")).toEqual([instance("initial")])
@@ -298,7 +298,7 @@ test("private heartbeat reports retryable and terminal failures without borrowin
   )
   expect(retryNotifications).toEqual([])
   expect(terminalNotifications[0]?.error).toMatchObject({
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     status: 403
   })
   expect(terminalNotifications[0]?.service).toEqual(instance("initial"))
@@ -381,11 +381,11 @@ test("failed registrations release many distinct identity serializers", async ()
   await started.promise
   expect(registrations.identityCount()).toBe(1)
   proceed.resolve()
-  await expect(first).rejects.toMatchObject({ code: "LIKEGO_CONSUL_HTTP", status: 403 })
+  await expect(first).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_HTTP", status: 403 })
   for (let index = 1; index < 32; index += 1) {
     await expect(
       registrations.register(background(), instance(`failed-${index}`, `orders-${index}`), options)
-    ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_HTTP", status: 403 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_HTTP", status: 403 })
   }
   expect(registrations.identityCount()).toBe(0)
 })
@@ -464,7 +464,7 @@ test("queued same-identity replacement preserves rollback, FIFO, and generation 
 
   await expect(
     registrations.register(background(), instance("updated"), options)
-  ).rejects.toMatchObject({ code: "LIKEGO_CONSUL_HTTP", status: 403 })
+  ).rejects.toMatchObject({ code: "GO_LIKE_CONSUL_HTTP", status: 403 })
   expect(agent.service(remoteId)?.Port).toBe(8080)
 
   holdDeregister = true

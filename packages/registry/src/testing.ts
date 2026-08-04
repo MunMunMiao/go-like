@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import { snapshotServiceInstance, snapshotServiceInstances } from "./snapshot"
 import type { Registry, ServiceInstance, Watcher } from "./types"

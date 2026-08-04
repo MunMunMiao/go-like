@@ -1,6 +1,6 @@
 ---
-"@likego/config": patch
-"@likego/transport-memory": patch
+"@go-like/config": patch
+"@go-like/transport-memory": patch
 ---
 
 增加显式 Node filesystem Config host，并新增进程内 unary Memory Transport provider，二者均遵循现有

@@ -1,8 +1,8 @@
-import { expiresIn } from "@likego/cache"
-import { newMemoryCache } from "@likego/cache-memory"
-import { newConfig, objectSource, schema, source, type ConfigObject } from "@likego/config"
-import { background, withoutCancel } from "@likego/context"
-import { afterStop, beforeStart, newApp, stopTimeout, type App } from "@likego/core"
+import { expiresIn } from "@go-like/cache"
+import { newMemoryCache } from "@go-like/cache-memory"
+import { newConfig, objectSource, schema, source, type ConfigObject } from "@go-like/config"
+import { background, withoutCancel } from "@go-like/context"
+import { afterStop, beforeStart, newApp, stopTimeout, type App } from "@go-like/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import pino from "pino"
 
@@ -94,7 +94,7 @@ describe("tenant configuration schema", () => {
     }
     const config = newConfig(source(objectSource("invalid", invalid)), schema(tenantDocumentSchema))
     await expect(config.load(background())).rejects.toMatchObject({
-      code: "LIKEGO_CONFIG_VALIDATION"
+      code: "GO_LIKE_CONFIG_VALIDATION"
     })
   })
 })

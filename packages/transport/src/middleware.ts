@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 /** Performs one Context-first operation with an explicitly typed result and argument tail. */
 export type Handler<Input, Result, Arguments extends readonly unknown[] = readonly []> = (
@@ -19,7 +19,7 @@ export function chain<Input, Result, Arguments extends readonly unknown[]>(
     Input,
     Result,
     Arguments
-  >[] /* likego-typed-rest: preserves ordered middleware declarations. */
+  >[] /* go-like-typed-rest: preserves ordered middleware declarations. */
 ): Handler<Input, Result, Arguments> {
   if (typeof handler !== "function") throw new TypeError("handler must be a function")
   let composed = handler

@@ -1,5 +1,5 @@
-import type { StoreRecord, StoreRecordInput } from "@likego/store"
-import { snapshotStoreRecord, snapshotStoreRecordInput } from "@likego/store/provider"
+import type { StoreRecord, StoreRecordInput } from "@go-like/store"
+import { snapshotStoreRecord, snapshotStoreRecordInput } from "@go-like/store/provider"
 
 import { newProtocolError } from "./errors"
 import type { VaultStoreOperation } from "./types"

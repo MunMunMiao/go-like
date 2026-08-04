@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import vm from "node:vm"
 
-import { newProbeRegistry } from "@likego/health"
+import { newProbeRegistry } from "@go-like/health"
 import { createHealthHandler } from "../src/health"
 
 async function json(response: Response): Promise<unknown> {
@@ -10,7 +10,7 @@ async function json(response: Response): Promise<unknown> {
 
 test("default paths ignore query strings and return deterministic sanitized JSON", async () => {
   const registry = newProbeRegistry()
-  registry.register("ready", "likego.app", () => {})
+  registry.register("ready", "go-like.app", () => {})
   const handler = createHealthHandler(registry)
 
   const response = await handler(new Request("https://service.test/readyz?x=1"))
@@ -19,7 +19,7 @@ test("default paths ignore query strings and return deterministic sanitized JSON
   expect(response.headers.get("Cache-Control")).toBe("no-store")
   expect(response.headers.get("Content-Type")).toBe("application/json; charset=utf-8")
   expect(await response.text()).toBe(
-    '{"status":"ok","checks":[{"name":"likego.app","status":"ok"}]}'
+    '{"status":"ok","checks":[{"name":"go-like.app","status":"ok"}]}'
   )
 })
 

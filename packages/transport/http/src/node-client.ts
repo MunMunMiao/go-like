@@ -19,7 +19,7 @@ import {
   type TLSSocket
 } from "node:tls"
 
-import type { DialOptions, Options, TLSEncodedBytes, TLSConfig } from "@likego/transport"
+import type { DialOptions, Options, TLSEncodedBytes, TLSConfig } from "@go-like/transport"
 
 import type { HTTPDialTarget } from "./address"
 import type { HTTPDialExecutorHandle } from "./transport"

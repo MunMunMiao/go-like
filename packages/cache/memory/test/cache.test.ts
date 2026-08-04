@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { expiresIn } from "@likego/cache"
-import { background, cause, withCancel } from "@likego/context"
+import { expiresIn } from "@go-like/cache"
+import { background, cause, withCancel } from "@go-like/context"
 
 import { clock, newMemoryCache } from "../src/index"
 

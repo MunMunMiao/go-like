@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
-import { contextHandler, type Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
+import { contextHandler, type Handler } from "@go-like/web"
 
 import { newGameServerDirectory, newMemoryMatchQueue } from "./match-resources"
 import { newJoinMatch, type JoinMatch, type JoinMatchCommand } from "./service"

@@ -1,4 +1,4 @@
-import type { ServiceInstance } from "@likego/registry"
+import type { ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import {
@@ -70,15 +70,15 @@ async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
 function replaceChunks(service: Record<string, unknown>, encoded: string): void {
   const meta = metadata(service)
   for (const key of Object.keys(meta)) {
-    if (key.startsWith("Likego-Chunk-") && key !== "Likego-Chunk-Count") delete meta[key]
+    if (key.startsWith("Go-Like-Chunk-") && key !== "Go-Like-Chunk-Count") delete meta[key]
   }
   const chunks: string[] = []
   for (let index = 0; index < encoded.length; index += 480) {
     chunks.push(encoded.slice(index, index + 480))
   }
-  meta["Likego-Chunk-Count"] = String(chunks.length)
+  meta["Go-Like-Chunk-Count"] = String(chunks.length)
   for (let index = 0; index < chunks.length; index += 1) {
-    meta[`Likego-Chunk-${String(index).padStart(3, "0")}`] = chunks[index] ?? ""
+    meta[`Go-Like-Chunk-${String(index).padStart(3, "0")}`] = chunks[index] ?? ""
   }
 }
 
@@ -103,7 +103,7 @@ test("codec round-trips exactly one public ServiceInstance", async () => {
     Name: "orders",
     Address: "127.0.0.1",
     Port: 8080,
-    Tags: ["Likego-Service-Instance=1"]
+    Tags: ["Go-Like-Service-Instance=1"]
   })
   expect(encoded.remoteId).toBe(await registrationIdentity(instance))
   const decoded = await decodeHealthResponse(JSON.stringify([{ Service: service }]), "orders")
@@ -148,10 +148,10 @@ test("codec ignores foreign records and rejects corrupt managed records", async 
   const service = carrier(body as Readonly<Record<string, unknown>>)
   const corrupt = structuredClone(service)
   const meta = corrupt.Meta as Record<string, string>
-  meta["Likego-Content-Hash"] = `lc-${"a".repeat(52)}`
+  meta["Go-Like-Content-Hash"] = `lc-${"a".repeat(52)}`
   await expect(
     decodeHealthResponse(JSON.stringify([{ Service: corrupt }]), "orders")
-  ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
 })
 
 test("codec validates endpoint and payload boundaries before Consul I/O", async () => {
@@ -172,16 +172,16 @@ test("codec rejects every malformed managed metadata field before publication", 
     (service: Record<string, unknown>, meta: Record<string, string>) => void,
     string
   ][] = [
-    ["missing field", (_service, meta) => delete meta["Likego-Wire-Version"], "is missing"],
+    ["missing field", (_service, meta) => delete meta["Go-Like-Wire-Version"], "is missing"],
     ["invalid carrier", (service) => (service.ID = 1), "carrier is invalid"],
-    ["wire version", (_service, meta) => (meta["Likego-Wire-Version"] = "2"), "unsupported"],
-    ["encoding", (_service, meta) => (meta["Likego-Encoding"] = "gzip"), "unsupported"],
-    ["hashes", (_service, meta) => (meta["Likego-Identity-Hash"] = "bad"), "hashes are invalid"],
+    ["wire version", (_service, meta) => (meta["Go-Like-Wire-Version"] = "2"), "unsupported"],
+    ["encoding", (_service, meta) => (meta["Go-Like-Encoding"] = "gzip"), "unsupported"],
+    ["hashes", (_service, meta) => (meta["Go-Like-Identity-Hash"] = "bad"), "hashes are invalid"],
     ["remote ID", (service) => (service.ID = "wrong"), "remote ID"],
-    ["chunk count", (_service, meta) => (meta["Likego-Chunk-Count"] = "zero"), "count is invalid"],
-    ["chunk ceiling", (_service, meta) => (meta["Likego-Chunk-Count"] = "33"), "provider bounds"],
-    ["chunk size", (_service, meta) => (meta["Likego-Chunk-000"] = "a".repeat(481)), "exceeds 480"],
-    ["chunk sequence", (_service, meta) => (meta["Likego-Chunk-999"] = "extra"), "unexpected key"]
+    ["chunk count", (_service, meta) => (meta["Go-Like-Chunk-Count"] = "zero"), "count is invalid"],
+    ["chunk ceiling", (_service, meta) => (meta["Go-Like-Chunk-Count"] = "33"), "provider bounds"],
+    ["chunk size", (_service, meta) => (meta["Go-Like-Chunk-000"] = "a".repeat(481)), "exceeds 480"],
+    ["chunk sequence", (_service, meta) => (meta["Go-Like-Chunk-999"] = "extra"), "unexpected key"]
   ]
   for (const [, mutate, message] of cases) {
     const value = await managed()
@@ -216,7 +216,7 @@ test("codec rejects malformed compression, text, and canonical payloads", async 
     invalidInstance.service,
     new TextEncoder().encode(
       JSON.stringify([
-        "likego.registry-instance.v1",
+        "go-like.registry-instance.v1",
         { id: "orders-1", name: "orders", version: "v1", metadata: {}, endpoints: ["opaque"] }
       ])
     )

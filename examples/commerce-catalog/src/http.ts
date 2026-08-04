@@ -1,8 +1,8 @@
-import { expiresIn, type Cache } from "@likego/cache"
-import type { Context } from "@likego/context"
-import { newProbeRegistry } from "@likego/health"
-import { contextHandler, type Handler } from "@likego/web"
-import { createHealthHandler } from "@likego/web/health"
+import { expiresIn, type Cache } from "@go-like/cache"
+import type { Context } from "@go-like/context"
+import { newProbeRegistry } from "@go-like/health"
+import { contextHandler, type Handler } from "@go-like/web"
+import { createHealthHandler } from "@go-like/web/health"
 import { Hono, type Context as HonoContext } from "hono"
 
 import { decodePrice, encodePrice, fetchPrice, type PricingClient } from "./pricing"

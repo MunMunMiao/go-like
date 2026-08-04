@@ -663,9 +663,9 @@ test(
   "C6-PR5 one canary is absent from Docker logs, output, failures, IPC, capability, ACK, and temp artifacts",
   async () => {
     await dockerPreflight()
-    const canary = `likego-c6-canary-${randomUUID()}`
-    const previous = process.env.LIKEGO_C6_SECRET
-    process.env.LIKEGO_C6_SECRET = canary
+    const canary = `go-like-c6-canary-${randomUUID()}`
+    const previous = process.env.GO_LIKE_C6_SECRET
+    process.env.GO_LIKE_C6_SECRET = canary
     let invocationRoot: string | null = null
     let result: ExamplesRunResult | null = null
     try {
@@ -705,8 +705,8 @@ test(
       expect(rendered).toContain("<redacted>")
       expect(invocationRoot).not.toBeNull()
     } finally {
-      if (previous === undefined) delete process.env.LIKEGO_C6_SECRET
-      else process.env.LIKEGO_C6_SECRET = previous
+      if (previous === undefined) delete process.env.GO_LIKE_C6_SECRET
+      else process.env.GO_LIKE_C6_SECRET = previous
       if (invocationRoot !== null) expect(await Bun.file(invocationRoot).exists()).toBe(false)
     }
   },
@@ -829,13 +829,13 @@ test(
     const invocation = `c5-filter-invocation-${suffix}`
     const networks: FixtureNetwork[] = [
       {
-        name: `likego-c5-filter-a-${suffix}`,
+        name: `go-like-c5-filter-a-${suffix}`,
         id: null,
         owner: `c5-filter-owner-a-${suffix}`,
         invocation
       },
       {
-        name: `likego-c5-filter-b-${suffix}`,
+        name: `go-like-c5-filter-b-${suffix}`,
         id: null,
         owner: `c5-filter-owner-b-${suffix}`,
         invocation
@@ -940,31 +940,31 @@ function collisionBackstop(capture: CollisionCapture): ExampleDockerBackstop {
     const foreignInvocation = `c5-foreign-invocation-${suffix}`
     capture.networks.push(
       {
-        name: `likego-c5-unknown-current-${suffix}`,
+        name: `go-like-c5-unknown-current-${suffix}`,
         id: null,
         owner: unknownOwner,
         invocation
       },
       {
-        name: `likego-c5-missing-current-${suffix}`,
+        name: `go-like-c5-missing-current-${suffix}`,
         id: null,
         owner: null,
         invocation
       },
       {
-        name: `likego-c5-registered-foreign-${suffix}`,
+        name: `go-like-c5-registered-foreign-${suffix}`,
         id: null,
         owner,
         invocation: foreignInvocation
       },
       {
-        name: `likego-c5-registered-missing-${suffix}`,
+        name: `go-like-c5-registered-missing-${suffix}`,
         id: null,
         owner,
         invocation: null
       },
       {
-        name: `likego-c5-foreign-canary-${suffix}`,
+        name: `go-like-c5-foreign-canary-${suffix}`,
         id: null,
         owner: foreignOwner,
         invocation: foreignInvocation

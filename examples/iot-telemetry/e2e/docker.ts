@@ -1,6 +1,6 @@
-import { background } from "@likego/context"
-import { newApp, server, stopTimeout, type App } from "@likego/core"
-import { newNatsJetStreamBroker } from "@likego/nats/jetstream/broker"
+import { background } from "@go-like/context"
+import { newApp, server, stopTimeout, type App } from "@go-like/core"
+import { newNatsJetStreamBroker } from "@go-like/nats/jetstream/broker"
 import {
   AckPolicy,
   RetentionPolicy,
@@ -35,7 +35,7 @@ const DeadLetterStream = "TELEMETRY_DLQ"
 const ConsumerName = "telemetry-validator-v1"
 const DockerKnownSecrets: readonly string[] = Object.freeze([])
 const RunId = crypto.randomUUID()
-const NatsContainer = `likego-iot-nats-${RunId}`
+const NatsContainer = `go-like-iot-nats-${RunId}`
 
 interface CommandResult {
   readonly stdout: string
@@ -423,7 +423,7 @@ async function main(): Promise<void> {
     drainDurationMs = await stopWorker(workerApp, workerRun)
     workerApp = null
     workerRun = null
-    assert(drainDurationMs < 5_000, `LikeGo drain exceeded its caller budget: ${drainDurationMs}`)
+    assert(drainDurationMs < 5_000, `go-like drain exceeded its caller budget: ${drainDurationMs}`)
     await closeNats(connection)
     connection = null
     if (statusTask !== null) await statusTask
@@ -476,7 +476,7 @@ async function main(): Promise<void> {
     try {
       await waitUntil(
         "start:prepared readiness",
-        () => programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"iot-telemetry"'),
+        () => programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"iot-telemetry"'),
         30_000
       )
       await waitUntil("start:prepared durable pull request", async () => {

@@ -109,7 +109,7 @@ const context = (await import(
   pathToFileURL(resolve(process.cwd(), "../../packages/context/dist/index.js")).href
 )) as ContextModule
 
-const directory = await mkdtemp(resolve(tmpdir(), "likego-winston-e2e-"))
+const directory = await mkdtemp(resolve(tmpdir(), "go-like-winston-e2e-"))
 const logPath = resolve(directory, "service.log")
 let fileLanded = false
 let nativeLoggerRecord = false

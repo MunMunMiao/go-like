@@ -286,12 +286,12 @@ const CapabilityComponent = "capability.json"
 const DockerEnvironmentComponent = "docker-environment.json"
 const ExecutionInputComponent = "execution-input.json"
 const StaleExampleEnvironmentKeys = Object.freeze([
-  "LIKEGO_E2E_CAPABILITY",
-  "LIKEGO_E2E_INVOCATION",
-  "LIKEGO_E2E_NONCE",
-  "LIKEGO_E2E_OWNER",
-  "LIKEGO_E2E_RESULT_DIR",
-  "LIKEGO_E2E_OWNED_DOCKER_AUTHORITY_V1"
+  "GO_LIKE_E2E_CAPABILITY",
+  "GO_LIKE_E2E_INVOCATION",
+  "GO_LIKE_E2E_NONCE",
+  "GO_LIKE_E2E_OWNER",
+  "GO_LIKE_E2E_RESULT_DIR",
+  "GO_LIKE_E2E_OWNED_DOCKER_AUTHORITY_V1"
 ])
 
 function noFollowReadFlags(): number {
@@ -371,7 +371,7 @@ async function readManifest(path: string, id: string): Promise<ExampleManifest> 
 }
 
 function validateManifest(id: string, cwdRealpath: string, manifest: ExampleManifest): void {
-  const expectedName = `@likego/example-${id}`
+  const expectedName = `@go-like/example-${id}`
   if (manifest.name !== expectedName) {
     throw new ExampleInputError(
       "example-name-mismatch",
@@ -401,7 +401,7 @@ function validateManifest(id: string, cwdRealpath: string, manifest: ExampleMani
 function frozenExecutionInput(id: string, cwdRealpath: string): ExampleExecutionInput {
   return Object.freeze({
     id,
-    packageName: `@likego/example-${id}`,
+    packageName: `@go-like/example-${id}`,
     cwdRealpath,
     scriptName: "test:e2e" as const
   })
@@ -932,7 +932,7 @@ function durableRegistrationComponent(id: string): string {
 function staleExampleEnvironment(): Readonly<Record<string, undefined>> {
   const keys = new Set(StaleExampleEnvironmentKeys)
   for (const key of Object.keys(process.env)) {
-    if (key.startsWith("LIKEGO_E2E_") && key !== "LIKEGO_E2E_CGROUP_PARENT") keys.add(key)
+    if (key.startsWith("GO_LIKE_E2E_") && key !== "GO_LIKE_E2E_CGROUP_PARENT") keys.add(key)
   }
   return Object.freeze(Object.fromEntries(Array.from(keys).map((key) => [key, undefined])))
 }
@@ -2202,7 +2202,7 @@ async function runExamplesCore(
   const cleanupFailures: CleanupFailure[] = []
 
   try {
-    directory = await createTempDirectory("likego-examples-")
+    directory = await createTempDirectory("go-like-examples-")
     const directories = await createTempSubdirectories(
       directory,
       ExampleInvocationDirectoryNames.map((name) => [name] as const)

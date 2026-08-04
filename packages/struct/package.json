@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/struct",
+  "name": "@go-like/struct",
   "version": "0.0.1",
-  "description": "Portable Go-style runtime structs for LikeGo service contracts.",
+  "description": "Portable Go-style runtime structs for go-like service contracts.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",

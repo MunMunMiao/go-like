@@ -1,5 +1,5 @@
-import type { Config, ConfigObject } from "@likego/config"
-import type { Context } from "@likego/context"
+import type { Config, ConfigObject } from "@go-like/config"
+import type { Context } from "@go-like/context"
 import type { TemperatureLedger } from "./config"
 
 const publicId = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/

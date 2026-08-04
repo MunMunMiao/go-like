@@ -57,7 +57,7 @@ function validResult(
       dockerVersion: "28.3.3",
       k6Image: "fixed",
       k6Version: "2.1.0",
-      nodeVersion: "26.5.1",
+      nodeVersion: "26.5.0",
       platform
     }),
     load: Object.freeze({

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import { jsonKubernetesDecoder, kubernetesSource, type KubernetesFetch } from "../src/index"
 
@@ -134,7 +134,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
         source(async function malformedGet() {
           return response(body)
         }).load(background())
-      ).rejects.toMatchObject({ code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL", operation: "get" })
+      ).rejects.toMatchObject({ code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL", operation: "get" })
     }
 
     const secretBase = {
@@ -164,7 +164,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
         }
       })
       await expect(config.load(background())).rejects.toMatchObject({
-        code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL"
+        code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL"
       })
     }
   })
@@ -201,7 +201,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
         .load(background())
         .catch((error: unknown) => error)
       expect(failure).toMatchObject({
-        code: "LIKEGO_KUBERNETES_CONFIG_TRANSPORT",
+        code: "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT",
         operation: "get"
       })
       expect(String(failure)).not.toContain("private")
@@ -211,7 +211,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
       source(async function invalidJson() {
         return new Response("not-json")
       }).load(background())
-    ).rejects.toMatchObject({ code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL" })
   })
 
   test("keeps HTTP status authoritative when response body cancellation is broken", async () => {
@@ -248,7 +248,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
         source(async function failed() {
           return unavailable
         }).load(background())
-      ).rejects.toMatchObject({ code: "LIKEGO_KUBERNETES_CONFIG_HTTP", status: 503 })
+      ).rejects.toMatchObject({ code: "GO_LIKE_KUBERNETES_CONFIG_HTTP", status: 503 })
     }
     await Bun.sleep(0)
   })
@@ -285,7 +285,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
       const watcher = await config.watch?.(background(), null)
       if (watcher === undefined) throw new Error("watcher missing")
       await expect(watcher.next(background())).rejects.toMatchObject({
-        code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL",
+        code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL",
         operation: "list"
       })
       await watcher.stop(background())
@@ -306,7 +306,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
       const watcher = await config.watch?.(background(), "1")
       if (watcher === undefined) throw new Error("watcher missing")
       await expect(watcher.next(background())).rejects.toMatchObject({
-        code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL",
+        code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL",
         operation: "watch"
       })
       await watcher.stop(background())
@@ -327,7 +327,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
       const watcher = await config.watch?.(background(), "1")
       if (watcher === undefined) throw new Error("watcher missing")
       await expect(watcher.next(background())).rejects.toMatchObject({
-        code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL",
+        code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL",
         operation: "watch"
       })
       await watcher.stop(background())
@@ -343,7 +343,7 @@ describe("Kubernetes configuration protocol boundaries", () => {
     const pending = watcher.next(background())
     await expect(watcher.next(background())).rejects.toThrow("already waiting")
     await expect(pending).rejects.toMatchObject({
-      code: "LIKEGO_KUBERNETES_CONFIG_HTTP",
+      code: "GO_LIKE_KUBERNETES_CONFIG_HTTP",
       status: 403
     })
     await watcher.stop(background())

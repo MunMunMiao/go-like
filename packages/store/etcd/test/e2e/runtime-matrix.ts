@@ -26,7 +26,7 @@ async function command(args: readonly string[], cwd: string): Promise<string> {
 
 /** Copies one built workspace package into an isolated publish-shaped node_modules tree. */
 async function stagePackage(stage: string, name: string, location: string): Promise<void> {
-  const target = join(stage, "node_modules", "@likego", name)
+  const target = join(stage, "node_modules", "@go-like", name)
   await mkdir(target, { recursive: true })
   await cp(join(Root, location, "dist"), target, { recursive: true })
 }
@@ -38,7 +38,7 @@ function validate(runtime: string, output: string): void {
 
 /** Builds one isolated package stage and executes every declared portable runtime lane. */
 async function main(): Promise<void> {
-  const stage = await mkdtemp(join(tmpdir(), "likego-store-etcd-runtime-"))
+  const stage = await mkdtemp(join(tmpdir(), "go-like-store-etcd-runtime-"))
   try {
     for (const [name, location] of Object.entries(PackageLocations)) {
       await stagePackage(stage, name, location)

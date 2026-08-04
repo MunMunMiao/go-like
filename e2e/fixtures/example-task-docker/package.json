@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-example-task-docker",
+  "name": "@go-like/example-example-task-docker",
   "private": true,
   "type": "module",
   "scripts": {

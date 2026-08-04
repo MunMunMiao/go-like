@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import { expiresIn, type Cache, type PutOption, type PutOptions } from "../src/index"
 import { putOptions } from "../src/provider"

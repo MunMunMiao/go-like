@@ -1,10 +1,10 @@
-# LikeGo Pre-kernel Verification Gates Implementation Plan
+# go-like Pre-kernel Verification Gates Implementation Plan
 
-> 历史记录：本计划已由 `2026-07-19-likego-package-transport-web.md` 取代，仅保留为实现证据；其中 TypeScript 运行时值标识符已同步为当前 `camelCase` 约定。
+> 历史记录：本计划已由 `2026-07-19-go-like-package-transport-web.md` 取代，仅保留为实现证据；其中 TypeScript 运行时值标识符已同步为当前 `camelCase` 约定。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 `@likego/context` 生产代码出现前，建立可机器审计、无空跑成功、可复现的 Context/runtime 契约、manifest、portable boundary、distribution、coverage 与 exact-runtime branch 自检门禁。
+**Goal:** 在 `@go-like/context` 生产代码出现前，建立可机器审计、无空跑成功、可复现的 Context/runtime 契约、manifest、portable boundary、distribution、coverage 与 exact-runtime branch 自检门禁。
 
 **Architecture:** 所有 gate 共享一个 fail-closed result protocol。每次运行先把完整输入 inventory 固化为同一份内容 snapshot，再由 evaluator 消费该 snapshot；status、readiness、result path 与退出码只有 `runGate` 一个权威。Fixture gate 只验证门禁本身，repository package-admission gate 在真实 package/source 为零时失败；Node/Deno branch 只用 exact-digest Docker 内的原生 coverage。
 
@@ -217,7 +217,7 @@ Canonical path is `.artifacts/gates/<gate>.json`. Temp file is in the same direc
 Only after rename succeeds print exactly one stdout line:
 
 ```text
-LIKEGO_GATE_RESULT=<compact persisted JSON>
+GO_LIKE_GATE_RESULT=<compact persisted JSON>
 ```
 
 Parsed stdout JSON must equal the persisted object. Validation/write/sync/close/rename failure exits `1`, prints no prefix, preserves prior canonical file, cleans temp, and writes only stderr. Consumers bind canonical JSON to the runId returned by the current invocation and reject stale runId.
@@ -376,7 +376,7 @@ The same test file recursively scans every current/future payload under `tools/*
 
 - [ ] **Step 3: Implement manifest cross-field rules**
 
-Portable/non-resident requires exact Bun/Node/Deno rows, terminal not-applicable and empty owner resources. Resident official adapter requires resources; release-blocking runtime rows must be terminal-observable. Tested versions are exact and at least minimum; Node contains both lanes. Reject LikeGo-owned/native-borrowed, duplicate resource id, application-owned stop contract for LikeGo-owned resource and package/residency mismatch.
+Portable/non-resident requires exact Bun/Node/Deno rows, terminal not-applicable and empty owner resources. Resident official adapter requires resources; release-blocking runtime rows must be terminal-observable. Tested versions are exact and at least minimum; Node contains both lanes. Reject go-like-owned/native-borrowed, duplicate resource id, application-owned stop contract for go-like-owned resource and package/residency mismatch.
 
 Discovery scans only direct official `packages/*` and `adapters/*`. The application-owned structural Server fixture lives outside those roots, has no manifests, and must be ignored.
 
@@ -789,7 +789,7 @@ Test malformed/multiple/missing top-level digest, tag mismatch, wrong version/pl
 
 For each Node24/Node26/Deno lane, execute `docker buildx imagetools inspect <tag>`, parse one top-level `Digest: sha256:<64 lowercase hex>`, form exact reference and pull requested platform. Do not copy any digest from reports or this plan.
 
-Each version-readback container has normalized unique name, label `likego.runtime-image-lock=<runId>`, hard timeout and `--rm`. In `finally`, independently attempt `docker rm -f <name>` and then require `docker ps -aq --filter label=likego.runtime-image-lock=<runId>` empty. If `--rm` already removed that exact named container, Docker's exact not-found response is the only idempotent-success exception; every other removal error fails. Cleanup failure fails the result even after correct version output.
+Each version-readback container has normalized unique name, label `go-like.runtime-image-lock=<runId>`, hard timeout and `--rm`. In `finally`, independently attempt `docker rm -f <name>` and then require `docker ps -aq --filter label=go-like.runtime-image-lock=<runId>` empty. If `--rm` already removed that exact named container, Docker's exact not-found response is the only idempotent-success exception; every other removal error fails. Cleanup failure fails the result even after correct version output.
 
 Lock schema records exact tag/digest/reference plus VerifiedPlatform, ObservedRuntimeVersion and ObservedRuntimePlatform for each lane. Atomic lock writer preserves prior lock on failure.
 
@@ -1020,7 +1020,7 @@ Run evidence selector; rerun instrumenter then evidence recorder if any bound re
 
 ## Deferred by scope
 
-- Real `@likego/context` source/package/dist behavior.
+- Real `@go-like/context` source/package/dist behavior.
 - Real `bun pm pack`, offline consumer, deep-import rejection and sentinel singleton.
 - Formal Bun/Node/Deno published-dist behavior matrix and package branch coverage.
 - Aggregate release gate and root `verify` integration.

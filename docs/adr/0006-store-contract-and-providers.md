@@ -6,7 +6,7 @@
 
 ## 背景
 
-go-micro 提供通用 Store 与多个后端实现。LikeGo 也需要承载配置快照、幂等记录和小型服务状态，但不能把
+go-micro 提供通用 Store 与多个后端实现。go-like 也需要承载配置快照、幂等记录和小型服务状态，但不能把
 Store 扩张成 ORM、Cache、配置中心或分布式事务门面。不同后端对 TTL、CAS、分页和多写者的保证并不相同，
 provider 必须按真实语义实现或在外部副作用前拒绝，不能静默降级。
 
@@ -18,7 +18,7 @@ owner cleanup。
 
 ### 公共契约
 
-`@likego/store` 定义：
+`@go-like/store` 定义：
 
 - `Store` 只定义 CRUD 与诊断名称，不伪造统一 `start/stop`。需要常驻所有权的具体 provider 可额外实现结构式
   `Server`。
@@ -45,19 +45,19 @@ CAS 失败返回稳定 `StoreConflictError`，同时保留 expected revision 和
 
 ### Provider
 
-- `@likego/store-memory` 为每个实例持有独立进程内 Map，构造后立即可用。它支持 TTL 惰性清理、CAS 和
+- `@go-like/store-memory` 为每个实例持有独立进程内 Map，构造后立即可用。它支持 TTL 惰性清理、CAS 和
   code-point 排序；cursor 绑定当前 revision、prefix 与 offset，任一 mutation/expiry 后旧 cursor fail closed。
   provider 不创建 timer、全局 backend 或结构式 Server。
-- `@likego/store-file` 使用应用指定的 filesystem 根目录，实现单进程文件持久化、TTL、CAS 和稳定分页。
+- `@go-like/store-file` 使用应用指定的 filesystem 根目录，实现单进程文件持久化、TTL、CAS 和稳定分页。
   Node filesystem host 位于 runtime-specific provider 内，portable 公共契约不静态引用 `node:`。
   进程崩溃留下的 lock 会 fail closed；provider 不按 PID 猜测并自动抢占。运维确认 owner 已终止并显式移除
   lock 后，启动只读取最后一份完整 checksum snapshot，忽略并在正常停止时清理 crash temp。
-- `@likego/store-consul` 使用注入的标准 Fetch 调用 Consul KV/session HTTP API。CAS 使用 ModifyIndex；TTL
+- `@go-like/store-consul` 使用注入的标准 Fetch 调用 Consul KV/session HTTP API。CAS 使用 ModifyIndex；TTL
   使用独立 session；不确定写响应必须通过 exact readback 判断。所有 Store 数据和 admission key 都位于
-  独占物理 root（默认 `likego/store`）下；root 外的 Registry、Config 或应用 KV 不参与解码与分页。
-- `@likego/store-etcd` 使用注入的标准 Fetch 调用 etcd v3 JSON gateway。revision 保持 provider-opaque；
+  独占物理 root（默认 `go-like/store`）下；root 外的 Registry、Config 或应用 KV 不参与解码与分页。
+- `@go-like/store-etcd` 使用注入的标准 Fetch 调用 etcd v3 JSON gateway。revision 保持 provider-opaque；
   CAS 使用 transaction；TTL 使用 lease，并在 stop 时撤销本 owner 的 lease。
-- `@likego/store-vault` 使用注入的标准 Fetch 调用 Vault KV v2。逻辑 key 编码到独占 root 下的单层物理
+- `@go-like/store-vault` 使用注入的标准 Fetch 调用 Vault KV v2。逻辑 key 编码到独占 root 下的单层物理
   keyspace；TTL 与统一 write/delete CAS 均 fail closed。delete 只 soft-delete 已读取的精确 version；分页首页
   完整物化一次 LIST+GET 快照，后续一次性 cursor 只读取有上限、可过期、stop 时清理的进程内快照。
 
@@ -75,13 +75,13 @@ CAS 失败返回稳定 `StoreConflictError`，同时保留 expected revision 和
 ## 验证要求
 
 所有 provider 必须复用仓库内部的 provider-neutral conformance，并补充实现特有的协议测试；conformance
-不是用户 API，也不进入 `@likego/store` 的发布导出。
+不是用户 API，也不进入 `@go-like/store` 的发布导出。
 外部服务测试必须使用固定 digest 的真实容器，覆盖 CRUD、排序、分页、CAS、TTL、停止、重启、故障恢复、
 凭据边界和零残留。File provider 必须在 Node 上使用真实临时目录，并证明关闭后 watcher、timer 与文件句柄归零。
 纯内存 provider 不启动无意义容器；它使用确定性 clock、完整 conformance 和发布态 Bun/Node/Deno 验证。
 
 ## 后果
 
-LikeGo 获得了与 go-micro Store 同角色的基础能力，同时不会把不同后端伪装成完全相同。应用按 README
+go-like 获得了与 go-micro Store 同角色的基础能力，同时不会把不同后端伪装成完全相同。应用按 README
 记录的固定语义选择 provider，并能在不改变业务调用形态的前提下替换实现。Cache、ORM、配置 watch 和分布式事务仍是独立
 能力，不能借 Store 名义偷偷并入。

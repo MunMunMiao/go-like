@@ -1,5 +1,5 @@
-import { withValue, type Context } from "@likego/context"
-import { clone as cloneMetadata } from "@likego/metadata"
+import { withValue, type Context } from "@go-like/context"
+import { clone as cloneMetadata } from "@go-like/metadata"
 
 import type { TransportInfo } from "./types"
 

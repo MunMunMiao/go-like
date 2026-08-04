@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-batch-reporting",
+  "name": "@go-like/example-batch-reporting",
   "private": true,
   "description": "Croner, BullMQ, Redis, and File Store batch-reporting example.",
   "type": "module",
@@ -13,12 +13,12 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun test/e2e/docker-e2e.ts"
   },
   "dependencies": {
-    "@likego/bullmq": "workspace:*",
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/croner": "workspace:*",
-    "@likego/store": "workspace:*",
-    "@likego/store-file": "workspace:*",
+    "@go-like/bullmq": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/croner": "workspace:*",
+    "@go-like/store": "workspace:*",
+    "@go-like/store-file": "workspace:*",
     "bullmq": "6.0.6",
     "croner": "10.0.1",
     "ioredis": "6.0.0"

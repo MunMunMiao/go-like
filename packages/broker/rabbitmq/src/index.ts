@@ -1,7 +1,7 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import { registerSubscriberTerminal, subscriberTerminal } from "@likego/broker/provider"
-import { background, cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import { registerSubscriberTerminal, subscriberTerminal } from "@go-like/broker/provider"
+import { background, cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type {
   Channel,
   ChannelModel,
@@ -68,7 +68,7 @@ export interface RabbitMqSubscribeOptions {
   readonly consume?: Options.Consume
 }
 
-/** Implements LikeGo Broker while preserving the exact amqplib delivery object. */
+/** Implements go-like Broker while preserving the exact amqplib delivery object. */
 export interface RabbitMqBroker extends Broker<
   RabbitMqPublishOptions,
   boolean,
@@ -659,7 +659,7 @@ function createRabbitMqBroker(
 /**
  * Creates the canonical recovery-aware provider through amqplib's own recovery setup callback.
  *
- * The returned connection remains application-owned. LikeGo owns each generated channel and
+ * The returned connection remains application-owned. go-like owns each generated channel and
  * replays active topology and consumers, but never closes the recovering connection.
  */
 export async function newRecoveringRabbitMqBroker(

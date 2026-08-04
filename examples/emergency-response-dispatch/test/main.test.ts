@@ -1,5 +1,5 @@
-import { background, withCancel } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
+import { background, withCancel } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
 import { describe, expect, test } from "bun:test"
 
 import { newEmergencyResponseService } from "../src/http"

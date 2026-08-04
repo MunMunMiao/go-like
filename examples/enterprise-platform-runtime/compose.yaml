@@ -1,4 +1,4 @@
-name: likego-enterprise-platform-runtime
+name: go-like-enterprise-platform-runtime
 
 services:
   consul:
@@ -18,7 +18,7 @@ services:
     image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
     command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200"]
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: likego-enterprise-dev
+      VAULT_DEV_ROOT_TOKEN_ID: go-like-enterprise-dev
     ports:
       - "127.0.0.1:58200:8200"
     healthcheck:

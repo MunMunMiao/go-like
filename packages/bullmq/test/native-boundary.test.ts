@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { background, canceled, withCancel } from "@likego/context"
+import { background, canceled, withCancel } from "@go-like/context"
 import { Worker } from "bullmq"
 
 import { newBullMqWorkerServer } from "../src/index"

@@ -1,6 +1,6 @@
-# @likego/pino
+# @go-like/pino
 
-`@likego/pino` 把应用创建的 Pino destination 接入 LikeGo `Server` 生命周期，并为 Client、内部
+`@go-like/pino` 把应用创建的 Pino destination 接入 go-like `Server` 生命周期，并为 Client、内部
 Server、标准 Web Handler 和 Broker 提供薄请求日志包装。Pino 继续拥有
 logger、level、custom levels、formatter、redaction、bindings、child logger、destination 和 transport 的
 全部业务语义；该包不复制或配置这些能力。
@@ -9,8 +9,8 @@ logger、level、custom levels、formatter、redaction、bindings、child logger
 
 ```ts
 import pino from "pino"
-import { newApp, server } from "@likego/core"
-import { newPinoServer } from "@likego/pino"
+import { newApp, server } from "@go-like/core"
+import { newPinoServer } from "@go-like/pino"
 
 const destination = pino.destination({
   dest: "/var/log/orders/service.log",
@@ -25,7 +25,7 @@ const logger = pino(
   destination
 )
 
-// App 启动并接纳 logging Server 后，destination 的 flush/end/close 生命周期移交给 LikeGo。
+// App 启动并接纳 logging Server 后，destination 的 flush/end/close 生命周期移交给 go-like。
 const logging = newPinoServer(logger, destination)
 const app = newApp(server(logging, httpServer))
 
@@ -38,7 +38,7 @@ await running
 ## 请求日志
 
 ```ts
-import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "@likego/pino"
+import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "@go-like/pino"
 
 const clientWithLogs = logClient(client, logger)
 const unaryLogging = logUnaryMiddleware(logger)
@@ -52,8 +52,8 @@ const brokerWithLogs = logBroker(broker, logger)
 `^[A-Z0-9_.-]{1,64}$` 的 `errorCode`。非法、过长或读取失败的字段会被省略。成功与取消使用 Pino
 `info`，失败使用 Pino `error`。操作名保持有限边界：
 
-- Client 和内部 Server：`service/endpoint`；Server 只读取 `Likego-Service` 与
-  `Likego-Endpoint` 保留路由头。
+- Client 和内部 Server：`service/endpoint`；Server 只读取 `Go-Like-Service` 与
+  `Go-Like-Endpoint` 保留路由头。
 - Web：HTTP method，不包含 URL 或 path。
 - Broker：`publish topic` 或 `consume topic`。
 
@@ -68,7 +68,7 @@ const brokerWithLogs = logBroker(broker, logger)
 有一个生命周期 owner。应用可以继续用 logger 写记录，但不得替换 logger 的 `flush`/stream binding 或
 destination 的 lifecycle 方法。adapter 使用构造期捕获、start 准入确认的固定 `flush`/`end`/`destroy` 引用；若 logger
 stream 之后漂移，会跳过错配 flush、清理原 destination 并以失败结算，绝不会把错配资源报告为成功 terminal。
-无需 LikeGo 管理的 logger 直接使用 Pino 即可，不需要额外包装。
+无需 go-like 管理的 logger 直接使用 Pino 即可，不需要额外包装。
 
 公开类型边界直接接收官方 `pino.Logger`，以及 `pino.destination()` 或 `pino.transport()` 的官方返回类型。
 该包不导出 `PinoLogger`、`PinoDestination`，也不复制日志方法、stream 写入方法或 EventEmitter API；包内只保留
@@ -111,7 +111,7 @@ ThreadStream `4.2.0` 仍引用该版本删除的旧别名 `TransferListItem`；�
   尽力调用一次；ThreadStream 没有公开 force 方法，因此超时错误的 `forceSupported` 为 `false`。无论
   `destroy()` 缺失、抛错还是调用后没有关闭，运行期 Promise 与 listener 都继续等待真实原生 `close`。
   `pinoDrainTimeout(ms)` 只配置这一真实 Pino drain 边界；App 的整体停止等待由 Core `stopTimeout(ms)` 配置。
-- adapter 不打开路径。路径错误由应用调用 Pino 官方 constructor 时原样产生，不会被 LikeGo 改写。
+- adapter 不打开路径。路径错误由应用调用 Pino 官方 constructor 时原样产生，不会被 go-like 改写。
 
 Pino 版本固定为当前验证的 `10.3.1`。运行时 E2E 会创建官方异步 destination，写入结构化日志，并在
 Server stop 后读取最终文件，证明 flush/end/close 的实际顺序。

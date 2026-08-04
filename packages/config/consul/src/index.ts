@@ -5,9 +5,9 @@ import {
   type ConfigSourceSnapshot,
   type ConfigSourceWatcher,
   type ConfigValue
-} from "@likego/config"
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/config"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 /** Executes one standard Web Fetch request without a runtime-global dependency. */
 export type ConsulFetch = (request: Request) => Promise<Response>
@@ -38,14 +38,14 @@ export interface ConsulSourceOptions {
 
 export interface ConsulHttpError extends Error {
   readonly name: "ConsulHttpError"
-  readonly code: "LIKEGO_CONSUL_HTTP"
+  readonly code: "GO_LIKE_CONSUL_HTTP"
   readonly status: number
   readonly key: string
 }
 
 interface ConsulHttpDetails {
   readonly name: "ConsulHttpError"
-  readonly code: "LIKEGO_CONSUL_HTTP"
+  readonly code: "GO_LIKE_CONSUL_HTTP"
   readonly status: number
   readonly key: string
 }
@@ -114,7 +114,7 @@ export function jsonConsulDecoder(text: string, key: string): ConfigObject {
 function newHttpError(status: number, key: string): ConsulHttpError {
   const details = {
     name: "ConsulHttpError",
-    code: "LIKEGO_CONSUL_HTTP",
+    code: "GO_LIKE_CONSUL_HTTP",
     status,
     key
   } satisfies ConsulHttpDetails
@@ -128,7 +128,7 @@ function retryableQueryFailure(value: unknown): boolean {
   if (value === TransportFailure) return true
   if (value === null || typeof value !== "object" || !("code" in value) || !("status" in value))
     return false
-  if (value.code !== "LIKEGO_CONSUL_HTTP" || typeof value.status !== "number") return false
+  if (value.code !== "GO_LIKE_CONSUL_HTTP" || typeof value.status !== "number") return false
   return (
     value.status === 404 ||
     value.status === 408 ||

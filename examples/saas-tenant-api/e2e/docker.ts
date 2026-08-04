@@ -2,12 +2,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { newRedisCache } from "@likego/cache-redis"
-import { newConfig, schema, source, type ConfigObject } from "@likego/config"
-import { consulSource } from "@likego/config-consul"
-import { background, withoutCancel } from "@likego/context"
-import { afterStop, beforeStart, name, newApp, server, stopTimeout, type App } from "@likego/core"
-import { newPinoServer } from "@likego/pino"
+import { newRedisCache } from "@go-like/cache-redis"
+import { newConfig, schema, source, type ConfigObject } from "@go-like/config"
+import { consulSource } from "@go-like/config-consul"
+import { background, withoutCancel } from "@go-like/context"
+import { afterStop, beforeStart, name, newApp, server, stopTimeout, type App } from "@go-like/core"
+import { newPinoServer } from "@go-like/pino"
 import pino from "pino"
 
 import {
@@ -26,9 +26,9 @@ const ConsulImage =
 const RedisImage =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
 const RunId = crypto.randomUUID()
-const ConsulName = `likego-saas-consul-${RunId}`
-const RedisName = `likego-saas-redis-${RunId}`
-const ConfigKey = "likego/examples/saas-tenant-api/config"
+const ConsulName = `go-like-saas-consul-${RunId}`
+const RedisName = `go-like-saas-redis-${RunId}`
+const ConfigKey = "go-like/examples/saas-tenant-api/config"
 
 interface CommandResult {
   readonly stdout: string
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
   let consulVersion = "unobserved"
   let redisVersion = "unobserved"
   try {
-    directory = await mkdtemp(join(tmpdir(), "likego-saas-tenant-api-"))
+    directory = await mkdtemp(join(tmpdir(), "go-like-saas-tenant-api-"))
     const logPath = join(directory, "requests.log")
     await createContainer(
       ownedDocker,
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
     const runtimeState = newTenantRuntimeState(consulAddress, RunId)
     const cache = newRedisCache({
       url: redisUrl,
-      prefix: `likego:example:saas:${RunId}:`,
+      prefix: `go-like:example:saas:${RunId}:`,
       connectTimeoutMs: 5_000,
       commandTimeoutMs: 5_000
     })
@@ -459,7 +459,7 @@ async function main(): Promise<void> {
       const deadline = Date.now() + 30_000
       let payload: unknown = null
       while (Date.now() < deadline) {
-        if (programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"saas-tenant-api"')) {
+        if (programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"saas-tenant-api"')) {
           const response = await fetch(`http://127.0.0.1:${programPort}/v1/tenant/config`, {
             headers: { "X-Tenant-Id": "tenant-acme" }
           })

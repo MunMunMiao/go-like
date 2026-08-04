@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newRoundRobinSelector, type Selector, type ServiceInstance } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { newRoundRobinSelector, type Selector, type ServiceInstance } from "@go-like/registry"
 
 import { canMatch, type JoinMatchCommand, type PlayerPair } from "./service"
 
@@ -52,7 +52,7 @@ export function newMemoryMatchQueue(): MatchQueue {
   })
 }
 
-/** Creates a regional game-server directory backed by LikeGo's round-robin selector. */
+/** Creates a regional game-server directory backed by go-like's round-robin selector. */
 export function newGameServerDirectory(
   instances: readonly ServiceInstance[],
   selector: Selector = newRoundRobinSelector()

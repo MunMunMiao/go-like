@@ -1,7 +1,7 @@
 ---
-"@likego/core": minor
-"@likego/registry": minor
-"@likego/server": minor
+"@go-like/core": minor
+"@go-like/registry": minor
+"@go-like/server": minor
 ---
 
 将 Registry 公共模型收敛为 go-kratos `ServiceInstance`、`Registrar`、`Discovery` 与 `Watcher`；删除

@@ -1,5 +1,5 @@
-import { background, withCancelCause } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { newEtcdRegistry } from "../src/index"
@@ -21,7 +21,7 @@ test("failed admission revokes its provisional lease and leaves no record", asyn
   const registry = newEtcdRegistry({ fetch: etcd.fetch, address: "https://etcd.example" })
   etcd.failNext("/v3/kv/txn", 403)
   await expect(registry.register(background(), instance("one"))).rejects.toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 403
   })
   expect(etcd.keys()).toEqual([])
@@ -33,7 +33,7 @@ test("failed update keeps the prior accepted immutable record", async () => {
   await registry.register(background(), instance("one"))
   etcd.failNext("/v3/kv/txn", 403)
   await expect(registry.register(background(), instance("two"))).rejects.toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 403
   })
   expect(await registry.getService(background(), "orders")).toEqual([instance("one")])
@@ -146,7 +146,7 @@ test("registration aggregates a failed cleanup after caller cancellation", async
   expect(failure).toBeInstanceOf(AggregateError)
   expect((failure as AggregateError).errors[0]).toBe(primary)
   expect((failure as AggregateError).errors[1]).toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 403
   })
   expect(etcd.keys()).toEqual([])
@@ -235,7 +235,7 @@ test("private lease renewal reports retryable and terminal failures without logg
   )
   expect(retryNotifications).toEqual([])
   expect(terminalNotifications[0]?.error).toMatchObject({
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     status: 403
   })
   expect(terminalNotifications[0]?.service).toEqual(instance("one"))

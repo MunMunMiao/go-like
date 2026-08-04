@@ -1,6 +1,6 @@
-import { expiresIn, type Cache } from "@likego/cache"
-import { newMemoryCache } from "@likego/cache-memory"
-import type { Context } from "@likego/context"
+import { expiresIn, type Cache } from "@go-like/cache"
+import { newMemoryCache } from "@go-like/cache-memory"
+import type { Context } from "@go-like/context"
 
 export interface ReserveStockCommand {
   readonly requestId: string
@@ -148,7 +148,7 @@ export function newReserveStock(
   }
 }
 
-/** Creates a read-through inventory query backed by LikeGo Cache. */
+/** Creates a read-through inventory query backed by go-like Cache. */
 export function newGetAvailableStock(
   repository: InventoryRepository,
   cache: Cache,

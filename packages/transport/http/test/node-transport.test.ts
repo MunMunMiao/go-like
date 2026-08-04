@@ -6,7 +6,7 @@ import { TLSSocket } from "node:tls"
 
 import { expect, test } from "bun:test"
 
-import { background, withCancel } from "@likego/context"
+import { background, withCancel } from "@go-like/context"
 import {
   logger,
   secure,
@@ -17,7 +17,7 @@ import {
   type Message,
   type TLSEncodedBytes,
   type TLSConfig
-} from "@likego/transport"
+} from "@go-like/transport"
 
 import { allowHTTP1, clientAuth, newNodeHTTPTransport } from "../src/node"
 import { executeNodeHTTP1, nodeHTTP1RequestOptions } from "../src/node-client"
@@ -104,7 +104,7 @@ test("Node transport performs a real listen, dial, exchange, and close", async (
 
   const client = await transport.dial(background(), listener.addr())
   await client.send(background(), {
-    header: { "Likego-Service": "echo", "Likego-Endpoint": "call" },
+    header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
     body: new Uint8Array([1, 2, 3])
   })
   let response
@@ -141,7 +141,7 @@ test("Node client close wins the public send body-read microtask", async () => {
     const sending = rejection(client.send(background(), { header: {}, body: new Uint8Array([1]) }))
     await Promise.resolve()
     await client.close(background())
-    expect(await sending).toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+    expect(await sending).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
     await new Promise<void>(function observeLateAdmission(resolve): void {
       setTimeout(resolve, 50)
     })
@@ -183,7 +183,7 @@ test("Node client close still terminates a request already admitted by the serve
     const sending = client.send(background(), { header: {}, body: new Uint8Array([1]) })
     await admitted
     await client.close(background())
-    expect(await rejection(sending)).toMatchObject({ code: "LIKEGO_TRANSPORT_CLOSED" })
+    expect(await rejection(sending)).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
     expect(requests).toBe(1)
   } finally {
     server.closeAllConnections()
@@ -218,7 +218,7 @@ test("Node transport preserves an explicitly injected Fetch executor", async () 
   const client = await transport.dial(background(), "127.0.0.1:1")
 
   await client.send(background(), {
-    header: { "Likego-Service": "echo", "Likego-Endpoint": "call" },
+    header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
     body: new TextEncoder().encode("request")
   })
   expect(text(await client.recv(background()))).toBe("injected")
@@ -235,13 +235,13 @@ test("Node custom executor rejects native-only dial capabilities before I/O", as
   }
   const transport = newNodeHTTPTransport(executor(injected))
   await expect(transport.dial(background(), "127.0.0.1:1", withConnClose())).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY",
+    code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY",
     message: "standard Fetch cannot force connection close"
   })
 
   transport.init(tlsConfig(clientTLS()))
   await expect(transport.dial(background(), "127.0.0.1:1")).rejects.toMatchObject({
-    code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY",
+    code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY",
     message: "standard Fetch cannot use custom TLS material"
   })
   expect(executorCalls).toBe(0)
@@ -266,7 +266,7 @@ test("Node client performs verified mTLS over negotiated HTTP/2", async () => {
       })
       request.once("end", function ended(): void {
         response.writeHead(200, {
-          "Likego-Reply": protocol,
+          "Go-Like-Reply": protocol,
           "Set-Cookie": ["first=1", "second=2"]
         })
         response.end(Buffer.concat(chunks))
@@ -282,15 +282,15 @@ test("Node client performs verified mTLS over negotiated HTTP/2", async () => {
     transport.init(secure(true), tlsConfig(clientTLS()))
     const client = await transport.dial(background(), `127.0.0.1:${listeningPort(server)}`)
     await client.send(background(), {
-      header: { "Likego-Service": "echo", "Likego-Endpoint": "call" },
+      header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
       body: new TextEncoder().encode("mtls-h2")
     })
     const response = await client.recv(background())
     expect(text(response)).toBe("mtls-h2")
-    expect(response.header["likego-reply"]).toBe("2.0")
+    expect(response.header["go-like-reply"]).toBe("2.0")
     expect(protocol).toBe("2.0")
     await client.send(background(), {
-      header: { "Likego-Service": "echo", "Likego-Endpoint": "call" },
+      header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
       body: new TextEncoder().encode("mtls-h2-reused")
     })
     expect(text(await client.recv(background()))).toBe("mtls-h2-reused")

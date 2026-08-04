@@ -17,7 +17,7 @@ export function newPinoAlreadyStartedError(status: StartedStatus): PinoAlreadySt
   const error: PinoAlreadyStartedError = {
     name: "PinoAlreadyStartedError",
     message: "Pino server has already started",
-    code: "LIKEGO_PINO_ALREADY_STARTED",
+    code: "GO_LIKE_PINO_ALREADY_STARTED",
     status
   }
   Object.setPrototypeOf(error, Error.prototype)
@@ -32,7 +32,7 @@ export function newPinoDrainTimeoutError(
   const error: PinoDrainTimeoutError = {
     name: "PinoDrainTimeoutError",
     message: `Pino destination drain exceeded ${timeoutMs}ms`,
-    code: "LIKEGO_PINO_DRAIN_TIMEOUT",
+    code: "GO_LIKE_PINO_DRAIN_TIMEOUT",
     timeoutMs,
     forceSupported
   }
@@ -45,7 +45,7 @@ export function newPinoDestinationClosedError(): PinoDestinationClosedError {
   const error: PinoDestinationClosedError = {
     name: "PinoDestinationClosedError",
     message: "Pino destination closed before owner stop",
-    code: "LIKEGO_PINO_DESTINATION_CLOSED"
+    code: "GO_LIKE_PINO_DESTINATION_CLOSED"
   }
   Object.setPrototypeOf(error, Error.prototype)
   return Object.freeze(error)

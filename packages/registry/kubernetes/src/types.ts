@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import type { ProviderLogger, RegistrationErrorHandler } from "@likego/registry/provider"
+import type { Registry } from "@go-like/registry"
+import type { ProviderLogger, RegistrationErrorHandler } from "@go-like/registry/provider"
 
 /** Executes one borrowed standard Web Fetch request. */
 export interface KubernetesFetch {
@@ -35,7 +35,7 @@ export type KubernetesOperation = "create" | "delete" | "get" | "list" | "update
 /** Describes one status-only Kubernetes HTTP failure. */
 export interface KubernetesHttpError extends Error {
   readonly name: "KubernetesHttpError"
-  readonly code: "LIKEGO_KUBERNETES_HTTP"
+  readonly code: "GO_LIKE_KUBERNETES_HTTP"
   readonly operation: KubernetesOperation
   readonly status: number
 }
@@ -43,7 +43,7 @@ export interface KubernetesHttpError extends Error {
 /** Describes one secret-safe Kubernetes Fetch rejection. */
 export interface KubernetesTransportError extends Error {
   readonly name: "KubernetesTransportError"
-  readonly code: "LIKEGO_KUBERNETES_TRANSPORT"
+  readonly code: "GO_LIKE_KUBERNETES_TRANSPORT"
   readonly operation: KubernetesOperation
   readonly cause: Error
 }

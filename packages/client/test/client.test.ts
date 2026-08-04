@@ -9,10 +9,10 @@ import {
   withCancelCause,
   withValue,
   type Context
-} from "@likego/context"
-import { fromClientContext, newMetadata, newClientContext, type Metadata } from "@likego/metadata"
-import { filterLabel, filterVersion } from "@likego/registry"
-import { struct } from "@likego/struct"
+} from "@go-like/context"
+import { fromClientContext, newMetadata, newClientContext, type Metadata } from "@go-like/metadata"
+import { filterLabel, filterVersion } from "@go-like/registry"
+import { struct } from "@go-like/struct"
 import type {
   Discovery,
   SelectionDone,
@@ -21,13 +21,13 @@ import type {
   ServiceEndpoint,
   ServiceInstance,
   Watcher
-} from "@likego/registry"
+} from "@go-like/registry"
 import {
   endpoint,
   fromClientContext as transportFromClientContext,
   isServiceError,
   serviceError
-} from "@likego/transport"
+} from "@go-like/transport"
 import type {
   Client as TransportClient,
   Listener,
@@ -35,9 +35,9 @@ import type {
   Options,
   Transport,
   TransportInfo
-} from "@likego/transport"
-import { encodeMetadataHeader, encodeServiceError } from "@likego/transport/provider"
-import { circuitOpen } from "@likego/resilience"
+} from "@go-like/transport"
+import { encodeMetadataHeader, encodeServiceError } from "@go-like/transport/provider"
+import { circuitOpen } from "@go-like/resilience"
 
 import {
   circuitBreakerMiddleware,
@@ -1537,7 +1537,7 @@ describe("unary Client", () => {
   })
 
   test("runs one discover-select-dial-send-recv exchange and snapshots both Messages", async () => {
-    const requestHeader = { tenant: "one", "Likego-Method": "POST" }
+    const requestHeader = { tenant: "one", "Go-Like-Method": "POST" }
     const requestBody = new Uint8Array([1, 2, 3])
     const responseHeader = { Node: "a" }
     const responseBody = new Uint8Array([9, 8])
@@ -1584,10 +1584,10 @@ describe("unary Client", () => {
     if (outbound === undefined) throw new Error("Client did not send its outbound Message")
     expect(outbound.header).toEqual({
       tenant: "one",
-      "Likego-Method": "POST",
-      "Likego-Service": "orders",
-      "Likego-Endpoint": "Create",
-      "Likego-Metadata": metadataWire
+      "Go-Like-Method": "POST",
+      "Go-Like-Service": "orders",
+      "Go-Like-Endpoint": "Create",
+      "Go-Like-Metadata": metadataWire
     })
     expect(outbound.body).toEqual(new Uint8Array([1, 2, 3]))
     expect(Object.isFrozen(outbound)).toBe(true)
@@ -1612,10 +1612,10 @@ describe("unary Client", () => {
     expect(transportInfo.endpoint()).toBe("http://127.0.0.1:8080/")
     expect(transportInfo.operation()).toBe("orders/Create")
     expect(transportInfo.requestHeaders()).toEqual({
-      "likego-endpoint": ["Create"],
-      "likego-metadata": [metadataWire],
-      "likego-method": ["POST"],
-      "likego-service": ["orders"],
+      "go-like-endpoint": ["Create"],
+      "go-like-metadata": [metadataWire],
+      "go-like-method": ["POST"],
+      "go-like-service": ["orders"],
       tenant: ["one"]
     })
     expect(transportInfo.replyHeaders()).toEqual({ node: ["a"] })
@@ -1985,8 +1985,8 @@ describe("unary Client", () => {
     expect(subject.sent[0]).toEqual({
       header: {
         "Content-Type": "application/json",
-        "Likego-Endpoint": "Create",
-        "Likego-Service": "orders"
+        "Go-Like-Endpoint": "Create",
+        "Go-Like-Service": "orders"
       },
       body: new TextEncoder().encode("7")
     })
@@ -2028,7 +2028,7 @@ describe("unary Client", () => {
       const failure = await rejected(client.call(background(), operation, 1))
       expect(failure).toMatchObject({
         name: "TransportProtocolError",
-        code: "LIKEGO_TRANSPORT_PROTOCOL",
+        code: "GO_LIKE_TRANSPORT_PROTOCOL",
         message: "client typed response is invalid"
       })
       expect(subject.outcomes).toEqual([
@@ -2167,7 +2167,7 @@ describe("unary Client", () => {
   })
 
   test("rejects either reserved header case-insensitively before discovery", async () => {
-    for (const header of [{ "LIKEGO-service": "caller" }, { "likego-ENDPOINT": "caller" }]) {
+    for (const header of [{ "GO-LIKE-service": "caller" }, { "go-like-ENDPOINT": "caller" }]) {
       const subject = harness()
       const client = newClient(
         withDiscovery(subject.discovery),
@@ -2236,8 +2236,8 @@ describe("unary Client", () => {
     if (info === null) throw new Error("Transport did not receive TransportInfo")
     const requestProjection = info.requestHeaders()
     expect(Object.keys(requestProjection)).toHaveLength(2_006)
-    expect(requestProjection["likego-service"]).toEqual(["orders"])
-    expect(requestProjection["likego-endpoint"]).toEqual(["Create"])
+    expect(requestProjection["go-like-service"]).toEqual(["orders"])
+    expect(requestProjection["go-like-endpoint"]).toEqual(["Create"])
     expect(requestProjection["bad key"]).toEqual(["still-on-wire"])
     expect(requestProjection["bad-value"]).toEqual(["contains\0control"])
     expect(requestProjection["x-duplicate"]).toEqual(["first", "second"])
@@ -2951,7 +2951,7 @@ describe("unary Client", () => {
 
     expect(failure).toMatchObject({
       name: "NoAvailableEndpointError",
-      code: "LIKEGO_NO_AVAILABLE_ENDPOINT"
+      code: "GO_LIKE_NO_AVAILABLE_ENDPOINT"
     })
     expect(subject.events).toEqual(["discover:orders", "discover:orders"])
   })
@@ -4412,7 +4412,7 @@ describe("unary Client", () => {
 
     expect(failure).toMatchObject({
       name: "TransportProtocolError",
-      code: "LIKEGO_TRANSPORT_PROTOCOL"
+      code: "GO_LIKE_TRANSPORT_PROTOCOL"
     })
     expect(subject.outcomes).toEqual([
       expectedSelectionOutcome(failure, true, true, envelope.header)
@@ -4445,8 +4445,8 @@ describe("unary Client", () => {
         expect(transportFromClientContext(ctx)).toBe(info)
         expect(info.endpoint()).toBe(selectedEndpoint.url)
         expect(info.requestHeaders()).toEqual({
-          "likego-endpoint": ["Create"],
-          "likego-service": ["orders"]
+          "go-like-endpoint": ["Create"],
+          "go-like-service": ["orders"]
         })
         expect(info.replyHeaders()).toEqual({ node: ["a"] })
         events.push(`${name}:after`)

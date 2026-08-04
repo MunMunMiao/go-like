@@ -17,9 +17,9 @@
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合业务服务、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/context` 贯穿处置仓储调用，使用 `@likego/web` 提供与运行时无关的标准 Fetch 入口，并使用 `@likego/registry` 的 round-robin selector 为改签处置选择下游服务端点。
+使用 `@go-like/context` 贯穿处置仓储调用，使用 `@go-like/web` 提供与运行时无关的标准 Fetch 入口，并使用 `@go-like/registry` 的 round-robin selector 为改签处置选择下游服务端点。
 
 ## 验证矩阵
 
@@ -31,14 +31,14 @@
 | 标准 Fetch 入口  | `test/main.test.ts` 的 HTTP 用例     |
 
 ```bash
-bun run --filter @likego/example-airline-irregular-operations typecheck
-bun run --filter @likego/example-airline-irregular-operations test:unit
+bun run --filter @go-like/example-airline-irregular-operations typecheck
+bun run --filter @go-like/example-airline-irregular-operations test:unit
 ```
 
 ## Docker 判定
 
 默认模式使用内存处置仓储，不声明已连接 GDS、航司 PSS、支付或票务系统，因此不需要 Docker。
-设置 `ZOOKEEPER_ADDRESS` 后，`@likego/registry-zookeeper` 会把当前服务注册到真实 ensemble，并在停止时
+设置 `ZOOKEEPER_ADDRESS` 后，`@go-like/registry-zookeeper` 会把当前服务注册到真实 ensemble，并在停止时
 注销；可用 `ZOOKEEPER_ROOT` 隔离路径。连接或认证失败会使生命周期失败，不会静默改用内存注册中心。
 
 ## 非目标
@@ -48,10 +48,10 @@ bun run --filter @likego/example-airline-irregular-operations test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-airline-irregular-operations start
+bun run --filter @go-like/example-airline-irregular-operations start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后请求航变处置接口：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后请求航变处置接口：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/disruptions/resolve \
@@ -59,4 +59,4 @@ curl -sS http://127.0.0.1:3000/v1/disruptions/resolve \
   -d '{"caseId":"case-demo","outcome":"rebooked"}'
 ```
 
-按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，LikeGo 会有序停止 HTTP Server。
+按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，go-like 会有序停止 HTTP Server。

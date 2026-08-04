@@ -10,19 +10,19 @@ import type {
 } from "./types"
 
 const httpName: EtcdStoreHttpError["name"] = "EtcdStoreHttpError"
-const httpCode: EtcdStoreHttpError["code"] = "LIKEGO_ETCD_STORE_HTTP"
+const httpCode: EtcdStoreHttpError["code"] = "GO_LIKE_ETCD_STORE_HTTP"
 const transportName: EtcdStoreTransportError["name"] = "EtcdStoreTransportError"
-const transportCode: EtcdStoreTransportError["code"] = "LIKEGO_ETCD_STORE_TRANSPORT"
+const transportCode: EtcdStoreTransportError["code"] = "GO_LIKE_ETCD_STORE_TRANSPORT"
 const protocolName: EtcdStoreProtocolError["name"] = "EtcdStoreProtocolError"
-const protocolCode: EtcdStoreProtocolError["code"] = "LIKEGO_ETCD_STORE_PROTOCOL"
+const protocolCode: EtcdStoreProtocolError["code"] = "GO_LIKE_ETCD_STORE_PROTOCOL"
 const compactedName: EtcdStoreCompactedError["name"] = "EtcdStoreCompactedError"
-const compactedCode: EtcdStoreCompactedError["code"] = "LIKEGO_ETCD_STORE_COMPACTED"
+const compactedCode: EtcdStoreCompactedError["code"] = "GO_LIKE_ETCD_STORE_COMPACTED"
 const leaseName: EtcdStoreLeaseLostError["name"] = "EtcdStoreLeaseLostError"
-const leaseCode: EtcdStoreLeaseLostError["code"] = "LIKEGO_ETCD_STORE_LEASE_LOST"
+const leaseCode: EtcdStoreLeaseLostError["code"] = "GO_LIKE_ETCD_STORE_LEASE_LOST"
 const uncertainName: EtcdStoreUncertainError["name"] = "EtcdStoreUncertainError"
-const uncertainCode: EtcdStoreUncertainError["code"] = "LIKEGO_ETCD_STORE_UNCERTAIN"
+const uncertainCode: EtcdStoreUncertainError["code"] = "GO_LIKE_ETCD_STORE_UNCERTAIN"
 const cleanupName: EtcdStoreCleanupError["name"] = "EtcdStoreCleanupError"
-const cleanupCode: EtcdStoreCleanupError["code"] = "LIKEGO_ETCD_STORE_CLEANUP"
+const cleanupCode: EtcdStoreCleanupError["code"] = "GO_LIKE_ETCD_STORE_CLEANUP"
 
 /** Converts one unknown safe internal failure without stringifying it. */
 export function boundaryError(value: unknown, message: string): Error {

@@ -1,7 +1,7 @@
-import { background, cause, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
-import { subscriberTerminal } from "@likego/broker/provider"
+import { background, cause, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { subscriberTerminal } from "@go-like/broker/provider"
 
 /** Describes one immutable broker payload at the portable bytes boundary. */
 export interface BrokerMessage {

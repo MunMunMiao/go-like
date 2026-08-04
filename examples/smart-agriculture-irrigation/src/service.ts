@@ -1,5 +1,5 @@
-import type { Config, ConfigObject } from "@likego/config"
-import type { Context } from "@likego/context"
+import type { Config, ConfigObject } from "@go-like/config"
+import type { Context } from "@go-like/context"
 
 import {
   decideIrrigation,
@@ -29,7 +29,7 @@ function currentPolicy(config: Config<ConfigObject>): IrrigationPolicy {
   return Object.freeze({ triggerBelowPercent, maxReadingAgeMs, maxLiters })
 }
 
-/** Creates a Context-first irrigation scheduler backed by LikeGo Config. */
+/** Creates a Context-first irrigation scheduler backed by go-like Config. */
 export function newScheduleIrrigation(
   config: Config<ConfigObject>,
   now: () => number = Date.now

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/resilience",
+  "name": "@go-like/resilience",
   "version": "0.0.1",
-  "description": "Portable Context-aware retry, circuit-breaker, and rate-limit primitives for LikeGo.",
+  "description": "Portable Context-aware retry, circuit-breaker, and rate-limit primitives for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,7 +25,7 @@
     "test:e2e:runtimes": "bun test/e2e/package-runtime.ts && tsx test/e2e/package-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/package-runtime.ts"
   },
   "dependencies": {
-    "@likego/context": "0.0.1"
+    "@go-like/context": "0.0.1"
   },
   "license": "MIT"
 }

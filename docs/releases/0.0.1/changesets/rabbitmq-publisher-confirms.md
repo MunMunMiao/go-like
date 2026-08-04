@@ -1,5 +1,5 @@
 ---
-"@likego/broker-rabbitmq": minor
+"@go-like/broker-rabbitmq": minor
 ---
 
 新增 borrowed `ConfirmChannel` Broker，并让 recovering Broker 的每个 generation 使用 publisher confirms；

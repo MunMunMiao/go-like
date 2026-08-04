@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { CallOption, CallRequest, Client } from "@likego/client"
-import { background, withCancelCause, type Context } from "@likego/context"
-import { struct } from "@likego/struct"
-import { endpoint as typedEndpoint, type Endpoint, type Message } from "@likego/transport"
-import { endpoint, request as service } from "@likego/transport/headers"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { CallOption, CallRequest, Client } from "@go-like/client"
+import { background, withCancelCause, type Context } from "@go-like/context"
+import { struct } from "@go-like/struct"
+import { endpoint as typedEndpoint, type Endpoint, type Message } from "@go-like/transport"
+import { endpoint, request as service } from "@go-like/transport/headers"
 import type { Logger } from "winston"
 
 import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "../src/index"
@@ -16,10 +16,10 @@ interface LogEntry {
   readonly fields: object
 }
 
-const secretSentinel = "LIKEGO_SECRET_SENTINEL"
+const secretSentinel = "GO_LIKE_SECRET_SENTINEL"
 
 /** Creates one secret-bearing Error with valid bounded diagnostic identifiers. */
-function secretFailure(name = "SensitiveError", code = "LIKEGO_TEST_FAILURE"): Error {
+function secretFailure(name = "SensitiveError", code = "GO_LIKE_TEST_FAILURE"): Error {
   const failure = new Error(secretSentinel, { cause: new Error(secretSentinel) })
   failure.name = name
   failure.stack = `${secretSentinel}_STACK`
@@ -90,7 +90,7 @@ function expectCompletion(
   extra: readonly string[] = []
 ): void {
   expect(entry.level).toBe(level)
-  expect(entry.message).toBe("LikeGo operation completed")
+  expect(entry.message).toBe("go-like operation completed")
   expect(field(entry, "component")).toBe(component)
   expect(field(entry, "operation")).toBe(operation)
   expect(field(entry, "outcome")).toBe(outcome)
@@ -455,7 +455,7 @@ describe("native Winston request logging", () => {
     const entry = logger.entries[0]!
     expectCompletion(entry, "error", "web", "GET", "failure", ["errorCode", "errorType"])
     expect(field(entry, "errorType")).toBe("SensitiveError")
-    expect(field(entry, "errorCode")).toBe("LIKEGO_TEST_FAILURE")
+    expect(field(entry, "errorCode")).toBe("GO_LIKE_TEST_FAILURE")
     expect(field(entry, "error")).toBeUndefined()
     expect(JSON.stringify(entry.fields)).not.toContain(secretSentinel)
     expect(JSON.stringify(entry.fields)).not.toContain("message")

@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 import type { EmergencyDispatchRepository, ResponderDirectory } from "./dispatch"
 
 export type EmergencyService = "fire" | "medical" | "police"

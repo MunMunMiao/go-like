@@ -1,4 +1,4 @@
-import { newMemoryCache } from "@likego/cache-memory"
+import { newMemoryCache } from "@go-like/cache-memory"
 import {
   newClient,
   withDiscovery,
@@ -6,10 +6,10 @@ import {
   withTransport,
   type CallRequest,
   type CallOption
-} from "@likego/client"
-import { background, type Context } from "@likego/context"
-import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@likego/registry"
-import { executor, newHTTPTransport } from "@likego/transport-http"
+} from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
+import { executor, newHTTPTransport } from "@go-like/transport-http"
 import { expect, test } from "bun:test"
 
 import { findAmountMinor } from "../src/catalog"
@@ -48,13 +48,13 @@ test("serves a product through Pricing once and then the cache", async () => {
   expect(first.status).toBe(200)
   expect(await first.json()).toEqual({
     id: "sku-001",
-    name: "LikeGo Mug",
+    name: "go-like Mug",
     price: { currency: "USD", amountMinor: 1299 }
   })
   expect(second.status).toBe(200)
   expect(await second.json()).toEqual({
     id: "sku-001",
-    name: "LikeGo Mug",
+    name: "go-like Mug",
     price: { currency: "USD", amountMinor: 1299 }
   })
   expect(pricingCalls).toBe(1)
@@ -127,7 +127,7 @@ test("retries one transient Pricing failure through the production handler", asy
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({
       id: "sku-001",
-      name: "LikeGo Mug",
+      name: "go-like Mug",
       price: { currency: "USD", amountMinor: 1299 }
     })
     expect(attempts).toBe(2)

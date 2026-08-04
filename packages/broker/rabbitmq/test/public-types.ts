@@ -1,5 +1,5 @@
-import type { Broker, Subscriber } from "@likego/broker"
-import { background } from "@likego/context"
+import type { Broker, Subscriber } from "@go-like/broker"
+import { background } from "@go-like/context"
 import type { Channel, ConfirmChannel, ConsumeMessage, RecoveringChannelModel } from "amqplib"
 import {
   newConfirmRabbitMqBroker,

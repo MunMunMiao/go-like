@@ -1,4 +1,4 @@
-import type { Store } from "@likego/store"
+import type { Store } from "@go-like/store"
 
 /** Executes one borrowed standard Web Fetch request. */
 export interface ConsulFetch {
@@ -10,7 +10,7 @@ export interface ConsulFetch {
 export interface ConsulStoreOptions {
   readonly fetch: ConsulFetch
   readonly address: string
-  /** Selects the isolated Consul KV root; defaults to `likego/store`. */
+  /** Selects the isolated Consul KV root; defaults to `go-like/store`. */
   readonly root?: string
   readonly token?: string
   readonly datacenter?: string
@@ -30,7 +30,7 @@ export type ConsulStoreOperation =
 /** Describes one non-success Consul HTTP response. */
 export interface ConsulStoreHttpError extends Error {
   readonly name: "ConsulStoreHttpError"
-  readonly code: "LIKEGO_CONSUL_STORE_HTTP"
+  readonly code: "GO_LIKE_CONSUL_STORE_HTTP"
   readonly operation: ConsulStoreOperation
   readonly status: number
 }
@@ -38,7 +38,7 @@ export interface ConsulStoreHttpError extends Error {
 /** Describes one secret-safe borrowed Fetch rejection. */
 export interface ConsulStoreTransportError extends Error {
   readonly name: "ConsulStoreTransportError"
-  readonly code: "LIKEGO_CONSUL_STORE_TRANSPORT"
+  readonly code: "GO_LIKE_CONSUL_STORE_TRANSPORT"
   readonly operation: ConsulStoreOperation
   readonly cause: Error
 }
@@ -46,14 +46,14 @@ export interface ConsulStoreTransportError extends Error {
 /** Describes malformed Consul protocol data without retaining response contents. */
 export interface ConsulStoreProtocolError extends Error {
   readonly name: "ConsulStoreProtocolError"
-  readonly code: "LIKEGO_CONSUL_STORE_PROTOCOL"
+  readonly code: "GO_LIKE_CONSUL_STORE_PROTOCOL"
   readonly operation: ConsulStoreOperation
 }
 
 /** Describes a mutation whose exact readback could not prove its outcome. */
 export interface ConsulStoreUncertainError extends Error {
   readonly name: "ConsulStoreUncertainError"
-  readonly code: "LIKEGO_CONSUL_STORE_UNCERTAIN"
+  readonly code: "GO_LIKE_CONSUL_STORE_UNCERTAIN"
   readonly operation: "write" | "delete" | "session-create" | "session-destroy"
   readonly cause: Error
 }
@@ -64,7 +64,7 @@ export type ConsulStoreUnsupportedCombination = "ttl-cas" | "cas-existing-ttl"
 /** Describes one fail-closed Consul-specific unsupported option combination. */
 export interface ConsulStoreUnsupportedCombinationError extends Error {
   readonly name: "ConsulStoreUnsupportedCombinationError"
-  readonly code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION"
+  readonly code: "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION"
   readonly combination: ConsulStoreUnsupportedCombination
 }
 

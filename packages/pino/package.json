@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/pino",
+  "name": "@go-like/pino",
   "version": "0.0.1",
-  "description": "Native Pino lifecycle and request logging adapters for LikeGo.",
+  "description": "Native Pino lifecycle and request logging adapters for go-like.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -25,13 +25,13 @@
     "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts && bun x tsx test/e2e/native-e2e.ts"
   },
   "dependencies": {
-    "@likego/broker": "0.0.1",
-    "@likego/client": "0.0.1",
-    "@likego/context": "0.0.1",
-    "@likego/core": "0.0.1",
-    "@likego/server": "0.0.1",
-    "@likego/struct": "0.0.1",
-    "@likego/transport": "0.0.1",
+    "@go-like/broker": "0.0.1",
+    "@go-like/client": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/server": "0.0.1",
+    "@go-like/struct": "0.0.1",
+    "@go-like/transport": "0.0.1",
     "@types/node": "26.1.2",
     "pino": "10.3.1"
   },

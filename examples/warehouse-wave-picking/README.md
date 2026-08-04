@@ -6,7 +6,7 @@
 ## 架构与职责
 
 - `src/service.ts`：任务与租约规则、递增 fencing token 的内存仓储及获取、完成用例。
-- `src/worker.ts`：把工人的租约所有权实现为结构式 LikeGo `Server`；
+- `src/worker.ts`：把工人的租约所有权实现为结构式 go-like `Server`；
   `start` 获取租约，Core 反向排空时由 `stop` 释放租约。
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合租约 Worker、HTTP Server 与进程信号。
@@ -23,10 +23,10 @@
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-warehouse-wave-picking start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-warehouse-wave-picking start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后，为预置任务 `wave-1` 获取租约：
+看到 `GO_LIKE_EXAMPLE_READY` 后，为预置任务 `wave-1` 获取租约：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/pick-tasks/wave-1/lease \

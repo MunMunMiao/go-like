@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, withTimeout, type Context } from "@likego/context"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+import { background, withCancelCause, withTimeout, type Context } from "@go-like/context"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 
 import { decodeDNSPacket, encodeDNSPacket, type DNSRecord, type DNSSRVData } from "../src/dns"
 import {
@@ -248,14 +248,14 @@ describe("mDNS Registry boundaries", () => {
       bindDatagram: base.bindDatagram
     }
     await expect(newMDNSRegistry(unavailable).getService(background(), "x")).rejects.toMatchObject({
-      code: "LIKEGO_UNSUPPORTED_REGISTRY_CAPABILITY"
+      code: "GO_LIKE_UNSUPPORTED_REGISTRY_CAPABILITY"
     })
     await expect(
       newMDNSRegistry(base, interfaces("missing")).getService(background(), "x")
     ).rejects.toThrow(TypeError)
     await expect(
       newMDNSRegistry(base).register(background(), instance("http://127.0.0.2:8080/"))
-    ).rejects.toMatchObject({ code: "LIKEGO_UNSUPPORTED_REGISTRY_CAPABILITY" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_UNSUPPORTED_REGISTRY_CAPABILITY" })
     expect(network.activeSockets()).toBe(0)
   })
 
@@ -718,7 +718,7 @@ describe("mDNS Registry boundaries", () => {
 
   test("fails a watcher closed on managed identity and RR-graph conflicts", async () => {
     const current = instance()
-    const canonical = await instanceRecords(current, "likego.", 2, 65_536)
+    const canonical = await instanceRecords(current, "go-like.", 2, 65_536)
     const identityOwner = canonical.find((record) => record.type === "SRV")?.name
     if (identityOwner === undefined) throw new Error("fixture identity owner is missing")
     const fakeOwner = `li-${"a".repeat(52)}.${identityOwner.split(".").slice(1).join(".")}`
@@ -744,16 +744,16 @@ describe("mDNS Registry boundaries", () => {
       "invalid-owner-publisher",
       response([
         {
-          name: `li-${"b".repeat(52)}.likego.`,
+          name: `li-${"b".repeat(52)}.go-like.`,
           type: "TXT",
           ttl: 2,
           flush: true,
-          data: [new TextEncoder().encode("Likego-Wire-Version=2")]
+          data: [new TextEncoder().encode("Go-Like-Wire-Version=2")]
         }
       ])
     )
     await expect(invalidOwnerPending).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     expect(invalidOwnerNetwork.activeSockets()).toBe(0)
 
@@ -765,7 +765,7 @@ describe("mDNS Registry boundaries", () => {
     const renamedPending = renamedWatcher.next(background())
     await sendRaw(renamedNetwork, "renamed-publisher", response(renamed))
     await expect(renamedPending).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     expect(renamedNetwork.activeSockets()).toBe(0)
 
@@ -791,7 +791,7 @@ describe("mDNS Registry boundaries", () => {
     const conflictPending = conflictWatcher.next(background())
     await sendRaw(conflictNetwork, "conflict-publisher", response(conflicting))
     await expect(conflictPending).rejects.toMatchObject({
-      code: "LIKEGO_REGISTRY_PROTOCOL"
+      code: "GO_LIKE_REGISTRY_PROTOCOL"
     })
     expect(conflictNetwork.activeSockets()).toBe(0)
   })
@@ -801,7 +801,7 @@ describe("mDNS Registry boundaries", () => {
       ...instance(),
       endpoints: ["http://127.0.0.1:8080/", "http://[::1]:8080/"]
     }
-    const records = await instanceRecords(current, "likego.", 2, 65_536)
+    const records = await instanceRecords(current, "go-like.", 2, 65_536)
     for (const mode of ["no-address", "missing-ipv6"] as const) {
       const network = newMemoryMDNSNetwork()
       const watcher = await newMDNSRegistry(
@@ -827,17 +827,17 @@ describe("mDNS Registry boundaries", () => {
       queryTimeout(5)
     ).watch(background(), "boundary-service")
     const irrelevant: DNSRecord = {
-      name: "noise.likego.",
+      name: "noise.go-like.",
       type: "PTR",
       ttl: 2,
       flush: false,
-      data: "target.likego."
+      data: "target.go-like."
     }
     for (let index = 0; index < 65; index += 1) {
       await sendRaw(
         publisherNetwork,
         `publisher-limit-${index}`,
-        response([{ ...irrelevant, name: `noise-${index}.likego.` }])
+        response([{ ...irrelevant, name: `noise-${index}.go-like.` }])
       )
     }
     await receiverTurn()
@@ -851,7 +851,7 @@ describe("mDNS Registry boundaries", () => {
     ).watch(background(), "boundary-service")
     const packets: Uint8Array[] = []
     for (let index = 0; index < 257; index += 1) {
-      packets.push(response([{ ...irrelevant, name: `record-${index}.likego.` }]))
+      packets.push(response([{ ...irrelevant, name: `record-${index}.go-like.` }]))
     }
     await sendPackets(recordNetwork, "record-limit-publisher", packets)
     await receiverTurn()
@@ -870,7 +870,7 @@ describe("mDNS Registry boundaries", () => {
       "utf8-publisher",
       response([
         {
-          name: "noise.likego.",
+          name: "noise.go-like.",
           type: "TXT",
           ttl: 2,
           flush: true,
@@ -896,14 +896,14 @@ describe("mDNS Registry boundaries", () => {
     await sendRaw(
       network,
       "ipv6-first",
-      response(await instanceRecords(initial, "likego.", 2, 65_536)),
+      response(await instanceRecords(initial, "go-like.", 2, 65_536)),
       "ipv6"
     )
     expect(await next(watcher)).toEqual([initial])
     await sendRaw(
       network,
       "ipv6-second",
-      response(await instanceRecords(updated, "likego.", 2, 65_536)),
+      response(await instanceRecords(updated, "go-like.", 2, 65_536)),
       "ipv6"
     )
     expect(await next(watcher)).toEqual([updated])

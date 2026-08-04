@@ -16,7 +16,7 @@ function signalExitCode(value: NodeJS.Signals): number {
 
 /** Adds Node-compatible process signals to the owning App lifecycle. */
 export function signal(
-  ...signals: readonly NodeJS.Signals[] /* likego-typed-rest: preserves the Go-style functional-option ABI. */
+  ...signals: readonly NodeJS.Signals[] /* go-like-typed-rest: preserves the Go-style functional-option ABI. */
 ): AppOption {
   const selected: NodeJS.Signals[] = []
   if (signals.length === 0) {

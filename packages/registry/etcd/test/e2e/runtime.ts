@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newEtcdRegistry } from "@likego/registry-etcd"
+import { background } from "@go-like/context"
+import { newEtcdRegistry } from "@go-like/registry-etcd"
 
 let requests = 0
 

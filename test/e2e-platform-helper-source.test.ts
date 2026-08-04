@@ -4,17 +4,17 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 const Root = resolve(import.meta.dir, "..")
-const PosixSource = resolve(Root, "e2e/harness/native/likego_e2e_posix_controller.c")
-const PosixProtocol = resolve(Root, "e2e/harness/native/likego_e2e_posix_protocol.h")
-const PosixFilesystemSource = resolve(Root, "e2e/harness/native/likego_e2e_posix_filesystem.c")
+const PosixSource = resolve(Root, "e2e/harness/native/go-like_e2e_posix_controller.c")
+const PosixProtocol = resolve(Root, "e2e/harness/native/go-like_e2e_posix_protocol.h")
+const PosixFilesystemSource = resolve(Root, "e2e/harness/native/go-like_e2e_posix_filesystem.c")
 const PosixFilesystemProtocol = resolve(
   Root,
-  "e2e/harness/native/likego_e2e_posix_filesystem_protocol.h"
+  "e2e/harness/native/go-like_e2e_posix_filesystem_protocol.h"
 )
 
 test("POSIX controller source compiles strictly and passes its self-test on macOS", async () => {
   if (process.platform !== "darwin") return
-  const output = join(tmpdir(), `likego-e2e-posix-controller-test-${process.pid}`)
+  const output = join(tmpdir(), `go-like-e2e-posix-controller-test-${process.pid}`)
   try {
     const compile = Bun.spawnSync(
       [
@@ -45,7 +45,7 @@ test("POSIX controller source compiles strictly and passes its self-test on macO
 
 test("POSIX filesystem broker compiles strictly and retains relative-operation primitives", async () => {
   if (process.platform !== "darwin" && process.platform !== "linux") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-e2e-fs-source-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-e2e-fs-source-"))
   const output = join(directory, "filesystem-broker")
   try {
     const compile = Bun.spawnSync(
@@ -100,15 +100,15 @@ test("POSIX protocol keeps control, target output, argv, and environment separat
   expect(protocol).toContain("fd 4: target stdout")
   expect(protocol).toContain("fd 5: target stderr")
   expect(protocol).toContain("Target argv and target environment exist only in PREPARE payload")
-  expect(protocol).toContain("LIKEGO_E2E_MAX_FRAME_BODY")
-  expect(protocol).toContain("LIKEGO_E2E_ERROR_TRUNCATED_FRAME")
+  expect(protocol).toContain("GO_LIKE_E2E_MAX_FRAME_BODY")
+  expect(protocol).toContain("GO_LIKE_E2E_ERROR_TRUNCATED_FRAME")
   expect(source).toContain("setsid()")
-  expect(source).toContain("LIKEGO_E2E_MACOS_MAX_KILL_ROUNDS")
-  expect(source).toContain("LIKEGO_E2E_REQUEST_HARD_TERMINATE")
-  expect(source).toContain("frame->type != LIKEGO_E2E_REQUEST_HARD_TERMINATE")
+  expect(source).toContain("GO_LIKE_E2E_MACOS_MAX_KILL_ROUNDS")
+  expect(source).toContain("GO_LIKE_E2E_REQUEST_HARD_TERMINATE")
+  expect(source).toContain("frame->type != GO_LIKE_E2E_REQUEST_HARD_TERMINATE")
   expect(source).toContain("result = finalize_strict_cgroup(controller")
   expect(source).toContain("result = finalize_anchored(controller, include_term_phase")
-  expect(protocol).toContain("LIKEGO_E2E_REQUEST_HARD_TERMINATE = 0x0008")
+  expect(protocol).toContain("GO_LIKE_E2E_REQUEST_HARD_TERMINATE = 0x0008")
   expect(protocol).toContain("Request flags remain zero")
   expect(protocol).toContain("and never select this policy")
   expect(source).toContain("cgroup.kill")

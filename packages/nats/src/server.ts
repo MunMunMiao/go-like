@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Server } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type { Subscription } from "@nats-io/transport-node"
 
 /** Creates one official NATS Core Subscription for lifecycle ownership at start time. */
@@ -12,21 +12,21 @@ export type NatsCoreSubscriptionSource = Subscription | NatsCoreSubscriptionFact
 /** Describes a rejected attempt to restart a one-shot NATS Core server. */
 export interface NatsCoreAlreadyStartedError extends Error {
   readonly name: "NatsCoreAlreadyStartedError"
-  readonly code: "LIKEGO_NATS_CORE_ALREADY_STARTED"
+  readonly code: "GO_LIKE_NATS_CORE_ALREADY_STARTED"
   readonly status: Exclude<NatsCoreServerState, "idle">
 }
 
 /** Describes an official Subscription that closed outside its owner stop. */
 export interface NatsCoreUnexpectedExitError extends Error {
   readonly name: "NatsCoreUnexpectedExitError"
-  readonly code: "LIKEGO_NATS_CORE_UNEXPECTED_EXIT"
+  readonly code: "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT"
   readonly cause: Error | null
 }
 
 /** Describes a Subscription that required unsubscribe after its drain boundary. */
 export interface NatsCoreDrainTimeoutError extends Error {
   readonly name: "NatsCoreDrainTimeoutError"
-  readonly code: "LIKEGO_NATS_CORE_DRAIN_TIMEOUT"
+  readonly code: "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT"
   readonly timeoutMs: number
   readonly forced: true
 }
@@ -47,11 +47,11 @@ interface NatsCoreStopOperation {
 }
 
 const alreadyStartedName: NatsCoreAlreadyStartedError["name"] = "NatsCoreAlreadyStartedError"
-const alreadyStartedCode: NatsCoreAlreadyStartedError["code"] = "LIKEGO_NATS_CORE_ALREADY_STARTED"
+const alreadyStartedCode: NatsCoreAlreadyStartedError["code"] = "GO_LIKE_NATS_CORE_ALREADY_STARTED"
 const unexpectedExitName: NatsCoreUnexpectedExitError["name"] = "NatsCoreUnexpectedExitError"
-const unexpectedExitCode: NatsCoreUnexpectedExitError["code"] = "LIKEGO_NATS_CORE_UNEXPECTED_EXIT"
+const unexpectedExitCode: NatsCoreUnexpectedExitError["code"] = "GO_LIKE_NATS_CORE_UNEXPECTED_EXIT"
 const drainTimeoutName: NatsCoreDrainTimeoutError["name"] = "NatsCoreDrainTimeoutError"
-const drainTimeoutCode: NatsCoreDrainTimeoutError["code"] = "LIKEGO_NATS_CORE_DRAIN_TIMEOUT"
+const drainTimeoutCode: NatsCoreDrainTimeoutError["code"] = "GO_LIKE_NATS_CORE_DRAIN_TIMEOUT"
 const forced: NatsCoreDrainTimeoutError["forced"] = true
 const maximumTimerDelayMs = 2_147_483_647
 
@@ -296,7 +296,7 @@ function ownSubscriptionStop(
 /** Creates a one-shot structural Server that owns only a native Subscription lifecycle. */
 export function newNatsCoreServer(
   source: NatsCoreSubscriptionSource,
-  ...options: readonly NatsCoreOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly NatsCoreOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): Server {
   const config: NatsCoreConfig = { drainTimeoutMs: 25_000 }
   for (const option of options) option(config)

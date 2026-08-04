@@ -1,7 +1,7 @@
 /// <reference lib="es2024.promise" />
 
-import { background, cause, type Context } from "@likego/context"
-import type { StoreRecord } from "@likego/store"
+import { background, cause, type Context } from "@go-like/context"
+import type { StoreRecord } from "@go-like/store"
 import {
   compareStoreKeys,
   deleteOptions,
@@ -11,8 +11,8 @@ import {
   snapshotStoreRecord,
   snapshotStoreRecordInput,
   writeOptions
-} from "@likego/store/provider"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/store/provider"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import type {
   FileStore,
@@ -72,8 +72,8 @@ interface CursorCandidate {
   readonly offset?: unknown
 }
 
-const SnapshotName = ".likego-store.snapshot"
-const TempName = ".likego-store.tmp"
+const SnapshotName = ".go-like-store.snapshot"
+const TempName = ".go-like-store.tmp"
 const SnapshotSchemaVersion = 1
 const CursorVersion = 1
 const Base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -199,7 +199,7 @@ export function newFileStoreCorruptionError(
   const error = new Error(`File Store snapshot failed ${reason} validation`)
   const details: Pick<FileStoreCorruptionError, "name" | "code" | "reason"> = {
     name: "FileStoreCorruptionError",
-    code: "LIKEGO_FILE_STORE_CORRUPTION",
+    code: "GO_LIKE_FILE_STORE_CORRUPTION",
     reason
   }
   return Object.freeze(Object.assign(error, details))
@@ -210,7 +210,7 @@ export function newFileStoreLockedError(): FileStoreLockedError {
   const error = new Error("File Store directory is already owned")
   const details: Pick<FileStoreLockedError, "name" | "code"> = {
     name: "FileStoreLockedError",
-    code: "LIKEGO_FILE_STORE_LOCKED"
+    code: "GO_LIKE_FILE_STORE_LOCKED"
   }
   return Object.freeze(Object.assign(error, details))
 }
@@ -234,7 +234,7 @@ export function newFileStoreStateError(
   const error = new Error(`${selectedOperation} is invalid while File Store state is ${state}`)
   const details: Pick<FileStoreStateError, "name" | "code" | "operation" | "state"> = {
     name: "FileStoreStateError",
-    code: "LIKEGO_FILE_STORE_STATE",
+    code: "GO_LIKE_FILE_STORE_STATE",
     operation: selectedOperation,
     state
   }

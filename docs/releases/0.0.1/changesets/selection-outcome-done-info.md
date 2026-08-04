@@ -1,6 +1,6 @@
 ---
-"@likego/registry": minor
-"@likego/client": minor
+"@go-like/registry": minor
+"@go-like/client": minor
 ---
 
 扩展 selector feedback 的 `SelectionOutcome`，对齐 Kratos `DoneInfo` 的响应 metadata 与

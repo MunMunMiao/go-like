@@ -1,5 +1,5 @@
-import { background, withCancelCause, withTimeout } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause, withTimeout } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { encodeRecord, instancePath, servicePath, servicesPath } from "../src/codec"
@@ -57,7 +57,7 @@ function mismatchedReadbackRegistry(
       async data(path: string, signal: AbortSignal) {
         if (corrupt) {
           corrupt = false
-          return encodeRecord("/likego/registry/v1", replacement).data
+          return encodeRecord("/go-like/registry/v1", replacement).data
         }
         return client.data(path, signal)
       },
@@ -104,7 +104,7 @@ test("reads, deterministic registration, update, and cleanup align the root cont
   const initial = fixture("initial")
   await subject.register(background(), initial)
   expect(await subject.getService(background(), initial.name)).toEqual([initial])
-  expect(zookeeper.paths()).toContain(instancePath("/likego/registry/v1", initial.name, initial.id))
+  expect(zookeeper.paths()).toContain(instancePath("/go-like/registry/v1", initial.name, initial.id))
   const updated = fixture("updated")
   await subject.register(background(), updated)
   expect(await subject.getService(background(), initial.name)).toEqual([updated])
@@ -131,9 +131,9 @@ test("watch returns complete replacement snapshots and re-arms after a dropped n
   expect(await watcher.next(background())).toEqual([])
   await watcher.stop(background())
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_STOPPED"
+    code: "GO_LIKE_WATCHER_STOPPED"
   })
-  expect(zookeeper.watchCount(servicePath("/likego/registry/v1", initial.name))).toBeGreaterThan(1)
+  expect(zookeeper.watchCount(servicePath("/go-like/registry/v1", initial.name))).toBeGreaterThan(1)
   expect(zookeeper.activeSessions()).toBe(0)
 })
 
@@ -161,15 +161,15 @@ test("watch buffer overflow and malformed provider records fail closed", async (
   await subject.register(background(), { ...fixture("initial", name), id: "one" })
   await subject.register(background(), { ...fixture("initial", name), id: "two" })
   await expect(watcher.next(background())).rejects.toMatchObject({
-    code: "LIKEGO_WATCHER_OVERFLOW"
+    code: "GO_LIKE_WATCHER_OVERFLOW"
   })
 
   const corrupt = fakeZookeeper()
   const reader = registry(corrupt)
-  const path = instancePath("/likego/registry/v1", "corrupt", "id")
+  const path = instancePath("/go-like/registry/v1", "corrupt", "id")
   const raw = await corrupt.putRaw(path, new TextEncoder().encode("{"))
   await expect(reader.getService(background(), "corrupt")).rejects.toMatchObject({
-    code: "LIKEGO_REGISTRY_PROTOCOL"
+    code: "GO_LIKE_REGISTRY_PROTOCOL"
   })
   await raw.close(new AbortController().signal)
 })
@@ -180,8 +180,8 @@ test("tree helpers leave only provider roots after deregistration", async () => 
   const value = fixture("initial", "prune")
   await subject.register(background(), value)
   await subject.deregister(background(), value)
-  expect(zookeeper.paths()).toContain(servicesPath("/likego/registry/v1"))
-  expect(zookeeper.paths()).not.toContain(servicePath("/likego/registry/v1", value.name))
+  expect(zookeeper.paths()).toContain(servicesPath("/go-like/registry/v1"))
+  expect(zookeeper.paths()).not.toContain(servicePath("/go-like/registry/v1", value.name))
 })
 
 test("discovery validates names, closes best effort, and rejects failed watch admission", async () => {
@@ -212,7 +212,7 @@ test("watcher waits honor caller cancellation and stop rejects remaining waiters
 
   const stopped = watcher.next(background())
   await watcher.stop(background())
-  await expect(stopped).rejects.toMatchObject({ code: "LIKEGO_WATCHER_STOPPED" })
+  await expect(stopped).rejects.toMatchObject({ code: "GO_LIKE_WATCHER_STOPPED" })
   expect(zookeeper.activeSessions()).toBe(0)
 })
 
@@ -292,7 +292,7 @@ test("watcher native state terminals fail pending waits", async () => {
   authentication.emitConnected()
   const authWait = authWatcher.next(background())
   authentication.emitAuthenticationFailure()
-  await expect(authWait).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+  await expect(authWait).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
   await authWatcher.stop(background())
 
   const terminal = fakeZookeeper()
@@ -505,7 +505,7 @@ test("registration readback mismatch rolls back or reports an aggregate rollback
   ).rejects.toThrow("readback differs")
   expect(rollback.activeSessions()).toBe(0)
   expect(rollback.paths()).not.toContain(
-    instancePath("/likego/registry/v1", initial.name, initial.id)
+    instancePath("/go-like/registry/v1", initial.name, initial.id)
   )
 
   const failedRollback = fakeZookeeper()

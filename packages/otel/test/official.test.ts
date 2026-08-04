@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { MeterProvider } from "@opentelemetry/sdk-metrics"
 import { TracerProvider } from "@opentelemetry/sdk-trace"

@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Listener, ListenOptions, TLSConfig, Transport } from "@likego/transport"
+import type { Context } from "@go-like/context"
+import type { Listener, ListenOptions, TLSConfig, Transport } from "@go-like/transport"
 
 /** Executes one standard Fetch request. */
 export interface HTTPExecutor {
@@ -78,7 +78,7 @@ export interface HTTPServeHandle {
   done(): Promise<void>
 }
 
-/** Implements LikeGo Transport with a portable unary HTTP wire. */
+/** Implements go-like Transport with a portable unary HTTP wire. */
 export interface HTTPTransport extends Transport {
   /** Binds one HTTP listener through a borrowed runtime host. */
   listen(
@@ -97,7 +97,7 @@ export interface HTTPListener extends Listener {
 /** Describes a bounded non-200 HTTP response. */
 export interface HTTPStatusError extends Error {
   readonly name: "HTTPStatusError"
-  readonly code: "LIKEGO_HTTP_STATUS"
+  readonly code: "GO_LIKE_HTTP_STATUS"
   readonly status: number
   readonly statusText: string
   readonly body: Uint8Array
@@ -107,7 +107,7 @@ export interface HTTPStatusError extends Error {
 /** Describes a runtime host or serve loop that ended without an upstream Error. */
 export interface HTTPTransportUnexpectedExitError extends Error {
   readonly name: "HTTPTransportUnexpectedExitError"
-  readonly code: "LIKEGO_HTTP_TRANSPORT_UNEXPECTED_EXIT"
+  readonly code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT"
   readonly source: "serve" | "host"
   readonly phase: "before-ready" | "running"
 }

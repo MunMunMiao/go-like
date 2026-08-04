@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { cursor, expiresIn, ifRevision, limit, prefix } from "@likego/store"
+import { background } from "@go-like/context"
+import { cursor, expiresIn, ifRevision, limit, prefix } from "@go-like/store"
 import { describe, expect, test } from "bun:test"
 
 import { encodeRecordPayload, encodeText } from "../src/codec"
@@ -63,7 +63,7 @@ async function raw(
   return Object.fromEntries(Object.entries(value))
 }
 
-/** Seeds one physically leased row whose LikeGo visibility already expired. */
+/** Seeds one physically leased row whose go-like visibility already expired. */
 async function seedExpired(fetch: EtcdStoreFetch, key: string): Promise<string> {
   const granted = await raw(fetch, "/v3/lease/grant", { TTL: "100" })
   const lease = property(granted, "ID")
@@ -113,7 +113,7 @@ describe("Store declared boundaries", () => {
     await expect(
       value.delete(background(), "bounds/missing", ifRevision("1"))
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       actualRevision: null
     })
   })
@@ -164,7 +164,7 @@ describe("lease cleanup", () => {
     )
     rejectRevoke = true
     await expect(value.delete(background(), "lease/cleanup")).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_STORE_CLEANUP",
+      code: "GO_LIKE_ETCD_STORE_CLEANUP",
       operation: "delete",
       committed: true
     })
@@ -202,7 +202,7 @@ describe("write races and uncertainty", () => {
         ifRevision(initial.revision),
         expiresIn(10_000)
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT" })
     expect(backend.leaseCount()).toBe(0)
 
     race = true
@@ -232,7 +232,7 @@ describe("write races and uncertainty", () => {
         { key: "write/deterministic", value: new Uint8Array() },
         expiresIn(10_000)
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_HTTP", status: 400 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_HTTP", status: 400 })
     expect(backend.leaseCount()).toBe(0)
     rejectCleanup = true
     const aggregate = await value
@@ -269,7 +269,7 @@ describe("write races and uncertainty", () => {
         { key: "write/lease-lost", value: new Uint8Array() },
         expiresIn(10_000)
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_LEASE_LOST" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_LEASE_LOST" })
     expect(backend.size()).toBe(0)
     expect(backend.leaseCount()).toBe(0)
   })
@@ -306,7 +306,7 @@ describe("write races and uncertainty", () => {
         key: "uncertain/absent",
         value: new Uint8Array([1])
       })
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_UNCERTAIN" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_UNCERTAIN" })
 
     const unreadableBackend = fakeEtcd()
     let rangeCalls = 0
@@ -322,7 +322,7 @@ describe("write races and uncertainty", () => {
         key: "uncertain/unreadable",
         value: new Uint8Array([1])
       })
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_UNCERTAIN" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_UNCERTAIN" })
   })
 
   test("cleans detached uncertain TTL leases and reports cleanup uncertainty", async () => {
@@ -347,7 +347,7 @@ describe("write races and uncertainty", () => {
           expiresIn(10_000)
         )
         .catch((reason: unknown) => reason)
-      expect(errorCode(error)).toBe("LIKEGO_ETCD_STORE_UNCERTAIN")
+      expect(errorCode(error)).toBe("GO_LIKE_ETCD_STORE_UNCERTAIN")
       expect(backend.leaseCount()).toBe(cleanupFails ? 1 : 0)
       backend.reset()
     }
@@ -409,7 +409,7 @@ describe("delete races and uncertainty", () => {
     })
     armed = true
     await expect(unreadable.delete(background(), "delete/unreadable")).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_STORE_UNCERTAIN"
+      code: "GO_LIKE_ETCD_STORE_UNCERTAIN"
     })
     armed = false
     await unreadable.delete(background(), "delete/unreadable")
@@ -434,7 +434,7 @@ describe("delete races and uncertainty", () => {
     })
     replace = true
     await expect(foreign.delete(background(), "delete/foreign")).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_STORE_UNCERTAIN"
+      code: "GO_LIKE_ETCD_STORE_UNCERTAIN"
     })
     expect((await competitor.read(background(), "delete/foreign"))?.value).toEqual(
       new Uint8Array([2])
@@ -465,7 +465,7 @@ describe("delete races and uncertainty", () => {
       if (conditional) {
         await expect(
           value.delete(background(), `delete/race/${conditional}`, ifRevision(initial.revision))
-        ).rejects.toMatchObject({ code: "LIKEGO_STORE_CONFLICT" })
+        ).rejects.toMatchObject({ code: "GO_LIKE_STORE_CONFLICT" })
         await competitor.delete(background(), `delete/race/${conditional}`)
       } else {
         expect(await value.delete(background(), `delete/race/${conditional}`)).toBeTrue()
@@ -480,7 +480,7 @@ describe("delete races and uncertainty", () => {
     await expect(
       value.delete(background(), "delete/expired-cas", ifRevision("stale"))
     ).rejects.toMatchObject({
-      code: "LIKEGO_STORE_CONFLICT",
+      code: "GO_LIKE_STORE_CONFLICT",
       actualRevision: null
     })
     expect(backend.size()).toBe(0)
@@ -530,7 +530,7 @@ describe("stable pagination failures", () => {
     compact = true
     await expect(
       value.list(background(), prefix("page/"), limit(1), cursor(first.cursor))
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_COMPACTED" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_COMPACTED" })
     compact = false
     for (const key of ["page/a", "page/b"]) await value.delete(background(), key)
 
@@ -546,7 +546,7 @@ describe("stable pagination failures", () => {
     })
     malformed = true
     await expect(malformedStore.list(background())).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_STORE_PROTOCOL"
+      code: "GO_LIKE_ETCD_STORE_PROTOCOL"
     })
   })
 
@@ -577,7 +577,7 @@ describe("stable pagination failures", () => {
     })
     inject = true
     await expect(value.list(background(), limit(1))).rejects.toMatchObject({
-      code: "LIKEGO_ETCD_STORE_PROTOCOL"
+      code: "GO_LIKE_ETCD_STORE_PROTOCOL"
     })
   })
 })

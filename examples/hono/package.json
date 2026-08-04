@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-hono",
+  "name": "@go-like/example-hono",
   "private": true,
-  "description": "Hono Fetch router composed with the LikeGo Node host.",
+  "description": "Hono Fetch router composed with the go-like Node host.",
   "type": "module",
   "exports": {
     ".": "./src/app.ts"
@@ -19,9 +19,9 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- tsx test/node-e2e.ts"
   },
   "dependencies": {
-    "@likego/context": "workspace:*",
-    "@likego/core": "workspace:*",
-    "@likego/web": "workspace:*",
+    "@go-like/context": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@go-like/web": "workspace:*",
     "hono": "4.12.34"
   },
   "devDependencies": {

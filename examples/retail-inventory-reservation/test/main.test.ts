@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newReservationHandler } from "../src/http"
 import { newRetailInventoryService } from "../src/service"
@@ -51,7 +51,7 @@ describe("retail inventory reservation", () => {
     ).rejects.toThrow("idempotency conflict")
   })
 
-  test("serves and refreshes inventory through the LikeGo cache", async () => {
+  test("serves and refreshes inventory through the go-like cache", async () => {
     const service = newTestService({ mug: 5 })
     const initial = await service.handler(new Request("https://example.test/v1/inventory/mug"))
     expect(initial.status).toBe(200)

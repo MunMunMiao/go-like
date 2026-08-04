@@ -5,9 +5,9 @@ import {
   type ConfigSourceSnapshot,
   type ConfigSourceWatcher,
   type ConfigValue
-} from "@likego/config"
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/config"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 /** Executes one standard Web Fetch request without transferring Fetch ownership. */
 export type EtcdFetch = (request: Request) => Promise<Response>
@@ -29,20 +29,20 @@ export interface EtcdSourceOptions {
 
 export interface EtcdHttpError extends Error {
   readonly name: "EtcdHttpError"
-  readonly code: "LIKEGO_ETCD_HTTP"
+  readonly code: "GO_LIKE_ETCD_HTTP"
   readonly operation: "range" | "watch"
   readonly status: number
 }
 
 export interface EtcdProtocolError extends Error {
   readonly name: "EtcdProtocolError"
-  readonly code: "LIKEGO_ETCD_PROTOCOL"
+  readonly code: "GO_LIKE_ETCD_PROTOCOL"
   readonly operation: "range" | "watch"
 }
 
 export interface EtcdTransportError extends Error {
   readonly name: "EtcdTransportError"
-  readonly code: "LIKEGO_ETCD_TRANSPORT"
+  readonly code: "GO_LIKE_ETCD_TRANSPORT"
   readonly operation: "range" | "watch"
 }
 
@@ -182,7 +182,7 @@ function newHttpError(operation: Operation, status: number): EtcdHttpError {
   const error = new Error(`etcd ${operation} request failed with HTTP ${status}`)
   const details: Pick<EtcdHttpError, "name" | "code" | "operation" | "status"> = {
     name: "EtcdHttpError",
-    code: "LIKEGO_ETCD_HTTP",
+    code: "GO_LIKE_ETCD_HTTP",
     operation,
     status
   }
@@ -194,7 +194,7 @@ function newTransportError(operation: Operation): EtcdTransportError {
   const error = new Error(`etcd ${operation} transport failed`)
   const details: Pick<EtcdTransportError, "name" | "code" | "operation"> = {
     name: "EtcdTransportError",
-    code: "LIKEGO_ETCD_TRANSPORT",
+    code: "GO_LIKE_ETCD_TRANSPORT",
     operation
   }
   return Object.freeze(Object.assign(error, details))
@@ -205,7 +205,7 @@ function newProtocolError(operation: Operation): EtcdProtocolError {
   const error = new Error(`etcd ${operation} response was invalid`)
   const details: Pick<EtcdProtocolError, "name" | "code" | "operation"> = {
     name: "EtcdProtocolError",
-    code: "LIKEGO_ETCD_PROTOCOL",
+    code: "GO_LIKE_ETCD_PROTOCOL",
     operation
   }
   return Object.freeze(Object.assign(error, details))
@@ -280,8 +280,8 @@ function waitForInterval(signal: AbortSignal, timeoutMs: number): Promise<void> 
 
 /** Classifies only transport, overload, timeout, and server failures as retryable. */
 function retryable(value: unknown): boolean {
-  if (property(value, "code") === "LIKEGO_ETCD_TRANSPORT") return true
-  if (property(value, "code") !== "LIKEGO_ETCD_HTTP") return false
+  if (property(value, "code") === "GO_LIKE_ETCD_TRANSPORT") return true
+  if (property(value, "code") !== "GO_LIKE_ETCD_HTTP") return false
   const status = property(value, "status")
   return (
     typeof status === "number" &&

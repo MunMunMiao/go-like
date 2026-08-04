@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Metadata } from "@likego/metadata"
+import type { Context } from "@go-like/context"
+import type { Metadata } from "@go-like/metadata"
 
 /** Configures and creates internal service transport clients and listeners. */
 export interface Transport {
@@ -150,27 +150,27 @@ export type ListenOption = <T extends ListenOptions>(options: T) => T
 /** Describes an operation attempted on a closed transport resource. */
 export interface TransportClosedError extends Error {
   readonly name: "TransportClosedError"
-  readonly code: "LIKEGO_TRANSPORT_CLOSED"
+  readonly code: "GO_LIKE_TRANSPORT_CLOSED"
   readonly cause: Error | undefined
 }
 
 /** Describes an invalid transport state transition. */
 export interface TransportStateError extends Error {
   readonly name: "TransportStateError"
-  readonly code: "LIKEGO_TRANSPORT_STATE"
+  readonly code: "GO_LIKE_TRANSPORT_STATE"
   readonly cause: Error | undefined
 }
 
 /** Describes an explicitly requested capability that an implementation cannot honor. */
 export interface UnsupportedTransportCapabilityError extends Error {
   readonly name: "UnsupportedTransportCapabilityError"
-  readonly code: "LIKEGO_TRANSPORT_UNSUPPORTED_CAPABILITY"
+  readonly code: "GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY"
   readonly cause: Error | undefined
 }
 
 /** Describes invalid transport wire data or protocol behavior. */
 export interface TransportProtocolError extends Error {
   readonly name: "TransportProtocolError"
-  readonly code: "LIKEGO_TRANSPORT_PROTOCOL"
+  readonly code: "GO_LIKE_TRANSPORT_PROTOCOL"
   readonly cause: Error | undefined
 }

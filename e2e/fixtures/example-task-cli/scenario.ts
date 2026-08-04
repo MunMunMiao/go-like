@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises"
 
 const mode = process.argv[2]
-const markerPath = process.env.LIKEGO_TEST_SCENARIO_MARKER
+const markerPath = process.env.GO_LIKE_TEST_SCENARIO_MARKER
 if (markerPath === undefined || markerPath.length === 0) {
   throw new Error("example-task CLI fixture scenario marker is unavailable")
 }

@@ -45,7 +45,7 @@ export async function canonicalTempRoot(): Promise<string> {
 
 /** Creates one validated opaque directory handle under the canonical user temp root. */
 export async function createTempDirectory(prefix: string): Promise<TempDirectory> {
-  if (!TempPrefixPattern.test(prefix)) throw new Error("invalid LikeGo temp directory prefix")
+  if (!TempPrefixPattern.test(prefix)) throw new Error("invalid go-like temp directory prefix")
   const root = await createSecureTempDirectory(prefix)
   const directory = Object.freeze({ path: secureDirectoryPath(root) })
   issuedDirectories.set(directory, { root, children: [], closing: false })
@@ -55,18 +55,18 @@ export async function createTempDirectory(prefix: string): Promise<TempDirectory
 function stateFor(directory: TempDirectory): DirectoryState {
   const state = issuedDirectories.get(directory)
   if (state === undefined || state.closing) {
-    throw new Error("unknown LikeGo temp directory handle")
+    throw new Error("unknown go-like temp directory handle")
   }
   return state
 }
 
 function validateComponentPaths(componentPaths: readonly (readonly string[])[]): void {
-  if (componentPaths.length === 0) throw new Error("LikeGo temp subdirectories require a path")
+  if (componentPaths.length === 0) throw new Error("go-like temp subdirectories require a path")
   for (const components of componentPaths) {
-    if (components.length === 0) throw new Error("LikeGo temp subdirectory requires a component")
+    if (components.length === 0) throw new Error("go-like temp subdirectory requires a component")
     for (const component of components) {
       if (!TempComponentPattern.test(component)) {
-        throw new Error(`invalid LikeGo temp path component ${JSON.stringify(component)}`)
+        throw new Error(`invalid go-like temp path component ${JSON.stringify(component)}`)
       }
     }
   }
@@ -90,12 +90,12 @@ export async function createTempSubdirectories(
       let child = created.get(childKey)
       if (child === undefined) {
         const parent = created.get(key)
-        if (parent === undefined) throw new Error("LikeGo temp path parent was not created")
+        if (parent === undefined) throw new Error("go-like temp path parent was not created")
         try {
           child = await createSecurePrivateDirectory(parent, component)
         } catch (error) {
           if (error instanceof Error && "code" in error && error.code === "EEXIST") {
-            throw new Error(`LikeGo temp path component already exists: ${component}`, {
+            throw new Error(`go-like temp path component already exists: ${component}`, {
               cause: error
             })
           }
@@ -107,7 +107,7 @@ export async function createTempSubdirectories(
       key = childKey
     }
     const result = created.get(key)
-    if (result === undefined) throw new Error("LikeGo temp path was not created")
+    if (result === undefined) throw new Error("go-like temp path was not created")
     results.push(secureDirectoryPath(result))
   }
   return Object.freeze(results)
@@ -120,7 +120,7 @@ export async function createTempSubdirectory(
 ): Promise<string> {
   const created = await createTempSubdirectories(directory, [components])
   const path = created[0]
-  if (path === undefined) throw new Error("LikeGo temp subdirectory was not created")
+  if (path === undefined) throw new Error("go-like temp subdirectory was not created")
   return path
 }
 
@@ -146,7 +146,7 @@ export async function removeTempDirectory(directory: TempDirectory): Promise<voi
   const failures: Error[] = []
   while (state.children.length > 0) {
     const child = state.children.at(-1)
-    if (child === undefined) throw new Error("LikeGo temp child handle inventory changed")
+    if (child === undefined) throw new Error("go-like temp child handle inventory changed")
     try {
       await closeSecureDirectory(child)
       state.children.pop()
@@ -156,7 +156,7 @@ export async function removeTempDirectory(directory: TempDirectory): Promise<voi
         throw error
       }
       state.children.pop()
-      failures.push(errorValue(error, "LikeGo temp child cleanup failed"))
+      failures.push(errorValue(error, "go-like temp child cleanup failed"))
     }
   }
 
@@ -166,8 +166,8 @@ export async function removeTempDirectory(directory: TempDirectory): Promise<voi
   } catch (error) {
     if (secureDirectoryLeaseConsumed(error)) issuedDirectories.delete(directory)
     else state.closing = false
-    failures.push(errorValue(error, "LikeGo temp root cleanup failed"))
+    failures.push(errorValue(error, "go-like temp root cleanup failed"))
   }
   if (failures.length === 1) throw failures[0]
-  if (failures.length > 1) throw new AggregateError(failures, "LikeGo temp cleanup failed")
+  if (failures.length > 1) throw new AggregateError(failures, "go-like temp cleanup failed")
 }

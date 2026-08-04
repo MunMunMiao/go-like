@@ -1,11 +1,11 @@
-import { background, type Context } from "@likego/context"
+import { background, type Context } from "@go-like/context"
 import {
   newOtelServer,
   traceBroker,
   traceClient,
   traceUnaryMiddleware,
   traceWebHandler
-} from "@likego/otel"
+} from "@go-like/otel"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { MeterProvider } from "@opentelemetry/sdk-metrics"
 import { TracerProvider } from "@opentelemetry/sdk-trace"

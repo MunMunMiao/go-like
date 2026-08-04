@@ -34,8 +34,8 @@ const prometheus = (await import(
 
 const registry = new promClient.Registry()
 const counter = new promClient.Counter({
-  name: "likego_e2e_total",
-  help: "LikeGo sourced E2E counter.",
+  name: "go_like_e2e_total",
+  help: "go-like sourced E2E counter.",
   registers: [registry]
 })
 counter.inc()
@@ -43,7 +43,7 @@ const response = await prometheus.createPrometheusHandler(registry)(
   new Request("https://service.test/metrics")
 )
 const body = await response.text()
-const sampleMatch = /^likego_e2e_total\s+([0-9]+(?:\.[0-9]+)?)$/m.exec(body)
+const sampleMatch = /^go_like_e2e_total\s+([0-9]+(?:\.[0-9]+)?)$/m.exec(body)
 const sampleValue = sampleMatch?.[1] === undefined ? Number.NaN : Number(sampleMatch[1])
 if (response.status !== 200 || sampleValue !== 1) {
   throw new Error("Prometheus Handler scrape did not expose the incremented sample")

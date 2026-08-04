@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
 import { describe, expect, test } from "bun:test"
 
 import { newHandler } from "../src/http"
@@ -80,7 +80,7 @@ describe("live game matchmaking", () => {
     ).toThrow("player is already queued")
   })
 
-  test("uses LikeGo round-robin selection for successive regional matches", () => {
+  test("uses go-like round-robin selection for successive regional matches", () => {
     const join = newJoinMatch(newMemoryMatchQueue(), newGameServerDirectory(gameServers), 100)
     join(background(), {
       requestId: "a",

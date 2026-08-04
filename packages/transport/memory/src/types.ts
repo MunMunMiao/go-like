@@ -1,4 +1,4 @@
-import type { Transport } from "@likego/transport"
+import type { Transport } from "@go-like/transport"
 
 /** Implements the provider-neutral Transport SPI inside one explicit process-local namespace. */
 export interface MemoryTransport extends Transport {

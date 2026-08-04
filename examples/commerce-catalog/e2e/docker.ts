@@ -1,6 +1,6 @@
-import { newRedisCache } from "@likego/cache-redis"
-import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@likego/client"
-import { background } from "@likego/context"
+import { newRedisCache } from "@go-like/cache-redis"
+import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@go-like/client"
+import { background } from "@go-like/context"
 import {
   endpoint,
   id,
@@ -11,17 +11,17 @@ import {
   stopTimeout,
   version,
   type App
-} from "@likego/core"
-import { newRoundRobinSelector } from "@likego/registry"
-import { newConsulRegistry } from "@likego/registry-consul"
+} from "@go-like/core"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newConsulRegistry } from "@go-like/registry-consul"
 import {
   address,
   handler as serviceHandler,
   newServer,
   transport as serverTransport
-} from "@likego/server"
-import { newHTTPTransport } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+} from "@go-like/server"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 import {
   closeOwnedDockerContext,
@@ -38,8 +38,8 @@ const ConsulImage =
 const RedisImage =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
 const RunId = crypto.randomUUID()
-const ConsulName = `likego-commerce-consul-${RunId}`
-const RedisName = `likego-commerce-redis-${RunId}`
+const ConsulName = `go-like-commerce-consul-${RunId}`
+const RedisName = `go-like-commerce-redis-${RunId}`
 
 interface CommandResult {
   readonly stdout: string
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
     void pricingRun.catch(() => {})
     await waitForPricingCount(consulAddress, 1)
 
-    const cachePrefix = `likego:example:commerce:${RunId}:`
+    const cachePrefix = `go-like:example:commerce:${RunId}:`
     const cache = newRedisCache({
       url: redisUrl,
       prefix: cachePrefix,
@@ -380,7 +380,7 @@ async function main(): Promise<void> {
       let body = ""
       const deadline = Date.now() + 30_000
       while (Date.now() < deadline) {
-        if (programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"commerce-catalog"')) {
+        if (programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"commerce-catalog"')) {
           const response = await fetch(
             `http://127.0.0.1:${portNumber}/v1/products/sku-001?currency=USD`
           )

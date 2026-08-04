@@ -1,5 +1,5 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import { background, type Context } from "@likego/context"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import { background, type Context } from "@go-like/context"
 
 import { newMemoryBroker, type MemoryBroker } from "../src/index"
 

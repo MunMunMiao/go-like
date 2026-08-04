@@ -16,9 +16,9 @@
 - `src/http.ts`：预测写入、到站查询以及可复用 Handler。
 - `src/main.ts`：唯一直接执行入口，挂载业务及健康路由并管理 HTTP 生命周期。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/context` 贯穿发布和查询操作，使用 `@likego/web` 暴露标准 Fetch 的预测发布与到站查询入口，并使用 `@likego/health` 把实时预测源 freshness 纳入 readiness。
+使用 `@go-like/context` 贯穿发布和查询操作，使用 `@go-like/web` 暴露标准 Fetch 的预测发布与到站查询入口，并使用 `@go-like/health` 把实时预测源 freshness 纳入 readiness。
 
 ## 验证矩阵
 
@@ -30,8 +30,8 @@
 | 标准 Fetch 入口            | `test/main.test.ts` 的 HTTP 用例      |
 
 ```bash
-bun run --filter @likego/example-public-transit-arrivals typecheck
-bun run --filter @likego/example-public-transit-arrivals test:unit
+bun run --filter @go-like/example-public-transit-arrivals typecheck
+bun run --filter @go-like/example-public-transit-arrivals test:unit
 ```
 
 ## Docker 判定
@@ -45,11 +45,11 @@ bun run --filter @likego/example-public-transit-arrivals test:unit
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-public-transit-arrivals start
+bun run --filter @go-like/example-public-transit-arrivals start
 ```
 
-`start` 会先构建本地 LikeGo 包，再由 `start:prepared` 把 `src/main.ts` 构建为
-`.artifacts/main.mjs` 并启动。看到 `LIKEGO_EXAMPLE_READY` 后发布一条实时预测，再查询到站数据：
+`start` 会先构建本地 go-like 包，再由 `start:prepared` 把 `src/main.ts` 构建为
+`.artifacts/main.mjs` 并启动。看到 `GO_LIKE_EXAMPLE_READY` 后发布一条实时预测，再查询到站数据：
 
 ```bash
 NOW=$(($(date +%s) * 1000))

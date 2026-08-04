@@ -20,14 +20,14 @@ async function writeExample(
 
 function manifest(id: string, script = "bun scenario.ts"): Readonly<Record<string, unknown>> {
   return Object.freeze({
-    name: `@likego/example-${id}`,
+    name: `@go-like/example-${id}`,
     private: true,
     scripts: Object.freeze({ "test:e2e": script })
   })
 }
 
 test("dynamic example input discovers only immediate real directories in stable ID order", async () => {
-  const fixture = await createTempDirectory("likego-example-input-")
+  const fixture = await createTempDirectory("go-like-example-input-")
   try {
     await mkdir(join(fixture.path, "examples"), { mode: 0o700 })
     await writeExample(fixture.path, "zebra-service", manifest("zebra-service"))
@@ -45,8 +45,8 @@ test("dynamic example input discovers only immediate real directories in stable 
     const inputs = await discoverExampleExecutionInputs(fixture.path)
     expect(inputs.map((input) => input.id)).toEqual(["alpha-service", "zebra-service"])
     expect(inputs.map((input) => input.packageName)).toEqual([
-      "@likego/example-alpha-service",
-      "@likego/example-zebra-service"
+      "@go-like/example-alpha-service",
+      "@go-like/example-zebra-service"
     ])
     expect(inputs.every((input) => input.scriptName === "test:e2e")).toBe(true)
     expect(Object.isFrozen(inputs)).toBe(true)
@@ -56,11 +56,11 @@ test("dynamic example input discovers only immediate real directories in stable 
 })
 
 test("dynamic example input classifies a missing script before any command can spawn", async () => {
-  const fixture = await createTempDirectory("likego-example-script-")
+  const fixture = await createTempDirectory("go-like-example-script-")
   try {
     await mkdir(join(fixture.path, "examples"), { mode: 0o700 })
     await writeExample(fixture.path, "missing-script", {
-      name: "@likego/example-missing-script",
+      name: "@go-like/example-missing-script",
       private: true,
       scripts: {}
     })
@@ -85,7 +85,7 @@ test("dynamic example input rejects mismatched identity, visibility, and malform
   }[] = [
     {
       id: "wrong-name",
-      value: { ...manifest("wrong-name"), name: "@likego/example-other" },
+      value: { ...manifest("wrong-name"), name: "@go-like/example-other" },
       code: "example-name-mismatch"
     },
     {
@@ -96,7 +96,7 @@ test("dynamic example input rejects mismatched identity, visibility, and malform
     { id: "broken-json", value: "{", code: "example-manifest-invalid" }
   ]
   for (const selected of cases) {
-    const fixture = await createTempDirectory("likego-example-negative-")
+    const fixture = await createTempDirectory("go-like-example-negative-")
     try {
       const directory = join(fixture.path, "examples", selected.id)
       await mkdir(directory, { recursive: true, mode: 0o700 })

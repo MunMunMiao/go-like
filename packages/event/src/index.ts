@@ -1,5 +1,5 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { Context } from "@likego/context"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { Context } from "@go-like/context"
 
 /** Converts one typed value to and from its portable byte representation. */
 export interface Codec<T> {

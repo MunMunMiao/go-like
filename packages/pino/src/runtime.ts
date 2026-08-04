@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import { symbols, type Logger } from "pino"
 
 import {
@@ -526,7 +526,7 @@ function createPinoServer(
 export function newPinoServer(
   logger: Logger,
   destination: OfficialPinoDestination,
-  ...options: readonly PinoServerOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI without coercion. */
+  ...options: readonly PinoServerOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI without coercion. */
 ): PinoServer {
   return createPinoServer(logger, destination, options)
 }

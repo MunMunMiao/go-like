@@ -184,9 +184,9 @@ async function testHookNativeSupervisor(): Promise<TestHookSupervisorFixture> {
   if (process.platform !== "darwin") {
     throw new Error("macOS native test-hook supervisor fixture is unavailable")
   }
-  const artifactDirectory = await mkdtemp(join(tmpdir(), "likego-e2e-posix-test-hooks-"))
+  const artifactDirectory = await mkdtemp(join(tmpdir(), "go-like-e2e-posix-test-hooks-"))
   try {
-    const source = resolve(Root, "e2e/harness/native/likego_e2e_posix_controller.c")
+    const source = resolve(Root, "e2e/harness/native/go-like_e2e_posix_controller.c")
     const binary = join(artifactDirectory, "controller")
     const compile = Bun.spawnSync(
       [
@@ -197,7 +197,7 @@ async function testHookNativeSupervisor(): Promise<TestHookSupervisorFixture> {
         "-Wextra",
         "-Wpedantic",
         "-Werror",
-        "-DLIKEGO_E2E_TEST_HOOKS",
+        "-DGO_LIKE_E2E_TEST_HOOKS",
         source,
         "-o",
         binary
@@ -417,10 +417,10 @@ test("native POSIX supervisor rejects controller-only target environment overrid
       supervisor.run(Root, {
         cwd: ".",
         command: [process.execPath, "-e", "process.exit(0)"],
-        environment: { LIKEGO_E2E_CGROUP_PARENT: "/should/not/reach/target" },
+        environment: { GO_LIKE_E2E_CGROUP_PARENT: "/should/not/reach/target" },
         timeoutMs: 2_000
       })
-    ).rejects.toThrow("controller-only key LIKEGO_E2E_CGROUP_PARENT")
+    ).rejects.toThrow("controller-only key GO_LIKE_E2E_CGROUP_PARENT")
   } finally {
     await supervisor.close()
   }
@@ -428,16 +428,16 @@ test("native POSIX supervisor rejects controller-only target environment overrid
 
 test("native POSIX supervisor strips controller-only ambient environment from targets", async () => {
   if (process.platform === "win32") return
-  const original = process.env.LIKEGO_E2E_CGROUP_PARENT
+  const original = process.env.GO_LIKE_E2E_CGROUP_PARENT
   const supervisor = await nativeSupervisor()
   try {
-    process.env.LIKEGO_E2E_CGROUP_PARENT = "/synthetic/delegated/parent"
+    process.env.GO_LIKE_E2E_CGROUP_PARENT = "/synthetic/delegated/parent"
     const result = await supervisor.run(Root, {
       cwd: ".",
       command: [
         process.execPath,
         "-e",
-        "console.log(process.env.LIKEGO_E2E_CGROUP_PARENT ?? 'controller-only-absent')"
+        "console.log(process.env.GO_LIKE_E2E_CGROUP_PARENT ?? 'controller-only-absent')"
       ],
       timeoutMs: 2_000
     })
@@ -448,8 +448,8 @@ test("native POSIX supervisor strips controller-only ambient environment from ta
     })
     expect(result.stdout.trim()).toBe("controller-only-absent")
   } finally {
-    if (original === undefined) delete process.env.LIKEGO_E2E_CGROUP_PARENT
-    else process.env.LIKEGO_E2E_CGROUP_PARENT = original
+    if (original === undefined) delete process.env.GO_LIKE_E2E_CGROUP_PARENT
+    else process.env.GO_LIKE_E2E_CGROUP_PARENT = original
     await supervisor.close()
   }
 }, 10_000)
@@ -528,7 +528,7 @@ test("native POSIX supervisor preserves argv, environment, output, and natural e
     const result = await supervisor.run(Root, {
       cwd: ".",
       command: [process.execPath, runnerFixture("diagnostics.ts"), "failure"],
-      environment: { LIKEGO_E2E_CANARY: secret },
+      environment: { GO_LIKE_E2E_CANARY: secret },
       knownSecrets: [secret],
       timeoutMs: 2_000,
       onStdout: (value) => {
@@ -594,7 +594,7 @@ test("native POSIX supervisor reports exec failure without waiting for TARGET_ST
   try {
     const result = await supervisor.run(Root, {
       cwd: ".",
-      command: ["/definitely/missing/likego-e2e-executable"],
+      command: ["/definitely/missing/go-like-e2e-executable"],
       timeoutMs: 2_000
     })
     expect(result).toMatchObject({
@@ -637,7 +637,7 @@ test("native POSIX supervisor reports target signal termination", async () => {
 
 test("native POSIX supervisor times out and removes an inherited-pipe descendant", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-timeout-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-timeout-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const supervisor = await nativeSupervisor()
@@ -682,7 +682,7 @@ test("native POSIX supervisor times out and removes an inherited-pipe descendant
 
 test("native POSIX timeout defaults to combined and hard-only skips TERM", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-termination-policy-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-termination-policy-"))
   const combinedMarker = join(directory, "combined.term")
   const hardOnlyMarker = join(directory, "hard-only.term")
   const supervisor = await nativeSupervisor()
@@ -719,7 +719,7 @@ test("native POSIX timeout defaults to combined and hard-only skips TERM", async
 
 test("native POSIX hard-only abort skips TERM and preserves abort result", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-hard-only-abort-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-hard-only-abort-"))
   const termMarker = join(directory, "term.sent")
   const abortController = new AbortController()
   const supervisor = await nativeSupervisor()
@@ -761,7 +761,7 @@ test("native POSIX hard-only abort skips TERM and preserves abort result", async
 
 test("native POSIX supervisor preserves a structured in-flight abort result", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-abort-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-abort-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const abortController = new AbortController()
@@ -810,7 +810,7 @@ test("native POSIX supervisor preserves a structured in-flight abort result", as
 
 test("native POSIX supervisor finalizes a silent descendant after its parent exits", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-finalize-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-finalize-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const supervisor = await nativeSupervisor()
@@ -868,7 +868,7 @@ test("macOS native protocol reports TERM for combined and KILL-only hard termina
 
 test("macOS native helper default combined timeout bounds repeated KILL rounds", async () => {
   if (process.platform !== "darwin") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-fork-storm-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-fork-storm-"))
   const processIdPath = join(directory, "target.pid")
   const readyPath = join(directory, "descendant.ready")
   const { supervisor, artifactDirectory } = await testHookNativeSupervisor()
@@ -884,8 +884,8 @@ test("macOS native helper default combined timeout bounds repeated KILL rounds",
         readyPath
       ],
       environment: {
-        LIKEGO_E2E_TEST_SIGNAL_BARRIER_DIR: directory,
-        LIKEGO_E2E_TEST_SKIP_KILL_ROUNDS: "2"
+        GO_LIKE_E2E_TEST_SIGNAL_BARRIER_DIR: directory,
+        GO_LIKE_E2E_TEST_SKIP_KILL_ROUNDS: "2"
       },
       timeoutMs: 750
     })
@@ -920,7 +920,7 @@ test("macOS native helper reports a forced bounded inconclusive observation", as
     const result = await supervisor.run(Root, {
       cwd: ".",
       command: [process.execPath, "-e", "process.exit(0)"],
-      environment: { LIKEGO_E2E_TEST_FORCE_INCONCLUSIVE: "1" },
+      environment: { GO_LIKE_E2E_TEST_FORCE_INCONCLUSIVE: "1" },
       timeoutMs: 2_000
     })
     expect(result).toMatchObject({
@@ -942,7 +942,7 @@ test("macOS native helper reports a forced bounded inconclusive observation", as
 
 test("native POSIX supervisor bounds inherited output from an unsupported breakaway", async () => {
   if (process.platform !== "darwin") return
-  const directory = await mkdtemp(join(tmpdir(), "likego-native-breakaway-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-breakaway-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const supervisor = await nativeSupervisor()

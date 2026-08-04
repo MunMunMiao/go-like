@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import type { Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import type { Handler } from "@go-like/web"
 
 import { newMediaTranscodingHandler } from "./http"
 import { validateTranscodeJob, type TranscodeJob, type TranscodeResult } from "./transcode-jobs"

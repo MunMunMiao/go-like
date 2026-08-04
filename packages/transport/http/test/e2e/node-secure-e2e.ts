@@ -10,15 +10,15 @@ import {
 import { createServer as createHTTPSServer, request as httpsRequest } from "node:https"
 import { TLSSocket } from "node:tls"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import {
   secure,
   tlsConfig as withTLSConfig,
   withConnClose,
   type TLSConfig,
   type TLSEncodedBytes
-} from "@likego/transport"
-import { allowHTTP1, clientAuth, newNodeHTTPTransport } from "@likego/transport-http/node"
+} from "@go-like/transport"
+import { allowHTTP1, clientAuth, newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { normalizeHTTPDialTarget } from "../../src/address"
 import { newNodeHTTPExecutor } from "../../src/node-client"
 import {
@@ -34,7 +34,7 @@ interface HTTP2Reply {
 }
 
 const tlsRoot =
-  process.env.LIKEGO_TRANSPORT_HTTP_TLS_E2E_ROOT ??
+  process.env.GO_LIKE_TRANSPORT_HTTP_TLS_E2E_ROOT ??
   new URL("../fixtures/tls/", import.meta.url).href
 const ca = await readFile(new URL("ca.pem", tlsRoot))
 const serverCertificate = await readFile(new URL("server.pem", tlsRoot))
@@ -304,43 +304,43 @@ const clientServed = clientListener.accept(
 )
 const clientTransport = newNodeHTTPTransport()
 clientTransport.init(secure(true), withTLSConfig(clientTLSConfig))
-/** Exchanges one LikeGo unary request through an already-owned client. */
-async function exchangeLikeGo(
+/** Exchanges one go-like unary request through an already-owned client. */
+async function exchangeGoLike(
   client: Awaited<ReturnType<typeof clientTransport.dial>>,
   body: string
 ): Promise<string> {
   await client.send(background(), {
-    header: { "Likego-Service": "secure", "Likego-Endpoint": "call" },
+    header: { "Go-Like-Service": "secure", "Go-Like-Endpoint": "call" },
     body: new TextEncoder().encode(body)
   })
   return new TextDecoder().decode((await client.recv(background())).body)
 }
-const likegoClient = await clientTransport.dial(background(), clientListener.addr())
+const goLikeClient = await clientTransport.dial(background(), clientListener.addr())
 await bounded(
-  likegoClient.send(background(), {
-    header: { "Likego-Service": "secure", "Likego-Endpoint": "call" },
-    body: new TextEncoder().encode("likego-mtls-h2")
+  goLikeClient.send(background(), {
+    header: { "Go-Like-Service": "secure", "Go-Like-Endpoint": "call" },
+    body: new TextEncoder().encode("go-like-mtls-h2")
   }),
-  "LikeGo mTLS HTTP/2 send timed out"
+  "go-like mTLS HTTP/2 send timed out"
 )
-const likegoReply = await bounded(
-  likegoClient.recv(background()),
-  "LikeGo mTLS HTTP/2 receive timed out"
+const goLikeReply = await bounded(
+  goLikeClient.recv(background()),
+  "go-like mTLS HTTP/2 receive timed out"
 )
 verify(
-  new TextDecoder().decode(likegoReply.body) === "likego-mtls-h2",
-  "LikeGo mTLS HTTP/2 response changed"
+  new TextDecoder().decode(goLikeReply.body) === "go-like-mtls-h2",
+  "go-like mTLS HTTP/2 response changed"
 )
-verify(clientRequests === 1, `LikeGo HTTP/2 client dispatched ${clientRequests} requests`)
-await likegoClient.close(background())
+verify(clientRequests === 1, `go-like HTTP/2 client dispatched ${clientRequests} requests`)
+await goLikeClient.close(background())
 await clientListener.close(background())
 await clientServed
 await provePortReleased(clientListener.addr())
 
-let likegoHTTP1Connections = 0
-let likegoHTTP1Requests = 0
-let likegoHTTP1Version = ""
-const likegoHTTP1Server = createHTTPSServer(
+let goLikeHTTP1Connections = 0
+let goLikeHTTP1Requests = 0
+let goLikeHTTP1Version = ""
+const goLikeHTTP1Server = createHTTPSServer(
   {
     ca,
     cert: serverCertificate,
@@ -349,42 +349,42 @@ const likegoHTTP1Server = createHTTPSServer(
     rejectUnauthorized: true
   },
   function echo(request, response): void {
-    likegoHTTP1Requests += 1
-    likegoHTTP1Version = request.httpVersion
+    goLikeHTTP1Requests += 1
+    goLikeHTTP1Version = request.httpVersion
     request.pipe(response)
   }
 )
-likegoHTTP1Server.on("secureConnection", function connected(): void {
-  likegoHTTP1Connections += 1
+goLikeHTTP1Server.on("secureConnection", function connected(): void {
+  goLikeHTTP1Connections += 1
 })
 await new Promise<void>(function listen(resolve, reject): void {
-  likegoHTTP1Server.once("error", reject)
-  likegoHTTP1Server.listen(0, "127.0.0.1", resolve)
+  goLikeHTTP1Server.once("error", reject)
+  goLikeHTTP1Server.listen(0, "127.0.0.1", resolve)
 })
-const likegoHTTP1Address = nativeAddress(likegoHTTP1Server)
-const likegoHTTP1Client = await clientTransport.dial(background(), likegoHTTP1Address)
+const goLikeHTTP1Address = nativeAddress(goLikeHTTP1Server)
+const goLikeHTTP1Client = await clientTransport.dial(background(), goLikeHTTP1Address)
 verify(
   (await bounded(
-    exchangeLikeGo(likegoHTTP1Client, "likego-mtls-http1-one"),
-    "first LikeGo mTLS HTTP/1.1 exchange timed out"
-  )) === "likego-mtls-http1-one",
-  "first LikeGo mTLS HTTP/1.1 response changed"
+    exchangeGoLike(goLikeHTTP1Client, "go-like-mtls-http1-one"),
+    "first go-like mTLS HTTP/1.1 exchange timed out"
+  )) === "go-like-mtls-http1-one",
+  "first go-like mTLS HTTP/1.1 response changed"
 )
 verify(
   (await bounded(
-    exchangeLikeGo(likegoHTTP1Client, "likego-mtls-http1-two"),
-    "second LikeGo mTLS HTTP/1.1 exchange timed out"
-  )) === "likego-mtls-http1-two",
-  "second LikeGo mTLS HTTP/1.1 response changed"
+    exchangeGoLike(goLikeHTTP1Client, "go-like-mtls-http1-two"),
+    "second go-like mTLS HTTP/1.1 exchange timed out"
+  )) === "go-like-mtls-http1-two",
+  "second go-like mTLS HTTP/1.1 response changed"
 )
-verify(likegoHTTP1Version === "1.1", `expected LikeGo HTTP/1.1, got ${likegoHTTP1Version}`)
+verify(goLikeHTTP1Version === "1.1", `expected go-like HTTP/1.1, got ${goLikeHTTP1Version}`)
 verify(
-  likegoHTTP1Connections === 1,
-  `LikeGo HTTP/1.1 used ${likegoHTTP1Connections} TLS connections`
+  goLikeHTTP1Connections === 1,
+  `go-like HTTP/1.1 used ${goLikeHTTP1Connections} TLS connections`
 )
-const likegoHTTP1ClientConnections = likegoHTTP1Connections
-await likegoHTTP1Client.close(background())
-const directHTTP1URL = `https://${likegoHTTP1Address}/internal`
+const goLikeHTTP1ClientConnections = goLikeHTTP1Connections
+await goLikeHTTP1Client.close(background())
+const directHTTP1URL = `https://${goLikeHTTP1Address}/internal`
 const directHTTP1Owner = newNodeHTTPExecutor(
   normalizeHTTPDialTarget(directHTTP1URL, true),
   applyHTTPCommonOptions(defaultHTTPCommonOptions(), [
@@ -394,7 +394,7 @@ const directHTTP1Owner = newNodeHTTPExecutor(
   applyHTTPDialOptions([])
 )
 try {
-  const beforeDirectOwner = likegoHTTP1Requests
+  const beforeDirectOwner = goLikeHTTP1Requests
   const warm = await bounded(
     directHTTP1Owner.executor(
       new Request(directHTTP1URL, { method: "POST", body: new Uint8Array([1]) })
@@ -403,7 +403,7 @@ try {
   )
   await bounded(warm.arrayBuffer(), "direct HTTP/1 owner warm body timed out")
   verify(
-    likegoHTTP1Requests === beforeDirectOwner + 1,
+    goLikeHTTP1Requests === beforeDirectOwner + 1,
     "direct HTTP/1 owner warm request did not reach the server"
   )
 
@@ -430,40 +430,40 @@ try {
     setTimeout(resolve, 50)
   })
   verify(
-    likegoHTTP1Requests === beforeDirectOwner + 1,
+    goLikeHTTP1Requests === beforeDirectOwner + 1,
     "closed direct HTTP/1 owner admitted a late request"
   )
   verify(failure instanceof Error, "closed direct HTTP/1 owner resolved a late request")
 } finally {
   await directHTTP1Owner.close()
-  likegoHTTP1Server.closeAllConnections()
+  goLikeHTTP1Server.closeAllConnections()
 }
 await new Promise<void>(function close(resolve, reject): void {
-  likegoHTTP1Server.close(function closed(error?: Error): void {
+  goLikeHTTP1Server.close(function closed(error?: Error): void {
     if (error === undefined) resolve()
     else reject(error)
   })
 })
-await provePortReleased(likegoHTTP1Address)
+await provePortReleased(goLikeHTTP1Address)
 
-let likegoPoolConnections = 0
-let likegoPoolSessions = 0
-let likegoPoolRequests = 0
-const activeLikegoPoolSessions = new Set<ServerHttp2Session>()
-const likegoPoolVersions: string[] = []
+let goLikePoolConnections = 0
+let goLikePoolSessions = 0
+let goLikePoolRequests = 0
+const activeGoLikePoolSessions = new Set<ServerHttp2Session>()
+const goLikePoolVersions: string[] = []
 /** Returns live native pool counters without retaining prior assertion narrowing. */
-function likegoPoolCounts(): {
+function goLikePoolCounts(): {
   readonly connections: number
   readonly requests: number
   readonly sessions: number
 } {
   return Object.freeze({
-    connections: likegoPoolConnections,
-    requests: likegoPoolRequests,
-    sessions: likegoPoolSessions
+    connections: goLikePoolConnections,
+    requests: goLikePoolRequests,
+    sessions: goLikePoolSessions
   })
 }
-const likegoPoolServer = createSecureServer(
+const goLikePoolServer = createSecureServer(
   {
     allowHTTP1: true,
     ca,
@@ -473,55 +473,55 @@ const likegoPoolServer = createSecureServer(
     rejectUnauthorized: true
   },
   function echo(request, response): void {
-    likegoPoolRequests += 1
-    likegoPoolVersions.push(request.httpVersion)
+    goLikePoolRequests += 1
+    goLikePoolVersions.push(request.httpVersion)
     request.pipe(response)
   }
 )
-likegoPoolServer.on("secureConnection", function connected(): void {
-  likegoPoolConnections += 1
+goLikePoolServer.on("secureConnection", function connected(): void {
+  goLikePoolConnections += 1
 })
-likegoPoolServer.on("session", function admitted(session): void {
-  likegoPoolSessions += 1
-  activeLikegoPoolSessions.add(session)
+goLikePoolServer.on("session", function admitted(session): void {
+  goLikePoolSessions += 1
+  activeGoLikePoolSessions.add(session)
   session.once("close", function closed(): void {
-    activeLikegoPoolSessions.delete(session)
+    activeGoLikePoolSessions.delete(session)
   })
 })
 await new Promise<void>(function listen(resolve, reject): void {
-  likegoPoolServer.once("error", reject)
-  likegoPoolServer.listen(0, "127.0.0.1", resolve)
+  goLikePoolServer.once("error", reject)
+  goLikePoolServer.listen(0, "127.0.0.1", resolve)
 })
-const likegoPoolAddress = nativeAddress(likegoPoolServer)
-const likegoPoolClient = await clientTransport.dial(background(), likegoPoolAddress)
+const goLikePoolAddress = nativeAddress(goLikePoolServer)
+const goLikePoolClient = await clientTransport.dial(background(), goLikePoolAddress)
 verify(
   (await bounded(
-    exchangeLikeGo(likegoPoolClient, "likego-h2-one"),
-    "first pooled LikeGo HTTP/2 exchange timed out"
-  )) === "likego-h2-one",
-  "first pooled LikeGo HTTP/2 response changed"
+    exchangeGoLike(goLikePoolClient, "go-like-h2-one"),
+    "first pooled go-like HTTP/2 exchange timed out"
+  )) === "go-like-h2-one",
+  "first pooled go-like HTTP/2 response changed"
 )
 verify(
   (await bounded(
-    exchangeLikeGo(likegoPoolClient, "likego-h2-two"),
-    "second pooled LikeGo HTTP/2 exchange timed out"
-  )) === "likego-h2-two",
-  "second pooled LikeGo HTTP/2 response changed"
+    exchangeGoLike(goLikePoolClient, "go-like-h2-two"),
+    "second pooled go-like HTTP/2 exchange timed out"
+  )) === "go-like-h2-two",
+  "second pooled go-like HTTP/2 response changed"
 )
 verify(
-  likegoPoolCounts().sessions === 1,
-  `two LikeGo requests opened ${likegoPoolSessions} HTTP/2 sessions`
+  goLikePoolCounts().sessions === 1,
+  `two go-like requests opened ${goLikePoolSessions} HTTP/2 sessions`
 )
-const firstLikegoPoolSession = Array.from(activeLikegoPoolSessions)[0]
-verify(firstLikegoPoolSession !== undefined, "LikeGo HTTP/2 pool omitted its server session")
-firstLikegoPoolSession.goaway(http2Constants.NGHTTP2_NO_ERROR)
+const firstGoLikePoolSession = Array.from(activeGoLikePoolSessions)[0]
+verify(firstGoLikePoolSession !== undefined, "go-like HTTP/2 pool omitted its server session")
+firstGoLikePoolSession.goaway(http2Constants.NGHTTP2_NO_ERROR)
 await new Promise<void>(function deliverGoaway(resolve): void {
   setTimeout(resolve, 20)
 })
-firstLikegoPoolSession.close()
+firstGoLikePoolSession.close()
 await bounded(
   (async function waitForOldSessionClose(): Promise<void> {
-    while (activeLikegoPoolSessions.has(firstLikegoPoolSession)) {
+    while (activeGoLikePoolSessions.has(firstGoLikePoolSession)) {
       await new Promise<void>(function wait(resolve): void {
         setTimeout(resolve, 1)
       })
@@ -531,68 +531,68 @@ await bounded(
 )
 verify(
   (await bounded(
-    exchangeLikeGo(likegoPoolClient, "likego-h2-after-goaway"),
-    "LikeGo HTTP/2 replacement exchange timed out"
-  )) === "likego-h2-after-goaway",
-  "LikeGo HTTP/2 replacement response changed"
+    exchangeGoLike(goLikePoolClient, "go-like-h2-after-goaway"),
+    "go-like HTTP/2 replacement exchange timed out"
+  )) === "go-like-h2-after-goaway",
+  "go-like HTTP/2 replacement response changed"
 )
 verify(
-  likegoPoolCounts().sessions === 2,
-  `GOAWAY produced ${likegoPoolSessions} total HTTP/2 sessions`
+  goLikePoolCounts().sessions === 2,
+  `GOAWAY produced ${goLikePoolSessions} total HTTP/2 sessions`
 )
 verify(
-  likegoPoolCounts().requests === 3,
-  `GOAWAY retried a POST; observed ${likegoPoolRequests} requests`
+  goLikePoolCounts().requests === 3,
+  `GOAWAY retried a POST; observed ${goLikePoolRequests} requests`
 )
-await likegoPoolClient.close(background())
+await goLikePoolClient.close(background())
 await bounded(
   (async function waitForPoolClose(): Promise<void> {
-    while (activeLikegoPoolSessions.size > 0) {
+    while (activeGoLikePoolSessions.size > 0) {
       await new Promise<void>(function wait(resolve): void {
         setTimeout(resolve, 1)
       })
     }
   })(),
-  "LikeGo HTTP/2 client close retained a session"
+  "go-like HTTP/2 client close retained a session"
 )
 const connectionCloseClient = await clientTransport.dial(
   background(),
-  likegoPoolAddress,
+  goLikePoolAddress,
   withConnClose()
 )
 verify(
   (await bounded(
-    exchangeLikeGo(connectionCloseClient, "likego-close-one"),
-    "first LikeGo connection-close exchange timed out"
-  )) === "likego-close-one",
-  "first LikeGo connection-close response changed"
+    exchangeGoLike(connectionCloseClient, "go-like-close-one"),
+    "first go-like connection-close exchange timed out"
+  )) === "go-like-close-one",
+  "first go-like connection-close response changed"
 )
 verify(
   (await bounded(
-    exchangeLikeGo(connectionCloseClient, "likego-close-two"),
-    "second LikeGo connection-close exchange timed out"
-  )) === "likego-close-two",
-  "second LikeGo connection-close response changed"
+    exchangeGoLike(connectionCloseClient, "go-like-close-two"),
+    "second go-like connection-close exchange timed out"
+  )) === "go-like-close-two",
+  "second go-like connection-close response changed"
 )
 verify(
-  likegoPoolVersions.slice(-2).every(function http1(version): boolean {
+  goLikePoolVersions.slice(-2).every(function http1(version): boolean {
     return version === "1.1"
   }),
   "connection-close negotiated HTTP/2"
 )
-verify(likegoPoolCounts().sessions === 2, "connection-close allocated an HTTP/2 session")
+verify(goLikePoolCounts().sessions === 2, "connection-close allocated an HTTP/2 session")
 verify(
-  likegoPoolCounts().connections === 4,
-  `pooled h2 plus connection-close used ${likegoPoolConnections} TLS connections`
+  goLikePoolCounts().connections === 4,
+  `pooled h2 plus connection-close used ${goLikePoolConnections} TLS connections`
 )
 await connectionCloseClient.close(background())
 await new Promise<void>(function close(resolve, reject): void {
-  likegoPoolServer.close(function closed(error?: Error): void {
+  goLikePoolServer.close(function closed(error?: Error): void {
     if (error === undefined) resolve()
     else reject(error)
   })
 })
-await provePortReleased(likegoPoolAddress)
+await provePortReleased(goLikePoolAddress)
 
 await new Promise<void>(function settle(resolve): void {
   setTimeout(resolve, 20)
@@ -603,16 +603,16 @@ const finalTCP = process.getActiveResourcesInfo().filter(function tcp(value): bo
 verify(finalTCP === baselineTCP, `secure host TCP resource delta ${finalTCP - baselineTCP}`)
 
 process.stdout.write(
-  `LIKEGO_NODE_HTTP_HOST_SECURE_E2E_V1=${JSON.stringify(
+  `GO_LIKE_NODE_HTTP_HOST_SECURE_E2E_V1=${JSON.stringify(
     Object.freeze({
       runtime: `Node.js ${process.versions.node}`,
       tls: negotiatedTLS,
       mtlsRequired: true,
       alpn: h2.protocol,
       http1Fallback: true,
-      likegoClientHTTP2: true,
-      likegoClientHTTP1: true,
-      likegoClientHTTP1TLSConnections: likegoHTTP1ClientConnections,
+      goLikeClientHTTP2: true,
+      goLikeClientHTTP1: true,
+      goLikeClientHTTP1TLSConnections: goLikeHTTP1ClientConnections,
       gracefulGoaway,
       goawayErrorCode,
       portReleased: true,

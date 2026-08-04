@@ -1,7 +1,7 @@
-import { envSource } from "@likego/config/env"
-import { fileSource } from "@likego/config/file"
-import { consulSource } from "@likego/config-consul"
-import { background } from "@likego/context"
+import { envSource } from "@go-like/config/env"
+import { fileSource } from "@go-like/config/file"
+import { consulSource } from "@go-like/config-consul"
+import { background } from "@go-like/context"
 
 const ctx = background()
 const env = await envSource({ APP_HTTP__PORT: "8080" }, { prefix: "APP_" }).load(ctx)

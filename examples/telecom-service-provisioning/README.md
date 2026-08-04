@@ -1,14 +1,14 @@
 # 电信业务开通
 
 该示例演示电信业务开通微服务：公共标准 Fetch API 不直接修改资源，而是通过
-`@likego/client`、`@likego/server` 与 `@likego/transport-memory` 调用内部
+`@go-like/client`、`@go-like/server` 与 `@go-like/transport-memory` 调用内部
 `Provisioning.Activate` unary 服务。
 
 ## 主要演示
 
-- LikeGo Client、Server declaration 与 Memory Transport 构成真实进程内内部调用。
+- go-like Client、Server declaration 与 Memory Transport 构成真实进程内内部调用。
 - 内部服务以结构式 `Server` 暴露 `start(ctx)`、`stop(ctx)` 生命周期。
-- `@likego/context` 从公共请求传播到内部 unary endpoint 与仓储。
+- `@go-like/context` 从公共请求传播到内部 unary endpoint 与仓储。
 - 业务服务、仓储、内部 Transport、公共 HTTP 与运行入口按真实职责拆分。
 
 ## 业务不变量
@@ -44,17 +44,17 @@
 ## 验证
 
 ```sh
-bun run --filter @likego/example-telecom-service-provisioning typecheck
-bun run --filter @likego/example-telecom-service-provisioning test:unit
+bun run --filter @go-like/example-telecom-service-provisioning typecheck
+bun run --filter @go-like/example-telecom-service-provisioning test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-telecom-service-provisioning start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-telecom-service-provisioning start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后开通业务：
+看到 `GO_LIKE_EXAMPLE_READY` 后开通业务：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/telecom-services \
@@ -65,4 +65,4 @@ curl -sS http://127.0.0.1:3000/v1/telecom-services \
 HTTP 请求会完整经过 Client、Memory Transport 与内部 unary Server。前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM` 可让 Core 排空两类 Server。
 
 本示例不伪装 OSS/BSS、SIM 厂商、号码携转或计费平台；Memory Transport 只用于真实验证
-LikeGo 内部微服务边界，跨进程部署时可替换为已实现的 HTTP Transport。
+go-like 内部微服务边界，跨进程部署时可替换为已实现的 HTTP Transport。

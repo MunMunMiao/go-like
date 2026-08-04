@@ -1,5 +1,5 @@
-import type { Context } from "@likego/context"
-import { newRoundRobinSelector, type ServiceInstance } from "@likego/registry"
+import type { Context } from "@go-like/context"
+import { newRoundRobinSelector, type ServiceInstance } from "@go-like/registry"
 
 import {
   dispatchFingerprint,
@@ -62,7 +62,7 @@ export function newMemoryEmergencyDispatchRepository(): EmergencyDispatchReposit
   })
 }
 
-/** Creates a responder directory backed by LikeGo's round-robin Registry selector. */
+/** Creates a responder directory backed by go-like's round-robin Registry selector. */
 export function newRegistryResponderDirectory(
   instances: readonly ServiceInstance[]
 ): ResponderDirectory {

@@ -12,12 +12,12 @@ export interface DockerSnapshot {
 const DockerInventoryTimeoutMs = 10_000
 const DockerCleanupQuietMs = 2_000
 const DockerCleanupPollMs = 100
-const DockerOwnerLabel = "io.likego.e2e.owner"
+const DockerOwnerLabel = "io.go-like.e2e.owner"
 const DockerOwnerPattern = /^[a-z0-9][a-z0-9_.-]{0,127}$/
 
 /** Rejects missing or argv-unsafe Docker owner values before any resource can be created. */
 function validDockerOwner(owner: string): string {
-  if (!DockerOwnerPattern.test(owner)) throw new Error("invalid LIKEGO_E2E_OWNER")
+  if (!DockerOwnerPattern.test(owner)) throw new Error("invalid GO_LIKE_E2E_OWNER")
   return owner
 }
 

@@ -1,4 +1,4 @@
-name: likego-commerce-catalog
+name: go-like-commerce-catalog
 
 services:
   consul:

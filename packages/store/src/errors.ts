@@ -1,7 +1,7 @@
 import type { StoreConflictError } from "./types"
 
 const StoreConflictErrorName: StoreConflictError["name"] = "StoreConflictError"
-const StoreConflictErrorCode: StoreConflictError["code"] = "LIKEGO_STORE_CONFLICT"
+const StoreConflictErrorCode: StoreConflictError["code"] = "GO_LIKE_STORE_CONFLICT"
 
 /** Reports whether a string contains no unmatched UTF-16 surrogate code units. */
 function isWellFormed(value: string): boolean {

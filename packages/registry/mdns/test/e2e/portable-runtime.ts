@@ -1,5 +1,5 @@
-import { background, withCancelCause, withTimeout } from "@likego/context"
-import { type Registry, type ServiceInstance, type Watcher } from "@likego/registry"
+import { background, withCancelCause, withTimeout } from "@go-like/context"
+import { type Registry, type ServiceInstance, type Watcher } from "@go-like/registry"
 import {
   domain,
   families,
@@ -9,7 +9,7 @@ import {
   ttl,
   watchBufferSize,
   type MDNSBindOptions
-} from "@likego/registry-mdns"
+} from "@go-like/registry-mdns"
 import { registryConformanceCases } from "../../../src/testing"
 import { newMemoryMDNSNetwork, type MemoryMDNSNetwork } from "../../src/testing"
 
@@ -106,7 +106,7 @@ async function domainScenario(): Promise<void> {
   const publisher = newMDNSRegistry(shared.host("default-domain"), queryTimeout(5), ttl(2_000))
   const isolated = newMDNSRegistry(
     shared.host("isolated-domain"),
-    domain("isolated.likego"),
+    domain("isolated.go-like"),
     queryTimeout(5)
   )
   const current = service()

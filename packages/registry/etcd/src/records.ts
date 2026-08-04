@@ -1,5 +1,5 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstances } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstances } from "@go-like/registry/provider"
 
 import { decodeRecord, type DecodedRecord } from "./codec"
 import type { OperationOptions } from "./options"

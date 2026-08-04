@@ -1,9 +1,9 @@
 import process from "node:process"
 
-import { newClient, withDiscovery, withSelector, withTransport } from "@likego/client"
-import { newConfig, schema, source } from "@likego/config"
-import { vaultSource } from "@likego/config-vault"
-import { background, withoutCancel } from "@likego/context"
+import { newClient, withDiscovery, withSelector, withTransport } from "@go-like/client"
+import { newConfig, schema, source } from "@go-like/config"
+import { vaultSource } from "@go-like/config-vault"
+import { background, withoutCancel } from "@go-like/context"
 import {
   afterStart,
   afterStop,
@@ -17,25 +17,25 @@ import {
   server,
   stopTimeout,
   version
-} from "@likego/core"
-import { signal } from "@likego/core/node"
-import { newProbeRegistry } from "@likego/health"
-import { newOtelServer, traceClient, traceUnaryMiddleware } from "@likego/otel"
-import { newPinoServer } from "@likego/pino"
-import { createPrometheusHandler } from "@likego/prometheus"
-import { newRoundRobinSelector } from "@likego/registry"
-import { newConsulRegistry } from "@likego/registry-consul"
+} from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newProbeRegistry } from "@go-like/health"
+import { newOtelServer, traceClient, traceUnaryMiddleware } from "@go-like/otel"
+import { newPinoServer } from "@go-like/pino"
+import { createPrometheusHandler } from "@go-like/prometheus"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newConsulRegistry } from "@go-like/registry-consul"
 import {
   address,
   handler as serviceHandler,
   middleware,
   newServer,
   transport as serverTransport
-} from "@likego/server"
-import { newHTTPTransport } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
-import { createHealthHandler } from "@likego/web/health"
-import { hostname, newNodeServer, port } from "@likego/web/node"
+} from "@go-like/server"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+import { createHealthHandler } from "@go-like/web/health"
+import { hostname, newNodeServer, port } from "@go-like/web/node"
 import { context } from "@opentelemetry/api"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
 import { W3CTraceContextPropagator } from "@opentelemetry/core"
@@ -60,7 +60,7 @@ if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
 }
 const consulAddress = process.env.CONSUL_HTTP_ADDR ?? "http://127.0.0.1:58500"
 const vaultAddress = process.env.VAULT_ADDR ?? "http://127.0.0.1:58200"
-const vaultToken = process.env.VAULT_TOKEN ?? "likego-enterprise-dev"
+const vaultToken = process.env.VAULT_TOKEN ?? "go-like-enterprise-dev"
 if (vaultToken === "") {
   throw new TypeError("VAULT_TOKEN is required")
 }
@@ -79,7 +79,7 @@ try {
   const logger = pino({ base: null, redact: ["secret", "token"] }, destination)
   const logging = newPinoServer(logger, destination)
   const resource = resourceFromAttributes({
-    "service.name": "likego-enterprise-platform",
+    "service.name": "go-like-enterprise-platform",
     "deployment.environment.name": "local"
   })
   const tracerProvider = new TracerProvider({
@@ -201,7 +201,7 @@ try {
       await managementServer.endpoint(ctx)
       logger.info({ service: echoServiceName }, "application started")
       process.stdout.write(
-        `LIKEGO_EXAMPLE_READY=${JSON.stringify({ example: "enterprise-platform-runtime", origin })}\n`
+        `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "enterprise-platform-runtime", origin })}\n`
       )
     }),
     afterStop(async function closeRuntime(ctx): Promise<void> {

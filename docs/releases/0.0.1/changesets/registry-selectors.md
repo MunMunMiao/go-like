@@ -1,5 +1,5 @@
 ---
-"@likego/registry": patch
+"@go-like/registry": patch
 ---
 
 增加 random、weighted round-robin、带 in-flight/连续失败/cooldown 反馈的 P2C，以及 Kratos 风格 P2C+EWMA

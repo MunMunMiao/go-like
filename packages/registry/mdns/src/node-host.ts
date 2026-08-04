@@ -3,8 +3,8 @@
 import { createSocket, type Socket, type SocketOptions } from "node:dgram"
 import { networkInterfaces, type NetworkInterfaceInfo } from "node:os"
 
-import { canceled, cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { canceled, cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import type {
   MDNSAddress,

@@ -1,13 +1,13 @@
-# `@likego/bullmq`
+# `@go-like/bullmq`
 
-把应用配置的官方 BullMQ `Worker` 接入 LikeGo 结构化 `Server` 生命周期。本包只承接
+把应用配置的官方 BullMQ `Worker` 接入 go-like 结构化 `Server` 生命周期。本包只承接
 `waitUntilReady()`、`run()`、`pause(false)`、`cancelAllJobs()`、`close(true)` 与原生终态观察；不创建
 Queue、不包装 processor、不复制 `WorkerOptions`，也不定义 job、token、signal、retry、backoff、result 或
 telemetry facade。
 
 ```ts
-import { newApp, server, stopTimeout } from "@likego/core"
-import { bullMqWorkerShutdownTimeout, newBullMqWorkerServer } from "@likego/bullmq"
+import { newApp, server, stopTimeout } from "@go-like/core"
+import { bullMqWorkerShutdownTimeout, newBullMqWorkerServer } from "@go-like/bullmq"
 import { Queue, Worker } from "bullmq"
 
 const connection = {
@@ -66,13 +66,13 @@ const jobs = newBullMqWorkerServer(
 - 主入口只接受官方 `Worker`，或同步的零参数 `() => Worker` 工厂。Worker 必须由应用通过 BullMQ 官方构造器
   配置完整 processor 与 `WorkerOptions`，并明确使用 `autorun: false`。
 - processor 保持 BullMQ 官方三参数 ABI `(job, token, signal)`；原始 `Job` identity、token、`AbortSignal`、
-  retry/backoff/stalled/result/telemetry 全部直接由 BullMQ 提供。本包不插入 LikeGo `Context`，不捕获或改写
+  retry/backoff/stalled/result/telemetry 全部直接由 BullMQ 提供。本包不插入 go-like `Context`，不捕获或改写
   processor rejection。
 - 应用始终持有原生 Worker 数据面引用，可以使用 BullMQ 的查询和业务 API。成功 `start()` 后，Worker 的
-  `run/pause/close` 终止契约转交 LikeGo；应用不得再从旁调用这些生命周期方法。
+  `run/pause/close` 终止契约转交 go-like；应用不得再从旁调用这些生命周期方法。
 - 传入已创建 Worker 时，BullMQ 构造器可能已经建立 Redis connection；`autorun: false` 只保证 processor main
   loop 未启动。需要把资源构造也纳入启动边界时，应使用同步工厂。
-- 工厂只在首次 `start(ctx)` 的取消预检通过后执行一次，不接收 LikeGo 参数。工厂返回的非官方 Worker、
+- 工厂只在首次 `start(ctx)` 的取消预检通过后执行一次，不接收 go-like 参数。工厂返回的非官方 Worker、
   `autorun !== false`、已运行或已关闭 Worker 会被拒绝，并由适配器回滚关闭。
 - 应用应在交付 Worker 前通过官方 `worker.on("error", ...)` 注册业务观察。适配器自己的 listener 只保护和
   收集生命周期排空期间的原生错误，不代替应用日志、监控或告警策略。
@@ -101,12 +101,12 @@ const jobs = newBullMqWorkerServer(
 ## 所有权
 
 应用负责 Queue、processor、Worker 配置与原生数据面。Worker 可以由应用预先创建，也可以由应用工厂在 start
-边界内创建；成功启动后仅 stop contract 归 LikeGo。Worker 内部 Redis connections 随同官方 Worker 的
+边界内创建；成功启动后仅 stop contract 归 go-like。Worker 内部 Redis connections 随同官方 Worker 的
 `close(true)` 收敛，应用 Queue 完全不在适配器作用域内，最后由应用自行关闭。
 
 所有权拆分如下：Queue 为 `application-owned / native-borrowed / application-owned`；Worker 为
-`application-owned / native-borrowed / likego-owned`；Worker connections 为
-`likego-owned / managed-private / likego-owned`。最后一项描述的是成功接纳后只能通过 LikeGo stop contract
+`application-owned / native-borrowed / go-like-owned`；Worker connections 为
+`go-like-owned / managed-private / go-like-owned`。最后一项描述的是成功接纳后只能通过 go-like stop contract
 收敛、且不向应用单独暴露的 Worker 内部 connections，不改变 Worker 配置由应用负责的事实。
 
 ## 真实服务测试

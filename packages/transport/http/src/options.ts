@@ -9,8 +9,8 @@ import type {
   TLSConfig,
   TransportLogLevel,
   TransportLogger
-} from "@likego/transport"
-import { snapshotMessage } from "@likego/transport/provider"
+} from "@go-like/transport"
+import { snapshotMessage } from "@go-like/transport/provider"
 import type {
   HTTPExecutor,
   HTTPHost,

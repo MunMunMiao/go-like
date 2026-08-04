@@ -1,5 +1,5 @@
-import type { Broker, Subscriber } from "@likego/broker"
-import { background } from "@likego/context"
+import type { Broker, Subscriber } from "@go-like/broker"
+import { background } from "@go-like/context"
 import type { Msg, NatsConnection } from "@nats-io/transport-node"
 import {
   newNatsCoreBroker,
@@ -31,6 +31,6 @@ void [published, subscribed]
 
 // @ts-expect-error BrokerMessage is the only public header source.
 const invalidPublishOptions: NatsCoreBrokerPublishOptions = { headers: undefined }
-// @ts-expect-error LikeGo owns the iterator callback.
+// @ts-expect-error go-like owns the iterator callback.
 const invalidSubscribeOptions: NatsCoreBrokerSubscribeOptions = { callback: () => {} }
 void [invalidPublishOptions, invalidSubscribeOptions]

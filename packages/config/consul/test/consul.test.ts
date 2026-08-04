@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, withTimeout, type Context } from "@likego/context"
+import { background, withCancelCause, withTimeout, type Context } from "@go-like/context"
 import { consulSource, jsonConsulDecoder, type ConsulFetch } from "../src/index"
 import { deferred } from "./helpers"
 
@@ -448,7 +448,7 @@ describe("Consul KV configuration source", () => {
     })
 
     await expect(source.load(background())).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_HTTP",
+      code: "GO_LIKE_CONSUL_HTTP",
       status: 403
     })
   })
@@ -499,7 +499,7 @@ describe("Consul KV configuration source", () => {
     if (watcher === undefined) throw new Error("watcher missing")
 
     await expect(watcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_HTTP",
+      code: "GO_LIKE_CONSUL_HTTP",
       status: 403
     })
     expect(requests).toBe(1)
@@ -569,7 +569,7 @@ describe("Consul KV configuration source", () => {
     })
     expect(failure).toMatchObject({
       name: "ConsulHttpError",
-      code: "LIKEGO_CONSUL_HTTP",
+      code: "GO_LIKE_CONSUL_HTTP",
       status: 403,
       key: "private/config"
     })
@@ -826,7 +826,7 @@ describe("Consul KV configuration source", () => {
     const malformedWatcher = await malformedSource.watch?.(background(), "1")
     if (malformedWatcher === undefined) throw new Error("watcher missing")
     await expect(malformedWatcher.next(background())).rejects.toMatchObject({
-      code: "LIKEGO_CONSUL_HTTP",
+      code: "GO_LIKE_CONSUL_HTTP",
       status: "unavailable"
     })
     await malformedWatcher.stop(background())

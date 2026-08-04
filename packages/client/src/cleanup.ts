@@ -1,5 +1,5 @@
-import { background, cause, withTimeoutCause, type Context } from "@likego/context"
-import type { Client as TransportClient, Message } from "@likego/transport"
+import { background, cause, withTimeoutCause, type Context } from "@go-like/context"
+import type { Client as TransportClient, Message } from "@go-like/transport"
 
 interface CompletedCallFailure extends AggregateError {
   readonly cause: Message

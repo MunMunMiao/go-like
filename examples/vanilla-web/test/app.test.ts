@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { newNodeServer } from "@likego/web/node"
+import { newNodeServer } from "@go-like/web/node"
 
 import { newHandler } from "../src/app"
 

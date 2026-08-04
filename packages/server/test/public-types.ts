@@ -1,6 +1,6 @@
-import { background, type Context } from "@likego/context"
-import { newTokenBucketLimiter, type RateLimiter } from "@likego/resilience"
-import { struct } from "@likego/struct"
+import { background, type Context } from "@go-like/context"
+import { newTokenBucketLimiter, type RateLimiter } from "@go-like/resilience"
+import { struct } from "@go-like/struct"
 import {
   endpoint as typedEndpoint,
   type Client,
@@ -8,7 +8,7 @@ import {
   type Message,
   type Options,
   type Transport
-} from "@likego/transport"
+} from "@go-like/transport"
 
 import {
   address,

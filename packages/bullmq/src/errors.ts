@@ -7,13 +7,13 @@ import type {
 type BullMqState = "starting" | "running" | "stopping" | "stopped" | "failed"
 
 const alreadyStartedName: BullMqAlreadyStartedError["name"] = "BullMqAlreadyStartedError"
-const alreadyStartedCode: BullMqAlreadyStartedError["code"] = "LIKEGO_BULLMQ_ALREADY_STARTED"
+const alreadyStartedCode: BullMqAlreadyStartedError["code"] = "GO_LIKE_BULLMQ_ALREADY_STARTED"
 const unexpectedExitName: BullMqUnexpectedExitError["name"] = "BullMqUnexpectedExitError"
-const unexpectedExitCode: BullMqUnexpectedExitError["code"] = "LIKEGO_BULLMQ_UNEXPECTED_EXIT"
+const unexpectedExitCode: BullMqUnexpectedExitError["code"] = "GO_LIKE_BULLMQ_UNEXPECTED_EXIT"
 const shutdownTimeoutName: BullMqWorkerShutdownTimeoutError["name"] =
   "BullMqWorkerShutdownTimeoutError"
 const shutdownTimeoutCode: BullMqWorkerShutdownTimeoutError["code"] =
-  "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
+  "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
 
 /** Preserves official Error identity and normalizes only non-Error boundary values. */
 export function normalizeBullMqError(boundary: string, value: unknown): Error {

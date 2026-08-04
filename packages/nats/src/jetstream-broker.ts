@@ -1,6 +1,6 @@
-import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@likego/broker"
-import type { Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
+import type { Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 import type {
   ConsumerMessages,
   JetStreamClient,

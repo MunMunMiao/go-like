@@ -1,4 +1,4 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import {
   newHandler,
@@ -100,7 +100,7 @@ describe("manufacturing maintenance", () => {
     })
   })
 
-  test("checks the maintenance repository through LikeGo readiness", async () => {
+  test("checks the maintenance repository through go-like readiness", async () => {
     const report = await newRuntime().probes.check(background(), "ready")
     expect(report.ok).toBe(true)
     expect(report.checks).toHaveLength(1)

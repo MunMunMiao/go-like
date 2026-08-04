@@ -1,4 +1,4 @@
-import { providerOptions, type ProviderOptions } from "@likego/registry/provider"
+import { providerOptions, type ProviderOptions } from "@go-like/registry/provider"
 
 import type {
   ZookeeperAcl,
@@ -121,7 +121,7 @@ export function captureOptions(
     throw new TypeError("ZooKeeper Registry options must be an object")
   }
   const address = zookeeperAddress(value.address)
-  const root = zookeeperRoot(value.root ?? "/likego/registry/v1")
+  const root = zookeeperRoot(value.root ?? "/go-like/registry/v1")
   const auth = authentication(value.auth)
   const acl = value.acl ?? "open"
   const sessionTimeoutMs = value.sessionTimeoutMs ?? 30_000

@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Handler } from "@likego/web"
+import { background } from "@go-like/context"
+import type { Handler } from "@go-like/web"
 import { describe, expect, test } from "bun:test"
 
 import { newEnergySettlementHandler } from "../src/http"
@@ -83,7 +83,7 @@ describe("energy meter settlement", () => {
     ).toThrow("settlement amount exceeds safe range")
   })
 
-  test("does not settle before LikeGo Config loads a value", () => {
+  test("does not settle before go-like Config loads a value", () => {
     const config = newTariffConfig({ offPeakMinorPerKwh: 17, peakMinorPerKwh: 43 })
     expect(() =>
       newSettleMeter(config)(background(), {

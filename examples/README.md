@@ -1,4 +1,4 @@
-# LikeGo Examples
+# go-like Examples
 
 ## 建议阅读路径
 
@@ -10,7 +10,7 @@
 
 ## 目录范围
 
-本目录是 LikeGo 可执行案例入口，覆盖行业微服务、Worker、scheduler、message consumer 以及第三方 Web
+本目录是 go-like 可执行案例入口，覆盖行业微服务、Worker、scheduler、message consumer 以及第三方 Web
 框架接入。案例只随真实业务不变量或接入需求增加，目录中的可运行程序就是维护对象。
 
 ## 直接运行
@@ -18,18 +18,18 @@
 每个案例都是在本仓库 workspace 内可独立启动、测试的 private 小程序，而不是只供阅读或测试导入的代码片段。
 案例依赖仓库内的 `workspace:*` 包；复制单个目录不等于得到可独立安装或发布的项目。
 
-- `src/main.ts` 是唯一进程与 App 装配入口，负责真实监听或消息消费、LikeGo 生命周期和信号停止；
+- `src/main.ts` 是唯一进程与 App 装配入口，负责真实监听或消息消费、go-like 生命周期和信号停止；
 - 其他源码只暴露 Handler、结构化 Server 或资源，不创建内层 App，也不另起一套手工生命周期；
 - 业务、HTTP、Client/Server 或外部资源只有在确实需要独立讲解、测试或生命周期时才拆文件；
 - 不统一套用 `domain/application/infrastructure/entrypoint`，也不保留二次转发的 barrel；
-- `bun run start` 先构建仓库内 LikeGo 包；Node.js 案例构建 `--target=node` 后运行产物，明确使用 Bun 的案例
+- `bun run start` 先构建仓库内 go-like 包；Node.js 案例构建 `--target=node` 后运行产物，明确使用 Bun 的案例
   直接运行源码入口；
-- 程序完成启动后输出 `LIKEGO_EXAMPLE_READY=...`，按 `Ctrl-C` 可优雅停止。
+- 程序完成启动后输出 `GO_LIKE_EXAMPLE_READY=...`，按 `Ctrl-C` 可优雅停止。
 
 不依赖外部服务的案例可从仓库根目录直接运行，例如：
 
 ```sh
-bun run --filter @likego/example-retail-inventory-reservation start
+bun run --filter @go-like/example-retail-inventory-reservation start
 ```
 
 默认 HTTP 地址是 `http://127.0.0.1:3000`，可通过 `HOST`、`PORT` 覆盖。部分 `production`
@@ -62,7 +62,7 @@ Tier 不自动代表 Docker。只有表格明确列出真实服务的案例才�
 
 ## 业务案例
 
-|   # | 案例                                                                         | 行业与业务不变量                           | 当前 LikeGo 微服务能力 / 调用链                                                      | Tier        | Docker 判定                                           |
+|   # | 案例                                                                         | 行业与业务不变量                           | 当前 go-like 微服务能力 / 调用链                                                      | Tier        | Docker 判定                                           |
 | --: | ---------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------- |
 |   1 | [`commerce-catalog`](./commerce-catalog/README.md)                           | 电商：缓存失效时仍从 Pricing 获取权威价格  | Hono/Web → Cache → Client + Retry → HTTP Pricing；Docker 注入 Redis/Consul           | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
 |   2 | [`saas-tenant-api`](./saas-tenant-api/README.md)                             | SaaS：配置、缓存和限流不得跨租户泄漏       | Hono/Web → Config + Cache → Token Bucket；Consul Store 保存 runtime state            | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
@@ -107,14 +107,14 @@ Tier 不自动代表 Docker。只有表格明确列出真实服务的案例才�
 
 ## 第三方框架接入案例
 
-以下四项专门演示第三方 Web 框架或原生 Fetch Handler 如何接入 LikeGo，同样属于正式 examples。
+以下四项专门演示第三方 Web 框架或原生 Fetch Handler 如何接入 go-like，同样属于正式 examples。
 
 | 案例                                     | 验证入口                                   | Tier        | Docker 判定       |
 | ---------------------------------------- | ------------------------------------------ | ----------- | ----------------- |
-| [`elysia`](./elysia/README.md)           | Elysia `app.fetch` → `@likego/web` Handler | integration | 否：Node 接入测试 |
-| [`h3`](./h3/README.md)                   | H3 `app.fetch` → `@likego/web` Handler     | integration | 否：Node 接入测试 |
-| [`hono`](./hono/README.md)               | Hono `app.fetch` → `@likego/web` Handler   | integration | 否：Node 接入测试 |
-| [`vanilla-web`](./vanilla-web/README.md) | 原生 Fetch Handler → LikeGo Web 生命周期   | integration | 否：Node 接入测试 |
+| [`elysia`](./elysia/README.md)           | Elysia `app.fetch` → `@go-like/web` Handler | integration | 否：Node 接入测试 |
+| [`h3`](./h3/README.md)                   | H3 `app.fetch` → `@go-like/web` Handler     | integration | 否：Node 接入测试 |
+| [`hono`](./hono/README.md)               | Hono `app.fetch` → `@go-like/web` Handler   | integration | 否：Node 接入测试 |
+| [`vanilla-web`](./vanilla-web/README.md) | 原生 Fetch Handler → go-like Web 生命周期   | integration | 否：Node 接入测试 |
 
 案例取舍、互斥边界和职责拆分规则见
 [`docs/example-portfolio.md`](../docs/example-portfolio.md)。

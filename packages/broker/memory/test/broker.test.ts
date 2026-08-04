@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 
-import type { BrokerEvent, Subscriber } from "@likego/broker"
-import { newBrokerServer } from "@likego/broker"
-import { background, cause, withCancel, withCancelCause, type Context } from "@likego/context"
+import type { BrokerEvent, Subscriber } from "@go-like/broker"
+import { newBrokerServer } from "@go-like/broker"
+import { background, cause, withCancel, withCancelCause, type Context } from "@go-like/context"
 
 import { newMemoryBroker } from "../src/index"
 

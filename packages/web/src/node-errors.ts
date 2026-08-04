@@ -1,19 +1,19 @@
 export interface NodeServerAlreadyStartedError extends Error {
   readonly name: "NodeServerAlreadyStartedError"
-  readonly code: "LIKEGO_NODE_SERVER_ALREADY_STARTED"
+  readonly code: "GO_LIKE_NODE_SERVER_ALREADY_STARTED"
   readonly status: "starting" | "running" | "stopping" | "stopped" | "failed"
 }
 
 export interface NodeServerForceCloseError extends Error {
   readonly name: "NodeServerForceCloseError"
-  readonly code: "LIKEGO_NODE_SERVER_FORCE_CLOSE"
+  readonly code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE"
   readonly timeoutMs: number
   readonly activeConnections: number
 }
 
 export interface NodeServerUnexpectedCloseError extends Error {
   readonly name: "NodeServerUnexpectedCloseError"
-  readonly code: "LIKEGO_NODE_SERVER_UNEXPECTED_CLOSE"
+  readonly code: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE"
 }
 
 /**
@@ -51,7 +51,7 @@ export function newAlreadyStartedError(
 ): NodeServerAlreadyStartedError {
   const details: Pick<NodeServerAlreadyStartedError, "name" | "code" | "status"> = {
     name: "NodeServerAlreadyStartedError",
-    code: "LIKEGO_NODE_SERVER_ALREADY_STARTED",
+    code: "GO_LIKE_NODE_SERVER_ALREADY_STARTED",
     status
   }
   return Object.freeze(Object.assign(new Error("node web server has already started"), details))
@@ -73,7 +73,7 @@ export function newForceCloseError(
     "name" | "code" | "timeoutMs" | "activeConnections"
   > = {
     name: "NodeServerForceCloseError",
-    code: "LIKEGO_NODE_SERVER_FORCE_CLOSE",
+    code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE",
     timeoutMs,
     activeConnections
   }
@@ -90,7 +90,7 @@ export function newForceCloseError(
 export function newUnexpectedCloseError(): NodeServerUnexpectedCloseError {
   const details: Pick<NodeServerUnexpectedCloseError, "name" | "code"> = {
     name: "NodeServerUnexpectedCloseError",
-    code: "LIKEGO_NODE_SERVER_UNEXPECTED_CLOSE"
+    code: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE"
   }
   return Object.freeze(Object.assign(new Error("node web server closed unexpectedly"), details))
 }

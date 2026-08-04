@@ -1,9 +1,9 @@
-import { background, canceled, cause, withCancelCause, type Context } from "@likego/context"
-import type { Endpointer, Server as LifecycleServer } from "@likego/core"
-import { waitForContext } from "@likego/core/lifecycle"
-import { newServerContext } from "@likego/metadata"
-import type { RateLimiter } from "@likego/resilience"
-import type { Infer, Struct } from "@likego/struct"
+import { background, canceled, cause, withCancelCause, type Context } from "@go-like/context"
+import type { Endpointer, Server as LifecycleServer } from "@go-like/core"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { newServerContext } from "@go-like/metadata"
+import type { RateLimiter } from "@go-like/resilience"
+import type { Infer, Struct } from "@go-like/struct"
 import {
   endpoint as endpointContract,
   isServiceError,
@@ -14,20 +14,20 @@ import {
   type Message,
   type Socket,
   type Transport
-} from "@likego/transport"
+} from "@go-like/transport"
 import {
   contentType as contentTypeHeader,
   endpoint as endpointHeader,
   metadata as metadataHeader,
   request as serviceHeader
-} from "@likego/transport/headers"
-import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@likego/transport/json"
+} from "@go-like/transport/headers"
+import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@go-like/transport/json"
 import {
   decodeMetadataHeader,
   encodeServiceError,
   internalServiceError,
   snapshotMessage
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 
 const DefaultAddress = "127.0.0.1:0"
 
@@ -91,7 +91,7 @@ function absoluteEndpoint(value: string): URL | null {
 function advertiseAuthority(value: string): URL {
   let authority: URL
   try {
-    authority = new URL(`likego://${value}`)
+    authority = new URL(`go-like://${value}`)
   } catch {
     throw new TypeError("server advertise must be an absolute endpoint, host, or host:port")
   }
@@ -409,7 +409,7 @@ export function handler<Request extends Struct, Response extends Struct>(
 
 /** Appends global unary middleware in declaration order. */
 export function middleware(
-  ...values: readonly Middleware[] /* likego-typed-rest: preserves ordered middleware. */
+  ...values: readonly Middleware[] /* go-like-typed-rest: preserves ordered middleware. */
 ): ServerOption {
   const selected: Middleware[] = []
   for (const value of values) selected.push(middlewareValue(value))
@@ -462,7 +462,7 @@ export function rateLimitMiddleware(limiter: RateLimiter): Middleware {
 /** Replaces middleware for one exact or trailing-wildcard operation selector. */
 export function use(
   selector: string,
-  ...values: readonly Middleware[] /* likego-typed-rest: preserves ordered middleware. */
+  ...values: readonly Middleware[] /* go-like-typed-rest: preserves ordered middleware. */
 ): ServerOption {
   const operation = operationSelector(selector)
   const selected: Middleware[] = []
@@ -486,7 +486,7 @@ export function use(
 
 /** Appends transport-specific listen options. */
 export function listenOption(
-  ...values: readonly ListenOption[] /* likego-typed-rest: preserves ordered listen options. */
+  ...values: readonly ListenOption[] /* go-like-typed-rest: preserves ordered listen options. */
 ): ServerOption {
   const selected: ListenOption[] = []
   for (const value of values) {
@@ -617,7 +617,7 @@ function dispatcher(
 
 /** Creates one go-micro-style internal service Server. */
 export function newServer(
-  ...values: readonly ServerOption[] /* likego-typed-rest: preserves the Go-style option ABI. */
+  ...values: readonly ServerOption[] /* go-like-typed-rest: preserves the Go-style option ABI. */
 ): Server {
   let options = defaultOptions()
   for (const option of values) {
@@ -646,7 +646,7 @@ export function newServer(
         .listen(
           bindOwner[0],
           options.address,
-          ...options.listenOptions /* likego-typed-spread: forwards listen options. */
+          ...options.listenOptions /* go-like-typed-spread: forwards listen options. */
         )
         .then(
           /** Captures the actual listener and address from the single bind. */

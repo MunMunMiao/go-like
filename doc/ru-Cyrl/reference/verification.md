@@ -1,8 +1,8 @@
 # Проверка
 
-LikeGo разделяет тесты только на два класса. `bun run test:unit` запускает детерминированные unit-тесты без внешних сервисов. `bun run test:e2e` собирает пакеты и локально проверяет реальные провайдеры, разные runtime, исполняемые examples и потребление опубликованных tarball. Docker suites запускают настоящие сервисы и удаляют созданные ресурсы.
+go-like использует несколько evidence lanes; сводить все результаты к двум классам тестов не стоит. `bun run test:unit` запускает детерминированные unit-тесты без внешних сервисов. `bun run test:e2e` собирает пакеты и локально проверяет реальные провайдеры, разные runtime, исполняемые examples и потребление опубликованных tarball. Docker suites запускают настоящие сервисы и удаляют созданные ресурсы.
 
-CI выполняет только установку, проверку форматирования и типов, build и unit-тесты. Docker, cross-runtime, example и soak E2E запускаются локально:
+Format, Typecheck, Build, Runtime E2E, Provider E2E, Example E2E, Published, Soak, Documentation build и Audit нужно записывать отдельно. `test:unit:coverage` создаёт только необязательный отчёт; полные evidence lanes, исторический baseline и документационный run record находятся в [канонической Verification на английском](/reference/verification).
 
 ```sh
 bun run test:unit
@@ -10,4 +10,4 @@ bun run test:e2e
 bun run test:e2e:soak
 ```
 
-`test:unit:coverage` создаёт только необязательный отчёт. `fmt`, `typecheck`, `build`, `audit` и `doc:build` — инженерные команды, а не дополнительные классы тестов. Наличие команды не доказывает её успешное выполнение; проверяйте terminal status и логи текущего запуска.
+`test:unit:coverage` создаёт только необязательный отчёт. `fmt`, `typecheck`, `build`, `audit` и `doc:build` — инженерные команды, а не дополнительные классы тестов. `doc:build` проверяет настроенные VitePress routes английской и локализованных веток; он не доказывает браузерную вёрстку или parity перевода. Наличие команды не доказывает её успешное выполнение; проверяйте terminal status и логи текущего запуска. Полные evidence lanes, исторический baseline и документационный run record находятся в [канонической Verification на английском](/reference/verification).

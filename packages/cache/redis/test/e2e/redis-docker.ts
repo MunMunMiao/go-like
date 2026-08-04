@@ -1,6 +1,6 @@
-import { background, withTimeout, type Context } from "@likego/context"
-import type { Cache } from "@likego/cache"
-import type { Server } from "@likego/core"
+import { background, withTimeout, type Context } from "@go-like/context"
+import type { Cache } from "@go-like/cache"
+import type { Server } from "@go-like/core"
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { createClient, createCluster, createSentinel } from "@redis/client"
@@ -15,16 +15,16 @@ const Image =
 const RedisVersion = "8.10.0"
 const NodeRedisVersion = redisClientManifest.version
 const RunId = crypto.randomUUID()
-const Name = `likego-cache-redis-${RunId}`
+const Name = `go-like-cache-redis-${RunId}`
 const Network = `${Name}-network`
-const Label = `likego.cache-redis.integration=${RunId}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Label = `go-like.cache-redis.integration=${RunId}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
-const Prefix = `likego:cache:e2e:${RunId}:`
-const Password = `likego-${RunId}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
+const Prefix = `go-like:cache:e2e:${RunId}:`
+const Password = `go-like-${RunId}`
 const ArtifactRoot = join(process.cwd(), ".artifacts", "cache-redis", RunId)
 
 interface CommandResult {
@@ -230,14 +230,14 @@ async function start(
   try {
     while (Date.now() < deadline) {
       try {
-        await cache.get(background(), "__likego_integration_readiness__")
+        await cache.get(background(), "__go-like_integration_readiness__")
         return cache
       } catch (value) {
         if (
           typeof value !== "object" ||
           value === null ||
           !("code" in value) ||
-          value.code !== "LIKEGO_CACHE_REDIS_STATE" ||
+          value.code !== "GO_LIKE_CACHE_REDIS_STATE" ||
           !("state" in value) ||
           value.state !== "starting"
         ) {
@@ -324,7 +324,7 @@ async function runDirect(redisUrl: string): Promise<Readonly<Record<string, unkn
         protocolCode = value.code
       }
     }
-    if (protocolCode !== "LIKEGO_CACHE_REDIS_PROTOCOL") {
+    if (protocolCode !== "GO_LIKE_CACHE_REDIS_PROTOCOL") {
       throw new Error("Redis foreign value did not produce the protocol error")
     }
 
@@ -367,7 +367,7 @@ async function tlsMaterial(): Promise<Readonly<{ ca: string; directory: string }
     "-out",
     ca,
     "-subj",
-    "/CN=LikeGo Redis Test CA",
+    "/CN=go-like Redis Test CA",
     "-days",
     "1"
   ])
@@ -527,11 +527,11 @@ async function runSentinelContainer(name: string, alias: string, primary: string
     "bind 0.0.0.0",
     "protected-mode no",
     "sentinel resolve-hostnames yes",
-    `sentinel monitor likego-primary ${primary} 6379 2`,
-    `sentinel auth-pass likego-primary ${Password}`,
-    "sentinel down-after-milliseconds likego-primary 500",
-    "sentinel failover-timeout likego-primary 5000",
-    "sentinel parallel-syncs likego-primary 1"
+    `sentinel monitor go-like-primary ${primary} 6379 2`,
+    `sentinel auth-pass go-like-primary ${Password}`,
+    "sentinel down-after-milliseconds go-like-primary 500",
+    "sentinel failover-timeout go-like-primary 5000",
+    "sentinel parallel-syncs go-like-primary 1"
   ].join("\n")
   const launch = `cat > /tmp/sentinel.conf <<'EOF'\n${configuration}\nEOF\nexec redis-server /tmp/sentinel.conf --sentinel`
   await runRedisContainer(name, alias, 26379, ["sh", "-c", launch])
@@ -552,7 +552,7 @@ async function sentinelPrimary(name: string): Promise<string> {
     "--raw",
     "SENTINEL",
     "get-master-addr-by-name",
-    "likego-primary"
+    "go-like-primary"
   ])
   const address = result.stdout.split("\n")[0]
   if (address === undefined || address.length === 0) throw new Error("Sentinel returned no primary")
@@ -618,7 +618,7 @@ async function runSentinelFailover(): Promise<SentinelEvidence> {
       newRedisCache({
         client: () =>
           createSentinel({
-            name: "likego-primary",
+            name: "go-like-primary",
             sentinelRootNodes,
             nodeAddressMap,
             nodeClientOptions: { password: Password },

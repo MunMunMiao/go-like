@@ -51,14 +51,14 @@ export type RedisCacheOperation = "connect" | "get" | "put" | "delete" | "close"
 /** Describes one stable Redis client or protocol boundary failure. */
 export interface RedisCacheOperationError extends Error {
   readonly name: "RedisCacheOperationError"
-  readonly code: "LIKEGO_CACHE_REDIS_OPERATION"
+  readonly code: "GO_LIKE_CACHE_REDIS_OPERATION"
   readonly operation: RedisCacheOperation
   readonly cause: Error
 }
 
-/** Describes a value that is not a canonical LikeGo Redis Cache carrier. */
+/** Describes a value that is not a canonical go-like Redis Cache carrier. */
 export interface RedisCacheProtocolError extends Error {
   readonly name: "RedisCacheProtocolError"
-  readonly code: "LIKEGO_CACHE_REDIS_PROTOCOL"
+  readonly code: "GO_LIKE_CACHE_REDIS_PROTOCOL"
   readonly operation: "get"
 }

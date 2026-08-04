@@ -14,8 +14,8 @@
     "noEmit": true,
     "skipLibCheck": false,
     "paths": {
-      "@likego/*": ["./authoring-stubs/likego.d.ts"]
+      "@go-like/*": ["./authoring-stubs/go-like.d.ts"]
     }
   },
-  "files": ["authoring-stubs/likego.d.ts", "portable.ts", "node.ts", "bun.ts", "deno.ts"]
+  "files": ["authoring-stubs/go-like.d.ts", "portable.ts", "node.ts", "bun.ts", "deno.ts"]
 }

@@ -1,6 +1,6 @@
-import { newBrokerServer } from "@likego/broker"
-import { background } from "@likego/context"
-import type { Server } from "@likego/core"
+import { newBrokerServer } from "@go-like/broker"
+import { background } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import {
   connect,
   type Channel,
@@ -15,9 +15,9 @@ const RabbitMqImage =
   "docker.io/library/rabbitmq:4.3.4-management-alpine@sha256:09b39ca8a3e884e91cab8842cd41264de21aab0625e1f1d016a9a3135ba590ef"
 const ExpectedServerVersion = "4.3.4"
 const ConcurrentPublisherConfirms = 100
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
 
 interface CommandResult {
@@ -199,10 +199,10 @@ async function waitForConsumerCount(
 
 /** Executes the fixed-digest RabbitMQ provider E2E. */
 async function main(): Promise<void> {
-  const project = `likego-rabbitmq-${crypto.randomUUID()}`
+  const project = `go-like-rabbitmq-${crypto.randomUUID()}`
   const container = `${project}-server`
-  const projectLabel = `likego.project=${project}`
-  const ownerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  const projectLabel = `go-like.project=${project}`
+  const ownerLabel = `io.go-like.e2e.owner=${DockerOwner}`
   const port = allocateHostPort()
   const queue = `${project}.queue`
   const terminalQueue = `${project}.terminal.queue`

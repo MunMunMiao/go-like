@@ -1,6 +1,6 @@
-# `@likego/registry-etcd`
+# `@go-like/registry-etcd`
 
-`@likego/registry-etcd` 是 `@likego/registry` 的 etcd 实现。公共 API 与其他 Registry provider
+`@go-like/registry-etcd` 是 `@go-like/registry` 的 etcd 实现。公共 API 与其他 Registry provider
 保持一致，只使用 `ServiceInstance`、`register/deregister`、`getService` 和按服务名创建的
 replacement snapshot `Watcher`。etcd lease、revision、transaction 与 watch stream 都是包内实现细节。
 
@@ -10,8 +10,8 @@ Node.js SDK 或运行时全局 `fetch`。
 ## 使用
 
 ```ts
-import { background } from "@likego/context"
-import { newEtcdRegistry } from "@likego/registry-etcd"
+import { background } from "@go-like/context"
+import { newEtcdRegistry } from "@go-like/registry-etcd"
 
 const registry = newEtcdRegistry({
   fetch,
@@ -47,7 +47,7 @@ await watcher.stop(background())
 | ----------------- | ---------------------- | ---------------------------------------------------------------------- |
 | `fetch`           | 必填                   | 借用的标准 `(RequestInfo \| URL, RequestInit?) => Promise<Response>`。 |
 | `address`         | 必填                   | 单个无 credential、path、query、fragment 的 HTTP(S) origin。           |
-| `prefix`          | `/likego/registry/v1/` | 以 `/` 开始和结束的绝对 UTF-8 key prefix。                             |
+| `prefix`          | `/go-like/registry/v1/` | 以 `/` 开始和结束的绝对 UTF-8 key prefix。                             |
 | `token`           | 省略                   | 非空 HTTP `Authorization` header 值；不会进入 URL 或诊断。             |
 | `retryInitialMs`  | `250`                  | availability retry 初始间隔，整数 `1..60000`。                         |
 | `retryMaximumMs`  | `30000`                | availability retry 上限，整数 `retryInitialMs..600000`。               |
@@ -110,8 +110,8 @@ Watcher 先读取一致快照，再从 `revision + 1` 建立 prefix watch，因�
 
 | 资源                | owner     | stop 契约                                                |
 | ------------------- | --------- | -------------------------------------------------------- |
-| `etcd-registration` | LikeGo    | `deregister(ctx, instance)` 停止续约并删除本地受管记录。 |
-| `etcd-watcher`      | LikeGo    | `watcher.stop(ctx)` 中止 stream、retry 和 pending wait。 |
+| `etcd-registration` | go-like    | `deregister(ctx, instance)` 停止续约并删除本地受管记录。 |
+| `etcd-watcher`      | go-like    | `watcher.stop(ctx)` 中止 stream、retry 和 pending wait。 |
 | `etcd-fetch`        | 应用      | 仅借用；本包不调用 `close`、`destroy` 或同类能力。       |
 | `etcd-process`      | 应用/运维 | 仅通过 HTTP 使用；本包不启动、停止或配置 etcd 进程。     |
 
@@ -119,16 +119,16 @@ Watcher 先读取一致快照，再从 `revision + 1` 建立 prefix watch，因�
 
 - `EtcdHttpError` 只暴露 operation 与 HTTP status，不读取非成功 body。
 - `EtcdTransportError` 在配置 token 时替换 Fetch rejection graph，避免 Request/header 泄密。
-- registry protocol 与 watcher overflow/stopped 复用 `@likego/registry` 的稳定错误契约。
+- registry protocol 与 watcher overflow/stopped 复用 `@go-like/registry` 的稳定错误契约。
 - token 不进入 URL、message、options snapshot 或日志。
 
 ## 验证
 
 ```sh
-bun run --filter @likego/registry-etcd typecheck
-bun run --filter @likego/registry-etcd test:unit
-bun run --filter @likego/registry-etcd build
-LIKEGO_E2E_OWNER=local bun run --filter @likego/registry-etcd test:e2e
+bun run --filter @go-like/registry-etcd typecheck
+bun run --filter @go-like/registry-etcd test:unit
+bun run --filter @go-like/registry-etcd build
+GO_LIKE_E2E_OWNER=local bun run --filter @go-like/registry-etcd test:e2e
 ```
 
 真实协议测试使用：

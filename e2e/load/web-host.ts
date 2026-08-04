@@ -1,19 +1,19 @@
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import {
   address,
   handler,
   newServer,
   transport,
   type Server as ServiceServer
-} from "@likego/server"
-import type { Message } from "@likego/transport"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
-import { hostname, newNodeServer, nodeShutdownTimeout, port } from "@likego/web/node"
+} from "@go-like/server"
+import type { Message } from "@go-like/transport"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+import { hostname, newNodeServer, nodeShutdownTimeout, port } from "@go-like/web/node"
 import { readdir } from "node:fs/promises"
 
-const AdmittedMarker = "LIKEGO_SOAK_WEB_DRAIN_ADMITTED="
-const ReadyMarker = "LIKEGO_SOAK_WEB_READY="
-const ResultMarker = "LIKEGO_SOAK_WEB_RESULT="
+const AdmittedMarker = "GO_LIKE_SOAK_WEB_DRAIN_ADMITTED="
+const ReadyMarker = "GO_LIKE_SOAK_WEB_READY="
+const ResultMarker = "GO_LIKE_SOAK_WEB_RESULT="
 const release = Promise.withResolvers<void>()
 const unhandled: unknown[] = []
 let admittedRequests = 0
@@ -52,7 +52,7 @@ process.on("unhandledRejection", (reason) => unhandled.push(reason))
 const server = newNodeServer(
   async function fetchHandler(request): Promise<Response> {
     const path = new URL(request.url).pathname
-    if (path === "/__likego/soak/runtime") {
+    if (path === "/__go-like/soak/runtime") {
       const memory = process.memoryUsage()
       return Response.json({
         rssBytes: memory.rss,
@@ -68,7 +68,7 @@ const server = newNodeServer(
       drainedRequests += 1
       return new Response("drained")
     }
-    return new Response("likego")
+    return new Response("go-like")
   },
   hostname("0.0.0.0"),
   port(0),

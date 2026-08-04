@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { background, withCancelCause } from "@likego/context"
+import { background, withCancelCause } from "@go-like/context"
 import { newProbeRegistry } from "../src/index"
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))

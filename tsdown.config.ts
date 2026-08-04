@@ -5,7 +5,7 @@ import { defineConfig, type UserConfig } from "tsdown"
 type JsonObject = Record<string, unknown>
 
 const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"] as const
-const repositoryUrl = "git+https://github.com/MunMunMiao/likego.git"
+const repositoryUrl = "git+https://github.com/MunMunMiao/go-like.git"
 
 function object(value: unknown, label: string): JsonObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -92,9 +92,9 @@ export async function distPackageManifest(value: unknown, cwd: string): Promise<
   manifest.typings = `./${root.output}.d.ts`
   manifest.exports = exports
   manifest.repository ??= { type: "git", url: repositoryUrl }
-  manifest.homepage ??= "https://github.com/MunMunMiao/likego#readme"
-  manifest.bugs ??= { url: "https://github.com/MunMunMiao/likego/issues" }
-  manifest.keywords ??= ["likego", "microservices", "typescript"]
+  manifest.homepage ??= "https://github.com/MunMunMiao/go-like#readme"
+  manifest.bugs ??= { url: "https://github.com/MunMunMiao/go-like/issues" }
+  manifest.keywords ??= ["go-like", "microservices", "typescript"]
   delete manifest.scripts
   delete manifest.devDependencies
   delete manifest.private
@@ -115,7 +115,7 @@ export default defineConfig(async (inlineConfig): Promise<UserConfig> => {
     clean: true,
     copy: ["README.md", "LICENSE"],
     cwd,
-    deps: { neverBundle: [/^@likego\//, /^node:/] },
+    deps: { neverBundle: [/^@go-like\//, /^node:/] },
     dts: true,
     entry,
     format: "esm",

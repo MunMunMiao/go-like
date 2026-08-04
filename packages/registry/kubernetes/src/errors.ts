@@ -10,7 +10,7 @@ export function newHttpError(operation: KubernetesOperation, status: number): Ku
   return Object.freeze(
     Object.assign(new Error(`Kubernetes ${operation} request failed with HTTP ${status}`), {
       name: "KubernetesHttpError" as const,
-      code: "LIKEGO_KUBERNETES_HTTP" as const,
+      code: "GO_LIKE_KUBERNETES_HTTP" as const,
       operation,
       status
     })
@@ -29,7 +29,7 @@ export function newTransportError(
   return Object.freeze(
     Object.assign(new Error(`Kubernetes ${operation} transport failed`, { cause }), {
       name: "KubernetesTransportError" as const,
-      code: "LIKEGO_KUBERNETES_TRANSPORT" as const,
+      code: "GO_LIKE_KUBERNETES_TRANSPORT" as const,
       operation,
       cause
     })

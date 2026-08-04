@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, cause, withCancel, type Context } from "@likego/context"
+import { background, canceled, cause, withCancel, type Context } from "@go-like/context"
 
 import {
   decodeBase64,
@@ -234,7 +234,7 @@ describe("Vault Store HTTP boundary", () => {
       namespace: "tenant"
     })
     await expect(listVault(background(), options)).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_HTTP",
+      code: "GO_LIKE_VAULT_STORE_HTTP",
       operation: "list",
       status: 403
     })
@@ -253,7 +253,7 @@ describe("Vault Store HTTP boundary", () => {
       mount: "secret"
     })
     await expect(listVault(background(), sync)).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_TRANSPORT"
+      code: "GO_LIKE_VAULT_STORE_TRANSPORT"
     })
     const asyncFailure = captureOptions({
       fetch() {
@@ -273,7 +273,7 @@ describe("Vault Store HTTP boundary", () => {
       mount: "secret"
     })
     await expect(listVault(background(), nonResponse)).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_PROTOCOL"
+      code: "GO_LIKE_VAULT_STORE_PROTOCOL"
     })
     for (const mode of ["sync", "async"] as const) {
       const response = Response.json({ data: { keys: [] } })
@@ -293,7 +293,7 @@ describe("Vault Store HTTP boundary", () => {
         mount: "secret"
       })
       await expect(listVault(background(), options)).rejects.toMatchObject({
-        code: "LIKEGO_VAULT_STORE_PROTOCOL"
+        code: "GO_LIKE_VAULT_STORE_PROTOCOL"
       })
     }
     const invalidJson = captureOptions({
@@ -302,7 +302,7 @@ describe("Vault Store HTTP boundary", () => {
       mount: "secret"
     })
     await expect(listVault(background(), invalidJson)).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_PROTOCOL"
+      code: "GO_LIKE_VAULT_STORE_PROTOCOL"
     })
     const [ctx, cancel] = withCancel(background())
     const canceledResponse = new Response("{")
@@ -344,7 +344,7 @@ describe("Vault Store HTTP boundary", () => {
     await writeVault(background(), options, { key: "x", value: Uint8Array.of(1) })
     backend.setFailure("malformed-read")
     await expect(readVault(background(), options, "x", "read")).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_PROTOCOL"
+      code: "GO_LIKE_VAULT_STORE_PROTOCOL"
     })
     backend.setFailure("malformed-write")
     expect(
@@ -367,7 +367,7 @@ describe("Vault Store HTTP boundary", () => {
     await expect(
       writeVault(background(), options, { key: "x", value: Uint8Array.of(1) })
     ).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_UNCERTAIN"
+      code: "GO_LIKE_VAULT_STORE_UNCERTAIN"
     })
 
     calls = 0
@@ -381,7 +381,7 @@ describe("Vault Store HTTP boundary", () => {
       mount: "secret"
     })
     await expect(deleteVault(background(), deleteOptions, "x", 1)).rejects.toMatchObject({
-      code: "LIKEGO_VAULT_STORE_UNCERTAIN"
+      code: "GO_LIKE_VAULT_STORE_UNCERTAIN"
     })
   })
 

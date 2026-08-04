@@ -1,4 +1,4 @@
-import { background, cause, deadlineExceeded, withCancelCause } from "@likego/context"
+import { background, cause, deadlineExceeded, withCancelCause } from "@go-like/context"
 import { expect, test } from "bun:test"
 
 import {

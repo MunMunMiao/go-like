@@ -1,4 +1,4 @@
-import { deadlineExceeded } from "@likego/context"
+import { deadlineExceeded } from "@go-like/context"
 
 import { newHttpError, newTransportError } from "./errors"
 import type { OperationOptions } from "./options"
@@ -131,9 +131,9 @@ export async function queryText(
 export function retryable(value: unknown): boolean {
   if (value === deadlineExceeded) return true
   if (typeof value !== "object" || value === null || !("code" in value)) return false
-  if (value.code === "LIKEGO_CONSUL_TRANSPORT") return true
+  if (value.code === "GO_LIKE_CONSUL_TRANSPORT") return true
   if (
-    value.code !== "LIKEGO_CONSUL_HTTP" ||
+    value.code !== "GO_LIKE_CONSUL_HTTP" ||
     !("status" in value) ||
     typeof value.status !== "number"
   )

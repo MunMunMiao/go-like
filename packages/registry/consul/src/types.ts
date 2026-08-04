@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import type { ProviderLogger, RegistrationErrorHandler } from "@likego/registry/provider"
+import type { Registry } from "@go-like/registry"
+import type { ProviderLogger, RegistrationErrorHandler } from "@go-like/registry/provider"
 
 /** Executes one borrowed standard Web Fetch request without runtime-specific static properties. */
 export interface ConsulFetch {
@@ -32,7 +32,7 @@ export type ConsulOperation = "register" | "heartbeat" | "deregister" | "readbac
 /** Describes one non-success Consul HTTP response. */
 export interface ConsulHttpError extends Error {
   readonly name: "ConsulHttpError"
-  readonly code: "LIKEGO_CONSUL_HTTP"
+  readonly code: "GO_LIKE_CONSUL_HTTP"
   readonly operation: ConsulOperation
   readonly status: number
 }
@@ -40,7 +40,7 @@ export interface ConsulHttpError extends Error {
 /** Describes one secret-safe Fetch rejection. */
 export interface ConsulTransportError extends Error {
   readonly name: "ConsulTransportError"
-  readonly code: "LIKEGO_CONSUL_TRANSPORT"
+  readonly code: "GO_LIKE_CONSUL_TRANSPORT"
   readonly operation: ConsulOperation
   readonly cause: Error
 }

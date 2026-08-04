@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { SQL } from "bun"
 
-import { background } from "@likego/context"
-import { name, newApp, server } from "@likego/core"
+import { background } from "@go-like/context"
+import { name, newApp, server } from "@go-like/core"
 
 import { newPaymentHandler } from "../src/http"
 import { isPaymentFailure, parsePaymentRequest } from "../src/payment"

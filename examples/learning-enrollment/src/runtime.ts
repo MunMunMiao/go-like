@@ -1,4 +1,4 @@
-import type { Handler } from "@likego/web"
+import type { Handler } from "@go-like/web"
 
 import { newEnrollmentHandler } from "./http"
 import { newEnrollLearner } from "./service"

@@ -1,7 +1,7 @@
-import type { CallOption, CallRequest, Client, ClientMiddleware } from "@likego/client"
-import type { Context } from "@likego/context"
-import type { Infer, Struct } from "@likego/struct"
-import type { Endpoint, Message } from "@likego/transport"
+import type { CallOption, CallRequest, Client, ClientMiddleware } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import type { Infer, Struct } from "@go-like/struct"
+import type { Endpoint, Message } from "@go-like/transport"
 import { SpanKind, type TextMapPropagator, type Tracer } from "@opentelemetry/api"
 
 import {
@@ -22,7 +22,7 @@ import {
 type RawClientCall = (
   ctx: Context,
   request: CallRequest,
-  ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+  ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
 ) => Promise<Message>
 
 /** Calls one runtime-erased typed Client endpoint. */
@@ -30,7 +30,7 @@ type TypedClientCall = (
   ctx: Context,
   endpoint: Endpoint,
   request: unknown,
-  ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+  ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
 ) => Promise<unknown>
 
 /** Invokes one captured overload with a selected Context and optional raw request replacement. */
@@ -45,7 +45,7 @@ type ClientDecorator = (
 
 /** Creates one stable client span name from the declared service operation. */
 function clientSpanName(request: CallRequest | Endpoint): string {
-  return `likego.client ${request.service}/${request.endpoint}`
+  return `go-like.client ${request.service}/${request.endpoint}`
 }
 
 /** Rejects a value that cannot preserve the complete public Client contract. */
@@ -57,7 +57,7 @@ function validateClient(client: Client): void {
     typeof client.call !== "function" ||
     typeof client.close !== "function"
   ) {
-    throw new TypeError("client must implement the LikeGo Client interface")
+    throw new TypeError("client must implement the go-like Client interface")
   }
 }
 
@@ -119,14 +119,14 @@ function wrapClient(client: Client, decorate: ClientDecorator): Client {
     ctx: Context,
     endpoint: Endpoint<RequestStruct, ResponseStruct>,
     request: NoInfer<Infer<RequestStruct>>,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Infer<ResponseStruct>>
 
   /** Calls one raw Message endpoint. */
   function call(
     ctx: Context,
     request: CallRequest,
-    ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Message>
 
   /** Dispatches one raw or typed call through the original Client receiver. */
@@ -186,7 +186,7 @@ export function traceClient(
   validateTracer(tracer)
   validatePropagator(propagator)
 
-  /** Traces one complete raw or typed call and injects propagation through LikeGo metadata. */
+  /** Traces one complete raw or typed call and injects propagation through go-like metadata. */
   async function traced(
     ctx: Context,
     endpoint: CallRequest | Endpoint,
@@ -197,9 +197,9 @@ export function traceClient(
       {
         kind: SpanKind.CLIENT,
         attributes: {
-          "likego.kind": "client",
-          "likego.service": endpoint.service,
-          "likego.endpoint": endpoint.endpoint
+          "go-like.kind": "client",
+          "go-like.service": endpoint.service,
+          "go-like.endpoint": endpoint.endpoint
         }
       },
       async (span) => {
@@ -303,7 +303,7 @@ export function measureClientMiddleware(metrics: RequestMetrics): ClientMiddlewa
     async function measuredClientCall(
       ctx: Context,
       request: CallRequest,
-      ...options: readonly CallOption[] /* likego-typed-rest: preserves call options. */
+      ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
     ): Promise<Message> {
       return await measured(ctx, request, options)
     }

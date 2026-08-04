@@ -1,5 +1,5 @@
 ---
-"@likego/core": patch
+"@go-like/core": patch
 ---
 
 新增 `startTimeout` startup admission deadline，将 `stopTimeout` 扩展为覆盖完整 shutdown pipeline 的单一

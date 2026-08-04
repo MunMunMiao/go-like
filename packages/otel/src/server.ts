@@ -1,6 +1,6 @@
-import type { Context } from "@likego/context"
-import type { Middleware } from "@likego/server"
-import { endpoint, request as service } from "@likego/transport/headers"
+import type { Context } from "@go-like/context"
+import type { Middleware } from "@go-like/server"
+import { endpoint, request as service } from "@go-like/transport/headers"
 import { SpanKind, type Span, type TextMapPropagator, type Tracer } from "@opentelemetry/api"
 
 import {
@@ -35,13 +35,13 @@ export function traceUnaryMiddleware(
       const endpointName = routeField(message.header, endpoint)
       const parent = extractServerContext(ctx, message.header, propagator)
       return await tracer.startActiveSpan(
-        `likego.server ${serviceName}/${endpointName}`,
+        `go-like.server ${serviceName}/${endpointName}`,
         {
           kind: SpanKind.SERVER,
           attributes: {
-            "likego.kind": "server",
-            "likego.service": serviceName,
-            "likego.endpoint": endpointName
+            "go-like.kind": "server",
+            "go-like.service": serviceName,
+            "go-like.endpoint": endpointName
           }
         },
         parent,
@@ -129,7 +129,7 @@ export function traceWebHandler(
       {
         kind: SpanKind.SERVER,
         attributes: {
-          "likego.kind": "web",
+          "go-like.kind": "web",
           "http.request.method": request.method
         }
       },

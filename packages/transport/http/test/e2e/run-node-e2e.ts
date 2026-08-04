@@ -14,7 +14,7 @@ try {
     naming: "node-host.js",
     format: "esm",
     target: "node",
-    external: ["@likego/*"]
+    external: ["@go-like/*"]
   })
   if (!built.success) {
     throw new Error(`private Node host E2E build failed: ${built.logs.join("\n")}`)
@@ -27,7 +27,7 @@ try {
     .join(",")
   environment.NO_PROXY = noProxy
   environment.no_proxy = noProxy
-  environment.LIKEGO_TRANSPORT_HTTP_NODE_HOST_E2E_MODULE = pathToFileURL(
+  environment.GO_LIKE_TRANSPORT_HTTP_NODE_HOST_E2E_MODULE = pathToFileURL(
     join(stage, "node-host.js")
   ).href
 

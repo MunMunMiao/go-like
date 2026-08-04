@@ -5,8 +5,8 @@ import {
   withSelector,
   withTransport,
   type Client
-} from "@likego/client"
-import { background, withTimeout, type Context } from "@likego/context"
+} from "@go-like/client"
+import { background, withTimeout, type Context } from "@go-like/context"
 import {
   id,
   metadata,
@@ -18,7 +18,7 @@ import {
   type App,
   type Endpointer,
   type Server as LifecycleServer
-} from "@likego/core"
+} from "@go-like/core"
 import {
   filterLabel,
   newRoundRobinSelector,
@@ -29,14 +29,14 @@ import {
   type ServiceEndpoint,
   type ServiceInstance,
   type Watcher
-} from "@likego/registry"
-import { newConsulRegistry, type ConsulFetch } from "@likego/registry-consul"
+} from "@go-like/registry"
+import { newConsulRegistry, type ConsulFetch } from "@go-like/registry-consul"
 import {
   address as serverAddress,
   handler,
   newServer,
   transport as serverTransport
-} from "@likego/server"
+} from "@go-like/server"
 import {
   type Client as TransportClient,
   type DialOption,
@@ -46,22 +46,22 @@ import {
   type Option,
   type Options,
   type Transport
-} from "@likego/transport"
-import { executor, type HTTPExecutor } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+} from "@go-like/transport"
+import { executor, type HTTPExecutor } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
 const Image =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
-const Marker = "Likego-Service-Instance=1"
+const Marker = "Go-Like-Service-Instance=1"
 const Session = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`
-const ContainerName = `likego-registry-transport-${Session}`
-const NetworkName = `likego-registry-transport-${Session}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const ContainerName = `go-like-registry-transport-${Session}`
+const NetworkName = `go-like-registry-transport-${Session}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
-const ServiceName = `likego-call-${Session}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
+const ServiceName = `go-like-call-${Session}`
 const OperationEndpoint = "Get"
 const DeregisterProbeEndpoint = "DeregisterProbe"
 const Encoder = new TextEncoder()
@@ -147,7 +147,7 @@ async function ready(address: string): Promise<void> {
   throw new Error("Consul Agent did not become ready within 30 seconds")
 }
 
-/** Returns exact LikeGo-managed Agent service IDs from a real Consul readback. */
+/** Returns exact go-like-managed Agent service IDs from a real Consul readback. */
 async function managedRemoteIds(address: string, serviceName: string | null): Promise<string[]> {
   const response = await fetch(`${address}/v1/agent/services`)
   if (!response.ok) {
@@ -344,7 +344,7 @@ function serviceServer(
       state.calls[node] += 1
       try {
         return Object.freeze({
-          header: Object.freeze({ "Likego-Node": node }),
+          header: Object.freeze({ "Go-Like-Node": node }),
           body: Encoder.encode(node)
         })
       } finally {
@@ -354,7 +354,7 @@ function serviceServer(
     handler(ServiceName, DeregisterProbeEndpoint, async function probe(): Promise<Message> {
       state.deregisterProbes[node] += 1
       return Object.freeze({
-        header: Object.freeze({ "Likego-Node": node }),
+        header: Object.freeze({ "Go-Like-Node": node }),
         body: Encoder.encode(node)
       })
     })
@@ -514,9 +514,9 @@ try {
     "network",
     "create",
     "--label",
-    "likego.suite=registry-transport-consul",
+    "go-like.suite=registry-transport-consul",
     "--label",
-    `likego.run=${Session}`,
+    `go-like.run=${Session}`,
     "--label",
     DockerOwnerLabel,
     NetworkName
@@ -530,9 +530,9 @@ try {
     "--network",
     NetworkName,
     "--label",
-    "likego.suite=registry-transport-consul",
+    "go-like.suite=registry-transport-consul",
     "--label",
-    `likego.run=${Session}`,
+    `go-like.run=${Session}`,
     "--label",
     DockerOwnerLabel,
     "--tmpfs",

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 
-import { newBrokerServer } from "@likego/broker"
-import { subscriberTerminal } from "@likego/broker/provider"
-import { background, canceled, withCancelCause, type Context } from "@likego/context"
+import { newBrokerServer } from "@go-like/broker"
+import { subscriberTerminal } from "@go-like/broker/provider"
+import { background, canceled, withCancelCause, type Context } from "@go-like/context"
 import type {
   Channel,
   ChannelModel,
@@ -47,7 +47,7 @@ describe("RabbitMQ Broker", () => {
           messageId: "message",
           timestamp: 123,
           type: "created",
-          appId: "likego"
+          appId: "go-like"
         }
       }
     )
@@ -75,7 +75,7 @@ describe("RabbitMQ Broker", () => {
       messageId: "message",
       timestamp: 123,
       type: "created",
-      appId: "likego"
+      appId: "go-like"
     })
 
     await broker.publish(background(), "default.😀", {

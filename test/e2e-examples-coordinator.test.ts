@@ -145,14 +145,14 @@ function createDeferredRunner(events: string[] = []): DeferredRunner {
 
 function manifest(id: string): Readonly<Record<string, unknown>> {
   return Object.freeze({
-    name: `@likego/example-${id}`,
+    name: `@go-like/example-${id}`,
     private: true,
     scripts: Object.freeze({ "test:e2e": "bun ../../e2e/example-task.ts -- synthetic" })
   })
 }
 
 async function repositoryFixture(ids: readonly string[]): Promise<RepositoryFixture> {
-  const temp = await createTempDirectory("likego-example-coordinator-test-")
+  const temp = await createTempDirectory("go-like-example-coordinator-test-")
   const root = temp.path
   const examples = join(root, "examples")
   await mkdir(examples, { mode: 0o700 })
@@ -519,7 +519,7 @@ test("unexpected participant and result artifacts fail the dynamic differential"
           {
             ...expected,
             id: "intruder",
-            packageName: "@likego/example-intruder",
+            packageName: "@go-like/example-intruder",
             cwdRealpath: join(fixture.root, "intruder")
           },
           "intruder.json"
@@ -819,8 +819,8 @@ test("direct local root validates a standalone manifest, uses the worker command
   const cwd = await standalonePackage(fixture.root, "standalone-service")
   const identities = new Map<number, ProcessIdentity>()
   const runner = createDeferredRunner()
-  const previous = process.env.LIKEGO_E2E_STALE_CANARY
-  process.env.LIKEGO_E2E_STALE_CANARY = "stale-secret"
+  const previous = process.env.GO_LIKE_E2E_STALE_CANARY
+  process.env.GO_LIKE_E2E_STALE_CANARY = "stale-secret"
   try {
     const result = await runSingleExampleLocalRoot(
       fixture.root,
@@ -837,9 +837,9 @@ test("direct local root validates a standalone manifest, uses the worker command
         expect(command.slice(3, -3)).toEqual(["bun", "scenario.ts", "--case", "direct"])
         expect(command.at(-3)).toBe("--worker")
         expect(runner.callFor(context).definition.environment).toMatchObject({
-          LIKEGO_E2E_STALE_CANARY: undefined,
-          LIKEGO_E2E_CAPABILITY: undefined,
-          LIKEGO_E2E_NONCE: undefined
+          GO_LIKE_E2E_STALE_CANARY: undefined,
+          GO_LIKE_E2E_CAPABILITY: undefined,
+          GO_LIKE_E2E_NONCE: undefined
         })
         await runSuccessfulWorker(context, identities, runner, 6)
       })
@@ -848,8 +848,8 @@ test("direct local root validates a standalone manifest, uses the worker command
     expect(result.executionInputIds).toEqual([basename(cwd)])
     expect(result.examples[0]?.classification).toBe("passed")
   } finally {
-    if (previous === undefined) delete process.env.LIKEGO_E2E_STALE_CANARY
-    else process.env.LIKEGO_E2E_STALE_CANARY = previous
+    if (previous === undefined) delete process.env.GO_LIKE_E2E_STALE_CANARY
+    else process.env.GO_LIKE_E2E_STALE_CANARY = previous
     await removeTempDirectory(fixture.temp)
   }
 })

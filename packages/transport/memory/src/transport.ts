@@ -6,7 +6,7 @@ import {
   withTimeout,
   type Context,
   type StopFunc
-} from "@likego/context"
+} from "@go-like/context"
 import {
   type AcceptHandler,
   type Client,
@@ -18,14 +18,14 @@ import {
   type Option,
   type Options,
   type Socket
-} from "@likego/transport"
+} from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
   newUnsupportedTransportCapabilityError,
   snapshotMessage
-} from "@likego/transport/provider"
+} from "@go-like/transport/provider"
 
 import {
   applyMemoryDialOptions,
@@ -685,7 +685,7 @@ export function failMemoryListener(ctx: Context, listener: Listener, cause: Erro
     throw new TypeError("memory listener failure cause must be an Error")
   const fail = listenerFailures.get(listener)
   if (fail === undefined) {
-    throw newTransportProtocolError("listener is not owned by @likego/transport-memory")
+    throw newTransportProtocolError("listener is not owned by @go-like/transport-memory")
   }
   fail(cause)
 }

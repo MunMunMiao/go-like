@@ -1,9 +1,9 @@
-# @likego/health
+# @go-like/health
 
-面向 LikeGo 的可移植存活探针与就绪探针注册表。
+面向 go-like 的可移植存活探针与就绪探针注册表。
 
 该包只定义 probe 注册、并发检查和取消，不包含 HTTP 或 Web handler。对外健康检查端点由
-`@likego/web/health` 提供，应用通过结构式 `ProbeRegistry` 显式组合两者。
+`@go-like/web/health` 提供，应用通过结构式 `ProbeRegistry` 显式组合两者。
 
 空 liveness 快照返回 `ok: true`；空 readiness 快照 fail closed，返回 `ok: false`。readiness 只有在至少
 注册一个 probe 且全部 ready probe 都成功时才返回 `ok: true`。

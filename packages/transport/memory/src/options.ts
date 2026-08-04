@@ -10,7 +10,7 @@ import {
   type ListenOptions,
   type Option,
   type Options
-} from "@likego/transport"
+} from "@go-like/transport"
 
 export const defaultDialTimeoutMs = 5_000
 

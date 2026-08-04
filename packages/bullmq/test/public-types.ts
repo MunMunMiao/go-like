@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import { Worker, type Processor } from "bullmq"
 
 import {

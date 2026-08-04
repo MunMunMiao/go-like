@@ -1,29 +1,29 @@
-# `@likego/web`
+# `@go-like/web`
 
-面向 LikeGo 请求处理器的可移植标准 Web API 桥接层。
+面向 go-like 请求处理器的可移植标准 Web API 桥接层。
 
 该包在运行时导出 `contextHandler`；仅类型 API 包括 `Handler`、`ContextHandler` 和
-`ContextHandlerOptions`。桥接层把 `Request.signal` 映射为私有的 `@likego/context` Context，
+`ContextHandlerOptions`。桥接层把 `Request.signal` 映射为私有的 `@go-like/context` Context，
 同时原样保留处理器自己的 `Response` 或失败结果。
 
 根入口不提供路由、中间件、Server-Sent Events 辅助函数或 WebSocket 升级控制；这些职责由运行时和框架包拥有。
 
 公开入口按职责拆分：
 
-- `@likego/web`：只使用标准 `Request`、`Response`、`Headers` 与 `AbortSignal` 的可移植请求桥接层。
-- `@likego/web/health`：把 `@likego/health` 的 probe registry 暴露为健康检查 Web handler。
-- `@likego/web/node`：基于 `@hono/node-server` 的 Node listener 生命周期。
+- `@go-like/web`：只使用标准 `Request`、`Response`、`Headers` 与 `AbortSignal` 的可移植请求桥接层。
+- `@go-like/web/health`：把 `@go-like/health` 的 probe registry 暴露为健康检查 Web handler。
+- `@go-like/web/node`：基于 `@hono/node-server` 的 Node listener 生命周期。
 
-Web 是对外 HTTP 服务入口；内部微服务通信属于 `@likego/transport` 与具体传输实现，二者不混用。
+Web 是对外 HTTP 服务入口；内部微服务通信属于 `@go-like/transport` 与具体传输实现，二者不混用。
 
 ## Node 生命周期宿主
 
-`@likego/web/node` 面向精确单参数 LikeGo `Handler` 提供受管 Node 生命周期宿主。HTTP Request/Response
-转换、流式响应、Header 和未消费请求体清理由 `@hono/node-server` 2.0.12 提供；LikeGo 只拥有原生监听器
+`@go-like/web/node` 面向精确单参数 go-like `Handler` 提供受管 Node 生命周期宿主。HTTP Request/Response
+转换、流式响应、Header 和未消费请求体清理由 `@hono/node-server` 2.0.12 提供；go-like 只拥有原生监听器
 的启动、终态观察、调用方范围的停止等待与原生关闭超时。
 
 该子路径显式关闭 `@hono/node-server` 的全局 Request/Response 覆盖，并保留未消费请求体自动清理。传给
-应用的处理器始终只有一个 `Request` 参数；上游提供的 Node `HttpBindings` 不进入 LikeGo ABI。路由、
+应用的处理器始终只有一个 `Request` 参数；上游提供的 Node `HttpBindings` 不进入 go-like ABI。路由、
 中间件、错误响应策略、WebSocket 和静态文件继续由应用及所选框架拥有。
 
 `newNodeServer(handler, ...options)` 返回结构式 `Server`。`hostname`、`port` 与
@@ -48,5 +48,5 @@ probe 汇总状态，对未知路径返回 404，对其他方法返回 405 与 `
 probe 的私有错误不会进入响应；请求取消通过独立 Context 传递给 registry。
 
 Hono、Elysia 与 H3 2.x 直接把原生 `app.fetch` 传给 `newNodeServer`，H3 1.x 使用官方
-`toWebHandler(app)`。框架继续拥有路由、中间件、流和错误策略；LikeGo 不发布框架专用桥接包，只管理
+`toWebHandler(app)`。框架继续拥有路由、中间件、流和错误策略；go-like 不发布框架专用桥接包，只管理
 listener 生命周期。

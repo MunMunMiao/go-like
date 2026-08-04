@@ -1,7 +1,7 @@
 ---
-"@likego/client": patch
-"@likego/server": patch
-"@likego/transport": patch
+"@go-like/client": patch
+"@go-like/server": patch
+"@go-like/transport": patch
 ---
 
 增加 canonical `ServiceError` wire、Client middleware 与业务错误健康反馈分类，并由单一 unary handler 驱动

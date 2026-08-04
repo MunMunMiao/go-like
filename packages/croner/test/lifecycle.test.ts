@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, type Context, withCancelCause } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background, canceled, type Context, withCancelCause } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import { Cron } from "croner"
 
 import { newCronerServer } from "../src/index"

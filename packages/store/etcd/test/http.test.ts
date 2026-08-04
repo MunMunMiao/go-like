@@ -1,4 +1,4 @@
-import { background, canceled, cause, withCancel, type Context } from "@likego/context"
+import { background, canceled, cause, withCancel, type Context } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 
 import { discard, postJson } from "../src/http"
@@ -141,7 +141,7 @@ describe("etcd JSON HTTP boundary", () => {
         "/v3/kv/txn",
         {}
       ).catch((value: unknown) => value)
-      expect(error).toMatchObject({ code: "LIKEGO_ETCD_STORE_TRANSPORT", operation: "write" })
+      expect(error).toMatchObject({ code: "GO_LIKE_ETCD_STORE_TRANSPORT", operation: "write" })
       expect(String(error)).not.toContain(secret)
       expect(JSON.stringify(error)).not.toContain("header-secret")
     }
@@ -152,7 +152,7 @@ describe("etcd JSON HTTP boundary", () => {
       "/v3/kv/range",
       {}
     ]).catch((value: unknown) => value)
-    expect(invalid).toMatchObject({ code: "LIKEGO_ETCD_STORE_PROTOCOL" })
+    expect(invalid).toMatchObject({ code: "GO_LIKE_ETCD_STORE_PROTOCOL" })
   })
 
   test("parses only numeric gRPC status while retaining no error body", async () => {
@@ -173,7 +173,7 @@ describe("etcd JSON HTTP boundary", () => {
         {}
       ).catch((value: unknown) => value)
       expect(error).toMatchObject({
-        code: "LIKEGO_ETCD_STORE_HTTP",
+        code: "GO_LIKE_ETCD_STORE_HTTP",
         operation: "lease-revoke",
         status: 404,
         grpcCode: expected
@@ -196,7 +196,7 @@ describe("etcd JSON HTTP boundary", () => {
           "/v3/kv/range",
           {}
         )
-      ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_PROTOCOL", operation: "list" })
+      ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_PROTOCOL", operation: "list" })
     }
     await expect(
       postJson(
@@ -206,7 +206,7 @@ describe("etcd JSON HTTP boundary", () => {
         "/v3/kv/range",
         {}
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_HTTP", grpcCode: null })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_HTTP", grpcCode: null })
     await expect(
       postJson(
         background(),
@@ -217,7 +217,7 @@ describe("etcd JSON HTTP boundary", () => {
           value: 1n
         }
       )
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_STORE_PROTOCOL", operation: "delete" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_PROTOCOL", operation: "delete" })
   })
 
   test("body discard tolerates absent, rejected, and synchronously failing cancellation", async () => {

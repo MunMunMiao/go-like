@@ -1,5 +1,5 @@
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 import { decodeRows, type ConsulRow } from "./codec"
 import {
@@ -347,7 +347,7 @@ export async function createSession(
   operationId: string,
   ttlMs: number
 ): Promise<string> {
-  const name = `likego-store:${operationId}`
+  const name = `go-like-store:${operationId}`
   const body = JSON.stringify({
     Name: name,
     Behavior: "delete",

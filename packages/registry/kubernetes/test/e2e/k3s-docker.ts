@@ -1,5 +1,5 @@
-import { background, withTimeout } from "@likego/context"
-import type { ServiceInstance, Watcher } from "@likego/registry"
+import { background, withTimeout } from "@go-like/context"
+import type { ServiceInstance, Watcher } from "@go-like/registry"
 import { createServer } from "node:net"
 
 import { managedByLabel, managedByValue } from "../../src/codec"
@@ -7,16 +7,16 @@ import { newKubernetesRegistry, type KubernetesFetch } from "../../src/index"
 
 const Image =
   "rancher/k3s:v1.36.2-k3s1@sha256:6a47cea22c4b834d4ba72c89d291696b79ebe406251f90b446e4dff03513dd87"
-const Namespace = "likego-registry-test"
-const ServiceAccount = "likego-registry"
-const Role = "likego-registry"
-const OwnerPod = "likego-registry-owner"
+const Namespace = "go-like-registry-test"
+const ServiceAccount = "go-like-registry"
+const Role = "go-like-registry"
+const OwnerPod = "go-like-registry-owner"
 const Verbs = ["get", "list", "watch", "create", "update", "delete"] as const
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
-  throw new Error("invalid LIKEGO_E2E_OWNER")
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 const VolumeTargets = ["/var/lib/cni", "/var/lib/kubelet", "/var/lib/rancher/k3s", "/var/log"]
 
 interface CommandResult {
@@ -157,7 +157,7 @@ function collection(): string {
   return `/apis/discovery.k8s.io/v1/namespaces/${Namespace}/endpointslices`
 }
 
-/** Lists real LikeGo-managed EndpointSlices. */
+/** Lists real go-like-managed EndpointSlices. */
 async function managedSlices(address: string, token: string): Promise<Record<string, unknown>[]> {
   const query = new URLSearchParams({
     labelSelector: `${managedByLabel}=${managedByValue}`
@@ -236,7 +236,7 @@ async function proveReal410(address: string, token: string): Promise<void> {
 
 /** Runs real K3s behavior and always removes every Docker-owned resource. */
 async function main(): Promise<void> {
-  const container = `likego-k3s-${crypto.randomUUID()}`
+  const container = `go-like-k3s-${crypto.randomUUID()}`
   const port = await freePort()
   const address = `https://127.0.0.1:${port}`
   const volumes = VolumeTargets.map((_target, index) => `${container}-volume-${index}`)

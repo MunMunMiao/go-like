@@ -5,9 +5,9 @@ import type {
 } from "./types"
 
 const operationName: ZookeeperOperationError["name"] = "ZookeeperOperationError"
-const operationCode: ZookeeperOperationError["code"] = "LIKEGO_ZOOKEEPER_OPERATION"
+const operationCode: ZookeeperOperationError["code"] = "GO_LIKE_ZOOKEEPER_OPERATION"
 const authenticationName: ZookeeperAuthenticationError["name"] = "ZookeeperAuthenticationError"
-const authenticationCode: ZookeeperAuthenticationError["code"] = "LIKEGO_ZOOKEEPER_AUTHENTICATION"
+const authenticationCode: ZookeeperAuthenticationError["code"] = "GO_LIKE_ZOOKEEPER_AUTHENTICATION"
 
 /** Narrows an untrusted rejection without retaining a non-Error carrier. */
 export function boundaryError(value: unknown, message: string): Error {

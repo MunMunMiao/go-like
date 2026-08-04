@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import { newProbeRegistry } from "@likego/health"
+import { background } from "@go-like/context"
+import { newProbeRegistry } from "@go-like/health"
 
 const lateRejections: unknown[] = []
 const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"

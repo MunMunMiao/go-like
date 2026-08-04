@@ -1,5 +1,5 @@
-import { background, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import { Cron } from "croner"
 
 import * as CronerPackage from "../src/index"

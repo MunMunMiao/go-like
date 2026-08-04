@@ -12,7 +12,7 @@ function frameworkKind(value: string | undefined): FrameworkKind {
 
 const root = resolve(import.meta.dir, "../..")
 const kind = frameworkKind(process.argv[2])
-const builtPackages = ["@likego/context", "@likego/core", "@likego/web"]
+const builtPackages = ["@go-like/context", "@go-like/core", "@go-like/web"]
 const vendorPackages: VendorPackageSource[] = [
   {
     name: "@hono/node-server",
@@ -34,7 +34,7 @@ if (kind === "elysia") {
 
 await runFrameworkDistConsumerMain({
   root,
-  prefix: `likego-framework-${kind}-`,
+  prefix: `go-like-framework-${kind}-`,
   consumer: resolve(import.meta.dir, "web-framework-native-consumer.mjs"),
   arguments: [kind],
   builtPackages,

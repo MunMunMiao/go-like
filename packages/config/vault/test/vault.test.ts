@@ -5,8 +5,8 @@ import {
   source as configSource,
   type ConfigObject,
   type ConfigSourceWatcher
-} from "@likego/config"
-import { background, withCancelCause, withTimeout } from "@likego/context"
+} from "@go-like/config"
+import { background, withCancelCause, withTimeout } from "@go-like/context"
 
 import { vaultSource, type VaultFetch, type VaultSourceOptions } from "../src/index"
 import { deferred, flush } from "./helpers"
@@ -268,11 +268,11 @@ describe("Vault KV v2 source construction and load", () => {
         return Object.getOwnPropertyDescriptor(error, "code")?.value
       })
     ).toEqual([
-      "LIKEGO_VAULT_TRANSPORT",
-      "LIKEGO_VAULT_TRANSPORT",
-      "LIKEGO_VAULT_PROTOCOL",
-      "LIKEGO_VAULT_HTTP",
-      "LIKEGO_VAULT_PROTOCOL"
+      "GO_LIKE_VAULT_TRANSPORT",
+      "GO_LIKE_VAULT_TRANSPORT",
+      "GO_LIKE_VAULT_PROTOCOL",
+      "GO_LIKE_VAULT_HTTP",
+      "GO_LIKE_VAULT_PROTOCOL"
     ])
     expect(failures[3]).toMatchObject({ status: 403 })
   })
@@ -303,7 +303,7 @@ describe("Vault KV v2 source construction and load", () => {
         path: "config"
       })
       await expect(source.load(background())).rejects.toMatchObject({
-        code: "LIKEGO_VAULT_PROTOCOL"
+        code: "GO_LIKE_VAULT_PROTOCOL"
       })
     }
   })
@@ -339,7 +339,7 @@ describe("Vault KV v2 source construction and load", () => {
         path: "config"
       })
       await expect(source.load(background())).rejects.toMatchObject({
-        code: "LIKEGO_VAULT_TRANSPORT"
+        code: "GO_LIKE_VAULT_TRANSPORT"
       })
     }
   })
@@ -418,7 +418,7 @@ describe("Vault KV v2 source construction and load", () => {
         path: "config"
       })
       await expect(source.load(background())).rejects.toMatchObject({
-        code: "LIKEGO_VAULT_HTTP",
+        code: "GO_LIKE_VAULT_HTTP",
         status: 503
       })
     }
@@ -543,7 +543,7 @@ describe("Vault KV v2 polling watcher", () => {
       const failure = await watch.next(background()).catch((error: unknown) => error)
       expect(failure).toBeInstanceOf(Error)
       expect(failure).toMatchObject({
-        code: response.status === 403 ? "LIKEGO_VAULT_HTTP" : "LIKEGO_VAULT_PROTOCOL"
+        code: response.status === 403 ? "GO_LIKE_VAULT_HTTP" : "GO_LIKE_VAULT_PROTOCOL"
       })
       await watch.stop(background())
     }

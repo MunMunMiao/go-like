@@ -1,14 +1,14 @@
-# @likego/winston
+# @go-like/winston
 
-`@likego/winston` 把应用创建的官方 Winston `Logger` 接入 LikeGo `Server` 生命周期，并为 Client、
+`@go-like/winston` 把应用创建的官方 Winston `Logger` 接入 go-like `Server` 生命周期，并为 Client、
 内部 unary Server、标准 Web Handler 与 Broker 提供显式请求日志包装。应用仍然直接使用原生 logger；
-LikeGo 不定义 Logger facade、日志格式、transport、child logger 或异常处理策略。
+go-like 不定义 Logger facade、日志格式、transport、child logger 或异常处理策略。
 
 ## 使用方式
 
 ```ts
-import { newApp, server } from "@likego/core"
-import { newWinstonServer } from "@likego/winston"
+import { newApp, server } from "@go-like/core"
+import { newWinstonServer } from "@go-like/winston"
 import winston from "winston"
 
 const logger = winston.createLogger({
@@ -28,12 +28,12 @@ await running
 
 调用 `newWinstonServer(logger)` 只做同步接口校验，不读取终态、不安装监听器，也不改变 logger 所有权。
 应用始终持有原生 logger 数据面引用并继续调用日志方法。只有 `start(ctx)` 通过取消检查、确认 logger 尚未
-终止并完整安装生命周期监听器后，LikeGo 才接管该次已启动实例的 stop 契约；此后应用不得再调用 `end()`
+终止并完整安装生命周期监听器后，go-like 才接管该次已启动实例的 stop 契约；此后应用不得再调用 `end()`
 或 `close()`。需要记录其他组件的最终日志时，应让这些组件在 logging 停止前完成自己的收尾。
 
 所有权拆分为：`owner: application-owned`、`exposure: native-borrowed`、
-`stopContract: likego-owned`。它表示应用拥有并直接暴露 Winston 数据面，但成功启动后的终止操作由 LikeGo
-统一发起；并不表示 LikeGo 私有化或重新创建 logger。
+`stopContract: go-like-owned`。它表示应用拥有并直接暴露 Winston 数据面，但成功启动后的终止操作由 go-like
+统一发起；并不表示 go-like 私有化或重新创建 logger。
 
 ## 生命周期契约
 
@@ -65,7 +65,7 @@ Winston 的 `handleExceptions` 和 `handleRejections` 会安装进程级处理�
 ## 请求完成日志
 
 ```ts
-import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "@likego/winston"
+import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "@go-like/winston"
 
 const client = logClient(nativeClient, logger)
 const unary = logUnaryMiddleware(logger)
@@ -76,7 +76,7 @@ const broker = logBroker(nativeBroker, logger)
 四个适配器都只在一个逻辑操作完成时写一条原生 Winston 日志：
 
 - Client operation 为 `service/endpoint`；一次包含重试的逻辑调用仍只记录一次。
-- unary Server operation 从 LikeGo routing header 读取 `service/endpoint`。
+- unary Server operation 从 go-like routing header 读取 `service/endpoint`。
 - Web operation 只记录 HTTP method，并在成功响应时增加 `httpStatus`；不记录 URL 或 path。
 - Broker operation 为 `publish <topic>` 或 `consume <topic>`；topic 应保持为稳定、低基数的业务主题。
 

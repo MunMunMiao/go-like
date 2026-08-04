@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel } from "@likego/context"
-import type { Context } from "@likego/context"
+import { background, canceled, withCancel } from "@go-like/context"
+import type { Context } from "@go-like/context"
 
 import {
   newTransportClosedError,
@@ -100,7 +100,7 @@ function stateError(message: string): Error {
   return Object.freeze(
     Object.assign(error, {
       name: "TransportStateError",
-      code: "LIKEGO_TRANSPORT_STATE"
+      code: "GO_LIKE_TRANSPORT_STATE"
     })
   )
 }
@@ -2003,7 +2003,7 @@ test("reports a listener that accepts again after normal close", async () => {
       "listener exposes its bound address and closes a pending accept",
       () => broken
     ).run()
-  ).rejects.toThrow("repeated Listener.accept must reject with LIKEGO_TRANSPORT_STATE")
+  ).rejects.toThrow("repeated Listener.accept must reject with GO_LIKE_TRANSPORT_STATE")
 })
 
 test("reports Listener.close that resolves before the accept owner terminal settles", async () => {
@@ -2397,7 +2397,7 @@ test("reports a repeated accept that does not expose TransportStateError", async
   }
   await expect(
     conformanceCase("accept cancellation preserves the Context terminal error", () => broken).run()
-  ).rejects.toThrow("repeated Listener.accept must reject with LIKEGO_TRANSPORT_STATE")
+  ).rejects.toThrow("repeated Listener.accept must reject with GO_LIKE_TRANSPORT_STATE")
 })
 
 test("reports a corrupted response body from a structural client", async () => {

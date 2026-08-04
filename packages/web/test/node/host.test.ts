@@ -1,7 +1,7 @@
 import { createServer, request } from "node:http"
 
 import { expect, test } from "bun:test"
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 
 import { newNodeServer, nodeShutdownTimeout, port } from "../../src/node"
 
@@ -88,7 +88,7 @@ test("endpoint binds once and shares the listener with start", async () => {
   } finally {
     await Bun.sleep(10)
     await server.stop(background())
-    await expect(running).rejects.toMatchObject({ code: "LIKEGO_NODE_SERVER_FORCE_CLOSE" })
+    await expect(running).rejects.toMatchObject({ code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE" })
   }
 
   await expect(server.start(background())).rejects.toMatchObject({
@@ -154,7 +154,7 @@ test("delegates the one-argument Fetch ABI to the upstream Node host without rep
   } finally {
     await Bun.sleep(10)
     await server.stop(background())
-    await expect(running).rejects.toMatchObject({ code: "LIKEGO_NODE_SERVER_FORCE_CLOSE" })
+    await expect(running).rejects.toMatchObject({ code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE" })
   }
 
   const rebound = createServer((_request, response) => response.end("rebound"))
@@ -188,6 +188,6 @@ test("rejects an occupied port without waiting for a close event from a listener
     expect(primary).toMatchObject({ code: "EADDRINUSE" })
   } finally {
     await owner.stop(background())
-    await expect(ownerRunning).rejects.toMatchObject({ code: "LIKEGO_NODE_SERVER_FORCE_CLOSE" })
+    await expect(ownerRunning).rejects.toMatchObject({ code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE" })
   }
 })

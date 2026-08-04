@@ -1,5 +1,5 @@
 {
-  "name": "likego-published-consumer",
+  "name": "go-like-published-consumer",
   "private": true,
   "type": "module"
 }

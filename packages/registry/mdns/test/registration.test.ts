@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, withTimeout } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause, withTimeout } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 
 import { queryTimeout, ttl, watchBufferSize } from "../src/options"
 import { instanceRecords, parseInstanceAddress, parseInstanceAddresses } from "../src/registration"
@@ -70,7 +70,7 @@ describe("mDNS registration and portable provider", () => {
   })
 
   test("builds shared discovery records and unique instance records", async () => {
-    const records = await instanceRecords(instance(), "likego.", 120, 65_536)
+    const records = await instanceRecords(instance(), "go-like.", 120, 65_536)
     expect(records.map((record) => [record.type, record.flush])).toEqual([
       ["PTR", false],
       ["TXT", false],
@@ -79,11 +79,11 @@ describe("mDNS registration and portable provider", () => {
       ["TXT", true],
       ["A", true]
     ])
-    expect(records[0]?.name).toBe("_services.likego.")
+    expect(records[0]?.name).toBe("_services.go-like.")
     expect(records[3]?.name.startsWith("li-")).toBe(true)
     expect(records[3]?.ttl).toBe(120)
-    await expect(instanceRecords(instance(), "likego", 1, 65_536)).rejects.toThrow(TypeError)
-    await expect(instanceRecords(instance(), "likego.", -1, 65_536)).rejects.toThrow(RangeError)
+    await expect(instanceRecords(instance(), "go-like", 1, 65_536)).rejects.toThrow(TypeError)
+    await expect(instanceRecords(instance(), "go-like.", -1, 65_536)).rejects.toThrow(RangeError)
   })
 
   test("registers, discovers, replaces, watches, and deregisters", async () => {
@@ -126,7 +126,7 @@ describe("mDNS registration and portable provider", () => {
     await first.register(background(), current)
     await expect(
       second.register(background(), instance("http://127.0.0.1:9090"))
-    ).rejects.toMatchObject({ code: "LIKEGO_REGISTRY_PROTOCOL" })
+    ).rejects.toMatchObject({ code: "GO_LIKE_REGISTRY_PROTOCOL" })
     await first.deregister(background(), current)
     expect(network.activeSockets()).toBe(0)
   })

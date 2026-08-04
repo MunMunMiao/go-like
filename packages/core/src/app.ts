@@ -9,9 +9,9 @@ import {
   type CancelFunc,
   type Context,
   type StopFunc
-} from "@likego/context"
-import type { Registrar, ServiceInstance } from "@likego/registry"
-import { snapshotServiceInstance } from "@likego/registry/provider"
+} from "@go-like/context"
+import type { Registrar, ServiceInstance } from "@go-like/registry"
+import { snapshotServiceInstance } from "@go-like/registry/provider"
 import { waitForContext } from "./lifecycle"
 
 export interface Server {
@@ -81,7 +81,7 @@ interface AppConfig {
   runtimeInstaller: RuntimeInstaller | null
 }
 
-const appInfoContextKey = Symbol("likego.core.appInfo")
+const appInfoContextKey = Symbol("go-like.core.appInfo")
 const maximumTimerDelayMs = 2_147_483_647
 
 /** Validates an application identity string. */
@@ -210,7 +210,7 @@ export function metadata(value: Readonly<Record<string, string>>): AppOption {
 
 /** Configures the ordered application endpoints. */
 export function endpoint(
-  ...values: readonly string[] /* likego-typed-rest: preserves the Go-style functional-option ABI. */
+  ...values: readonly string[] /* go-like-typed-rest: preserves the Go-style functional-option ABI. */
 ): AppOption {
   const captured = snapshotEndpoints(values)
   return (config) => {
@@ -220,7 +220,7 @@ export function endpoint(
 
 /** Registers application servers. */
 export function server(
-  ...servers: readonly Server[] /* likego-typed-rest: preserves the Go-style functional-option ABI. */
+  ...servers: readonly Server[] /* go-like-typed-rest: preserves the Go-style functional-option ABI. */
 ): AppOption {
   for (const subject of servers) {
     if (
@@ -435,7 +435,7 @@ function invokeStop(subject: Server, ctx: Context, index: number): Promise<void>
 
 /** Creates a one-shot Kratos-style application lifecycle manager. */
 export function newApp(
-  ...options: readonly AppOption[] /* likego-typed-rest: preserves the Go-style functional-option ABI. */
+  ...options: readonly AppOption[] /* go-like-typed-rest: preserves the Go-style functional-option ABI. */
 ): App {
   const config: AppConfig = {
     parent: background(),

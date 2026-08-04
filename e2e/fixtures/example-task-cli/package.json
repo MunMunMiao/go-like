@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@likego/example-example-task-cli",
+  "name": "@go-like/example-example-task-cli",
   "private": true,
   "type": "module",
   "scripts": {

@@ -5,15 +5,15 @@ import {
   withTransport,
   type CallRequest,
   type Client
-} from "@likego/client"
-import { background, type Context } from "@likego/context"
-import type { Server as LifecycleServer } from "@likego/core"
-import { traceClient, traceUnaryMiddleware, traceWebHandler } from "@likego/otel"
-import { newRandomSelector, type Discovery, type ServiceInstance } from "@likego/registry"
-import { address as serverAddress, handler, middleware, newServer, transport } from "@likego/server"
-import type { Message } from "@likego/transport"
-import { newHTTPTransport } from "@likego/transport-http"
-import { newNodeHTTPTransport } from "@likego/transport-http/node"
+} from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import type { Server as LifecycleServer } from "@go-like/core"
+import { traceClient, traceUnaryMiddleware, traceWebHandler } from "@go-like/otel"
+import { newRandomSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
+import { address as serverAddress, handler, middleware, newServer, transport } from "@go-like/server"
+import type { Message } from "@go-like/transport"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { context, propagation, SpanStatusCode, type TextMapSetter } from "@opentelemetry/api"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
 import { W3CTraceContextPropagator } from "@opentelemetry/core"
@@ -33,10 +33,10 @@ const CollectorImage =
   "otel/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6"
 const Encoder = new TextEncoder()
 const Decoder = new TextDecoder()
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly exitCode: number
@@ -146,20 +146,20 @@ function spanNamed(spans: readonly ReadableSpan[], name: string): ReadableSpan {
   return span
 }
 
-/** Stops one LikeGo Server and waits for its real running terminal. */
+/** Stops one go-like Server and waits for its real running terminal. */
 async function stopServer(server: LifecycleServer, running: Promise<void>): Promise<void> {
   await server.stop(background())
   await running
 }
 
 const session = crypto.randomUUID().replaceAll("-", "")
-const collector = `likego-otel-instrumentation-collector-${session}`
+const collector = `go-like-otel-instrumentation-collector-${session}`
 const collectorPort = allocatePort()
 const config = resolve(import.meta.dir, "collector.yaml")
-const serviceName = `likego.otel.${session}`
+const serviceName = `go-like.otel.${session}`
 const endpointName = "Trace"
-const rootSpanName = `likego.e2e.root.${session}`
-const webRootSpanName = `likego.e2e.web.root.${session}`
+const rootSpanName = `go-like.e2e.root.${session}`
+const webRootSpanName = `go-like.e2e.web.root.${session}`
 const otelVersion = await installedOtelVersion()
 ensure(otelVersion === "2.10.0", `unexpected OpenTelemetry SDK version: ${otelVersion}`)
 const manager = new AsyncLocalStorageContextManager().enable()
@@ -218,7 +218,7 @@ try {
   ensure(collectorVersion.includes("0.157.0"), `unexpected Collector version: ${collectorVersion}`)
 
   const memoryExporter = new InMemorySpanExporter()
-  const resource = resourceFromAttributes({ "service.name": "likego-otel-instrumentation-e2e" })
+  const resource = resourceFromAttributes({ "service.name": "go-like-otel-instrumentation-e2e" })
   provider = new TracerProvider({
     resource,
     spanProcessors: [
@@ -236,12 +236,12 @@ try {
       })
     ]
   })
-  const tracer = provider.getTracer("likego-e2e")
+  const tracer = provider.getTracer("go-like-e2e")
 
   const endpointHandler = async (_ctx: Context, request: Message): Promise<Message> => {
-    ensure(request.header["x-likego-e2e"] === "kept", "HTTP request lost the caller header")
+    ensure(request.header["x-go-like-e2e"] === "kept", "HTTP request lost the caller header")
     return {
-      header: { "x-likego-e2e-response": "ok" },
+      header: { "x-go-like-e2e-response": "ok" },
       body: Encoder.encode("response")
     }
   }
@@ -299,7 +299,7 @@ try {
   const request: CallRequest = {
     service: serviceName,
     endpoint: endpointName,
-    message: { header: { "x-likego-e2e": "kept" }, body: Encoder.encode("request") }
+    message: { header: { "x-go-like-e2e": "kept" }, body: Encoder.encode("request") }
   }
   const captured: { response: Message | null } = { response: null }
   await tracer.startActiveSpan(rootSpanName, async (rootSpan) => {
@@ -315,7 +315,7 @@ try {
     "HTTP response body was not preserved"
   )
   ensure(
-    captured.response.header["x-likego-e2e-response"] === "ok",
+    captured.response.header["x-go-like-e2e-response"] === "ok",
     "HTTP response header was not preserved"
   )
 
@@ -328,10 +328,10 @@ try {
   const webHandler = traceWebHandler(async (webRequest) => {
     webRequestState.bodyUsedAtHandlerEntry = webRequest.bodyUsed
     webRequestState.bodyLockedAtHandlerEntry = webRequest.body?.locked === true
-    webRequestState.callerHeader = webRequest.headers.get("x-likego-e2e-web") ?? ""
+    webRequestState.callerHeader = webRequest.headers.get("x-go-like-e2e-web") ?? ""
     webRequestState.body = await webRequest.text()
     return new Response("web-response", {
-      headers: { "x-likego-e2e-web-response": "ok" }
+      headers: { "x-go-like-e2e-web-response": "ok" }
     })
   }, tracer)
   webServer = Bun.serve({
@@ -344,7 +344,7 @@ try {
   const webCaptured: { response: Response | null } = { response: null }
   await tracer.startActiveSpan(webRootSpanName, async (rootSpan) => {
     try {
-      const headers = new Headers({ "x-likego-e2e-web": "kept" })
+      const headers = new Headers({ "x-go-like-e2e-web": "kept" })
       propagation.inject(context.active(), headers, webHeaderSetter)
       webCaptured.response = await fetch(`http://127.0.0.1:${webPort}/orders`, {
         method: "POST",
@@ -361,7 +361,7 @@ try {
   ensure(!webResponseBodyUsedBeforeOwnerRead, "Web response body was consumed before owner read")
   ensure(!webResponseBodyLockedBeforeOwnerRead, "Web response body was locked before owner read")
   ensure(
-    webCaptured.response.headers.get("x-likego-e2e-web-response") === "ok",
+    webCaptured.response.headers.get("x-go-like-e2e-web-response") === "ok",
     "Web response header was not preserved"
   )
   const webResponse = await webCaptured.response.text()
@@ -372,8 +372,8 @@ try {
   ensure(webRequestState.callerHeader === "kept", "Web request lost the caller header")
 
   await provider.forceFlush()
-  const clientSpanName = `likego.client ${serviceName}/${endpointName}`
-  const serverSpanName = `likego.server ${serviceName}/${endpointName}`
+  const clientSpanName = `go-like.client ${serviceName}/${endpointName}`
+  const serverSpanName = `go-like.server ${serviceName}/${endpointName}`
   const webSpanName = "POST"
   const names = [rootSpanName, clientSpanName, serverSpanName, webRootSpanName, webSpanName]
   await waitUntil(async () => {
@@ -417,7 +417,7 @@ try {
   ensure(
     [clientSpan, serverSpan, webSpan].every(
       (span) =>
-        span.status.code !== SpanStatusCode.ERROR && span.attributes["likego.outcome"] === "ok"
+        span.status.code !== SpanStatusCode.ERROR && span.attributes["go-like.outcome"] === "ok"
     ),
     "one instrumented span did not complete successfully"
   )

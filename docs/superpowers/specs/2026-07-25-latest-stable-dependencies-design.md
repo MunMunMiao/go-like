@@ -1,4 +1,4 @@
-# LikeGo 最新正式版依赖升级设计
+# go-like 最新正式版依赖升级设计
 
 日期：2026-07-25
 
@@ -9,12 +9,12 @@
 ## 版本规则
 
 - 正式版不包含 `alpha`、`beta`、`rc`、`canary`、`nightly` 等预发布版本。
-- npm 依赖优先采用官方 registry 的非预发布、非废弃 `dist-tags.latest`；仅当 `latest` 指向预发布版时，才按发布时间回退到最近发布的非预发布、非废弃版本。内部 `@likego/*` 包继续保持 `0.0.1`。该规则既避免把维护分支的较晚发布日期误判为主线最新版本，也避免 H3 的 RC `latest` 被当成正式版。
+- npm 依赖优先采用官方 registry 的非预发布、非废弃 `dist-tags.latest`；仅当 `latest` 指向预发布版时，才按发布时间回退到最近发布的非预发布、非废弃版本。内部 `@go-like/*` 包继续保持 `0.0.1`。该规则既避免把维护分支的较晚发布日期误判为主线最新版本，也避免 H3 的 RC `latest` 被当成正式版。
 - Node 同时保留最新 LTS 与最新 Current 两条运行时通道；Bun、Deno 使用最新正式版。
 - Docker 使用上游最新正式版标签，并固定当前多架构 manifest digest；GitHub Actions 固定正式 release commit SHA。
 - 上游依赖自身的传递依赖不越过其声明范围强制覆盖。
 
-Pino `10.3.1` 当前声明 `sonic-boom ^4.0.1`。`@likego/pino` 不再把 SonicBoom 暴露为直接依赖或 peer；由 Pino 解析其受支持的传递版本，消费应用可以独立安装最新正式版 SonicBoom，而不会形成双重版本约束。
+Pino `10.3.1` 当前声明 `sonic-boom ^4.0.1`。`@go-like/pino` 不再把 SonicBoom 暴露为直接依赖或 peer；由 Pino 解析其受支持的传递版本，消费应用可以独立安装最新正式版 SonicBoom，而不会形成双重版本约束。
 
 ## 实施方式
 

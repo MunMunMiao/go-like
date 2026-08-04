@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { background, canceled, withCancel } from "@likego/context"
-import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@likego/core"
+import { background, canceled, withCancel } from "@go-like/context"
+import { newApp, server as registerServer, stopTimeout as appStopTimeout } from "@go-like/core"
 
 import { bullMqWorkerShutdownTimeout } from "../src/index"
 import { newBullMqWorkerServerWithFactory } from "../src/server"
@@ -95,7 +95,7 @@ test("converts passive run resolution, rejection, and synchronous throw into une
   resolvedNative.resolveRun()
   await expect(resolvedRunning).rejects.toMatchObject({
     name: "BullMqUnexpectedExitError",
-    code: "LIKEGO_BULLMQ_UNEXPECTED_EXIT",
+    code: "GO_LIKE_BULLMQ_UNEXPECTED_EXIT",
     queueName: "email",
     cause: null
   })
@@ -172,7 +172,7 @@ test("force timeout requests native job cancellation but preserves the pending n
   const failure = await subject.stop(background()).catch((error: unknown) => error)
   expect(failure).toMatchObject({
     name: "BullMqWorkerShutdownTimeoutError",
-    code: "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
+    code: "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
     queueName: "email",
     timeoutMs: 0
   })
@@ -200,7 +200,7 @@ test("bounds a hanging close without fabricating the closed event", async () => 
   expect(await settlesWithin(stopping)).toBeTrue()
   const ownerFailure = await stopping.catch((error: unknown) => error)
   expect(ownerFailure).toMatchObject({
-    code: "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
+    code: "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
     timeoutMs: 10
   })
   expect(await settlesWithin(running, 20)).toBeFalse()
@@ -234,7 +234,7 @@ test("counts synchronous pause and close work inside the provider boundary", asy
 
     expect(performance.now() - started).toBeGreaterThanOrEqual(30)
     expect(failure).toMatchObject({
-      code: "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
+      code: "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT",
       timeoutMs: 10
     })
     expect(native.calls.filter(([name]) => name === "cancelAllJobs")).toHaveLength(1)
@@ -264,7 +264,7 @@ test("preserves synchronous pause and active-cancellation failures", async () =>
   expect(failure).toBeInstanceOf(AggregateError)
   if (!(failure instanceof AggregateError)) throw new Error("expected cancellation aggregate")
   expect(failure.errors[0]).toMatchObject({
-    code: "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
+    code: "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
   })
   expect(failure.errors[1]).toMatchObject({ message: "cancelAllJobs threw" })
   expect(await settlesWithin(cancelRunning, 20)).toBeFalse()
@@ -365,7 +365,7 @@ test("bounds startup rollback without claiming native terminal", async () => {
   if (!(failure instanceof AggregateError)) throw new Error("expected startup cleanup aggregate")
   expect(failure.errors[0]).toBe(canceled)
   expect(failure.errors[1]).toMatchObject({
-    code: "LIKEGO_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
+    code: "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT"
   })
   expect(native.calls.filter(([name]) => name === "cancelAllJobs")).toEqual([])
 

@@ -267,7 +267,7 @@ export async function runDefinition(
         cwd: definition.cwd,
         command: definition.command,
         timeoutMs,
-        environment: owner === null ? undefined : { LIKEGO_E2E_OWNER: owner },
+        environment: owner === null ? undefined : { GO_LIKE_E2E_OWNER: owner },
         signal,
         forwardOutput: true
       })

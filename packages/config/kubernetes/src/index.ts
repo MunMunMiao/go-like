@@ -5,9 +5,9 @@ import {
   type ConfigSourceSnapshot,
   type ConfigSourceWatcher,
   type ConfigValue
-} from "@likego/config"
-import { cause, type Context } from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
+} from "@go-like/config"
+import { cause, type Context } from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
 
 /** Executes one standard Web Fetch request without transferring Fetch ownership. */
 export type KubernetesFetch = (request: Request) => Promise<Response>
@@ -36,20 +36,20 @@ export interface KubernetesSourceOptions {
 
 export interface KubernetesConfigHttpError extends Error {
   readonly name: "KubernetesConfigHttpError"
-  readonly code: "LIKEGO_KUBERNETES_CONFIG_HTTP"
+  readonly code: "GO_LIKE_KUBERNETES_CONFIG_HTTP"
   readonly operation: "get" | "list" | "watch"
   readonly status: number
 }
 
 export interface KubernetesConfigProtocolError extends Error {
   readonly name: "KubernetesConfigProtocolError"
-  readonly code: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL"
+  readonly code: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL"
   readonly operation: "get" | "list" | "watch"
 }
 
 export interface KubernetesConfigTransportError extends Error {
   readonly name: "KubernetesConfigTransportError"
-  readonly code: "LIKEGO_KUBERNETES_CONFIG_TRANSPORT"
+  readonly code: "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT"
   readonly operation: "get" | "list" | "watch"
 }
 
@@ -144,7 +144,7 @@ function isHttpError(error: Error): error is KubernetesConfigHttpError {
   return (
     error.name === "KubernetesConfigHttpError" &&
     "code" in error &&
-    error.code === "LIKEGO_KUBERNETES_CONFIG_HTTP" &&
+    error.code === "GO_LIKE_KUBERNETES_CONFIG_HTTP" &&
     "operation" in error &&
     (error.operation === "get" || error.operation === "list" || error.operation === "watch") &&
     "status" in error &&
@@ -157,7 +157,7 @@ function isProtocolError(error: Error): error is KubernetesConfigProtocolError {
   return (
     error.name === "KubernetesConfigProtocolError" &&
     "code" in error &&
-    error.code === "LIKEGO_KUBERNETES_CONFIG_PROTOCOL" &&
+    error.code === "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL" &&
     "operation" in error &&
     (error.operation === "get" || error.operation === "list" || error.operation === "watch")
   )
@@ -168,7 +168,7 @@ function isTransportError(error: Error): error is KubernetesConfigTransportError
   return (
     error.name === "KubernetesConfigTransportError" &&
     "code" in error &&
-    error.code === "LIKEGO_KUBERNETES_CONFIG_TRANSPORT" &&
+    error.code === "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT" &&
     "operation" in error &&
     (error.operation === "get" || error.operation === "list" || error.operation === "watch")
   )
@@ -187,7 +187,7 @@ function boundaryError(
     )
     Object.defineProperties(error, {
       name: { value: "KubernetesConfigHttpError" },
-      code: { value: "LIKEGO_KUBERNETES_CONFIG_HTTP", enumerable: true },
+      code: { value: "GO_LIKE_KUBERNETES_CONFIG_HTTP", enumerable: true },
       operation: { value: operation, enumerable: true },
       status: { value: status ?? 0, enumerable: true }
     })
@@ -199,7 +199,7 @@ function boundaryError(
     error = new Error(`Kubernetes configuration ${operation} transport failed`)
     Object.defineProperties(error, {
       name: { value: "KubernetesConfigTransportError" },
-      code: { value: "LIKEGO_KUBERNETES_CONFIG_TRANSPORT", enumerable: true },
+      code: { value: "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT", enumerable: true },
       operation: { value: operation, enumerable: true }
     })
     if (!isTransportError(error))
@@ -209,7 +209,7 @@ function boundaryError(
   error = new Error(`Kubernetes configuration ${operation} response was invalid`)
   Object.defineProperties(error, {
     name: { value: "KubernetesConfigProtocolError" },
-    code: { value: "LIKEGO_KUBERNETES_CONFIG_PROTOCOL", enumerable: true },
+    code: { value: "GO_LIKE_KUBERNETES_CONFIG_PROTOCOL", enumerable: true },
     operation: { value: operation, enumerable: true }
   })
   if (!isProtocolError(error))
@@ -317,8 +317,8 @@ async function withOperationTimeout<T>(
 
 /** Classifies only transport, overload, timeout, and server failures as retryable. */
 function retryable(value: unknown): boolean {
-  if (property(value, "code") === "LIKEGO_KUBERNETES_CONFIG_TRANSPORT") return true
-  if (property(value, "code") !== "LIKEGO_KUBERNETES_CONFIG_HTTP") return false
+  if (property(value, "code") === "GO_LIKE_KUBERNETES_CONFIG_TRANSPORT") return true
+  if (property(value, "code") !== "GO_LIKE_KUBERNETES_CONFIG_HTTP") return false
   const status = property(value, "status")
   return (
     typeof status === "number" &&
@@ -329,7 +329,7 @@ function retryable(value: unknown): boolean {
 /** Reports whether one watch cursor has expired. */
 function expired(value: unknown): boolean {
   return (
-    property(value, "code") === "LIKEGO_KUBERNETES_CONFIG_HTTP" && property(value, "status") === 410
+    property(value, "code") === "GO_LIKE_KUBERNETES_CONFIG_HTTP" && property(value, "status") === 410
   )
 }
 

@@ -10,7 +10,7 @@ export interface CapturedOptions {
   readonly namespace: string | undefined
 }
 
-const DefaultRoot = "likego/store"
+const DefaultRoot = "go-like/store"
 const MaximumRootBytes = 1_024
 
 /** Reports whether one string contains only complete UTF-16 scalar sequences. */

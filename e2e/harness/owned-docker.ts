@@ -93,7 +93,7 @@ export interface OwnedDockerDependencies {
     | undefined
 }
 
-export const OwnedDockerEnvironmentKey = "LIKEGO_E2E_OWNED_DOCKER_AUTHORITY_V1"
+export const OwnedDockerEnvironmentKey = "GO_LIKE_E2E_OWNED_DOCKER_AUTHORITY_V1"
 export const OwnedDockerEnvironmentKeys = Object.freeze([OwnedDockerEnvironmentKey] as const)
 
 export type OwnedDockerEnvironment = Readonly<
@@ -577,7 +577,7 @@ function environmentAuthority(
   }
   const unexpected = Object.keys(environment).filter(
     (key) =>
-      key.startsWith("LIKEGO_E2E_OWNED_DOCKER_") &&
+      key.startsWith("GO_LIKE_E2E_OWNED_DOCKER_") &&
       !OwnedDockerEnvironmentKeys.includes(key as never)
   )
   if (unexpected.length !== 0) {

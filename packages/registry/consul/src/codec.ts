@@ -1,10 +1,10 @@
-import { type ServiceInstance } from "@likego/registry"
-import { newRegistryProtocolError, snapshotServiceInstance } from "@likego/registry/provider"
+import { type ServiceInstance } from "@go-like/registry"
+import { newRegistryProtocolError, snapshotServiceInstance } from "@go-like/registry/provider"
 
 import { ignoreFailure } from "./runtime"
 
-const marker = "Likego-Service-Instance=1"
-const chunkPrefix = "Likego-Chunk-"
+const marker = "Go-Like-Service-Instance=1"
+const chunkPrefix = "Go-Like-Chunk-"
 const chunkBytes = 480
 const maximumChunks = 32
 const maximumEncodedBytes = chunkBytes * maximumChunks
@@ -122,7 +122,7 @@ function instanceIdentity(instance: ServiceInstance): Promise<string> {
   return hash(
     "li",
     new TextEncoder().encode(
-      JSON.stringify(["likego.registry-instance.identity.v1", instance.name, instance.id])
+      JSON.stringify(["go-like.registry-instance.identity.v1", instance.name, instance.id])
     )
   )
 }
@@ -182,7 +182,7 @@ async function decompress(bytes: Uint8Array): Promise<Uint8Array> {
   } catch (value) {
     void writer?.abort().catch(ignoreFailure)
     void reader?.cancel().catch(ignoreFailure)
-    if (value instanceof Error && "code" in value && value.code === "LIKEGO_REGISTRY_PROTOCOL") {
+    if (value instanceof Error && "code" in value && value.code === "GO_LIKE_REGISTRY_PROTOCOL") {
       throw value
     }
     throw newRegistryProtocolError("Consul payload deflate stream is invalid")
@@ -204,7 +204,7 @@ function hostPort(value: string): HostPort {
 
 /** Serializes one validated ServiceInstance into stable UTF-8 JSON bytes. */
 function canonicalPayload(instance: ServiceInstance): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(["likego.registry-instance.v1", instance]))
+  return new TextEncoder().encode(JSON.stringify(["go-like.registry-instance.v1", instance]))
 }
 
 /** Narrows one parsed carrier enough for the public snapshot validator. */
@@ -232,7 +232,7 @@ function instancePayload(bytes: Uint8Array): ServiceInstance {
   if (
     !Array.isArray(value) ||
     value.length !== 2 ||
-    value[0] !== "likego.registry-instance.v1" ||
+    value[0] !== "go-like.registry-instance.v1" ||
     !instanceCarrier(instance)
   ) {
     throw newRegistryProtocolError("Consul payload tuple is invalid")
@@ -284,11 +284,11 @@ export async function encodeRegistration(
     if (chunk !== undefined) entries.push([chunkKey(index), chunk])
   }
   entries.push(
-    ["Likego-Chunk-Count", String(chunks.length)],
-    ["Likego-Content-Hash", content],
-    ["Likego-Encoding", "deflate+base64url"],
-    ["Likego-Identity-Hash", identity],
-    ["Likego-Wire-Version", "1"]
+    ["Go-Like-Chunk-Count", String(chunks.length)],
+    ["Go-Like-Content-Hash", content],
+    ["Go-Like-Encoding", "deflate+base64url"],
+    ["Go-Like-Identity-Hash", identity],
+    ["Go-Like-Wire-Version", "1"]
   )
   const body = JSON.stringify({
     ID: identity,
@@ -299,7 +299,7 @@ export async function encodeRegistration(
     Meta: Object.fromEntries(entries),
     Check: {
       CheckID: `service:${identity}`,
-      Name: `LikeGo TTL for ${instance.name}/${instance.id}`,
+      Name: `go-like TTL for ${instance.name}/${instance.id}`,
       TTL: `${ttlMs}ms`,
       Status: "passing",
       DeregisterCriticalServiceAfter: `${deregisterCriticalServiceAfterMs}ms`
@@ -336,21 +336,21 @@ async function decodeManagedService(value: object): Promise<DecodedRegistration 
   if (typeof remoteId !== "string" || typeof name !== "string" || !record(meta)) {
     throw newRegistryProtocolError("Consul managed Service carrier is invalid")
   }
-  if (metaString(meta, "Likego-Wire-Version") !== "1") {
+  if (metaString(meta, "Go-Like-Wire-Version") !== "1") {
     throw newRegistryProtocolError("Consul managed wire version is unsupported")
   }
-  if (metaString(meta, "Likego-Encoding") !== "deflate+base64url") {
+  if (metaString(meta, "Go-Like-Encoding") !== "deflate+base64url") {
     throw newRegistryProtocolError("Consul managed encoding is unsupported")
   }
-  const identity = metaString(meta, "Likego-Identity-Hash")
-  const content = metaString(meta, "Likego-Content-Hash")
+  const identity = metaString(meta, "Go-Like-Identity-Hash")
+  const content = metaString(meta, "Go-Like-Content-Hash")
   if (!/^li-[a-z2-7]{52}$/.test(identity) || !/^lc-[a-z2-7]{52}$/.test(content)) {
     throw newRegistryProtocolError("Consul managed hashes are invalid")
   }
   if (remoteId !== identity) {
     throw newRegistryProtocolError("Consul managed remote ID does not match its identity")
   }
-  const chunkCountText = metaString(meta, "Likego-Chunk-Count")
+  const chunkCountText = metaString(meta, "Go-Like-Chunk-Count")
   if (!/^[1-9][0-9]*$/.test(chunkCountText)) {
     throw newRegistryProtocolError("Consul managed chunk count is invalid")
   }
@@ -371,7 +371,7 @@ async function decodeManagedService(value: object): Promise<DecodedRegistration 
   }
   for (const key of Object.keys(meta)) {
     if (
-      key !== "Likego-Chunk-Count" &&
+      key !== "Go-Like-Chunk-Count" &&
       key.startsWith(chunkPrefix) &&
       !expectedChunkKeys.has(key)
     ) {

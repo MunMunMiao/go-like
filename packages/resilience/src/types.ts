@@ -1,4 +1,4 @@
-import type { Context } from "@likego/context"
+import type { Context } from "@go-like/context"
 
 /** Declares why an operation may be attempted more than once. */
 export type RetryAuthorization = "idempotent" | "caller-approved"

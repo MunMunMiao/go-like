@@ -1,7 +1,7 @@
 import { SQL } from "bun"
 
-import type { Context } from "@likego/context"
-import { contextHandler, type Handler } from "@likego/web"
+import type { Context } from "@go-like/context"
+import { contextHandler, type Handler } from "@go-like/web"
 
 import { postPayment } from "./post-payment"
 import { isPaymentFailure } from "./payment"

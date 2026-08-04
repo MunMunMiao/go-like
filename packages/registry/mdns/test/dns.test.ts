@@ -20,13 +20,13 @@ describe("portable DNS wire codec", () => {
     const packet: DNSPacket = {
       id: 0,
       response: false,
-      questions: [{ name: "_services.likego.", type: "PTR" }],
+      questions: [{ name: "_services.go-like.", type: "PTR" }],
       answers: [],
       authorities: [],
       additionals: []
     }
     expect(Buffer.from(encodeDNSPacket(packet, 1_200)).toString("hex")).toBe(
-      "000000000001000000000000095f7365727669636573066c696b65676f00000c0001"
+      "000000000001000000000000095f736572766963657307676f2d6c696b6500000c0001"
     )
   })
 
@@ -43,23 +43,26 @@ describe("portable DNS wire codec", () => {
       response: true,
       questions: [],
       answers: [
-        { name: "_services.likego.", type: "PTR", ttl: 120, flush: false, data: "ls-a.likego." },
+        { name: "_services.go-like.", type: "PTR", ttl: 120, flush: false, data: "ls-a.go-like." },
         {
-          name: "li-a.ls-a.likego.",
+          name: "li-a.ls-a.go-like.",
           type: "SRV",
           ttl: 120,
           flush: true,
-          data: { priority: 0, weight: 0, port: 8080, target: "lh-a.likego." }
+          data: { priority: 0, weight: 0, port: 8080, target: "lh-a.go-like." }
         },
         {
-          name: "li-a.ls-a.likego.",
+          name: "li-a.ls-a.go-like.",
           type: "TXT",
           ttl: 120,
           flush: true,
-          data: [encoder.encode("Likego-Wire-Version=1"), encoder.encode("Likego-Chunk-Count=000")]
+          data: [
+            encoder.encode("Go-Like-Wire-Version=1"),
+            encoder.encode("Go-Like-Chunk-Count=000")
+          ]
         },
-        { name: "lh-a.likego.", type: "A", ttl: 120, flush: true, data: "127.0.0.1" },
-        { name: "lh-a.likego.", type: "AAAA", ttl: 120, flush: true, data: "2001:db8::1" }
+        { name: "lh-a.go-like.", type: "A", ttl: 120, flush: true, data: "127.0.0.1" },
+        { name: "lh-a.go-like.", type: "AAAA", ttl: 120, flush: true, data: "2001:db8::1" }
       ],
       authorities: [],
       additionals: []
@@ -76,7 +79,7 @@ describe("portable DNS wire codec", () => {
         response: true,
         questions: [],
         answers: [
-          { name: "_services.likego.", type: "PTR", ttl: 120, flush: false, data: "ls-a.likego." }
+          { name: "_services.go-like.", type: "PTR", ttl: 120, flush: false, data: "ls-a.go-like." }
         ],
         authorities: [],
         additionals: []
@@ -103,7 +106,7 @@ describe("portable DNS wire codec", () => {
       response: true,
       questions: [],
       answers: [
-        { name: "x.likego.", type: "A", ttl: 2_147_483_647, flush: true, data: "127.0.0.1" }
+        { name: "x.go-like.", type: "A", ttl: 2_147_483_647, flush: true, data: "127.0.0.1" }
       ],
       authorities: [],
       additionals: []
@@ -116,7 +119,7 @@ describe("portable DNS wire codec", () => {
           response: true,
           questions: [],
           answers: [
-            { name: "x.likego.", type: "A", ttl: 2_147_483_648, flush: true, data: "127.0.0.1" }
+            { name: "x.go-like.", type: "A", ttl: 2_147_483_648, flush: true, data: "127.0.0.1" }
           ],
           authorities: [],
           additionals: []
@@ -141,7 +144,7 @@ describe("portable DNS wire codec", () => {
       questions: [],
       answers: [
         {
-          name: "x.likego.",
+          name: "x.go-like.",
           type: "TXT",
           ttl: 1,
           flush: true,
@@ -160,7 +163,7 @@ describe("portable DNS wire codec", () => {
           questions: [],
           answers: [
             {
-              name: "x.likego.",
+              name: "x.go-like.",
               type: "TXT",
               ttl: 1,
               flush: true,
@@ -199,7 +202,7 @@ describe("portable DNS wire codec", () => {
       questions: [],
       answers: [
         {
-          name: "x.likego.",
+          name: "x.go-like.",
           type: "AAAA",
           ttl: 2_147_483_647,
           flush: true,
@@ -217,7 +220,7 @@ describe("portable DNS wire codec", () => {
         id: 0,
         response: true,
         questions: [],
-        answers: [{ name: "x.likego.", type: "AAAA", ttl: 1, flush: true, data: address }],
+        answers: [{ name: "x.go-like.", type: "AAAA", ttl: 1, flush: true, data: address }],
         authorities: [],
         additionals: []
       }
@@ -230,7 +233,7 @@ describe("portable DNS wire codec", () => {
       encodeDNSPacket(
         {
           ...ipv4Tail,
-          answers: [{ name: "x.likego.", type: "A", ttl: -1, flush: true, data: "127.0.0.1" }]
+          answers: [{ name: "x.go-like.", type: "A", ttl: -1, flush: true, data: "127.0.0.1" }]
         },
         512
       )
@@ -239,7 +242,7 @@ describe("portable DNS wire codec", () => {
       encodeDNSPacket(
         {
           ...ipv4Tail,
-          answers: [{ name: "x.likego.", type: "A", ttl: 1, flush: true, data: "01.2.3.4" }]
+          answers: [{ name: "x.go-like.", type: "A", ttl: 1, flush: true, data: "01.2.3.4" }]
         },
         512
       )
@@ -248,7 +251,7 @@ describe("portable DNS wire codec", () => {
       encodeDNSPacket(
         {
           ...ipv4Tail,
-          answers: [{ name: "x.likego.", type: "AAAA", ttl: 1, flush: true, data: "fe80::1%en0" }]
+          answers: [{ name: "x.go-like.", type: "AAAA", ttl: 1, flush: true, data: "fe80::1%en0" }]
         },
         512
       )
@@ -257,7 +260,7 @@ describe("portable DNS wire codec", () => {
       encodeDNSPacket(
         {
           ...ipv4Tail,
-          answers: [{ name: "x.likego.", type: "AAAA", ttl: 1, flush: true, data: "1:2:3" }]
+          answers: [{ name: "x.go-like.", type: "AAAA", ttl: 1, flush: true, data: "1:2:3" }]
         },
         512
       )

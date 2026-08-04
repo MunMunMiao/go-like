@@ -73,7 +73,7 @@ describe("Consul Store construction options", () => {
   })
 
   test("defaults, normalizes, and bounds the isolated KV root", () => {
-    expect(consulRoot(undefined)).toBe("likego/store")
+    expect(consulRoot(undefined)).toBe("go-like/store")
     expect(consulRoot("///tenant/订单///")).toBe("tenant/订单")
     expect(() => consulRoot("x".repeat(1_025))).toThrow("root exceeds 1024 UTF-8 bytes")
   })
@@ -108,7 +108,7 @@ describe("Consul Store stable provider errors", () => {
     const http = newConsulStoreHttpError("read", 403)
     expect(http).toMatchObject({
       name: "ConsulStoreHttpError",
-      code: "LIKEGO_CONSUL_STORE_HTTP",
+      code: "GO_LIKE_CONSUL_STORE_HTTP",
       operation: "read",
       status: 403
     })
@@ -118,7 +118,7 @@ describe("Consul Store stable provider errors", () => {
     const protocol = newConsulStoreProtocolError("list")
     expect(protocol).toMatchObject({
       name: "ConsulStoreProtocolError",
-      code: "LIKEGO_CONSUL_STORE_PROTOCOL",
+      code: "GO_LIKE_CONSUL_STORE_PROTOCOL",
       operation: "list"
     })
     expect(Object.isFrozen(protocol)).toBe(true)
@@ -157,14 +157,14 @@ describe("Consul Store stable provider errors", () => {
     for (const status of [400, 404, 409, 499]) {
       expect(isUncertainFailure(newConsulStoreHttpError("write", status))).toBe(false)
     }
-    expect(isUncertainFailure({ code: "LIKEGO_CONSUL_STORE_HTTP", status: "500" })).toBe(false)
+    expect(isUncertainFailure({ code: "GO_LIKE_CONSUL_STORE_HTTP", status: "500" })).toBe(false)
   })
 
   test("creates stable uncertain and fail-closed unsupported-combination errors", () => {
     const uncertain = newConsulStoreUncertainError("session-create", "lost")
     expect(uncertain).toMatchObject({
       name: "ConsulStoreUncertainError",
-      code: "LIKEGO_CONSUL_STORE_UNCERTAIN",
+      code: "GO_LIKE_CONSUL_STORE_UNCERTAIN",
       operation: "session-create"
     })
     expect(uncertain.cause).toBeInstanceOf(Error)
@@ -174,7 +174,7 @@ describe("Consul Store stable provider errors", () => {
       const unsupported = newConsulStoreUnsupportedCombinationError(combination)
       expect(unsupported).toMatchObject({
         name: "ConsulStoreUnsupportedCombinationError",
-        code: "LIKEGO_CONSUL_STORE_UNSUPPORTED_COMBINATION",
+        code: "GO_LIKE_CONSUL_STORE_UNSUPPORTED_COMBINATION",
         combination
       })
       expect(Object.isFrozen(unsupported)).toBe(true)

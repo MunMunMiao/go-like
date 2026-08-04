@@ -1,4 +1,4 @@
-import { withValue, type Context } from "@likego/context"
+import { withValue, type Context } from "@go-like/context"
 
 /** Accepts one metadata value or an ordered group of values for the same key. */
 export type MetadataValue = string | readonly string[]

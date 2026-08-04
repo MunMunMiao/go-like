@@ -1,5 +1,5 @@
-import type { StoreRecord, StoreRecordInput } from "@likego/store"
-import { snapshotStoreRecord, snapshotStoreRecordInput } from "@likego/store/provider"
+import type { StoreRecord, StoreRecordInput } from "@go-like/store"
+import { snapshotStoreRecord, snapshotStoreRecordInput } from "@go-like/store/provider"
 
 import { newConsulStoreProtocolError } from "./errors"
 import type { ConsulStoreOperation } from "./types"
@@ -64,7 +64,7 @@ export function decodeBase64(value: unknown, operation: ConsulStoreOperation): U
   return bytes
 }
 
-/** Encodes one validated Store input into the stable LikeGo Consul payload. */
+/** Encodes one validated Store input into the stable go-like Consul payload. */
 export function encodeRecordPayload(
   value: StoreRecordInput,
   operation: string,
@@ -95,7 +95,7 @@ function decodeMetadata(
   return Object.fromEntries(entries)
 }
 
-/** Decodes one LikeGo payload while retaining no mutable JSON carrier. */
+/** Decodes one go-like payload while retaining no mutable JSON carrier. */
 function decodeRecordPayload(
   key: string,
   revision: string,

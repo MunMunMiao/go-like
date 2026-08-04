@@ -1,5 +1,5 @@
-import type { BrokerEvent, BrokerMessage } from "@likego/broker"
-import { cause, type Context } from "@likego/context"
+import type { BrokerEvent, BrokerMessage } from "@go-like/broker"
+import { cause, type Context } from "@go-like/context"
 import { headers, type MsgHdrs } from "@nats-io/transport-node"
 
 /** Describes the official message fields shared by NATS Core and JetStream. */

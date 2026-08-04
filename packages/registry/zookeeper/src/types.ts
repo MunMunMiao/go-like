@@ -1,5 +1,5 @@
-import type { Registry } from "@likego/registry"
-import type { ProviderLogger, RegistrationErrorHandler } from "@likego/registry/provider"
+import type { Registry } from "@go-like/registry"
+import type { ProviderLogger, RegistrationErrorHandler } from "@go-like/registry/provider"
 
 /** Identifies the ACL applied to every provider-managed znode. */
 export type ZookeeperAcl = "open" | "creator"
@@ -108,7 +108,7 @@ export type ZookeeperOperation =
 /** Describes one secret-safe native ZooKeeper operation failure. */
 export interface ZookeeperOperationError extends Error {
   readonly name: "ZookeeperOperationError"
-  readonly code: "LIKEGO_ZOOKEEPER_OPERATION"
+  readonly code: "GO_LIKE_ZOOKEEPER_OPERATION"
   readonly operation: ZookeeperOperation
   readonly nativeCode: number | null
   readonly retryable: boolean
@@ -117,7 +117,7 @@ export interface ZookeeperOperationError extends Error {
 /** Describes one secret-safe authentication terminal. */
 export interface ZookeeperAuthenticationError extends Error {
   readonly name: "ZookeeperAuthenticationError"
-  readonly code: "LIKEGO_ZOOKEEPER_AUTHENTICATION"
+  readonly code: "GO_LIKE_ZOOKEEPER_AUTHENTICATION"
 }
 
 /** Documents the structural result of the sole public constructor. */

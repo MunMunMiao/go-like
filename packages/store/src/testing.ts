@@ -1,4 +1,4 @@
-import { background, cause, withCancel, withTimeout, type Context } from "@likego/context"
+import { background, cause, withCancel, withTimeout, type Context } from "@go-like/context"
 
 import { expiresIn, ifAbsent, ifRevision, limit, prefix, cursor as resume } from "./options"
 import type { Store, StoreRecord, StoreRecordInput } from "./types"
@@ -464,7 +464,7 @@ function casCase(subject: CapturedSubject): StoreConformanceCase {
             bounded(subject.convergenceTimeoutMs, (ctx) =>
               store.write(ctx, input(key, new Uint8Array([2])), ifAbsent())
             ),
-          "LIKEGO_STORE_CONFLICT"
+          "GO_LIKE_STORE_CONFLICT"
         )
         const stale = `stale:${initial.revision}`
         await rejectsCode(
@@ -472,7 +472,7 @@ function casCase(subject: CapturedSubject): StoreConformanceCase {
             bounded(subject.convergenceTimeoutMs, (ctx) =>
               store.write(ctx, input(key, new Uint8Array([2])), ifRevision(stale))
             ),
-          "LIKEGO_STORE_CONFLICT"
+          "GO_LIKE_STORE_CONFLICT"
         )
         const updated = await bounded(subject.convergenceTimeoutMs, (ctx) =>
           store.write(ctx, input(key, new Uint8Array([2])), ifRevision(initial.revision))
@@ -483,7 +483,7 @@ function casCase(subject: CapturedSubject): StoreConformanceCase {
             bounded(subject.convergenceTimeoutMs, (ctx) =>
               store.delete(ctx, key, ifRevision(initial.revision))
             ),
-          "LIKEGO_STORE_CONFLICT"
+          "GO_LIKE_STORE_CONFLICT"
         )
         ensure(
           await bounded(subject.convergenceTimeoutMs, (ctx) =>
@@ -567,7 +567,7 @@ function sharedWriterCase(subject: CapturedSubject): StoreConformanceCase {
           ensure(
             isObjectLike(failure.reason) &&
               "code" in failure.reason &&
-              failure.reason.code === "LIKEGO_STORE_CONFLICT" &&
+              failure.reason.code === "GO_LIKE_STORE_CONFLICT" &&
               "expectedRevision" in failure.reason &&
               failure.reason.expectedRevision === null,
             "concurrent ifAbsent did not expose an absence conflict"

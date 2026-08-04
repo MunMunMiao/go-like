@@ -1,10 +1,10 @@
 ---
-"@likego/registry": minor
-"@likego/registry-consul": minor
-"@likego/registry-etcd": minor
-"@likego/registry-kubernetes": minor
-"@likego/registry-mdns": minor
-"@likego/registry-zookeeper": minor
+"@go-like/registry": minor
+"@go-like/registry-consul": minor
+"@go-like/registry-etcd": minor
+"@go-like/registry-kubernetes": minor
+"@go-like/registry-mdns": minor
+"@go-like/registry-zookeeper": minor
 ---
 
 将 Registry 公共体验统一为 Kratos 风格的构造期配置：删除运行期可变的

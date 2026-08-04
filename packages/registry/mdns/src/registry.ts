@@ -7,16 +7,16 @@ import {
   withTimeout,
   type CancelCauseFunc,
   type Context
-} from "@likego/context"
-import { waitForContext } from "@likego/core/lifecycle"
-import { type ServiceInstance, type Watcher } from "@likego/registry"
+} from "@go-like/context"
+import { waitForContext } from "@go-like/core/lifecycle"
+import { type ServiceInstance, type Watcher } from "@go-like/registry"
 import {
   newRegistryProtocolError,
   newUnsupportedRegistryCapabilityError,
   notifyRegistrationError,
   snapshotServiceInstance,
   snapshotServiceInstances
-} from "@likego/registry/provider"
+} from "@go-like/registry/provider"
 
 import { newMDNSCache, type MDNSCache } from "./cache"
 import { canonicalPayload, identityPreimage, serviceLabel } from "./canonical"
@@ -253,13 +253,13 @@ function boundedResponsePackets(
   return Object.freeze(packets)
 }
 
-/** Reports whether one TXT record carries the exact LikeGo v2 marker. */
+/** Reports whether one TXT record carries the exact go-like v2 marker. */
 function isManagedTXT(record: DNSRecord): boolean {
   if (record.type !== "TXT" || !Array.isArray(record.data)) return false
   const decoder = new TextDecoder("utf-8", { fatal: true })
   for (const item of record.data) {
     try {
-      if (decoder.decode(item) === "Likego-Wire-Version=2") return true
+      if (decoder.decode(item) === "Go-Like-Wire-Version=2") return true
     } catch {
       return false
     }
@@ -1597,7 +1597,7 @@ function cleanupWatcher(owner: WatchOwner, failure: Error | null): Promise<void>
 /** Creates the unified portable mDNS Registry around one borrowed runtime host. */
 export function newMDNSRegistry(
   host: MDNSHost,
-  ...options: readonly MDNSOption[] /* likego-typed-rest: preserves Go-style functional options. */
+  ...options: readonly MDNSOption[] /* go-like-typed-rest: preserves Go-style functional options. */
 ): MDNSRegistry {
   if (
     typeof host !== "object" ||
@@ -1607,7 +1607,7 @@ export function newMDNSRegistry(
   )
     throw new TypeError("MDNSHost must implement networkInterfaces and bindDatagram")
   const provider = mdnsOptions(
-    ...options /* likego-typed-spread: forwards the exact ordered provider options. */
+    ...options /* go-like-typed-spread: forwards the exact ordered provider options. */
   )
   const state: ProviderState = {
     host,

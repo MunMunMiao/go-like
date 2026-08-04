@@ -1,6 +1,6 @@
-# `@likego/registry-mdns`
+# `@go-like/registry-mdns`
 
-`@likego/registry-mdns` 是 `@likego/registry` 的 mDNS 实现，适合本地开发、局域网服务发现和不依赖中心注册中心的部署环境。
+`@go-like/registry-mdns` 是 `@go-like/registry` 的 mDNS 实现，适合本地开发、局域网服务发现和不依赖中心注册中心的部署环境。
 
 它沿用统一的 `Registry` 用户模型：
 
@@ -12,13 +12,13 @@ provider 不引入额外的注册句柄、运行器或结果包装类型。注�
 
 ## Node.js
 
-mDNS 依赖 UDP multicast，而标准 Web API 没有 UDP 接口。portable provider 因此通过 `MDNSHost` 隔离运行时差异；Node.js 后端使用 `@likego/registry-mdns/node` 提供的实现：
+mDNS 依赖 UDP multicast，而标准 Web API 没有 UDP 接口。portable provider 因此通过 `MDNSHost` 隔离运行时差异；Node.js 后端使用 `@go-like/registry-mdns/node` 提供的实现：
 
 ```ts
-import { background } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
-import { newMDNSRegistry, ttl, watchBufferSize } from "@likego/registry-mdns"
-import { newNodeMDNSHost } from "@likego/registry-mdns/node"
+import { background } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
+import { newMDNSRegistry, ttl, watchBufferSize } from "@go-like/registry-mdns"
+import { newNodeMDNSHost } from "@go-like/registry-mdns/node"
 
 const ctx = background()
 const registry = newMDNSRegistry(newNodeMDNSHost(), watchBufferSize(32), ttl(120_000))
@@ -59,8 +59,8 @@ import {
   queryTimeout,
   ttl,
   watchBufferSize
-} from "@likego/registry-mdns"
-import { newNodeMDNSHost } from "@likego/registry-mdns/node"
+} from "@go-like/registry-mdns"
+import { newNodeMDNSHost } from "@go-like/registry-mdns/node"
 
 const registry = newMDNSRegistry(
   newNodeMDNSHost(),
@@ -88,8 +88,8 @@ mDNS 现有 functional option 风格，不引入第二套构造参数。
 
 ## 运行时边界
 
-- 根入口 `@likego/registry-mdns` 不静态导入 `node:` 模块；
-- `@likego/registry-mdns/node` 提供 Node.js `node:dgram` host；
+- 根入口 `@go-like/registry-mdns` 不静态导入 `node:` 模块；
+- `@go-like/registry-mdns/node` 提供 Node.js `node:dgram` host；
 - 后续运行时只需实现相同的 `MDNSHost` datagram 边界，不改变应用使用的 `Registry` 接口。
 
 Node.js host 使用 `reuseAddr`，multicast TTL / hop limit 固定为 255，并分别支持 `224.0.0.251:5353` 与 `ff02::fb:5353`。
@@ -98,7 +98,7 @@ Node.js host 使用 `reuseAddr`，multicast TTL / hop limit 固定为 255，并�
 
 - 服务身份固定为 `[name, id]`，同一身份再次 `register` 表示替换当前版本；
 - TXT payload 使用 canonical UTF-8 JSON、`deflate+base64url`、SHA-256 Base32 hash 与有界分片；
-- wire key 使用 `Likego-` namespace，当前 wire version 为 `2`；
+- wire key 使用 `Go-Like-` namespace，当前 wire version 为 `2`；
 - 正常注销发送 TTL 0 goodbye；进程异常退出后依赖短期记录与缓存过期移除服务；
 - 同一身份出现不同内容时 fail closed，不静默合并冲突；
 - `watch.next(ctx)` 返回完整替换快照，而不是 provider 私有事件。
@@ -108,15 +108,15 @@ Node.js host 使用 `reuseAddr`，multicast TTL / hop limit 固定为 255，并�
 包级检查使用 Bun workspace：
 
 ```sh
-bun run --filter @likego/registry-mdns typecheck
-bun run --filter @likego/registry-mdns test:unit
-bun run --filter @likego/registry-mdns test:unit:coverage
+bun run --filter @go-like/registry-mdns typecheck
+bun run --filter @go-like/registry-mdns test:unit
+bun run --filter @go-like/registry-mdns test:unit:coverage
 ```
 
 真实协议测试使用 Docker bridge 中的独立 publisher、observer 与 packet capture 容器：
 
 ```sh
-LIKEGO_E2E_OWNER=likego-registry-mdns bun run --filter @likego/registry-mdns test:e2e
+GO_LIKE_E2E_OWNER=go-like-registry-mdns bun run --filter @go-like/registry-mdns test:e2e
 ```
 
 测试覆盖 IPv4 / IPv6 注册、发现、更新、恢复、注销、domain 隔离、内容冲突、协作 responder 接管、publisher `SIGKILL` 后 TTL expiry，以及 pcap 中的 multicast TTL / hop limit、RR TTL、cache-flush、owner / target 与 wire version。结束时还会检查 observer 不再接收数据、进程 socket descriptor、`/proc/net/udp*`、容器与 Docker network 清理。

@@ -1,5 +1,5 @@
-import { background, withCancelCause } from "@likego/context"
-import { type ServiceInstance } from "@likego/registry"
+import { background, withCancelCause } from "@go-like/context"
+import { type ServiceInstance } from "@go-like/registry"
 import { expect, test } from "bun:test"
 
 import { encodeRecord } from "../src/codec"
@@ -53,11 +53,11 @@ test("failed registrations release many distinct identity serializers", async ()
   await started.promise
   expect(registrations.identityCount()).toBe(1)
   proceed.resolve()
-  await expect(first).rejects.toMatchObject({ code: "LIKEGO_ETCD_HTTP", status: 403 })
+  await expect(first).rejects.toMatchObject({ code: "GO_LIKE_ETCD_HTTP", status: 403 })
   for (let index = 1; index < 32; index += 1) {
     await expect(
       registrations.register(background(), instance(`failed-${index}`, `orders-${index}`), options)
-    ).rejects.toMatchObject({ code: "LIKEGO_ETCD_HTTP", status: 403 })
+    ).rejects.toMatchObject({ code: "GO_LIKE_ETCD_HTTP", status: 403 })
   }
   expect(registrations.identityCount()).toBe(0)
 })

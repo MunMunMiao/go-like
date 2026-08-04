@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import type { ConfigSchema, ConfigSourceSnapshot, ConfigValue } from "../src/index"
 import { newConfig, onReloadError, schema as configSchema, source } from "../src/index"
 import { controlledWatcher, deferred, flush, startConfig, type Deferred } from "./helpers"

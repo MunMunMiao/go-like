@@ -17,9 +17,9 @@
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一创建 Core App 的可执行入口，按顺序挂载 Worker、HTTP Server 与进程信号。
 
-## LikeGo 能力
+## go-like 能力
 
-使用 `@likego/core` 启停并排空结构式履约 worker；只有 worker 处于运行期时才接收履约事件。`@likego/web` 暴露标准 Web API。事件重投由确定性内存仓储模拟，不声称已经连接真实 Broker。
+使用 `@go-like/core` 启停并排空结构式履约 worker；只有 worker 处于运行期时才接收履约事件。`@go-like/web` 暴露标准 Web API。事件重投由确定性内存仓储模拟，不声称已经连接真实 Broker。
 
 ## 验证矩阵
 
@@ -31,17 +31,17 @@
 | Fetch 入口                | `test/main.test.ts` 运行期 Web API 用例                    |
 
 ```bash
-bun run --filter @likego/example-marketplace-order-fulfillment typecheck
-bun run --filter @likego/example-marketplace-order-fulfillment test:unit
+bun run --filter @go-like/example-marketplace-order-fulfillment typecheck
+bun run --filter @go-like/example-marketplace-order-fulfillment test:unit
 ```
 
 ## 直接运行
 
 ```bash
-HOST=127.0.0.1 PORT=3000 bun run --filter @likego/example-marketplace-order-fulfillment start
+HOST=127.0.0.1 PORT=3000 bun run --filter @go-like/example-marketplace-order-fulfillment start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY` 后推进订单第一步：
+看到 `GO_LIKE_EXAMPLE_READY` 后推进订单第一步：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/fulfillment-events \

@@ -1,6 +1,6 @@
 import { SQL } from "bun"
 
-import { background } from "@likego/context"
+import { background } from "@go-like/context"
 import {
   RetentionPolicy,
   StorageType,
@@ -34,8 +34,8 @@ const ExpectedNatsVersion = "2.14.4"
 const ExpectedSdkVersion = "3.4.0"
 const DockerKnownSecrets = Object.freeze(["local-e2e-only"])
 const RunId = crypto.randomUUID()
-const PostgresContainer = `likego-payments-postgres-${RunId}`
-const NatsContainer = `likego-payments-nats-${RunId}`
+const PostgresContainer = `go-like-payments-postgres-${RunId}`
+const NatsContainer = `go-like-payments-nats-${RunId}`
 
 interface CommandResult {
   readonly stdout: string
@@ -145,7 +145,7 @@ async function connectPostgres(port: number): Promise<SQL> {
       adapter: "postgres",
       hostname: "127.0.0.1",
       port,
-      username: "likego",
+      username: "go-like",
       password: "local-e2e-only",
       database: "ledger",
       tls: false,
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
         "--mount",
         `source=${postgresVolume.id},target=/var/lib/postgresql`,
         "--env",
-        "POSTGRES_USER=likego",
+        "POSTGRES_USER=go-like",
         "--env",
         "POSTGRES_PASSWORD=local-e2e-only",
         "--env",
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
           "-h",
           "127.0.0.1",
           "-U",
-          "likego",
+          "go-like",
           "-d",
           "ledger"
         ],
@@ -519,7 +519,7 @@ async function main(): Promise<void> {
           "-h",
           "127.0.0.1",
           "-U",
-          "likego",
+          "go-like",
           "-d",
           "ledger"
         ],
@@ -556,7 +556,7 @@ async function main(): Promise<void> {
         ...scenarioDockerEnvironment(ownedDocker),
         HOST: "127.0.0.1",
         PORT: String(programPort),
-        DATABASE_URL: `postgres://likego:local-e2e-only@127.0.0.1:${postgresPort}/ledger`,
+        DATABASE_URL: `postgres://go-like:local-e2e-only@127.0.0.1:${postgresPort}/ledger`,
         NATS_URL: `nats://127.0.0.1:${natsPort}`,
         PUBLISHER_OWNER: `entry_${RunId}`
       },
@@ -583,7 +583,7 @@ async function main(): Promise<void> {
     try {
       await waitUntil(
         "start:prepared readiness",
-        () => programOutput.includes('LIKEGO_EXAMPLE_READY={"example":"payments-ledger"'),
+        () => programOutput.includes('GO_LIKE_EXAMPLE_READY={"example":"payments-ledger"'),
         30_000
       )
       const entryReference = `entry-${RunId}`

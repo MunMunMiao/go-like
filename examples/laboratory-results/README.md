@@ -19,10 +19,10 @@
 ## 直接运行
 
 ```bash
-bun run --filter @likego/example-laboratory-results start
+bun run --filter @go-like/example-laboratory-results start
 ```
 
-看到 `LIKEGO_EXAMPLE_READY=...` 后提交与演示就诊匹配的检验结果：
+看到 `GO_LIKE_EXAMPLE_READY=...` 后提交与演示就诊匹配的检验结果：
 
 ```bash
 curl -sS http://127.0.0.1:3000/v1/laboratory-results \
@@ -31,4 +31,4 @@ curl -sS http://127.0.0.1:3000/v1/laboratory-results \
   -d '{"resultId":"result-demo","encounterId":"encounter-1","patientId":"patient-1","orderingClinicianId":"clinician-1","testCode":"HB","value":"13.5"}'
 ```
 
-按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，LikeGo 会有序停止 HTTP Server。
+按 `Ctrl+C` 发送 `SIGINT`，或执行 `kill -TERM <pid>`，go-like 会有序停止 HTTP Server。

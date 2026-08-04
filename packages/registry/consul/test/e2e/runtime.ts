@@ -1,6 +1,6 @@
-import { background } from "@likego/context"
-import type { ServiceInstance } from "@likego/registry"
-import { newConsulRegistry, type ConsulFetch } from "@likego/registry-consul"
+import { background } from "@go-like/context"
+import type { ServiceInstance } from "@go-like/registry"
+import { newConsulRegistry, type ConsulFetch } from "@go-like/registry-consul"
 
 /** Reads one own data field from an untrusted JSON object. */
 function own(value: object, key: string): unknown {

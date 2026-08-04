@@ -1,4 +1,4 @@
-import type { ConfigSource, ConfigValue } from "@likego/config"
+import type { ConfigSource, ConfigValue } from "@go-like/config"
 
 import * as EnvironmentConfig from "../src/env"
 import { envSource, type EnvSourceOptions, type EnvironmentRecord } from "../src/env"

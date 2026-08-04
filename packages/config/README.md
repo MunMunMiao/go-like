@@ -1,11 +1,11 @@
-# @likego/config
+# @go-like/config
 
-面向 LikeGo 应用的可移植、不可变配置能力。公共入口采用 go-kratos Config 的
+面向 go-like 应用的可移植、不可变配置能力。公共入口采用 go-kratos Config 的
 `load / scan / value / watch / close` 心智，不把 Config 当作 Server。
 
 ```ts
-import { background } from "@likego/context"
-import { newConfig, objectSource, source } from "@likego/config"
+import { background } from "@go-like/context"
+import { newConfig, objectSource, source } from "@go-like/config"
 
 const config = newConfig(source(objectSource("defaults", { http: { port: 8080 } })))
 await config.load(background())
@@ -14,13 +14,13 @@ const port = config.value("http.port").load()
 await config.close(background())
 ```
 
-在 LikeGo App 中，使用与 go-kratos 对应的生命周期 hook 加载和关闭 Config，`server(...)` 只接收真正的
+在 go-like App 中，使用与 go-kratos 对应的生命周期 hook 加载和关闭 Config，`server(...)` 只接收真正的
 HTTP、Cron、Broker 等 Server：
 
 ```ts
-import { withoutCancel } from "@likego/context"
-import { newConfig, objectSource, source } from "@likego/config"
-import { afterStop, beforeStart, newApp, server } from "@likego/core"
+import { withoutCancel } from "@go-like/context"
+import { newConfig, objectSource, source } from "@go-like/config"
+import { afterStop, beforeStart, newApp, server } from "@go-like/core"
 
 const config = newConfig(source(objectSource("defaults", { http: { port: 8080 } })))
 const app = newApp(
@@ -34,11 +34,11 @@ await app.run()
 
 公开入口按 Go 风格职责平铺在同一个包中：
 
-- `@likego/config` 提供配置编排、合并、校验与观察。
-- `@likego/config/env` 提供无驻留的环境变量配置源。
-- `@likego/config/file` 提供由调用方注入文件能力的可观测配置源。
-- `@likego/config/node` 提供 Node 文件系统能力，可与 file source 显式组合。
-- `@likego/config/yaml` 提供可移植 YAML 解码器，可与 file source 显式组合。
+- `@go-like/config` 提供配置编排、合并、校验与观察。
+- `@go-like/config/env` 提供无驻留的环境变量配置源。
+- `@go-like/config/file` 提供由调用方注入文件能力的可观测配置源。
+- `@go-like/config/node` 提供 Node 文件系统能力，可与 file source 显式组合。
+- `@go-like/config/yaml` 提供可移植 YAML 解码器，可与 file source 显式组合。
 
 `ConfigSource.watch` 返回的 watcher 与 Kratos 的 `Watcher` 语义一致，只包含 `next(ctx)` 和 `stop(ctx)`。
 一旦 watch 成功完成，watcher 就由 Config 管理；若后续结构接纳失败，Config 会调用
@@ -56,11 +56,11 @@ await app.run()
 
 `key` 与 Kratos 一样使用点分字符串，例如 `http.port`。路径只穿过对象，不把数组下标解释为路径；
 空 segment、不安全对象键和非法 UTF-16 会被拒绝。尚未加载或路径不存在时，`scan` 和 `watch` 抛出
-`ConfigNotFoundError`（`LIKEGO_CONFIG_NOT_FOUND`），而 `Value.load()` 返回 `null`。
+`ConfigNotFoundError`（`GO_LIKE_CONFIG_NOT_FOUND`），而 `Value.load()` 返回 `null`。
 
 ```ts
-import { background } from "@likego/context"
-import { newConfig, objectSource, source } from "@likego/config"
+import { background } from "@go-like/context"
+import { newConfig, objectSource, source } from "@go-like/config"
 
 const config = newConfig(source(objectSource("defaults", { http: { port: 8080 } })))
 await config.load(background())
@@ -85,11 +85,11 @@ await config.close(background())
 ```
 
 `scan` 不触发 source I/O，只读取调用开始时的当前配置。Go 可以把配置反序列化到调用方传入的目标对象；
-TypeScript 的接口在运行时不存在，无法可靠复制这种反射行为，所以 LikeGo 使用生态通用的 Standard Schema
+TypeScript 的接口在运行时不存在，无法可靠复制这种反射行为，所以 go-like 使用生态通用的 Standard Schema
 表达校验与转换。这是语言边界，不是第二套 Config 模型。Standard Schema 允许异步校验，因此 `Config.scan`
 和 `Value.scan` 保留独立首参 `Context`，把 Web `AbortSignal` 取消传播到等待边界；同步的 `Value.load()`
 与 `watch` 注册不接收无意义的 Context。校验 issues、throw、畸形结果和非法输出统一使用冻结的
-`ConfigValidationError`（`LIKEGO_CONFIG_VALIDATION`）。
+`ConfigValidationError`（`GO_LIKE_CONFIG_VALIDATION`）。
 
 构造使用 Go 风格 functional option：
 
@@ -109,8 +109,8 @@ TypeScript 的接口在运行时不存在，无法可靠复制这种反射行为
 应先通过 `envSource(...)` 把调用方提供的记录合并进配置，再从合并后的根对象解析引用：
 
 ```ts
-import { newConfig, placeholderResolver, resolver, source } from "@likego/config"
-import { envSource } from "@likego/config/env"
+import { newConfig, placeholderResolver, resolver, source } from "@go-like/config"
+import { envSource } from "@go-like/config/env"
 
 const config = newConfig(
   source(
@@ -140,10 +140,10 @@ const config = newConfig(
 应用可以把终态映射到现有 Health readiness，并请求同一个 App stop；Config 本身不依赖 Health：
 
 ```ts
-import { background } from "@likego/context"
-import { newConfig, onTerminalError, source, type ConfigSource } from "@likego/config"
-import { afterStop, beforeStart, newApp } from "@likego/core"
-import { newProbeRegistry } from "@likego/health"
+import { background } from "@go-like/context"
+import { newConfig, onTerminalError, source, type ConfigSource } from "@go-like/config"
+import { afterStop, beforeStart, newApp } from "@go-like/core"
+import { newProbeRegistry } from "@go-like/health"
 
 let configReady = false
 let app: ReturnType<typeof newApp>
@@ -177,11 +177,11 @@ await app.run()
 
 ## 环境变量配置源
 
-`@likego/config/env` 把显式提供的环境变量记录转换为不可变的 `@likego/config` 配置源。它绝不读取
+`@go-like/config/env` 把显式提供的环境变量记录转换为不可变的 `@go-like/config` 配置源。它绝不读取
 `process.env`、`Bun.env` 或其他运行时全局对象。
 
 ```ts
-import { envSource } from "@likego/config/env"
+import { envSource } from "@go-like/config/env"
 
 const source = envSource(
   { APP_HTTP__PORT: "8080", APP_HTTP__HOST: "127.0.0.1" },
@@ -196,11 +196,11 @@ symbol、带附加属性的数组、循环引用和非有限数值都无法越�
 
 ## 文件配置源
 
-`@likego/config/file` 把调用方提供的文件系统能力转换为 `@likego/config` 配置源。生产代码中不包含任何
+`@go-like/config/file` 把调用方提供的文件系统能力转换为 `@go-like/config` 配置源。生产代码中不包含任何
 运行时特定的文件系统 import。
 
 该能力以 `Context` 作为第一个参数，并同时返回文件文本与不透明 revision。可选的 watch 操作会把一个私有
-订阅移交给配置源；LikeGo 合并变更回调，并负责停止已接纳的订阅。默认解码 JSON 对象；自定义 decoder
+订阅移交给配置源；go-like 合并变更回调，并负责停止已接纳的订阅。默认解码 JSON 对象；自定义 decoder
 可以增加 YAML、TOML 或其他格式，而无需修改配置源。
 
 预先取消的操作不会调用运行时能力。若在接纳原生文件 watcher 期间取消变得可观测，配置源会先调用
@@ -213,7 +213,7 @@ watch API 的被动错误和真实关闭完成状态；它不会出现在 `Confi
 同时合并后的变更仍留给下一个有效调用方。
 
 ```ts
-import { fileSource } from "@likego/config/file"
+import { fileSource } from "@go-like/config/file"
 
 const source = fileSource(
   {
@@ -233,14 +233,14 @@ const source = fileSource(
 
 ### Node 文件能力
 
-`@likego/config/node` 是显式 Node 子路径；可移植根入口及 `@likego/config/file` 不会加载任何 `node:` 模块。
+`@go-like/config/node` 是显式 Node 子路径；可移植根入口及 `@go-like/config/file` 不会加载任何 `node:` 模块。
 它以完整文件内容的 SHA-256 作为 revision，并监听目标文件的父目录，因此普通写入和临时文件 rename 覆盖都能
 触发同一个 file source。原生 watcher 由返回的文件 watcher 管理：`stop(ctx)` 只让有效调用者启动一次关闭，
 `done()` 始终返回同一个真实终止屏障，被动文件系统错误则通过该屏障显式拒绝。
 
 ```ts
-import { fileSource } from "@likego/config/file"
-import { newNodeFileCapability } from "@likego/config/node"
+import { fileSource } from "@go-like/config/file"
+import { newNodeFileCapability } from "@go-like/config/node"
 
 const source = fileSource(newNodeFileCapability(), "/etc/application/config.json")
 ```

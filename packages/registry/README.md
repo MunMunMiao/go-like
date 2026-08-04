@@ -1,6 +1,6 @@
-# @likego/registry
+# @go-like/registry
 
-`@likego/registry` 定义 LikeGo 的服务注册、发现、Watcher 与 Selector 公共契约。注册对象直接采用
+`@go-like/registry` 定义 go-like 的服务注册、发现、Watcher 与 Selector 公共契约。注册对象直接采用
 go-kratos 的 `ServiceInstance` 心智：
 
 ```ts
@@ -20,8 +20,8 @@ interface ServiceInstance {
 ## Registry
 
 ```ts
-import { background } from "@likego/context"
-import type { Registry, ServiceInstance } from "@likego/registry"
+import { background } from "@go-like/context"
+import type { Registry, ServiceInstance } from "@go-like/registry"
 
 declare const registry: Registry
 
@@ -57,16 +57,16 @@ try {
 
 具体 provider 位于五个独立子 workspace：
 
-- `@likego/registry-consul`
-- `@likego/registry-mdns`
-- `@likego/registry-etcd`
-- `@likego/registry-kubernetes`
-- `@likego/registry-zookeeper`
+- `@go-like/registry-consul`
+- `@go-like/registry-mdns`
+- `@go-like/registry-etcd`
+- `@go-like/registry-kubernetes`
+- `@go-like/registry-zookeeper`
 
 五个 provider 在 workspace 内复用同一组 provider-neutral conformance cases；这些测试资产不属于
-`@likego/registry` 的发布 API。
+`@go-like/registry` 的发布 API。
 
-Provider 作者可以从 `@likego/registry/provider` 导入 `providerOptions`、`notifyRegistrationError` 与不可变
+Provider 作者可以从 `@go-like/registry/provider` 导入 `providerOptions`、`notifyRegistrationError` 与不可变
 `ServiceInstance` snapshot helper。`ProviderOptionInput.onRegistrationError` 只观察已经成功注册、随后永久丢失的
 resident registration generation；回调收到防御性快照，其抛错或 rejected thenable 不会接管 provider 生命周期。
 这些实现辅助能力不在应用侧根入口中，避免普通用户接触 provider 配置和内部防御性复制概念。
@@ -85,12 +85,12 @@ P2C + EWMA 决策；选择结果包含实际 URL 与同步 feedback 回调。
 词汇，可先过滤实例再交给 Selector：
 
 ```ts
-import { background } from "@likego/context"
-import { filterLabel, filterVersion } from "@likego/registry"
+import { background } from "@go-like/context"
+import { filterLabel, filterVersion } from "@go-like/registry"
 
 const candidates = filterLabel("zone", "a")(filterVersion("v1")(instances))
 const selected = selector.select(background(), candidates)
 ```
 
-LikeGo 不提供 `filterEndpoint`。`endpoints` 是 Kratos 风格实例属性，不是 go-micro
+go-like 不提供 `filterEndpoint`。`endpoints` 是 Kratos 风格实例属性，不是 go-micro
 `Endpoint` 描述树；调用协议和路径应由 client/transport 决定。

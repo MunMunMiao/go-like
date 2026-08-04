@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { background, canceled, type Context, type ContextError, withCancel } from "@likego/context"
+import { background, canceled, type Context, type ContextError, withCancel } from "@go-like/context"
 
 import { retry, type RetryOptions } from "../src/index"
 import { deferred, flush } from "./helpers"

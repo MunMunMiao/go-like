@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { background, canceled, withCancelCause, withTimeout, type Context } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background, canceled, withCancelCause, withTimeout, type Context } from "@go-like/context"
+import type { Server } from "@go-like/core"
 
 import { newWinstonServer } from "../src/index"
 import { FakeLogger, turns } from "./helpers"
@@ -100,7 +100,7 @@ describe("native Winston logger lifecycle", () => {
     logger.finish()
     await expect(running).rejects.toMatchObject({
       name: "WinstonLoggerFinishedError",
-      code: "LIKEGO_WINSTON_LOGGER_FINISHED"
+      code: "GO_LIKE_WINSTON_LOGGER_FINISHED"
     })
     expect(logger.endCalls).toBe(0)
   })
@@ -112,7 +112,7 @@ describe("native Winston logger lifecycle", () => {
     logger.close()
     await expect(running).rejects.toMatchObject({
       name: "WinstonLoggerClosedError",
-      code: "LIKEGO_WINSTON_LOGGER_CLOSED"
+      code: "GO_LIKE_WINSTON_LOGGER_CLOSED"
     })
     expect(logger.endCalls).toBe(0)
   })
@@ -273,7 +273,7 @@ describe("native Winston logger lifecycle", () => {
 
     await expect(newWinstonServer(logger.official()).start(background())).rejects.toMatchObject({
       name: "WinstonLoggerFinishedError",
-      code: "LIKEGO_WINSTON_LOGGER_FINISHED"
+      code: "GO_LIKE_WINSTON_LOGGER_FINISHED"
     })
     expect(logger.endCalls).toBe(0)
     expect(logger.listenerCount("error")).toBe(0)
@@ -292,7 +292,7 @@ describe("native Winston logger lifecycle", () => {
 
     await expect(newWinstonServer(logger.official()).start(background())).rejects.toMatchObject({
       name: "WinstonLoggerClosedError",
-      code: "LIKEGO_WINSTON_LOGGER_CLOSED"
+      code: "GO_LIKE_WINSTON_LOGGER_CLOSED"
     })
     expect(logger.endCalls).toBe(0)
     expect(logger.listenerCount("error")).toBe(0)

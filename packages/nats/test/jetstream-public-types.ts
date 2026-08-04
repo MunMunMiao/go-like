@@ -1,5 +1,5 @@
-import { background } from "@likego/context"
-import type { Server } from "@likego/core"
+import { background } from "@go-like/context"
+import type { Server } from "@go-like/core"
 import type { ConsumerMessages } from "@nats-io/jetstream"
 import {
   natsJetStreamCloseTimeout,
@@ -35,7 +35,7 @@ void alreadyStarted
 void unexpectedExit
 void closeTimeout
 
-// @ts-expect-error Lifecycle-only factories do not receive a LikeGo Context.
+// @ts-expect-error Lifecycle-only factories do not receive a go-like Context.
 const contextFactory: NatsJetStreamMessagesFactory = (_ctx) => messages
 void contextFactory
 

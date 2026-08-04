@@ -1,14 +1,14 @@
 import { etcdSource } from "../../src/index"
-import { background, withTimeout } from "@likego/context"
+import { background, withTimeout } from "@go-like/context"
 
 const Image =
   "gcr.io/etcd-development/etcd:v3.7.1@sha256:a9983dd6d9283138ab926daa307c6c25623636703ecf5645d5df4d666ce9eba2"
 const EtcdVersion = "3.7.1"
-const Name = `likego-config-etcd-${process.pid}-${Date.now()}`
-const DockerOwner = process.env.LIKEGO_E2E_OWNER
+const Name = `go-like-config-etcd-${process.pid}-${Date.now()}`
+const DockerOwner = process.env.GO_LIKE_E2E_OWNER
 if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
-  throw new Error("invalid LIKEGO_E2E_OWNER")
-const DockerOwnerLabel = `io.likego.e2e.owner=${DockerOwner}`
+  throw new Error("invalid GO_LIKE_E2E_OWNER")
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly exitCode: number
