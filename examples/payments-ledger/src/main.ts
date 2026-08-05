@@ -43,9 +43,29 @@ function newBunWebServer(handler: Handler): Server {
       await done
     },
     async stop(ctx: Context): Promise<void> {
-      const failure = ctx.err()
-      if (failure !== null) throw failure
-      await native?.stop(false)
+      const signal = ctx.done()
+      if (signal === null) {
+        await native?.stop(false)
+        resolveDone?.()
+        return
+      }
+      let gracefulDone = false
+      if (!signal.aborted) {
+        const graceful = (async () => {
+          await native?.stop(false)
+          gracefulDone = true
+        })()
+        const deadline = new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve(), { once: true })
+        })
+        await Promise.race([graceful, deadline])
+      }
+      if (!gracefulDone) {
+        // Deadline won the race (or had already expired): force-close instead of hanging forever.
+        await native?.stop(true)
+        resolveDone?.()
+        throw ctx.err() ?? new Error("Bun web server stop deadline exceeded")
+      }
       resolveDone?.()
     }
   })
