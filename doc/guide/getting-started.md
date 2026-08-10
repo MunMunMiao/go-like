@@ -17,7 +17,7 @@ The repository root is private and currently records package version `0.0.1`. Re
 bun install --frozen-lockfile
 ```
 
-The declared validation matrix is Bun `1.3.14`, Node.js `26.x`, Deno `2.9.4`, TypeScript `7.0.2`, and k6 `2.1.0`. Node.js 26.x is the supported validation range; another major version may still execute a source example, but it is not the repository's full validation environment.
+The declared validation matrix is Bun `1.x`, Node.js `26.x`, Deno with no fixed version requirement, TypeScript `7.0.2`, and k6 `2.1.0`. Bun 1.x and Node.js 26.x are the supported validation ranges; Deno is still probed and tested, but the repository does not enforce a Deno version pin. Other Bun or Node.js major versions may still execute a source example, but they are not the repository's full validation environment.
 
 After a future published release, the intended dependency shape for a small Node-hosted Web service is:
 

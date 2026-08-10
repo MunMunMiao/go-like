@@ -60,7 +60,7 @@ examples/healthcare-appointments/
 bun install --frozen-lockfile
 ```
 
-目前 checkout 中，packages 透過 workspace dependencies 互相連結。根 repository 記錄的驗證矩陣是 Bun `1.3.14`、Node.js `26.x`、Deno `2.9.4`、TypeScript `7.0.2` 與 k6 `2.1.0`；Node.js 使用 26.x 的任何 patch 都可以。目前 package 文件說明這些 packages 尚未發布到 npm。
+目前 checkout 中，packages 透過 workspace dependencies 互相連結。根 repository 記錄的驗證矩陣是 Bun `1.x`、Node.js `26.x`、不固定版本的 Deno、TypeScript `7.0.2` 與 k6 `2.1.0`；Bun 1.x 與 Node.js 26.x 的任何版本都可以，Deno 仍會被探測與測試，但 repository 不強制固定其版本。目前 package 文件說明這些 packages 尚未發布到 npm。
 
 執行現有的 baseline example：
 

@@ -55,7 +55,7 @@ async function frameworkHandler(selectedKind) {
   })).fetch
 }
 
-for (const specifier of ["@go-like/context", "@go-like/web/node", "@hono/node-server"]) {
+for (const specifier of ["@go-like/context", "@go-like/web/node"]) {
   assertStaged(specifier)
 }
 const [{ background }, { newNodeServer }] = await Promise.all([

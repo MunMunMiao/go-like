@@ -1,8 +1,7 @@
 # Hono 示例
 
 Hono 继续拥有路由并暴露原生 `app.fetch`。应用把这个单参数 Handler 直接交给 `newNodeServer`；go-like
-不提供框架专用桥接包，Node 宿主只拥有 listener 生命周期。Node HTTP 翻译复用 `@hono/node-server`，
-但 go-like ABI 不暴露其 Node
+不提供框架专用桥接包，Node 宿主拥有 listener 生命周期和包内 Node Fetch bridge。go-like ABI 不暴露 Node
 `HttpBindings`、WebSocket 或静态文件扩展。
 
 源码按职责拆分：

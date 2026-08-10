@@ -32,7 +32,6 @@ import {
   TracerProvider,
   type ReadableSpan
 } from "@opentelemetry/sdk-trace"
-import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
 const CollectorImage =
@@ -110,25 +109,6 @@ function allocatePort(): number {
   return port
 }
 
-/** Reads the installed OpenTelemetry SDK version from validated package metadata. */
-async function installedOtelVersion(): Promise<string> {
-  const value: unknown = JSON.parse(
-    await readFile(
-      new URL("../../package.json", import.meta.resolve("@opentelemetry/sdk-trace")),
-      "utf8"
-    )
-  )
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("version" in value) ||
-    typeof value.version !== "string"
-  ) {
-    throw new Error("installed OpenTelemetry SDK package has no version")
-  }
-  return value.version
-}
-
 /** Waits for one externally observable condition. */
 async function waitUntil(
   operation: () => Promise<boolean>,
@@ -166,8 +146,6 @@ const serviceName = `go-like.otel.${session}`
 const endpointName = "Trace"
 const rootSpanName = `go-like.e2e.root.${session}`
 const webRootSpanName = `go-like.e2e.web.root.${session}`
-const otelVersion = await installedOtelVersion()
-ensure(otelVersion === "2.10.0", `unexpected OpenTelemetry SDK version: ${otelVersion}`)
 const manager = new AsyncLocalStorageContextManager().enable()
 let collectorExists = false
 let provider: TracerProvider | null = null

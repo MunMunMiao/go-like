@@ -10,9 +10,9 @@ import type {
 } from "./harness/process"
 
 export const RequiredRuntimeVersions = Object.freeze({
-  bun: "1.3.14",
+  bun: "1.x",
   node: "26.x",
-  deno: "2.9.4",
+  deno: null,
   typescript: "7.0.2",
   k6: "2.1.0",
   k6Image:

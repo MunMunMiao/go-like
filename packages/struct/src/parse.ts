@@ -377,18 +377,21 @@ export function buildZeroValue(struct: RuntimeStruct, path: Path): unknown {
     case "record":
       return {}
 
-    case "tuple": {
-      const output: unknown[] = []
-      for (let index = 0; index < definition.items.length; index += 1) {
-        output[index] = resolveMissingValue(
-          definition.items[index] as RuntimeStruct,
-          [...path, index],
-          "value"
-        )
-      }
-      return output
-    }
+    case "tuple":
+      return buildTupleZeroValue(definition, path)
   }
+}
+
+function buildTupleZeroValue(definition: TupleDefinition, path: Path): unknown[] {
+  const output: unknown[] = []
+  for (let index = 0; index < definition.items.length; index += 1) {
+    output[index] = resolveMissingValue(
+      definition.items[index] as RuntimeStruct,
+      [...path, index],
+      "value"
+    )
+  }
+  return output
 }
 
 function resolveMissingValue(struct: RuntimeStruct, path: Path, mode: ParseMode): unknown {

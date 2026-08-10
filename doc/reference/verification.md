@@ -89,9 +89,9 @@ The repository declares these versions in `e2e/runtime-versions.ts` and the veri
 
 | Tool       | Declared version |
 | ---------- | ---------------: |
-| Bun        |         `1.3.14` |
+| Bun        |            `1.x` |
 | Node.js    |           `26.x` |
-| Deno       |          `2.9.4` |
+| Deno       |     unrestricted |
 | TypeScript |          `7.0.2` |
 | k6         |          `2.1.0` |
 | VitePress  | `2.0.0-alpha.19` |

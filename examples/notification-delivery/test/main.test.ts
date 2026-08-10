@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { newNotificationEvents } from "../src/events"
 import { newNotificationHandler } from "../src/http"
 import { newMemoryNotificationProvider } from "../src/provider"
-import { newDeliverNotification } from "../src/service"
+import { newDeliverNotification, validateNotification } from "../src/service"
 
 describe("notification delivery", () => {
   test("publishes a typed accepted event into the memory Store projection", async () => {
@@ -101,6 +101,9 @@ describe("notification delivery", () => {
   })
 
   test("rejects an invalid destination before provider access", async () => {
+    expect(() =>
+      newMemoryNotificationProvider([{ messageId: "invalid-plan", failuresBeforeSuccess: -1 }])
+    ).toThrow("failuresBeforeSuccess must be a non-negative safe integer")
     const provider = newMemoryNotificationProvider()
     const deliver = newDeliverNotification(provider)
     await expect(
@@ -131,6 +134,130 @@ describe("notification delivery", () => {
     expect(await response.json()).toMatchObject({
       messageId: "message-http",
       status: "accepted"
+    })
+  })
+
+  test("covers event projection misses, decoder rejection and channel validation", async () => {
+    const events = newNotificationEvents()
+    expect(await events.receipt(background(), "missing")).toBeNull()
+    const running = events.server.start(background())
+    void running.catch(() => {})
+    await Bun.sleep(0)
+    try {
+      await expect(
+        events.publish(background(), {
+          messageId: "event-invalid",
+          channel: "email",
+          providerReference: "provider-event-invalid",
+          status: "accepted"
+        })
+      ).resolves.toBeUndefined()
+      expect(await events.receipt(background(), "event-invalid")).toMatchObject({
+        messageId: "event-invalid"
+      })
+    } finally {
+      await events.server.stop(background())
+      await running
+    }
+
+    const invalidEventCases: unknown[] = [null, { messageId: "bad", channel: "push" }]
+    for (const [index, invalidEvent] of invalidEventCases.entries()) {
+      const brokenEvents = newNotificationEvents()
+      const brokenRunning = brokenEvents.server.start(background())
+      void brokenRunning.catch(() => {})
+      await Bun.sleep(0)
+      await expect(brokenEvents.publish(background(), invalidEvent as never)).rejects.toThrow(
+        "invalid notification event"
+      )
+      await expect(brokenRunning).rejects.toThrow("invalid notification event")
+      await brokenEvents.server.stop(background()).catch(() => {})
+      expect(index).toBeLessThan(invalidEventCases.length)
+    }
+
+    expect(() =>
+      validateNotification({
+        messageId: "bad id",
+        channel: "email",
+        destination: "ops@example.test",
+        body: "alert"
+      })
+    ).toThrow("invalid messageId")
+    expect(() =>
+      validateNotification({
+        messageId: "message-channel",
+        channel: "email",
+        destination: "ops@example.test",
+        body: ""
+      })
+    ).toThrow("body must contain")
+    expect(() =>
+      validateNotification({
+        messageId: "message-sms",
+        channel: "sms",
+        destination: "+8613800138000",
+        body: "alert"
+      })
+    ).not.toThrow()
+    expect(() =>
+      validateNotification({
+        messageId: "message-sms-bad",
+        channel: "sms",
+        destination: "123",
+        body: "alert"
+      })
+    ).toThrow("invalid notification destination")
+  })
+
+  test("maps notification HTTP request and delivery failures", async () => {
+    const handler = newNotificationHandler(newDeliverNotification(newMemoryNotificationProvider()))
+    const notFound = await handler(new Request("https://example.test/other"))
+    expect(notFound.status).toBe(404)
+    const invalid = await handler(
+      new Request("https://example.test/v1/notifications/deliver", {
+        method: "POST",
+        body: JSON.stringify({ messageId: "bad" })
+      })
+    )
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({ code: "invalid_notification" })
+    const invalidArray = await handler(
+      new Request("https://example.test/v1/notifications/deliver", {
+        method: "POST",
+        body: JSON.stringify([])
+      })
+    )
+    expect(invalidArray.status).toBe(400)
+    expect(await invalidArray.json()).toMatchObject({ code: "invalid_notification" })
+    expect(() =>
+      validateNotification({
+        messageId: "message-unsupported",
+        channel: "push",
+        destination: "ops@example.test",
+        body: "alert"
+      } as never)
+    ).toThrow("unsupported notification channel")
+
+    const rejectingProvider = Object.freeze({
+      send: async () => {
+        throw new Error("provider unavailable")
+      },
+      attemptCount: () => 0
+    })
+    const rejected = await newNotificationHandler(newDeliverNotification(rejectingProvider))(
+      new Request("https://example.test/v1/notifications/deliver", {
+        method: "POST",
+        body: JSON.stringify({
+          messageId: "message-provider",
+          channel: "email",
+          destination: "ops@example.test",
+          body: "alert"
+        })
+      })
+    )
+    expect(rejected.status).toBe(503)
+    expect(await rejected.json()).toMatchObject({
+      code: "notification_delivery_rejected",
+      message: "provider unavailable"
     })
   })
 })

@@ -44,7 +44,8 @@
     "typecheck:e2e": "tsc -p e2e/tsconfig.json --pretty false && tsc -p e2e/load/tsconfig.json --pretty false && tsc -p e2e/fixtures/published-consumer/tsconfig.authoring.json --pretty false",
     "typecheck": "bun run typecheck:root && bun run typecheck:e2e && bun run --workspaces --sequential typecheck",
     "test:unit": "bun test --isolate --no-orphans test/*.test.ts && bun run --workspaces --sequential test:unit",
-    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage && bun run --workspaces --sequential test:unit:coverage",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage && bun run --workspaces --sequential test:unit:coverage && bun run coverage:verify",
+    "coverage:verify": "bun scripts/verify-coverage.ts",
     "test:e2e:suites": "bun run build && bun e2e/run.ts --scope suites",
     "test:e2e:providers": "bun run build && bun e2e/run.ts --scope providers",
     "test:e2e:runtimes": "bun run build && bun e2e/run.ts --scope runtimes",
@@ -74,6 +75,7 @@
   },
   "homepage": "https://github.com/MunMunMiao/go-like#readme",
   "overrides": {
-    "vite": "8.2.0"
+    "vite": "8.2.0",
+    "nanoid": "3.3.18"
   }
 }

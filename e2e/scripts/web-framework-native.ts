@@ -13,12 +13,7 @@ function frameworkKind(value: string | undefined): FrameworkKind {
 const root = resolve(import.meta.dir, "../..")
 const kind = frameworkKind(process.argv[2])
 const builtPackages = ["@go-like/context", "@go-like/core", "@go-like/web"]
-const vendorPackages: VendorPackageSource[] = [
-  {
-    name: "@hono/node-server",
-    source: resolve(root, "packages/web/node_modules/@hono/node-server")
-  }
-]
+const vendorPackages: VendorPackageSource[] = []
 if (kind === "hono") {
   vendorPackages.push({ name: "hono", source: resolve(root, "examples/hono/node_modules/hono") })
 }
@@ -40,7 +35,6 @@ await runFrameworkDistConsumerMain({
   builtPackages,
   vendorPackages,
   requiredRuntimePeers: {
-    "@hono/node-server": ["hono"],
     elysia: ["@sinclair/typebox"]
   }
 })

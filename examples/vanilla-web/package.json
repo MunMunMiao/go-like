@@ -16,7 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test",
     "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage",
-    "test:e2e": "bun ../../e2e/example-task.ts -- tsx test/node-e2e.ts"
+    "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
     "@go-like/context": "workspace:*",

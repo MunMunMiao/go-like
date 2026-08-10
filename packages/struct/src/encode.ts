@@ -195,15 +195,28 @@ export function encodeValue(
       return value
     }
 
-    case "intersection": {
-      const leftEncoded = encodeValue(definition.left as RuntimeStruct, value, options)
-      const rightEncoded = encodeValue(definition.right as RuntimeStruct, value, options)
-      return isObjectIntersectionStruct(definition.left) &&
-        isObjectIntersectionStruct(definition.right) &&
-        isPlainObject(leftEncoded) &&
-        isPlainObject(rightEncoded)
-        ? { ...leftEncoded, ...rightEncoded }
-        : rightEncoded
-    }
+    case "intersection":
+      return encodeIntersectionValue(
+        definition.left as RuntimeStruct,
+        definition.right as RuntimeStruct,
+        value,
+        options
+      )
   }
+}
+
+function encodeIntersectionValue(
+  leftStruct: RuntimeStruct,
+  rightStruct: RuntimeStruct,
+  value: unknown,
+  options: EncodeOptions
+): unknown {
+  const leftEncoded = encodeValue(leftStruct, value, options)
+  const rightEncoded = encodeValue(rightStruct, value, options)
+  const canMerge =
+    isObjectIntersectionStruct(leftStruct) &&
+    isObjectIntersectionStruct(rightStruct) &&
+    isPlainObject(leftEncoded) &&
+    isPlainObject(rightEncoded)
+  return canMerge ? { ...leftEncoded, ...rightEncoded } : rightEncoded
 }

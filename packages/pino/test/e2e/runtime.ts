@@ -57,10 +57,7 @@ try {
   >
   assert.equal(transportRecord.component, "thread")
 
-  const packageJson = JSON.parse(
-    await readFile(new URL("../../node_modules/pino/package.json", import.meta.url), "utf8")
-  ) as { version: string }
-  console.log(`log-pino-node-runtime ok pino=${packageJson.version}`)
+  console.log("log-pino-node-runtime ok")
 } finally {
   await rm(directory, { recursive: true, force: true })
 }

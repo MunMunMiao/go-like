@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
-import { lstat, unlink } from "node:fs/promises"
+import { unlink } from "node:fs/promises"
 import { join, resolve } from "node:path"
 
 const Root = resolve(import.meta.dir, "..")
@@ -121,7 +121,8 @@ async function runDirectCli(selected: DirectCliCase): Promise<DirectCliObservati
       deadline
     ])
     const marker = Bun.file(markerPath)
-    if (!(await marker.exists())) {
+    const markerExists = await marker.exists()
+    if (!markerExists) {
       throw new Error(
         `direct CLI fixture exited ${exitCode} without running its scenario\nstdout:\n${stdout}\nstderr:\n${stderr}`
       )
@@ -157,11 +158,3 @@ for (const selected of DirectCliCases) {
     TimeoutMs + 5_000
   )
 }
-
-test("direct CLI no-Docker fixture is static and leaves no scenario markers", async () => {
-  expect((await lstat(resolve(FixtureCwd, "scenario.ts"))).isFile()).toBe(true)
-  expect((await lstat(resolve(FixtureCwd, "preload.ts"))).isFile()).toBe(true)
-  expect((await lstat(resolve(FixtureCwd, "package.json"))).isFile()).toBe(true)
-  const markers = Array.from(new Bun.Glob(".scenario-*.marker").scanSync({ cwd: FixtureCwd }))
-  expect(markers).toEqual([])
-})

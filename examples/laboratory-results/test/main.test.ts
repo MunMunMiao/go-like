@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background, withCancel } from "@go-like/context"
 import { fromClientContext, get, values, type Metadata } from "@go-like/metadata"
 import { describe, expect, test } from "bun:test"
 import { newLaboratoryResultHandler } from "../src/http"
@@ -131,11 +131,11 @@ describe("laboratory results", () => {
 
   test("reports encounter-index readiness without leaking clinical identifiers", async () => {
     const repository = newMemoryLaboratoryResultRepository({ encounters: [encounter] })
-    const ready = await newLaboratoryProbeRegistry(repository, "encounter-1").check(
-      background(),
-      "ready"
-    )
+    const probes = newLaboratoryProbeRegistry(repository, "encounter-1")
+    const ready = await probes.check(background(), "ready")
     expect(ready).toMatchObject({ ok: true, checks: [{ name: "laboratory.encounter-index" }] })
+    const live = await probes.check(background(), "live")
+    expect(live).toMatchObject({ ok: true, checks: [{ name: "laboratory.receiver" }] })
 
     const unavailable = await newLaboratoryProbeRegistry(repository, "missing").check(
       background(),
@@ -144,5 +144,91 @@ describe("laboratory results", () => {
     expect(unavailable.ok).toBe(false)
     expect(unavailable.checks[0]?.error?.message).toBe("encounter index is unavailable")
     expect(JSON.stringify(unavailable)).not.toContain("patient-1")
+  })
+
+  test("validates laboratory identifiers, test codes, values, and repository idempotency", () => {
+    const repository = newMemoryLaboratoryResultRepository({ encounters: [encounter] })
+    const audit = newMemoryResultAuditSink()
+    const record = newRecordLaboratoryResult(repository, audit)
+
+    for (const [field, value] of [
+      ["resultId", ""],
+      ["encounterId", ""],
+      ["patientId", ""],
+      ["orderingClinicianId", ""]
+    ] as const) {
+      expect(() => record(background(), { ...command, [field]: value })).toThrow(`invalid ${field}`)
+    }
+    expect(() => record(background(), { ...command, testCode: "test code" })).toThrow(
+      "invalid testCode"
+    )
+    expect(() => record(background(), { ...command, value: "" })).toThrow(
+      "invalid result value length"
+    )
+    expect(() => record(background(), { ...command, value: "x".repeat(4_097) })).toThrow(
+      "invalid result value length"
+    )
+
+    expect(record(background(), command)).toEqual(record(background(), command))
+    expect(() => repository.save(background(), { ...command, value: "changed" })).toThrow(
+      "idempotency conflict"
+    )
+  })
+
+  test("rejects missing and malformed HTTP requests without storing a result", async () => {
+    const repository = newMemoryLaboratoryResultRepository({ encounters: [encounter] })
+    const handler = newLaboratoryResultHandler(
+      newRecordLaboratoryResult(repository, newMemoryResultAuditSink())
+    )
+    const notFound = await handler(new Request("https://example.test/v1/other", { method: "GET" }))
+    expect(notFound.status).toBe(404)
+
+    const invalidShape = await handler(
+      new Request("https://example.test/v1/laboratory-results", {
+        method: "POST",
+        body: JSON.stringify({ ...command, value: 123 })
+      })
+    )
+    expect(invalidShape.status).toBe(400)
+    expect(await invalidShape.json()).toMatchObject({ code: "laboratory_result_rejected" })
+
+    const missingHeader = await handler(
+      new Request("https://example.test/v1/laboratory-results", {
+        method: "POST",
+        body: JSON.stringify(command)
+      })
+    )
+    expect(missingHeader.status).toBe(400)
+
+    const unknownEncounter = await handler(
+      new Request("https://example.test/v1/laboratory-results", {
+        method: "POST",
+        body: JSON.stringify({ ...command, encounterId: "missing" }),
+        headers: { "x-encounter-id": "missing" }
+      })
+    )
+    expect(unknownEncounter.status).toBe(409)
+  })
+
+  test("propagates terminal Context failures through repositories, audit, and probes", async () => {
+    const repository = newMemoryLaboratoryResultRepository({ encounters: [encounter] })
+    const audit = newMemoryResultAuditSink()
+    const [ctx, cancel] = withCancel(background())
+    cancel()
+    expect(() => repository.encounter(ctx, "encounter-1")).toThrow()
+    expect(() => repository.save(ctx, command)).toThrow()
+    expect(() => repository.get(ctx, "result-1")).toThrow()
+    expect(() =>
+      audit.write(ctx, {
+        action: "laboratory_result_accepted",
+        resultId: "result-1",
+        encounterId: "encounter-1",
+        testCode: "HB"
+      })
+    ).toThrow()
+    expect(() => audit.events(ctx)).toThrow()
+    const probes = newLaboratoryProbeRegistry(repository, "encounter-1")
+    expect((await probes.check(ctx, "live")).ok).toBe(false)
+    expect((await probes.check(ctx, "ready")).ok).toBe(false)
   })
 })

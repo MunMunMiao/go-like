@@ -1,8 +1,8 @@
 # 原生 Fetch 示例
 
 本示例的应用处理器只使用 `Request`、`Response` 和 `URL`。同一个单参数处理器直接传给
-`newNodeServer`；go-like 不会添加路由器或 HTTP 协议实现。Node HTTP 翻译由 `@hono/node-server`
-提供，go-like 只管理监听器生命周期。
+`newNodeServer`；go-like 不会添加路由器。Node HTTP 翻译由 `@go-like/web` 包内 Node Fetch bridge 提供，
+go-like 同时管理监听器生命周期。
 
 源码按职责拆分：
 

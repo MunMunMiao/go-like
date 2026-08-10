@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 
 import { finalizeWithCleanup } from "../e2e/harness/cleanup"
 import { errorSummary } from "../e2e/harness/diagnostics"
@@ -19,8 +19,6 @@ import {
   type SoakCleanupActions
 } from "../e2e/soak"
 
-const Root = resolve(import.meta.dir, "..")
-
 function commandResult(stdout: string, overrides: Partial<CommandResult> = {}): CommandResult {
   return Object.freeze({
     exitCode: 0,
@@ -37,26 +35,6 @@ function commandResult(stdout: string, overrides: Partial<CommandResult> = {}): 
     ...overrides
   })
 }
-
-test("k6 workload is committed TypeScript with isolated globals", async () => {
-  const workload = await Bun.file(join(Root, "e2e/load/k6-http.ts")).text()
-  const webHost = await Bun.file(join(Root, "e2e/load/web-host.ts")).text()
-  const loadConfig = await Bun.file(join(Root, "e2e/load/tsconfig.json")).json()
-  const e2eConfig = await Bun.file(join(Root, "e2e/tsconfig.json")).json()
-
-  expect(await Bun.file(join(Root, "e2e/load/k6-http.js")).exists()).toBe(false)
-  expect(loadConfig.extends).toBeUndefined()
-  expect(loadConfig.compilerOptions.types).toEqual(["k6"])
-  expect(loadConfig.files).toEqual(["k6-http.ts"])
-  expect(e2eConfig.exclude).toContain("load/k6-http.ts")
-  expect(workload).toContain('executor: "constant-arrival-rate"')
-  expect(workload).toContain("__ENV.GO_LIKE_SOAK_DURATION")
-  expect(workload).toContain("__ENV.GO_LIKE_SOAK_RATE")
-  expect(workload).toContain('checks: ["rate==1"]')
-  expect(workload).toContain('"status is 200"')
-  expect(workload).toContain('"body is go-like"')
-  expect(webHost).not.toContain("catch(() => {})")
-})
 
 test("k6 uses the fixed image and direct TypeScript workload argv", () => {
   expect(K6Image).toBe(

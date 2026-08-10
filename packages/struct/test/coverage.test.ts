@@ -359,6 +359,37 @@ describe("struct coverage boundary cases", () => {
     )
   })
 
+  test("public codecs cover repeated composites and wire-key ordering edges", () => {
+    const tuple = struct.tuple([struct.string()])
+    expect(decodeObjectByAlias(tuple, ["first", "untyped"])).toEqual(["first"])
+
+    const nested = struct.object({ value: struct.number() }).alias("nested")
+    expect(
+      decodeObjectByAlias(struct.object({ nested }), {
+        nested: { value: 1 },
+        NESTED: { value: 2 }
+      })
+    ).toEqual({ nested: { value: 2 } })
+
+    const record = struct.record(struct.number())
+    expect(Object.keys(encodeValue(runtime(record), { a: 1, b: 2 }) as object)).toEqual(["a", "b"])
+    expect(Object.keys(encodeValue(runtime(record), { a: 1, aa: 2 }) as object)).toEqual([
+      "a",
+      "aa"
+    ])
+  })
+
+  test("public matching and parsing reject the opposite intersection and unknown tuple input", () => {
+    const intersection = struct.intersection(
+      struct.object({ left: struct.string() }),
+      struct.object({ right: struct.number() })
+    )
+    expect(matchesRuntimeValue(runtime(intersection), { left: "ok", right: "bad" })).toBe(false)
+    const [error, value] = parse(struct.tuple([struct.number()]), undefined)
+    expect(error).toBeNull()
+    expect(value).toEqual([0])
+  })
+
   test("field and discriminator helpers cover remaining branch edges", () => {
     const duplicate = runtime(
       struct.object({
@@ -430,6 +461,15 @@ describe("struct coverage boundary cases", () => {
       StructError
     )
 
+    const suppressedOption = struct.object({
+      type: struct.literal("text").alias("same"),
+      other: struct.string().alias("same")
+    })
+    const suppressedUnion = struct.discriminatedUnion("type", [suppressedOption])
+    expect(() => decodeObjectByAlias(suppressedUnion, { type: "text", other: "value" })).toThrow(
+      StructError
+    )
+
     const missingWireDiscriminator = struct.discriminatedUnion("type", [
       struct.object({ type: struct.literal("text").alias("kind") })
     ])
@@ -452,5 +492,45 @@ describe("struct coverage boundary cases", () => {
     expect(() => decodeObjectByAlias(unstableObjectStruct as never, {})).toThrow(
       "json decode expects object struct"
     )
+  })
+
+  test("remaining parser and encoder edge paths are exercised by public codecs", () => {
+    const tupleField = struct.object({ values: struct.tuple([struct.string()]) })
+    expect(decodeObjectByAlias(tupleField, { values: ["first", "unknown"] })).toEqual({
+      values: ["first"]
+    })
+
+    const repeatedObject = struct.object({
+      nested: struct.object({ value: struct.string() }).alias("nested")
+    })
+    expect(
+      decodeObjectByAlias(repeatedObject, {
+        nested: { value: "first" },
+        NESTED: { value: "second" }
+      })
+    ).toEqual({ nested: { value: "second" } })
+
+    expect(
+      encodeValue(runtime(struct.intersection(struct.string(), struct.number())), "not-an-object")
+    ).toBe("not-an-object")
+    expect(
+      matchesRuntimeValue(
+        runtime(
+          struct.intersection(
+            struct.object({ left: struct.string() }),
+            struct.object({ right: struct.number() })
+          )
+        ),
+        { left: "ok", right: 1 }
+      )
+    ).toBe(true)
+    expect(safeZeroValue(runtime(struct.tuple([struct.string()])))).toEqual([""])
+
+    expect(() => struct.discriminatedUnion("type", [struct.string() as never])).toThrow(
+      "discriminatedUnion options must be object structs"
+    )
+    expect(() =>
+      struct.discriminatedUnion("type", [struct.object({ type: struct.string() }) as never])
+    ).toThrow('discriminator "type" must be a literal struct')
   })
 })

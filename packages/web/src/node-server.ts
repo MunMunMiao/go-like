@@ -1,4 +1,3 @@
-import { createAdaptorServer, type ServerType } from "@hono/node-server"
 import type { Socket } from "node:net"
 import { afterFunc, canceled, cause, type Context, type StopFunc } from "@go-like/context"
 import type { Endpointer, Server } from "@go-like/core"
@@ -15,6 +14,7 @@ import {
   type NodeServerForceCloseError,
   type NodeServerUnexpectedCloseError
 } from "./node-errors"
+import { createAdaptorServer, type ServerType } from "./node-fetch-bridge"
 
 export interface NodeServer extends Server, Endpointer {
   /** Binds once and returns the actual HTTP endpoint used by App registration. */
@@ -184,12 +184,7 @@ function createNativeServer(handler: Handler, host: string): ServerType {
   function fetch(request: Request): Response | Promise<Response> {
     return handler(request)
   }
-  return createAdaptorServer({
-    fetch,
-    hostname: host,
-    overrideGlobalObjects: false,
-    autoCleanupIncoming: true
-  })
+  return createAdaptorServer({ fetch, hostname: host })
 }
 
 /** Reads the Go-style cancellation cause while preserving custom failure identity. */

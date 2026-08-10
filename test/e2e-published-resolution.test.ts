@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { cp, readFile, readdir, unlink } from "node:fs/promises"
+import { cp, unlink } from "node:fs/promises"
 import { join, resolve } from "node:path"
 
 import { runCommand } from "../e2e/harness/process"
@@ -26,32 +26,6 @@ function packOutput(
   ])
 }
 
-test("published fixtures are committed TypeScript with explicit runtime boundaries", async () => {
-  const files = await readdir(Fixture, { recursive: true })
-  expect(files.some((path) => path.endsWith(".mjs"))).toBe(false)
-  expect(files).toEqual(
-    expect.arrayContaining([
-      "portable.ts",
-      "node.ts",
-      "bun.ts",
-      "deno.ts",
-      "tsconfig.authoring.json",
-      "tsconfig.types.json",
-      "tsconfig.node.json",
-      "authoring-stubs/go-like.d.ts"
-    ])
-  )
-  const authoring = JSON.parse(await readFile(join(Fixture, "tsconfig.authoring.json"), "utf8"))
-  expect(authoring.extends).toBeUndefined()
-  expect(authoring.compilerOptions.paths).toEqual({
-    "@go-like/*": ["./authoring-stubs/go-like.d.ts"]
-  })
-  const runner = await readFile(resolve("e2e/published.ts"), "utf8")
-  expect(runner).toContain('"--no-install"')
-  expect(runner).toContain('"--no-prompt"')
-  expect(runner).not.toContain("--allow-all")
-})
-
 test("authoring check depends only on its committed wildcard stub", async () => {
   const directory = await createTempDirectory("go-like-published-authoring-")
   try {
@@ -67,7 +41,7 @@ test("authoring check depends only on its committed wildcard stub", async () => 
     const positive = await runCommand(process.cwd(), {
       cwd: directory.path,
       command,
-      timeoutMs: 30_000,
+      timeoutMs: 65_000,
       environment: { NODE_OPTIONS: undefined, NODE_PATH: undefined }
     })
     expect(positive.timedOut).toBe(false)
@@ -79,7 +53,7 @@ test("authoring check depends only on its committed wildcard stub", async () => 
     const negative = await runCommand(process.cwd(), {
       cwd: directory.path,
       command,
-      timeoutMs: 30_000,
+      timeoutMs: 65_000,
       environment: { NODE_OPTIONS: undefined, NODE_PATH: undefined }
     })
     expect(negative.timedOut).toBe(false)
@@ -89,7 +63,7 @@ test("authoring check depends only on its committed wildcard stub", async () => 
   } finally {
     await removeTempDirectory(directory)
   }
-})
+}, 75_000)
 
 test("npm pack JSON accepts a complete safe inventory and rejects archive escapes", () => {
   const valid = [

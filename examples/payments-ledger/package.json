@@ -8,7 +8,7 @@
     "start:prepared": "bun src/main.ts",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
-    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage",
+    "test:unit:coverage": "bun ../../e2e/example-task.ts -- bun test --isolate --no-orphans test/*.test.ts test/integration --coverage --coverage-dir .artifacts/coverage",
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {

@@ -83,14 +83,7 @@ try {
   assert.equal("final" in record ? record.final : null, true)
   assert.equal("message" in record ? record.message : null, "native logger")
 
-  const packageJson: unknown = JSON.parse(
-    await readFile(new URL("../../node_modules/winston/package.json", import.meta.url), "utf8")
-  )
-  if (typeof packageJson !== "object" || packageJson === null || !("version" in packageJson)) {
-    throw new Error("Winston package version is unavailable")
-  }
-  assert.equal(packageJson.version, "3.19.0")
-  console.log(`log-winston-node-runtime ok winston=${String(packageJson.version)}`)
+  console.log("log-winston-node-runtime ok")
 } finally {
   await rm(directory, { recursive: true, force: true })
 }

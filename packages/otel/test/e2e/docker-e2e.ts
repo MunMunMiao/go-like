@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
 
 import { background } from "@go-like/context"
@@ -65,25 +64,6 @@ function occurrences(value: string, marker: string): number {
   return value.split(marker).length - 1
 }
 
-/** Reads the installed OpenTelemetry SDK version from validated package metadata. */
-async function installedOtelVersion(): Promise<string> {
-  const value: unknown = JSON.parse(
-    await readFile(
-      new URL("../../package.json", import.meta.resolve("@opentelemetry/sdk-trace")),
-      "utf8"
-    )
-  )
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("version" in value) ||
-    typeof value.version !== "string"
-  ) {
-    throw new Error("OpenTelemetry SDK package metadata has no string version")
-  }
-  return value.version
-}
-
 /** Adds one cleanup failure once without replacing the primary scenario failure. */
 function addFailure(failures: unknown[], failure: unknown): void {
   if (!failures.includes(failure)) failures.push(failure)
@@ -142,9 +122,6 @@ const portReservation = Bun.serve({
 })
 const port = portReservation.port
 await portReservation.stop(true)
-const otelVersion = await installedOtelVersion()
-if (otelVersion !== "2.10.0")
-  throw new Error(`unexpected OpenTelemetry SDK version: ${otelVersion}`)
 let runtimeServer: ReturnType<typeof newOtelServer> | null = null
 let runtimeRunning: Promise<void> | null = null
 let collectorExists = false

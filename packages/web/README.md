@@ -12,17 +12,17 @@
 
 - `@go-like/web`：只使用标准 `Request`、`Response`、`Headers` 与 `AbortSignal` 的可移植请求桥接层。
 - `@go-like/web/health`：把 `@go-like/health` 的 probe registry 暴露为健康检查 Web handler。
-- `@go-like/web/node`：基于 `@hono/node-server` 的 Node listener 生命周期。
+- `@go-like/web/node`：基于内置 Node Fetch bridge 的 Node listener 生命周期。
 
 Web 是对外 HTTP 服务入口；内部微服务通信属于 `@go-like/transport` 与具体传输实现，二者不混用。
 
 ## Node 生命周期宿主
 
 `@go-like/web/node` 面向精确单参数 go-like `Handler` 提供受管 Node 生命周期宿主。HTTP Request/Response
-转换、流式响应、Header 和未消费请求体清理由 `@hono/node-server` 2.0.12 提供；go-like 只拥有原生监听器
-的启动、终态观察、调用方范围的停止等待与原生关闭超时。
+转换、流式响应、Header 和未消费请求体清理由包内 Node Fetch bridge 提供；go-like 同时拥有协议边界和原生监听器
+的启动、终态观察、调用方范围的停止等待与原生关闭超时，不再引入外部 Node HTTP bridge 供应链。
 
-该子路径显式关闭 `@hono/node-server` 的全局 Request/Response 覆盖，并保留未消费请求体自动清理。传给
+该子路径不覆盖全局 Request/Response，并保留未消费请求体自动清理。传给
 应用的处理器始终只有一个 `Request` 参数；上游提供的 Node `HttpBindings` 不进入 go-like ABI。路由、
 中间件、错误响应策略、WebSocket 和静态文件继续由应用及所选框架拥有。
 

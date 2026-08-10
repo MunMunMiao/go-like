@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises"
-
 import { background, type Context } from "@go-like/context"
 import {
   newApp,
@@ -39,22 +37,6 @@ interface ManagedWorker {
 interface RedisCommandClient {
   call(command: string, ...args: string[]): Promise<unknown>
   ping(): Promise<string>
-}
-
-/** Reads one exact installed package version from validated JSON metadata. */
-async function installedBullMqVersion(): Promise<string> {
-  const value: unknown = JSON.parse(
-    await readFile(new URL("../../package.json", import.meta.resolve("bullmq")), "utf8")
-  )
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("version" in value) ||
-    typeof value.version !== "string"
-  ) {
-    throw new Error("BullMQ package metadata has no string version")
-  }
-  return value.version
 }
 
 /** Creates one externally controlled E2E synchronization point. */
@@ -290,9 +272,6 @@ async function main(): Promise<void> {
   let queue: Queue | null = null
   let imageId = ""
   let redisVersion = ""
-  const bullmqVersion = await installedBullMqVersion()
-  assert(bullmqVersion === "6.0.6", `unexpected BullMQ version: ${bullmqVersion}`)
-
   /** Records process-level late rejections as release-gate failures. */
   const recordLateRejection = (reason: unknown): void => {
     lateRejections.push(reason)

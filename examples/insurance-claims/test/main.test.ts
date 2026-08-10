@@ -3,6 +3,7 @@ import { newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { newInsuranceClaimsHandler } from "../src/http"
 import {
+  decideClaim,
   newInsuranceClaimsService,
   newMemoryClaimsRepository,
   newSubmitClaim
@@ -119,5 +120,113 @@ describe("insurance claims", () => {
       starts: 1,
       stops: 1
     })
+  })
+
+  test("returns the limit-exhausted decision and rejects invalid policy setup", () => {
+    const exhausted = newSubmitClaim(
+      newMemoryClaimsRepository([
+        Object.freeze({
+          ...policy,
+          deductibleCents: 0,
+          coverageLimitCents: 100
+        })
+      ])
+    )
+    expect(
+      exhausted(background(), {
+        claimId: "exhausted",
+        policyId: "policy-1",
+        incidentAt: 2_000,
+        lossCents: 100
+      })
+    ).toMatchObject({ payableCents: 100, remainingCoverageCents: 0, status: "approved" })
+    expect(
+      exhausted(background(), {
+        claimId: "limit-exhausted",
+        policyId: "policy-1",
+        incidentAt: 3_000,
+        lossCents: 10
+      })
+    ).toMatchObject({ payableCents: 0, remainingCoverageCents: 0, status: "limitExhausted" })
+
+    expect(() =>
+      newMemoryClaimsRepository([Object.freeze({ ...policy, policyId: "invalid policy" })])
+    ).toThrow("invalid policyId")
+    expect(() =>
+      newMemoryClaimsRepository([Object.freeze({ ...policy, startsAt: 5_000, endsAt: 5_000 })])
+    ).toThrow("invalid policy period")
+    expect(() =>
+      newMemoryClaimsRepository([Object.freeze({ ...policy, deductibleCents: -1 })])
+    ).toThrow("invalid policy money limits")
+    expect(() => newMemoryClaimsRepository([policy, Object.freeze({ ...policy })])).toThrow(
+      "duplicate policyId"
+    )
+    expect(() =>
+      decideClaim(
+        {
+          claimId: "bad-aggregate",
+          policyId: "policy-1",
+          incidentAt: 2_000,
+          lossCents: 100
+        },
+        policy,
+        policy.coverageLimitCents + 1
+      )
+    ).toThrow("invalid paid aggregate")
+  })
+
+  test("rejects invalid claims and unknown policy operations", () => {
+    const submit = newSubmitClaim(newMemoryClaimsRepository([policy]))
+    expect(() =>
+      submit(background(), {
+        claimId: "bad id",
+        policyId: "policy-1",
+        incidentAt: 2_000,
+        lossCents: 500
+      })
+    ).toThrow("invalid claimId")
+    expect(() =>
+      submit(background(), {
+        claimId: "bad-policy",
+        policyId: "unknown-policy",
+        incidentAt: 2_000,
+        lossCents: 500
+      })
+    ).toThrow("unknown policy")
+    expect(() =>
+      submit(background(), {
+        claimId: "bad-time",
+        policyId: "policy-1",
+        incidentAt: Number.NaN,
+        lossCents: 500
+      })
+    ).toThrow("invalid incidentAt")
+    expect(() =>
+      submit(background(), {
+        claimId: "bad-loss",
+        policyId: "policy-1",
+        incidentAt: 2_000,
+        lossCents: 0
+      })
+    ).toThrow("lossCents must be a positive safe integer")
+  })
+
+  test("reports malformed Fetch requests and not-found routes", async () => {
+    const handler = newInsuranceClaimsHandler(newSubmitClaim(newMemoryClaimsRepository([policy])))
+    const malformed = await handler(
+      new Request("https://example.test/v1/claims", {
+        method: "POST",
+        body: JSON.stringify({ claimId: "missing" })
+      })
+    )
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toMatchObject({
+      code: "claim_rejected",
+      message: "invalid claim"
+    })
+
+    const notFound = await handler(new Request("https://example.test/v1/other", { method: "GET" }))
+    expect(notFound.status).toBe(404)
+    expect(await notFound.json()).toEqual({ code: "not_found" })
   })
 })

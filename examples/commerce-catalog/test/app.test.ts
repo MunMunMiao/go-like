@@ -1,3 +1,4 @@
+import { expiresIn, type Cache } from "@go-like/cache"
 import { newMemoryCache } from "@go-like/cache-memory"
 import {
   newClient,
@@ -14,7 +15,13 @@ import { expect, test } from "bun:test"
 
 import { findAmountMinor } from "../src/catalog"
 import { newCatalogHandler } from "../src/http"
-import { decodePricingRequest, newPricingHandler, type PricingClient } from "../src/pricing"
+import {
+  decodePrice,
+  decodePricingRequest,
+  encodePrice,
+  newPricingHandler,
+  type PricingClient
+} from "../src/pricing"
 
 /** Creates a Client that invokes the real Pricing handler without network I/O. */
 function directClient(onCall: () => void): PricingClient {
@@ -29,8 +36,26 @@ function directClient(onCall: () => void): PricingClient {
 }
 
 /** Creates one immediately usable memory Cache. */
-function memoryCache() {
+function memoryCache(): Cache {
   return newMemoryCache()
+}
+
+function failingCache(overrides: Partial<Cache> = {}): Cache {
+  return Object.freeze({
+    async get() {
+      throw new Error("cache get failed")
+    },
+    async put() {
+      throw new Error("cache put failed")
+    },
+    async delete() {
+      throw new Error("cache delete failed")
+    },
+    string() {
+      return "failing-cache"
+    },
+    ...overrides
+  })
 }
 
 test("serves a product through Pricing once and then the cache", async () => {
@@ -171,18 +196,109 @@ test("rejects prototype-sensitive products at the Pricing service boundary", () 
   ).toThrow("price is unavailable")
 })
 
+test("rejects malformed JSON and invalid Pricing field values", () => {
+  expect(() => decodePricingRequest(new TextEncoder().encode("{"))).toThrow(
+    "invalid Pricing.Get request"
+  )
+  expect(() =>
+    decodePricingRequest(
+      new TextEncoder().encode(JSON.stringify({ productId: "bad product", currency: "USD" }))
+    )
+  ).toThrow("invalid Pricing.Get request")
+})
+
 test("does not read inherited currency properties from the price table", () => {
   expect(findAmountMinor("sku-001", "constructor")).toBeNull()
 })
 
-test.each([{}, { productId: "sku-001" }, { currency: "USD" }, { productId: 1, currency: "USD" }])(
-  "rejects an incomplete Pricing request %#",
-  (value) => {
-    expect(() => decodePricingRequest(new TextEncoder().encode(JSON.stringify(value)))).toThrow(
-      "invalid Pricing.Get request"
+test.each([
+  {},
+  { productId: "sku-001" },
+  { currency: "USD" },
+  { productId: 1, currency: "USD" },
+  JSON.parse("null")
+])("rejects an incomplete Pricing request %#", (value) => {
+  expect(() => decodePricingRequest(new TextEncoder().encode(JSON.stringify(value)))).toThrow(
+    "invalid Pricing.Get request"
+  )
+})
+
+test("rejects invalid cached payloads and still serves the authoritative Pricing result", async () => {
+  const cache = newMemoryCache()
+  const key = "price:v1:USD:sku-001"
+  await cache.put(background(), key, new TextEncoder().encode("not-json"), expiresIn(30_000))
+  const handler = newCatalogHandler({ cache, client: directClient(() => {}) })
+  const response = await handler(
+    new Request("http://example.test/v1/products/sku-001?currency=USD")
+  )
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({ price: { amountMinor: 1299 } })
+  expect(await cache.get(background(), key)).not.toBeNull()
+})
+
+test("keeps Pricing errors and invalid responses distinct from cache failures", async () => {
+  const cache = failingCache()
+  const unavailable = newCatalogHandler({
+    cache,
+    client: {
+      async call() {
+        throw new Error("pricing unavailable")
+      }
+    }
+  })
+  expect(
+    (await unavailable(new Request("http://example.test/v1/products/sku-001?currency=USD"))).status
+  ).toBe(503)
+
+  const invalid = newCatalogHandler({
+    cache,
+    client: {
+      async call() {
+        return { header: {}, body: new TextEncoder().encode("{}") }
+      }
+    }
+  })
+  expect(
+    (await invalid(new Request("http://example.test/v1/products/sku-001?currency=USD"))).status
+  ).toBe(502)
+})
+
+test("rejects malformed and expired Pricing responses", () => {
+  const now = Date.now()
+  expect(decodePrice(new TextEncoder().encode("{}"), "sku-001", "USD")).toBeNull()
+  expect(
+    decodePrice(
+      new TextEncoder().encode(
+        JSON.stringify({
+          productId: "sku-001",
+          currency: "USD",
+          amountMinor: -1,
+          validUntil: now + 1_000
+        })
+      ),
+      "sku-001",
+      "USD"
     )
-  }
-)
+  ).toBeNull()
+  expect(
+    decodePrice(
+      new TextEncoder().encode(
+        JSON.stringify({
+          productId: "sku-001",
+          currency: "USD",
+          amountMinor: 1,
+          validUntil: now - 1
+        })
+      ),
+      "sku-001",
+      "USD"
+    )
+  ).toBeNull()
+  expect(decodePrice(new TextEncoder().encode("{"), "sku-001", "USD")).toBeNull()
+  expect(
+    encodePrice({ productId: "sku-001", currency: "USD", amountMinor: 1, validUntil: now + 1_000 })
+  ).toBeInstanceOf(Uint8Array)
+})
 
 test("exposes live and cache readiness handlers", async () => {
   const cache = memoryCache()

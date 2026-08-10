@@ -35,7 +35,7 @@ v1 的完成条件不是“存在对应目录”，而是每个 release-blocking
 9. fake 只证明内存逻辑。listener、broker、Redis、config center、telemetry exporter 等外部事实必须
    使用真实 runtime 或 Docker 服务。
 10. 所有开发源码、测试和工具均使用 TypeScript；内部相对 module specifier 不带扩展名。`dist` 仅是
-   Git-ignored 的构建/发布瞬态产物，不得作为开发类型检查或业务测试输入。
+    Git-ignored 的构建/发布瞬态产物，不得作为开发类型检查或业务测试输入。
 
 ## 3. Monorepo 依赖边界
 
@@ -51,7 +51,7 @@ packages/
   testing/                 reusable conformance suites and fixtures
 
 adapters/
-  fetch-node/              @hono/node-server Fetch host lifecycle adapter
+  fetch-node/              Node Fetch host lifecycle adapter
   cron-croner/             native Croner lifecycle adapter
   job-bullmq-node/         Redis durable jobs
   nats-core-node/          NATS Core subscriptions
@@ -86,45 +86,57 @@ e2e/
 
 ```ts
 export interface Context {
-  deadline(): readonly [Date, boolean]
-  done(): AbortSignal | null
-  err(): ContextError | null
-  value(key: unknown): unknown
+  deadline(): readonly [Date, boolean];
+  done(): AbortSignal | null;
+  err(): ContextError | null;
+  value(key: unknown): unknown;
 }
 
 export interface ContextError extends Error {}
 
 export interface TimeoutContextError extends ContextError {
-  timeout(): boolean
-  temporary(): boolean
+  timeout(): boolean;
+  temporary(): boolean;
 }
 
-export const canceled: ContextError
-export const deadlineExceeded: TimeoutContextError
+export const canceled: ContextError;
+export const deadlineExceeded: TimeoutContextError;
 
-export type CancelFunc = () => void
-export type CancelCauseFunc = (cause: Error | null) => void
+export type CancelFunc = () => void;
+export type CancelCauseFunc = (cause: Error | null) => void;
 
-export function background(): Context
-export function todo(): Context
-export function withCancel(parent: Context): readonly [Context, CancelFunc]
-export function withCancelCause(parent: Context): readonly [Context, CancelCauseFunc]
-export function withDeadline(parent: Context, deadline: Date): readonly [Context, CancelFunc]
+export function background(): Context;
+export function todo(): Context;
+export function withCancel(parent: Context): readonly [Context, CancelFunc];
+export function withCancelCause(
+  parent: Context,
+): readonly [Context, CancelCauseFunc];
+export function withDeadline(
+  parent: Context,
+  deadline: Date,
+): readonly [Context, CancelFunc];
 export function withDeadlineCause(
   parent: Context,
   deadline: Date,
   cause: Error | null,
-): readonly [Context, CancelFunc]
-export function withTimeout(parent: Context, timeoutMs: number): readonly [Context, CancelFunc]
+): readonly [Context, CancelFunc];
+export function withTimeout(
+  parent: Context,
+  timeoutMs: number,
+): readonly [Context, CancelFunc];
 export function withTimeoutCause(
   parent: Context,
   timeoutMs: number,
   cause: Error | null,
-): readonly [Context, CancelFunc]
-export function withValue(parent: Context, key: unknown, value: unknown): Context
-export function withoutCancel(parent: Context): Context
-export function cause(ctx: Context): Error | null
-export function afterFunc(ctx: Context, fn: () => void): () => boolean
+): readonly [Context, CancelFunc];
+export function withValue(
+  parent: Context,
+  key: unknown,
+  value: unknown,
+): Context;
+export function withoutCancel(parent: Context): Context;
+export function cause(ctx: Context): Error | null;
+export function afterFunc(ctx: Context, fn: () => void): () => boolean;
 ```
 
 公开能力和可观察语义与 Go `context` 对齐：父取消传播、子取消不反向传播、第一次取消/原因获胜、
@@ -140,12 +152,12 @@ export function afterFunc(ctx: Context, fn: () => void): () => boolean
 
 ```ts
 export interface Server<H extends ServerHandle = ServerHandle> {
-  start(ctx: Context): Promise<H>
+  start(ctx: Context): Promise<H>;
 }
 
 export interface ServerHandle {
-  done(): Promise<void>
-  stop(ctx: Context): Promise<void>
+  done(): Promise<void>;
+  stop(ctx: Context): Promise<void>;
 }
 ```
 
@@ -178,9 +190,7 @@ diagnostics。无可信 force 的 adapter 不设置伪终态；存在 adapter bo
 HTTP 主 ABI 只有：
 
 ```ts
-export type FetchHandler = (
-  request: Request,
-) => Response | Promise<Response>
+export type FetchHandler = (request: Request) => Response | Promise<Response>;
 ```
 
 go-like 不提供 router。Vanilla 传函数，Hono、Elysia、H3 都传各自的 `app.fetch`。
@@ -190,23 +200,23 @@ go-like 不提供 router。Vanilla 传函数，Hono、Elysia、H3 都传各自�
 export type ContextHandler = (
   ctx: Context,
   request: Request,
-) => Response | Promise<Response>
+) => Response | Promise<Response>;
 
 export interface ContextHandlerOptions {
-  readonly timeoutMs?: number
+  readonly timeoutMs?: number;
 }
 
 export function toFetchHandler(
   handler: ContextHandler,
   options?: ContextHandlerOptions,
-): FetchHandler
+): FetchHandler;
 ```
 
 bridge 将 `Request.signal` 映射为 Context cancel；只有显式 `timeoutMs` 才产生可查询 deadline。禁止
 AsyncLocalStorage、WeakMap ambient map、Request mutation、body buffering 和 Response 重建。
 
-首个 managed Node host 使用 `@hono/node-server` 承接标准 Fetch ABI。go-like 不实现
-`IncomingMessage`/`ServerResponse` 与 Web API 的协议转换，也不复制框架 router/middleware；adapter 只负责
+首个 managed Node host 使用包内 Node Fetch bridge 承接标准 Fetch ABI。go-like 拥有
+`IncomingMessage`/`ServerResponse` 与 Web API 的协议转换，但不复制框架 router/middleware；adapter 只负责
 创建原生 host、等待 listen accepted、映射 `close`/`error` 为稳定 `done()`，并在 `stop(ctx)` 中执行原生
 graceful close 与有界 force。Vanilla、Hono、Elysia、H3 只要暴露单参数 Fetch handler 就复用同一 adapter，
 不为框架名称制造空壳 package。其他 Fetch host 可通过 factory 或用户自实现 structural Server 接入。

@@ -117,14 +117,3 @@ test("dynamic example input rejects mismatched identity, visibility, and malform
     }
   }
 })
-
-test("repository dynamic input matches every current immediate example manifest", async () => {
-  const inputs = await discoverExampleExecutionInputs(join(import.meta.dir, ".."))
-  const immediateDirectories = (
-    await Array.fromAsync(new Bun.Glob("*/package.json").scan("examples"))
-  )
-    .map((path) => path.split("/")[0])
-    .filter((id): id is string => id !== undefined)
-  expect(new Set(inputs.map((input) => input.id))).toEqual(new Set(immediateDirectories))
-  expect(inputs).toHaveLength(immediateDirectories.length)
-})

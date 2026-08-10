@@ -23,7 +23,7 @@
     "typecheck": "tsc -p tsconfig.test.json --pretty false",
     "typecheck:published": "tsc -p tsconfig.published.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans --path-ignore-patterns=consul --path-ignore-patterns=etcd --path-ignore-patterns=kubernetes --path-ignore-patterns=mdns --path-ignore-patterns=zookeeper test/conformance.test.ts test/errors.test.ts test/options.test.ts test/public-api.test.ts test/selector.test.ts test/snapshot.test.ts",
-    "test:unit:coverage": "bun test --isolate --no-orphans --path-ignore-patterns=consul --path-ignore-patterns=etcd --path-ignore-patterns=kubernetes --path-ignore-patterns=mdns --path-ignore-patterns=zookeeper test/conformance.test.ts test/errors.test.ts test/options.test.ts test/public-api.test.ts test/selector.test.ts test/snapshot.test.ts --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+    "test:unit:coverage": "bun test --isolate --no-orphans --path-ignore-patterns=consul --path-ignore-patterns=etcd --path-ignore-patterns=kubernetes --path-ignore-patterns=mdns --path-ignore-patterns=zookeeper test/conformance.test.ts test/errors.test.ts test/options.test.ts test/public-api.test.ts test/selector.test.ts test/snapshot.test.ts --coverage --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
     "@go-like/context": "0.0.1",

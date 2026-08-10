@@ -21,7 +21,7 @@
     "build": "bun x --bun tsdown --config-loader native",
     "typecheck": "tsc -p tsconfig.test.json --pretty false",
     "test:unit": "bun test --isolate --no-orphans test",
-    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-reporter=lcov --coverage-dir .artifacts/coverage"
+    "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
     "@go-like/context": "0.0.1",

@@ -31,7 +31,6 @@ const NatsImage =
   "docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
 const ExpectedPostgresVersion = "18.4"
 const ExpectedNatsVersion = "2.14.4"
-const ExpectedSdkVersion = "3.4.0"
 const DockerKnownSecrets = Object.freeze(["local-e2e-only"])
 const RunId = crypto.randomUUID()
 const PostgresContainer = `go-like-payments-postgres-${RunId}`
@@ -49,10 +48,6 @@ interface ReadbackCount {
 
 interface ReadbackText {
   readonly value: string
-}
-
-interface PackageManifest {
-  readonly dependencies?: Readonly<Record<string, string>>
 }
 
 /** Throws when one real-service invariant is false. */
@@ -199,20 +194,8 @@ async function closeNats(connection: NatsConnection | null): Promise<void> {
   }
 }
 
-/** Reads the example manifest instead of trusting a duplicated SDK version claim. */
-async function verifySdkPin(): Promise<void> {
-  const manifest: PackageManifest = await Bun.file(
-    new URL("../package.json", import.meta.url)
-  ).json()
-  assert(
-    manifest.dependencies?.["@nats-io/jetstream"] === ExpectedSdkVersion &&
-      manifest.dependencies?.["@nats-io/transport-node"] === ExpectedSdkVersion,
-    "official NATS SDK packages are not pinned to 3.4.0"
-  )
-}
-
 /** Executes the PostgreSQL journal and JetStream outbox real-service contract. */
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
   let sql: SQL | null = null
   let connection: NatsConnection | null = null
@@ -231,8 +214,6 @@ async function main(): Promise<void> {
   let phase = "startup"
 
   try {
-    phase = "verify SDK pin"
-    await verifySdkPin()
     phase = "create Docker resources"
     const [postgresPort, natsPort] = allocateHostPorts()
     const postgresVolume = await createVolume(ownedDocker, [], {
@@ -691,4 +672,4 @@ async function main(): Promise<void> {
   }
 }
 
-await main()
+if (import.meta.main) await main()

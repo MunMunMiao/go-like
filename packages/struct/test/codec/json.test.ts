@@ -547,6 +547,19 @@ describe("codec/json.ts", () => {
     expect(() => decodeJson(Message, { type: "text" })).toThrow(StructError)
   })
 
+  test("skips a union candidate whose discriminator is suppressed by aliases", () => {
+    const Message = struct.discriminatedUnion("type", [
+      struct.object({
+        type: struct.literal("a").alias("same"),
+        shadow: struct.string().optional().alias("same")
+      }),
+      struct.object({ type: struct.literal("b").alias("kind_b") }),
+      struct.object({ type: struct.literal("c").alias("kind_c") })
+    ])
+
+    expect(decodeJson(Message, { kind_b: "a", kind_c: "c" })).toEqual({ type: "c" })
+  })
+
   test("decodes aliased intersection right-side objects symmetrically", () => {
     const profile = struct.object({
       name: struct.string().alias("full_name")

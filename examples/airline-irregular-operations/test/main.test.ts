@@ -1,7 +1,12 @@
 import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newDisruptionHandler } from "../src/http"
-import { newMemoryDisruptionRepository, newResolveDisruption } from "../src/service"
+import { airlineRegistryFromEnvironment } from "../src/registry"
+import {
+  newMemoryDisruptionRepository,
+  newResolveDisruption,
+  validateDisruptionResolution
+} from "../src/service"
 
 describe("airline irregular operations", () => {
   test("keeps repeated rebooking decisions idempotent", () => {
@@ -74,5 +79,70 @@ describe("airline irregular operations", () => {
       status: "resolved",
       providerEndpoint: "https://rebooking-a.example.test/"
     })
+  })
+
+  test("validates cases, exposes stored resolutions, and handles Fetch failures", async () => {
+    expect(
+      validateDisruptionResolution({ caseId: "case.valid", outcome: "refunded" })
+    ).toBeUndefined()
+    expect(() => validateDisruptionResolution({ caseId: "", outcome: "refunded" })).toThrow(
+      "invalid caseId"
+    )
+    expect(airlineRegistryFromEnvironment({})).toBeNull()
+    expect(() => airlineRegistryFromEnvironment({ ZOOKEEPER_ADDRESS: "" })).toThrow(
+      "ZOOKEEPER_ADDRESS must not be empty"
+    )
+    expect(() =>
+      airlineRegistryFromEnvironment({ ZOOKEEPER_ADDRESS: "zk.example.test", ZOOKEEPER_ROOT: "" })
+    ).toThrow("ZOOKEEPER_ROOT must not be empty")
+    expect(airlineRegistryFromEnvironment({ ZOOKEEPER_ADDRESS: "zk.example.test" })).toBeTruthy()
+    expect(
+      airlineRegistryFromEnvironment({
+        ZOOKEEPER_ADDRESS: "zk.example.test",
+        ZOOKEEPER_ROOT: "/airline"
+      })
+    ).toBeTruthy()
+
+    const repository = newMemoryDisruptionRepository()
+    expect(repository.get(background(), "missing")).toBeUndefined()
+    const resolved = repository.resolve(background(), { caseId: "stored", outcome: "refunded" })
+    expect(repository.get(background(), "stored")).toBe(resolved)
+
+    const handler = newDisruptionHandler(newResolveDisruption(newMemoryDisruptionRepository()))
+    const requests: Array<[Request, number]> = [
+      [new Request("https://example.test/other", { method: "GET" }), 404],
+      [
+        new Request("https://example.test/v1/disruptions/resolve", {
+          method: "POST",
+          body: JSON.stringify(null)
+        }),
+        400
+      ],
+      [
+        new Request("https://example.test/v1/disruptions/resolve", {
+          method: "POST",
+          body: JSON.stringify({ caseId: "bad", outcome: "unknown" })
+        }),
+        400
+      ],
+      [
+        new Request("https://example.test/v1/disruptions/resolve", {
+          method: "POST",
+          body: JSON.stringify({ caseId: "conflict", outcome: "refunded" })
+        }),
+        200
+      ],
+      [
+        new Request("https://example.test/v1/disruptions/resolve", {
+          method: "POST",
+          body: JSON.stringify({ caseId: "conflict", outcome: "rebooked" })
+        }),
+        409
+      ]
+    ]
+    for (const [request, status] of requests) {
+      const response = await handler(request)
+      expect(response.status).toBe(status)
+    }
   })
 })

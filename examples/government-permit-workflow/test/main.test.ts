@@ -3,6 +3,7 @@ import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
 import { newGovernmentPermitService } from "../src/service"
+import { newMemoryPermitRepository, newSubmitPermit } from "../src/permits"
 
 /** Submits one permit through the public Fetch boundary. */
 function submit(
@@ -106,5 +107,138 @@ describe("government permit workflow", () => {
     expect(() => service.worker.processNext(background())).toThrow(
       "permit review worker is not running"
     )
+  })
+
+  test("returns null when a running worker has no pending permits", async () => {
+    const service = newGovernmentPermitService()
+    await withWorker(service, async function drainEmptyQueue(): Promise<void> {
+      expect(service.worker.processNext(background())).toBeNull()
+    })
+    expect(service.worker.diagnostics()).toEqual({ status: "stopped", reviewed: 0 })
+  })
+
+  test("rejects malformed Fetch commands and reports missing permits", async () => {
+    const service = newGovernmentPermitService()
+
+    const malformedJson = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify(null)
+      })
+    )
+    expect(malformedJson.status).toBe(400)
+    expect(await malformedJson.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "invalid JSON body"
+    })
+
+    const invalidType = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: "bad-type",
+          applicantId: "applicant-one",
+          permitType: "construction",
+          documents: []
+        })
+      })
+    )
+    expect(invalidType.status).toBe(400)
+    expect(await invalidType.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "invalid permitType"
+    })
+
+    const invalidDocuments = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: "bad-documents",
+          applicantId: "applicant-one",
+          permitType: "renovation",
+          documents: ["identity", 7]
+        })
+      })
+    )
+    expect(invalidDocuments.status).toBe(400)
+    expect(await invalidDocuments.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "documents must contain strings"
+    })
+
+    const notFound = await service.handler(
+      new Request("https://example.test/v1/unknown", { method: "GET" })
+    )
+    expect(notFound.status).toBe(404)
+
+    const missing = await get(service, "does-not-exist")
+    expect(missing.status).toBe(409)
+    expect(await missing.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "permit application not found"
+    })
+  })
+
+  test("rejects invalid identifiers, missing fields and duplicate documents", async () => {
+    const service = newGovernmentPermitService()
+    const invalidIdentifier = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: "bad id",
+          applicantId: "applicant-one",
+          permitType: "renovation",
+          documents: []
+        })
+      })
+    )
+    expect(invalidIdentifier.status).toBe(400)
+    expect(await invalidIdentifier.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "invalid applicationId"
+    })
+
+    const missingApplicant = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: "missing-applicant",
+          permitType: "renovation",
+          documents: []
+        })
+      })
+    )
+    expect(missingApplicant.status).toBe(400)
+    expect(await missingApplicant.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "invalid permit submission"
+    })
+
+    const duplicateDocuments = await service.handler(
+      new Request("https://example.test/v1/permits", {
+        method: "POST",
+        body: JSON.stringify({
+          applicationId: "duplicate-documents",
+          applicantId: "applicant-one",
+          permitType: "renovation",
+          documents: ["identity", "identity"]
+        })
+      })
+    )
+    expect(duplicateDocuments.status).toBe(409)
+    expect(await duplicateDocuments.json()).toMatchObject({
+      code: "permit_rejected",
+      message: "duplicate document"
+    })
+
+    const submit = newSubmitPermit(newMemoryPermitRepository())
+    expect(() =>
+      submit(background(), {
+        applicationId: "invalid-type",
+        applicantId: "applicant-one",
+        permitType: "unsupported" as never,
+        documents: []
+      })
+    ).toThrow("invalid permitType")
   })
 })

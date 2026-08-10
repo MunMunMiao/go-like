@@ -24,11 +24,15 @@ workspace 源码解析、发布包构建和真实服务验证是不同职责，�
 6. TypeScript 负责声明与类型检查。portable 入口只使用 ECMAScript 与标准 Web API；Node listener、进程信号、
    UDP、文件监听或第三方原生 SDK 放在显式 runtime 子路径或 provider 包。
 7. 测试只分为单元测试和 E2E：
-   - `test:unit` 运行不依赖外部服务的确定性测试；`test:unit:coverage` 仅输出覆盖率，覆盖率不是独立测试类型。
+   - `test:unit` 运行不依赖外部服务的确定性测试；`test:unit:coverage` 只是在相同单元测试上输出
+     Bun 的 line/function coverage，不构成第三类测试。
+   - 每个 package/example workspace 的 `test:unit:coverage` 都要求已加载生产模块达到 100% line/function；
+     该门禁不把未加载的入口文件伪装成已覆盖，也不把跨进程 E2E 当作 Bun LCOV。
    - `test:e2e` 在本地验证真实 provider、跨运行时、可执行 example 与发布 tarball consumer；
-     `test:e2e:soak` 是独立的长时间 E2E。
-8. CI 只执行安装、`fmt:check`、`typecheck`、`build` 和 `test:unit`。Docker、跨运行时、example 进程和 soak
-   不在托管 CI 中运行，避免把不完整环境的结果当作真实 E2E。
+     `test:e2e:soak` 是独立的长时间 E2E。example 的 `src/main.ts`、装配和进程生命周期由真实
+     `start:prepared`/E2E 执行证明，纯类型和声明代码由 typecheck/type tests 证明。
+8. CI 运行安装、`fmt:check`、`typecheck`、`build`、unit tests 和 workspace coverage 门禁。Docker、跨运行时、
+   example 进程和 soak 是否纳入托管 CI 仍由具体 workflow 的环境能力决定；不把未执行的 E2E 宣称为 coverage。
 9. `oxfmt` 是唯一格式化工具。`fmt`、`typecheck`、`build`、`audit` 和 `doc:build` 是工程命令，不命名为测试。
 10. 公共包从 `0.0.1` 起步，由 Changesets 管理版本。`release` 在发布前重新执行格式检查、类型检查、构建与
     单元测试，再调用 Changesets；npm trusted publishing 与 provenance 由 Release workflow 承接。

@@ -2,8 +2,14 @@ import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
+import { newMediaTranscodingHandler } from "../src/http"
 import { newMediaTranscodingService, newSubmitTranscode } from "../src/service"
-import type { TranscodeJob } from "../src/transcode-jobs"
+import {
+  outputKey,
+  sameTranscodeJob,
+  validateTranscodeJob,
+  type TranscodeJob
+} from "../src/transcode-jobs"
 import { newMemoryTranscodeWorker, type TranscodeWorker } from "../src/transcode-worker"
 
 /** Lets Core own one transcode worker for the duration of an assertion. */
@@ -120,6 +126,99 @@ describe("media transcoding pipeline", () => {
       starts: 1,
       stops: 1,
       completedJobs: 1
+    })
+  })
+
+  test("validates job fields and maps HTTP decode and conflict failures", async () => {
+    const valid: TranscodeJob = {
+      jobId: "job-valid",
+      inputUrl: "https://media.example/input.mov",
+      profile: "video-720p",
+      durationSeconds: 60
+    }
+    expect(outputKey({ ...valid, profile: "audio-aac" })).toBe("transcoded/job-valid.m4a")
+    expect(sameTranscodeJob({ ...valid, outputKey: "x", status: "completed" }, valid)).toBe(true)
+    expect(
+      sameTranscodeJob(
+        { ...valid, durationSeconds: 61, outputKey: "x", status: "completed" },
+        valid
+      )
+    ).toBe(false)
+    expect(() => validateTranscodeJob({ ...valid, jobId: "bad id" })).toThrow(
+      "invalid transcode jobId"
+    )
+    expect(() => validateTranscodeJob({ ...valid, inputUrl: "not a URL" })).toThrow(
+      "invalid media input URL"
+    )
+    expect(() =>
+      validateTranscodeJob({
+        ...valid,
+        profile: "audio-aac",
+        inputUrl: "http://media.example/input"
+      })
+    ).toThrow("media input URL must use HTTPS")
+    expect(() =>
+      validateTranscodeJob({ ...valid, profile: "unsupported" } as unknown as TranscodeJob)
+    ).toThrow("unsupported transcode profile")
+    expect(() => validateTranscodeJob({ ...valid, durationSeconds: 0 })).toThrow(
+      "durationSeconds must be a positive safe integer"
+    )
+
+    const handler = newMediaTranscodingHandler(() => {
+      throw new Error("transcode job identity conflict")
+    })
+    expect(
+      (await handler(new Request("https://example.test/v1/other", { method: "POST" }))).status
+    ).toBe(404)
+    const malformed = await handler(
+      new Request("https://example.test/v1/transcode-jobs", {
+        method: "POST",
+        body: JSON.stringify([])
+      })
+    )
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toMatchObject({ code: "invalid_transcode_job" })
+    const malformedObject = await handler(
+      new Request("https://example.test/v1/transcode-jobs", {
+        method: "POST",
+        body: JSON.stringify({ jobId: "job-valid" })
+      })
+    )
+    expect(malformedObject.status).toBe(400)
+    expect(await malformedObject.json()).toMatchObject({ code: "invalid_transcode_job" })
+    const conflict = await handler(
+      new Request("https://example.test/v1/transcode-jobs", {
+        method: "POST",
+        body: JSON.stringify(valid)
+      })
+    )
+    expect(conflict.status).toBe(409)
+    expect(await conflict.json()).toEqual({
+      code: "transcode_rejected",
+      message: "transcode job identity conflict"
+    })
+  })
+
+  test("rejects repeated worker lifecycle operations", async () => {
+    const worker = newMemoryTranscodeWorker()
+    await expect(worker.stop(background())).rejects.toThrow("transcode worker is not running")
+    const app = newApp(name("media-transcoding-lifecycle-test"), server(worker))
+    const running = app.run()
+    await Promise.resolve()
+    await Promise.resolve()
+    try {
+      await expect(worker.start(background())).rejects.toThrow("transcode worker already started")
+    } finally {
+      await app.stop()
+      await running
+    }
+    await worker.stop(background())
+    await worker.stop(background())
+    expect(worker.diagnostics()).toEqual({
+      status: "stopped",
+      starts: 1,
+      stops: 1,
+      completedJobs: 0
     })
   })
 })

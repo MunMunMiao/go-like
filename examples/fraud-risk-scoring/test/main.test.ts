@@ -138,4 +138,143 @@ describe("fraud risk scoring", () => {
     expect(breaker.snapshot().state).toBe("open")
     await expect(assess(background(), command)).rejects.toBe(circuitOpen)
   })
+
+  test("falls back to scoring when persisted cache data is malformed", async () => {
+    const cache = newMemoryCache()
+    const breaker = newCircuitBreaker({ failureThreshold: 1, resetTimeoutMs: 60_000 })
+    const assess = newCachedAssessTransaction(
+      cache,
+      breaker,
+      newAssessTransaction(newMemoryFraudSignalsRepository({}))
+    )
+    const malformedEntries = [
+      "not-json",
+      "null",
+      JSON.stringify({ fingerprint: 42, assessment: {} }),
+      JSON.stringify({ fingerprint: "fingerprint", assessment: null }),
+      JSON.stringify({
+        fingerprint: "fingerprint",
+        assessment: { transactionId: "ignored", score: 0, decision: "unknown", reasons: [] }
+      }),
+      JSON.stringify({
+        fingerprint: "fingerprint",
+        assessment: { transactionId: "ignored", score: 0, decision: "approve", reasons: [1] }
+      })
+    ]
+
+    for (const [index, entry] of malformedEntries.entries()) {
+      const transactionId = `malformed-${index}`
+      const command = Object.freeze({
+        transactionId,
+        accountId: "account-1",
+        amountMinor: 1_000,
+        country: "DE",
+        homeCountry: "DE",
+        deviceTrusted: true
+      })
+      await cache.put(
+        background(),
+        `fraud-assessment:v1:${transactionId}`,
+        new TextEncoder().encode(entry)
+      )
+      await expect(assess(background(), command)).resolves.toMatchObject({
+        transactionId,
+        score: 0,
+        decision: "approve"
+      })
+    }
+  })
+
+  test("rejects malformed requests and reports public Fetch failures", async () => {
+    const command = {
+      transactionId: "web-invalid",
+      accountId: "account-1",
+      amountMinor: 1_000,
+      country: "DE",
+      homeCountry: "DE",
+      deviceTrusted: true
+    }
+    const handler = newFraudRiskHandler(newAssessTransaction(newMemoryFraudSignalsRepository({})))
+
+    const notFound = await handler(new Request("https://example.test/v1/other", { method: "GET" }))
+    expect(notFound.status).toBe(404)
+
+    const malformed = await handler(
+      new Request("https://example.test/v1/risk-assessments", {
+        method: "POST",
+        body: JSON.stringify({ transactionId: "missing-fields" })
+      })
+    )
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toMatchObject({
+      code: "risk_assessment_rejected",
+      message: "invalid transaction assessment"
+    })
+
+    const typeFailure = await newFraudRiskHandler(function rejectWithTypeError(): never {
+      throw new TypeError("invalid dependency input")
+    })(
+      new Request("https://example.test/v1/risk-assessments", {
+        method: "POST",
+        body: JSON.stringify(command)
+      })
+    )
+    expect(typeFailure.status).toBe(400)
+
+    const unknownFailure = await newFraudRiskHandler(function rejectWithUnknown(): never {
+      throw "dependency unavailable"
+    })(
+      new Request("https://example.test/v1/risk-assessments", {
+        method: "POST",
+        body: JSON.stringify(command)
+      })
+    )
+    expect(unknownFailure.status).toBe(409)
+    expect(await unknownFailure.json()).toEqual({
+      code: "risk_assessment_rejected",
+      message: "assessment failed"
+    })
+  })
+
+  test("rejects invalid cache TTLs, transaction amounts and server-side velocity signals", () => {
+    expect(() =>
+      newCachedAssessTransaction(
+        newMemoryCache(),
+        newCircuitBreaker({ failureThreshold: 1, resetTimeoutMs: 1_000 }),
+        newAssessTransaction(newMemoryFraudSignalsRepository({})),
+        0
+      )
+    ).toThrow("fraud assessment cache ttl must be a positive safe integer")
+
+    const command = {
+      transactionId: "invalid-amount",
+      accountId: "account-1",
+      amountMinor: 0,
+      country: "DE",
+      homeCountry: "DE",
+      deviceTrusted: true
+    }
+    expect(() =>
+      newAssessTransaction(newMemoryFraudSignalsRepository({}))(background(), command)
+    ).toThrow("amountMinor is outside the supported range")
+
+    const invalidSignals = newAssessTransaction(
+      newMemoryFraudSignalsRepository({
+        "invalid-signals": Object.freeze({
+          transactionsLastFiveMinutes: -1,
+          declinedLastHour: 0
+        })
+      })
+    )
+    expect(() =>
+      invalidSignals(background(), {
+        transactionId: "invalid-signals-transaction",
+        accountId: "invalid-signals",
+        amountMinor: 1_000,
+        country: "DE",
+        homeCountry: "DE",
+        deviceTrusted: true
+      })
+    ).toThrow("invalid server-side velocity signals")
+  })
 })

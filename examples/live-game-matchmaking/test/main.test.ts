@@ -1,10 +1,11 @@
-import { background } from "@go-like/context"
+import { background, withCancel } from "@go-like/context"
 import type { ServiceInstance } from "@go-like/registry"
 import { describe, expect, test } from "bun:test"
 
-import { newHandler } from "../src/http"
+import { newHandler, newMatchmakingHandler } from "../src/http"
 import { newGameServerDirectory, newMemoryMatchQueue } from "../src/match-resources"
-import { newJoinMatch } from "../src/service"
+import { gameRegistryFromEnvironment } from "../src/registry"
+import { canMatch, matchIdentity, newJoinMatch, validateJoinMatch } from "../src/service"
 
 const gameServers: readonly ServiceInstance[] = Object.freeze([
   Object.freeze({
@@ -135,5 +136,92 @@ describe("live game matchmaking", () => {
     )
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: "waiting", requestId: "web" })
+  })
+
+  test("validates match commands, route bodies, and deterministic identities", async () => {
+    const valid = { requestId: "a", playerId: "player", region: "eu-west", skillRating: 1000 }
+    expect(canMatch(valid, { ...valid, region: "us-east" }, 100)).toBe(false)
+    expect(canMatch(valid, { ...valid, skillRating: 1100 }, 100)).toBe(true)
+    expect(matchIdentity("z", "a")).toBe("a:z")
+    expect(() =>
+      newJoinMatch(newMemoryMatchQueue(), newGameServerDirectory(gameServers), -1)
+    ).toThrow("maximumSkillGap must be a non-negative safe integer")
+    expect(() => validateJoinMatch({ ...valid, requestId: "" })).toThrow("invalid requestId")
+    expect(() => validateJoinMatch({ ...valid, playerId: "" })).toThrow("invalid playerId")
+    expect(() => validateJoinMatch({ ...valid, region: "EU-WEST" })).toThrow("invalid region")
+    for (const skillRating of [-1, 5_001, 1.5]) {
+      expect(() => validateJoinMatch({ ...valid, skillRating })).toThrow(
+        "skillRating must be an integer from 0 through 5000"
+      )
+    }
+
+    const handler = newMatchmakingHandler(() => {
+      throw "non-error failure"
+    })
+    expect(
+      (await handler(new Request("https://example.test/v1/other", { method: "GET" }))).status
+    ).toBe(404)
+    const invalidBody = await handler(
+      new Request("https://example.test/v1/matches", {
+        method: "POST",
+        body: JSON.stringify({ ...valid, skillRating: "1000" })
+      })
+    )
+    expect(invalidBody.status).toBe(400)
+    const rejected = await handler(
+      new Request("https://example.test/v1/matches", {
+        method: "POST",
+        body: JSON.stringify(valid)
+      })
+    )
+    expect(rejected.status).toBe(409)
+    expect(await rejected.json()).toMatchObject({ message: "matchmaking failed" })
+  })
+
+  test("rejects canceled queue and directory contexts and supports empty regions", () => {
+    const [ctx, cancel] = withCancel(background())
+    cancel()
+    const queue = newMemoryMatchQueue()
+    expect(() =>
+      queue.join(
+        ctx,
+        {
+          requestId: "ctx",
+          playerId: "ctx-player",
+          region: "eu-west",
+          skillRating: 1
+        },
+        100
+      )
+    ).toThrow()
+    expect(() => queue.pending(ctx, "eu-west")).toThrow()
+    const directory = newGameServerDirectory(gameServers)
+    expect(() => directory.allocate(ctx, "missing")).toThrow()
+  })
+
+  test("creates the optional Kubernetes registry from environment inputs", () => {
+    expect(gameRegistryFromEnvironment({})).toBeNull()
+    expect(() => gameRegistryFromEnvironment({ KUBERNETES_API_ADDRESS: "" })).toThrow(
+      "KUBERNETES_API_ADDRESS must not be empty"
+    )
+    expect(() =>
+      gameRegistryFromEnvironment({
+        KUBERNETES_API_ADDRESS: "https://kubernetes.example",
+        KUBERNETES_TOKEN: ""
+      })
+    ).toThrow("KUBERNETES_TOKEN must not be empty")
+    expect(
+      gameRegistryFromEnvironment({
+        KUBERNETES_API_ADDRESS: "https://kubernetes.example",
+        KUBERNETES_NAMESPACE: "games"
+      })
+    ).not.toBeNull()
+    expect(
+      gameRegistryFromEnvironment({
+        KUBERNETES_API_ADDRESS: "https://kubernetes.example",
+        KUBERNETES_NAMESPACE: "games",
+        KUBERNETES_TOKEN: "token"
+      })
+    ).not.toBeNull()
   })
 })

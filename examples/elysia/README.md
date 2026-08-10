@@ -4,8 +4,8 @@ Elysia 继续拥有路由并处理传入的标准 `Request`。应用把原生 `a
 生命周期宿主；go-like 不提供框架专用桥接包，也不复制 Elysia router 或 middleware。
 
 Elysia 1.4.29 的声明文件尚未通过 TypeScript 7 的精确可选属性检查。本示例使用 `skipLibCheck` 隔离该
-上游声明问题；应用源码和 go-like 源码仍保持严格检查。Node HTTP 翻译由 `@hono/node-server` 提供，
-不是 go-like 自研协议层。
+上游声明问题；应用源码和 go-like 源码仍保持严格检查。Node HTTP 翻译由 `@go-like/web` 包内 Node Fetch
+bridge 提供，不引入外部 HTTP bridge 供应链。
 
 源码按职责拆分：
 

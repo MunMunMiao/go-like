@@ -249,10 +249,7 @@ export function goFoldCodePoint(codePoint: number): number {
   let high = GO_SIMPLE_FOLD.length / 2
   while (low < high) {
     const middle = (low + high) >>> 1
-    const candidate = GO_SIMPLE_FOLD[middle * 2]
-    if (candidate === undefined) {
-      return codePoint
-    }
+    const candidate = GO_SIMPLE_FOLD[middle * 2] as number
     if (candidate < codePoint) {
       low = middle + 1
     } else {

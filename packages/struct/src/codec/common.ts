@@ -167,13 +167,8 @@ function decodeRepeatedAliasedField(
   }
 
   if (definition.kind === "object" && isPlainObject(value)) {
-    return normalizeObjectByAlias(
-      runtime,
-      value,
-      label,
-      path,
-      hasPrevious && isPlainObject(previous) ? previous : undefined
-    )
+    const previousObject = hasPrevious && isPlainObject(previous) ? previous : undefined
+    return normalizeObjectByAlias(runtime, value, label, path, previousObject)
   }
 
   if (definition.kind === "record" && isPlainObject(value)) {
@@ -215,10 +210,7 @@ function unicodeSimpleFoldKey(value: string): string {
 }
 
 function unicodeSimpleFoldRune(rune: string): string {
-  const codePoint = rune.codePointAt(0)
-  if (codePoint === undefined) {
-    return rune
-  }
+  const codePoint = rune.codePointAt(0) as number
   const folded = goFoldCodePoint(codePoint)
   return folded === codePoint ? rune : String.fromCodePoint(folded)
 }
@@ -409,22 +401,16 @@ function readDiscriminatorWireValue(
 
 function hasSuppressedDiscriminator(runtime: RuntimeStruct, discriminator: string): boolean {
   const definition = runtime[DEFINITION]
-  if (definition.kind !== "object") {
-    return false
-  }
-  const shape = resolveObjectShape(runtime, definition)
   return (
-    Object.hasOwn(shape, discriminator) &&
+    definition.kind === "object" &&
+    Object.hasOwn(resolveObjectShape(runtime, definition), discriminator) &&
     !resolveStructFields(runtime, definition).some((field) => field.key === discriminator)
   )
 }
 
 function omitRawDiscriminator(value: unknown, discriminator: string): unknown {
-  if (!isPlainObject(value)) {
-    return value
-  }
   const output: { [key: string]: unknown } = Object.create(null)
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of Object.entries(isPlainObject(value) ? value : {})) {
     if (key !== discriminator) {
       output[key] = entry
     }

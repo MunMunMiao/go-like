@@ -60,7 +60,7 @@ Depuis la racine du dépôt :
 bun install --frozen-lockfile
 ```
 
-Les paquets sont des dépendances du workspace dans ce checkout. Le dépôt racine indique Bun `1.3.14`, Node.js `26.x`, Deno `2.9.4`, TypeScript `7.0.2` et k6 `2.1.0` dans sa matrice de validation ; tout patch de Node.js 26.x convient. La documentation actuelle des paquets précise qu'ils ne sont pas encore publiés sur npm.
+Les paquets sont des dépendances du workspace dans ce checkout. Le dépôt racine indique Bun `1.x`, Node.js `26.x`, Deno sans exigence de version fixe, TypeScript `7.0.2` et k6 `2.1.0` dans sa matrice de validation ; toute version de Bun 1.x ou de Node.js 26.x convient, et Deno reste sondé et testé sans que le dépôt impose une version. La documentation actuelle des paquets précise qu'ils ne sont pas encore publiés sur npm.
 
 Lancez l'exemple de référence existant :
 

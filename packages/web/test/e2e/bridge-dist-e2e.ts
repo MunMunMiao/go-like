@@ -11,13 +11,5 @@ await runFrameworkDistConsumerMain({
   prefix: "go-like-web-bridge-",
   consumer: resolve(directory, "fixtures/bridge-dist-consumer.mjs"),
   builtPackages: ["@go-like/context", "@go-like/core", "@go-like/web"],
-  vendorPackages: [
-    {
-      name: "@hono/node-server",
-      source: resolve(root, "packages/web/node_modules/@hono/node-server")
-    }
-  ],
-  requiredRuntimePeers: {
-    "@hono/node-server": ["hono"]
-  }
+  vendorPackages: []
 })

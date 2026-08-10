@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background, withCancel } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newDispatchHandler } from "../src/http"
 import {
@@ -45,7 +45,8 @@ describe("last mile dispatch", () => {
 
   test("serves dispatch through a standard Fetch handler", async () => {
     const service = newDispatchService([{ courierId: "web-courier", capacity: 4, healthy: true }])
-    const response = await newDispatchHandler(service.dispatch)(
+    const handler = newDispatchHandler(service.dispatch)
+    const response = await handler(
       new Request("https://example.test/v1/dispatches", {
         method: "POST",
         body: JSON.stringify({ deliveryId: "web-1", requiredCapacity: 3 })
@@ -56,6 +57,39 @@ describe("last mile dispatch", () => {
       courierId: "web-courier",
       remainingCapacity: 1
     })
+    expect(
+      (await handler(new Request("https://example.test/v1/other", { method: "GET" }))).status
+    ).toBe(404)
+    expect(
+      (
+        await handler(
+          new Request("https://example.test/v1/dispatches", {
+            method: "POST",
+            body: JSON.stringify({ deliveryId: "web-invalid", requiredCapacity: "3" })
+          })
+        )
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await handler(
+          new Request("https://example.test/v1/dispatches", {
+            method: "POST",
+            body: JSON.stringify({ deliveryId: "web-invalid", requiredCapacity: 0 })
+          })
+        )
+      ).status
+    ).toBe(400)
+    expect(
+      (
+        await handler(
+          new Request("https://example.test/v1/dispatches", {
+            method: "POST",
+            body: JSON.stringify({ deliveryId: "web-missing" })
+          })
+        )
+      ).status
+    ).toBe(400)
   })
 
   test("reports exhausted healthy capacity through go-like readiness", async () => {
@@ -68,5 +102,53 @@ describe("last mile dispatch", () => {
       })
     )
     expect((await service.probes.check(background(), "ready")).ok).toBe(false)
+  })
+
+  test("validates dispatch and courier boundaries and supports deterministic tie breaks", () => {
+    expect(() =>
+      newMemoryDispatchRepository([{ courierId: "", capacity: 1, healthy: true }])
+    ).toThrow("invalid courierId")
+    expect(() =>
+      newMemoryDispatchRepository([{ courierId: "bad", capacity: 0, healthy: true }])
+    ).toThrow("capacity is outside the supported range")
+    expect(() =>
+      newMemoryDispatchRepository([
+        { courierId: "duplicate", capacity: 1, healthy: true },
+        { courierId: "duplicate", capacity: 1, healthy: true }
+      ])
+    ).toThrow("duplicate courierId")
+
+    const repository = newMemoryDispatchRepository([
+      { courierId: "zulu", capacity: 4, healthy: true },
+      { courierId: "alpha", capacity: 4, healthy: true }
+    ])
+    const dispatch = newDispatchDelivery(repository)
+    expect(() => dispatch(background(), { deliveryId: "", requiredCapacity: 1 })).toThrow(
+      "invalid deliveryId"
+    )
+    for (const requiredCapacity of [0, 1.5, 1_000_001]) {
+      expect(() =>
+        dispatch(background(), { deliveryId: `invalid-${requiredCapacity}`, requiredCapacity })
+      ).toThrow("requiredCapacity is outside the supported range")
+    }
+    expect(dispatch(background(), { deliveryId: "tie", requiredCapacity: 1 })).toMatchObject({
+      courierId: "alpha",
+      remainingCapacity: 3
+    })
+    expect(repository.availableCapacity(background(), "alpha")).toBe(3)
+    expect(() => repository.availableCapacity(background(), "missing")).toThrow("courier not found")
+  })
+
+  test("rejects already canceled contexts at repository and readiness boundaries", async () => {
+    const repository = newMemoryDispatchRepository([
+      { courierId: "ctx-courier", capacity: 2, healthy: true }
+    ])
+    const [ctx, cancel] = withCancel(background())
+    cancel()
+    expect(() => repository.assign(ctx, { deliveryId: "ctx", requiredCapacity: 1 })).toThrow()
+    expect(() => repository.availableCapacity(ctx, "ctx-courier")).toThrow()
+    expect(() => repository.checkReady(ctx)).toThrow()
+    const service = newDispatchService([{ courierId: "ctx-probe", capacity: 1, healthy: true }])
+    expect((await service.probes.check(ctx, "ready")).ok).toBe(false)
   })
 })

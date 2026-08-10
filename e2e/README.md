@@ -55,9 +55,9 @@ runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启
 
 当前验证要求：
 
-- Bun `1.3.14`
+- Bun `1.x`
 - Node.js `26.x`
-- Deno `2.9.4`
+- Deno: unrestricted version
 - TypeScript `7.0.2`
 - k6 image 内部版本 `2.1.0`
 

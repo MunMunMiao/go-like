@@ -18,6 +18,7 @@ import {
 import { RequiredRuntimeVersions } from "../e2e/runtime-versions"
 
 const Root = resolve(import.meta.dir, "..")
+const RepresentativeBunVersion = "1.3.14"
 const RunnerFixtures = resolve(Root, "e2e/fixtures/runner")
 const runnerFixture = (name: string): string => join(RunnerFixtures, name)
 
@@ -995,7 +996,7 @@ test("definition fails when process cleanup reports an inconclusive output drain
       definitions: [Definition],
       validatePlan: async () => {},
       createSupervisor: async () => syntheticSupervisor(async () => inconclusive),
-      runtimeProbe: { bunVersion: () => RequiredRuntimeVersions.bun },
+      runtimeProbe: { bunVersion: () => RepresentativeBunVersion },
       write: () => {}
     })
   ).rejects.toThrow("process cleanup failed")
@@ -1017,7 +1018,7 @@ test("definition fails when process cleanup reports a residual", async () => {
       definitions: [Definition],
       validatePlan: async () => {},
       createSupervisor: async () => syntheticSupervisor(async () => residual),
-      runtimeProbe: { bunVersion: () => RequiredRuntimeVersions.bun },
+      runtimeProbe: { bunVersion: () => RepresentativeBunVersion },
       write: () => {}
     })
   ).rejects.toThrow("process cleanup failed")
@@ -1037,7 +1038,7 @@ test("definition failures report the actual timeout and residual outcome", async
       definitions: [Definition],
       validatePlan: async () => {},
       createSupervisor: async () => syntheticSupervisor(async () => timeoutResult),
-      runtimeProbe: { bunVersion: () => RequiredRuntimeVersions.bun },
+      runtimeProbe: { bunVersion: () => RepresentativeBunVersion },
       write: (value) => logs.push(value)
     })
   ).rejects.toThrow("supervision-fixture exceeded")
@@ -1062,7 +1063,7 @@ test("supervisor close failure is collected after a successful definition", asyn
             throw new Error("synthetic supervisor close failure")
           }
         ),
-      runtimeProbe: { bunVersion: () => RequiredRuntimeVersions.bun },
+      runtimeProbe: { bunVersion: () => RepresentativeBunVersion },
       write: (value) => logs.push(value)
     })
   ).rejects.toThrow("synthetic supervisor close failure")
@@ -1091,7 +1092,7 @@ test("supervisor close failure preserves an earlier definition failure", async (
               throw closeFailure
             }
           ),
-        runtimeProbe: { bunVersion: () => RequiredRuntimeVersions.bun },
+        runtimeProbe: { bunVersion: () => RepresentativeBunVersion },
         write: () => {}
       }
     )

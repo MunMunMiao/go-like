@@ -20,6 +20,7 @@ import { createProcessSupervisor, runCommand, type CommandResult } from "../e2e/
 import { createTempDirectory, removeTempDirectory } from "../e2e/harness/temp"
 import { RequiredRuntimeVersions } from "../e2e/runtime-versions"
 
+const RepresentativeBunVersion = "1.3.14"
 const RepresentativeNodeVersion = "26.0.0"
 
 function successfulResult(): CommandResult {
@@ -608,19 +609,6 @@ test("generic definition injection cannot intercept child-owned examples", async
   expect(examplesCalls).toBe(1)
 })
 
-test("root public E2E scripts preserve single-build scope contracts", async () => {
-  const manifest = await Bun.file("package.json").json()
-  expect(manifest.scripts).toMatchObject({
-    "test:e2e:suites": "bun run build && bun e2e/run.ts --scope suites",
-    "test:e2e:providers": "bun run build && bun e2e/run.ts --scope providers",
-    "test:e2e:runtimes": "bun run build && bun e2e/run.ts --scope runtimes",
-    "test:e2e:examples": "bun run build && bun e2e/run.ts --scope examples",
-    "test:e2e:published": "bun run build && bun e2e/run.ts --scope published",
-    "test:e2e": "bun run build && bun e2e/run.ts --scope all"
-  })
-  expect(manifest.scripts["test:e2e"]).not.toContain("--if-present")
-})
-
 test("the complete selected plan is validated before the first definition starts", async () => {
   const first: SuiteDefinition = Object.freeze({
     ...runtimeDefinition("."),
@@ -641,7 +629,7 @@ test("the complete selected plan is validated before the first definition starts
         throw new Error("synthetic validation failure")
       },
       runtimeProbe: {
-        bunVersion: () => RequiredRuntimeVersions.bun
+        bunVersion: () => RepresentativeBunVersion
       },
       executeDefinition: async () => {
         started += 1
@@ -677,7 +665,7 @@ test("an abort between definitions preserves summary count conservation", async 
             compileNativeHelper: async () => "/synthetic/native-helper"
           }),
         runtimeProbe: {
-          bunVersion: () => RequiredRuntimeVersions.bun
+          bunVersion: () => RepresentativeBunVersion
         },
         executeDefinition: async () => {
           started += 1

@@ -4,7 +4,6 @@ import type { Server } from "@go-like/core"
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { createClient, createCluster, createSentinel } from "@redis/client"
-import redisClientManifest from "@redis/client/package.json" with { type: "json" }
 
 import { cacheConformanceCases, type CacheConformanceCase } from "../../../src/testing"
 import { encodeRedisCacheValue } from "../../src/codec"
@@ -13,7 +12,6 @@ import { newRedisCache } from "../../src/index"
 const Image =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
 const RedisVersion = "8.10.0"
-const NodeRedisVersion = redisClientManifest.version
 const RunId = crypto.randomUUID()
 const Name = `go-like-cache-redis-${RunId}`
 const Network = `${Name}-network`

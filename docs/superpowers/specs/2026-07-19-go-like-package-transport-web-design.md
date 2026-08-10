@@ -46,11 +46,11 @@ feature 分支或 worktree；除非用户单独授权，不提交、不推送、
 
 本设计在 2026-07-19 通过 Git 默认分支 HEAD 重新核实，所有源码链接均固定到提交，避免默认分支后续漂移。
 
-| 项目 | 默认分支与提交 | 本设计采用的事实 |
-| --- | --- | --- |
-| [micro/go-micro](https://github.com/micro/go-micro/tree/db4401d306039be2614e0e3657c6a5c6473feb3b) | `master` / `db4401d306039be2614e0e3657c6a5c6473feb3b` | 根级能力域、`transport` 公共 SPI、HTTP/memory/NATS 实现、独立 `web.Service` |
-| [go-kratos/kratos](https://github.com/go-kratos/kratos/tree/668db92c2c001e9552594ba5a8aede8456af6d7e) | `main` / `668db92c2c001e9552594ba5a8aede8456af6d7e` | 小接口、结构式 Server、核心包与 contrib/provider 分离 |
-| [go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/tree/ecd00dd24491d09642c76542f94e392c6d639336) | `main` / `ecd00dd24491d09642c76542f94e392c6d639336` | 应用可自行组合任意 Server，Cron/Gin/Asynq 等只适配生命周期 |
+| 项目                                                                                                    | 默认分支与提交                                        | 本设计采用的事实                                                            |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
+| [micro/go-micro](https://github.com/micro/go-micro/tree/db4401d306039be2614e0e3657c6a5c6473feb3b)       | `master` / `db4401d306039be2614e0e3657c6a5c6473feb3b` | 根级能力域、`transport` 公共 SPI、HTTP/memory/NATS 实现、独立 `web.Service` |
+| [go-kratos/kratos](https://github.com/go-kratos/kratos/tree/668db92c2c001e9552594ba5a8aede8456af6d7e)   | `main` / `668db92c2c001e9552594ba5a8aede8456af6d7e`   | 小接口、结构式 Server、核心包与 contrib/provider 分离                       |
+| [go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/tree/ecd00dd24491d09642c76542f94e392c6d639336) | `main` / `ecd00dd24491d09642c76542f94e392c6d639336`   | 应用可自行组合任意 Server，Cron/Gin/Asynq 等只适配生命周期                  |
 
 go-micro 当前公共 transport 契约以
 [transport.go](https://github.com/micro/go-micro/blob/db4401d306039be2614e0e3657c6a5c6473feb3b/transport/transport.go)、
@@ -78,7 +78,7 @@ go-kratos 当前 HTTP transport 同时具有
 go-kratos 的可编排 HTTP Server 角色，不复制 Kratos router、middleware、codec 或 Protobuf 调用层。
 
 实施时使用当日 npm `latest` 快照并精确锁定。设计核实时的直接依赖版本为：Standard Schema `1.1.0`、
-Hono `4.12.31`、H3 `2.0.1-rc.25`、Elysia `1.4.29`、`@hono/node-server` `2.0.12`、Croner
+Hono `4.12.31`、H3 `2.0.1-rc.25`、Elysia `1.4.29`、Croner
 `10.0.1`、BullMQ `5.81.1`、`@nats-io/transport-node` 与 `@nats-io/jetstream` `3.4.0`、Pino
 `10.3.1`、Winston `3.19.0`、Prom Client `15.1.3`、OpenTelemetry API `1.9.1`、SDK Metrics 与
 SDK Trace `2.10.0`。mDNS 候选调研到 `multicast-dns` `7.2.5` 与 `dns-packet` `5.6.1`；v1 不把它们放入 portable
@@ -144,74 +144,74 @@ packages/
 
 发布包与旧实现的精确映射如下：
 
-| 新包 | 公开子路径 | 旧来源与处理 |
-| --- | --- | --- |
-| `@go-like/context` | `.` | 保留 |
-| `@go-like/core` | `.`, `./lifecycle` | 保留 App、Server、ServerHandle 与现有 Context wait helper；不聚合 transport 或 Web |
-| `@go-like/config` | `.`, `./env`, `./file` | 合并 `@go-like/config-env` 与 `@go-like/config-file` |
-| `@go-like/config-consul` | `.` | 从 `@go-like/config-consul` 迁入 `packages/config/consul`；继续使用标准 Fetch |
-| `@go-like/health` | `.` | 只保留 probe 域；HTTP handler 迁到 `@go-like/web/health` |
-| `@go-like/registry` | `.`, `./testing` | 对齐 Registry/Service/Node/Endpoint/Value/Watcher，并保留便利层与 provider conformance |
-| `@go-like/registry-consul` | `.` | 从 `@go-like/registry-consul` 迁入 `packages/registry/consul`；继续使用标准 Fetch |
-| `@go-like/registry-mdns` | `.`, `./node`, `./testing` | 新增 portable mDNS provider、host SPI、首个真实 Node UDP multicast host |
-| `@go-like/resilience` | `.` | 保留 retry、backoff、breaker、limiter |
-| `@go-like/testing` | `.`, `./server`, `./listener` | 保留 Server 契约并新增仅供测试使用的 listener conformance |
-| `@go-like/transport` | `.`, `./headers`, `./testing` | 新增内部通信 SPI、go-like headers 与 transport conformance suite |
-| `@go-like/transport-http` | `.`, `./node`, `./testing` | 新增 Fetch unary client、底层 listener server、Core lifecycle server 与首个 Node host |
-| `@go-like/web` | `.`, `./health`, `./node`, `./node/testing` | 吸收 `@go-like/fetch` 与 `@go-like/fetch-node` 的正确职责 |
-| `@go-like/hono` | `.` | Hono native app 到 `@go-like/web` Handler 的薄接缝 |
-| `@go-like/h3` | `.` | H3 native app 到 `@go-like/web` Handler 的薄接缝 |
-| `@go-like/elysia` | `.` | Elysia native app 到 `@go-like/web` Handler 的薄接缝 |
-| `@go-like/croner` | `.` | 重命名 `@go-like/cron-croner`，继续只适配 Cron 生命周期 |
-| `@go-like/bullmq` | `.`, `./testing` | 重命名 `@go-like/job-bullmq-node` |
-| `@go-like/nats` | `.`, `./jetstream` | 合并两个 NATS 包；根入口是 core transport，子路径保留 JetStream |
-| `@go-like/pino` | `.` | 重命名 `@go-like/log-pino-node` |
-| `@go-like/winston` | `.` | 重命名 `@go-like/log-winston-node` |
-| `@go-like/otel` | `.`, `./testing` | 重命名 `@go-like/otel-node` |
-| `@go-like/prometheus` | `.` | 重命名 `@go-like/metrics-prom-client-node`，handler 类型改用 `@go-like/web` |
+| 新包                       | 公开子路径                                  | 旧来源与处理                                                                           |
+| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@go-like/context`         | `.`                                         | 保留                                                                                   |
+| `@go-like/core`            | `.`, `./lifecycle`                          | 保留 App、Server、ServerHandle 与现有 Context wait helper；不聚合 transport 或 Web     |
+| `@go-like/config`          | `.`, `./env`, `./file`                      | 合并 `@go-like/config-env` 与 `@go-like/config-file`                                   |
+| `@go-like/config-consul`   | `.`                                         | 从 `@go-like/config-consul` 迁入 `packages/config/consul`；继续使用标准 Fetch          |
+| `@go-like/health`          | `.`                                         | 只保留 probe 域；HTTP handler 迁到 `@go-like/web/health`                               |
+| `@go-like/registry`        | `.`, `./testing`                            | 对齐 Registry/Service/Node/Endpoint/Value/Watcher，并保留便利层与 provider conformance |
+| `@go-like/registry-consul` | `.`                                         | 从 `@go-like/registry-consul` 迁入 `packages/registry/consul`；继续使用标准 Fetch      |
+| `@go-like/registry-mdns`   | `.`, `./node`, `./testing`                  | 新增 portable mDNS provider、host SPI、首个真实 Node UDP multicast host                |
+| `@go-like/resilience`      | `.`                                         | 保留 retry、backoff、breaker、limiter                                                  |
+| `@go-like/testing`         | `.`, `./server`, `./listener`               | 保留 Server 契约并新增仅供测试使用的 listener conformance                              |
+| `@go-like/transport`       | `.`, `./headers`, `./testing`               | 新增内部通信 SPI、go-like headers 与 transport conformance suite                       |
+| `@go-like/transport-http`  | `.`, `./node`, `./testing`                  | 新增 Fetch unary client、底层 listener server、Core lifecycle server 与首个 Node host  |
+| `@go-like/web`             | `.`, `./health`, `./node`, `./node/testing` | 吸收 `@go-like/fetch` 与 `@go-like/fetch-node` 的正确职责                              |
+| `@go-like/hono`            | `.`                                         | Hono native app 到 `@go-like/web` Handler 的薄接缝                                     |
+| `@go-like/h3`              | `.`                                         | H3 native app 到 `@go-like/web` Handler 的薄接缝                                       |
+| `@go-like/elysia`          | `.`                                         | Elysia native app 到 `@go-like/web` Handler 的薄接缝                                   |
+| `@go-like/croner`          | `.`                                         | 重命名 `@go-like/cron-croner`，继续只适配 Cron 生命周期                                |
+| `@go-like/bullmq`          | `.`, `./testing`                            | 重命名 `@go-like/job-bullmq-node`                                                      |
+| `@go-like/nats`            | `.`, `./jetstream`                          | 合并两个 NATS 包；根入口是 core transport，子路径保留 JetStream                        |
+| `@go-like/pino`            | `.`                                         | 重命名 `@go-like/log-pino-node`                                                        |
+| `@go-like/winston`         | `.`                                         | 重命名 `@go-like/log-winston-node`                                                     |
+| `@go-like/otel`            | `.`, `./testing`                            | 重命名 `@go-like/otel-node`                                                            |
+| `@go-like/prometheus`      | `.`                                         | 重命名 `@go-like/metrics-prom-client-node`，handler 类型改用 `@go-like/web`            |
 
 `@go-like/consule` 是拼写错误，不创建该包；`@go-like/consul` 聚合包也不创建。所有旧 adapter 包名、
 `@go-like/fetch`、`@go-like/fetch-node`、候选名 `@go-like/http` 和 `adapters/` 目录在迁移完成后均不存在。
 
 四个 private workspace 的最终 identity 同样固定，不使用过渡名：
 
-| 目录 | package name |
-| --- | --- |
+| 目录                   | package name                   |
+| ---------------------- | ------------------------------ |
 | `examples/vanilla-web` | `@go-like/example-vanilla-web` |
-| `examples/hono` | `@go-like/example-hono` |
-| `examples/h3` | `@go-like/example-h3` |
-| `examples/elysia` | `@go-like/example-elysia` |
+| `examples/hono`        | `@go-like/example-hono`        |
+| `examples/h3`          | `@go-like/example-h3`          |
+| `examples/elysia`      | `@go-like/example-elysia`      |
 
 ## 6. 依赖方向
 
 下表是 v1 workspace 的完整直接 production/peer 依赖，不包含 `@types/*`、测试工具和同包内部子路径；它同时
 用于校验 package manifests 与 build order，不能只当示意图。
 
-| 包 | 直接 workspace 依赖 | 外部 production/peer 依赖 |
-| --- | --- | --- |
-| `@go-like/context` | 无 | 无 |
-| `@go-like/core` | context | 无 |
-| `@go-like/config` | context、core | `@standard-schema/spec` |
-| `@go-like/config-consul` | config、context、core | 无；Fetch 由应用注入 |
-| `@go-like/health` | context、core | 无 |
-| `@go-like/registry` | context、core | 无 |
-| `@go-like/registry-consul` | registry、context、core | 无；Fetch 由应用注入 |
-| `@go-like/registry-mdns` | registry、context、core | portable codec 不依赖 Node SDK |
-| `@go-like/resilience` | context | 无 |
-| `@go-like/testing` | context、core | 无；只能作为 devDependency 使用 |
-| `@go-like/transport` | context | 无 |
-| `@go-like/transport-http` | transport、context、core | Node host 依赖在同包条件子路径隔离 |
-| `@go-like/web` | context、core、health | `@hono/node-server` 只由 `./node` 使用 |
-| `@go-like/hono` | web | `hono` peer |
-| `@go-like/h3` | web | `h3` peer |
-| `@go-like/elysia` | web | `elysia` peer |
-| `@go-like/croner` | context、core | `croner` |
-| `@go-like/bullmq` | context、core | `bullmq` |
-| `@go-like/nats` | context、core | `@nats-io/transport-node`、`@nats-io/jetstream` |
-| `@go-like/pino` | context、core | `pino` production；Pino 自行拥有其 `sonic-boom` implementation dependency |
-| `@go-like/winston` | context、core | `winston` |
-| `@go-like/otel` | context、core | `@opentelemetry/api`、`@opentelemetry/sdk-metrics`、`@opentelemetry/sdk-trace` |
-| `@go-like/prometheus` | web | `prom-client` |
+| 包                         | 直接 workspace 依赖      | 外部 production/peer 依赖                                                      |
+| -------------------------- | ------------------------ | ------------------------------------------------------------------------------ |
+| `@go-like/context`         | 无                       | 无                                                                             |
+| `@go-like/core`            | context                  | 无                                                                             |
+| `@go-like/config`          | context、core            | `@standard-schema/spec`                                                        |
+| `@go-like/config-consul`   | config、context、core    | 无；Fetch 由应用注入                                                           |
+| `@go-like/health`          | context、core            | 无                                                                             |
+| `@go-like/registry`        | context、core            | 无                                                                             |
+| `@go-like/registry-consul` | registry、context、core  | 无；Fetch 由应用注入                                                           |
+| `@go-like/registry-mdns`   | registry、context、core  | portable codec 不依赖 Node SDK                                                 |
+| `@go-like/resilience`      | context                  | 无                                                                             |
+| `@go-like/testing`         | context、core            | 无；只能作为 devDependency 使用                                                |
+| `@go-like/transport`       | context                  | 无                                                                             |
+| `@go-like/transport-http`  | transport、context、core | Node host 依赖在同包条件子路径隔离                                             |
+| `@go-like/web`             | context、core、health    | 无；Node Fetch bridge 内置且只由 `./node` 使用                                 |
+| `@go-like/hono`            | web                      | `hono` peer                                                                    |
+| `@go-like/h3`              | web                      | `h3` peer                                                                      |
+| `@go-like/elysia`          | web                      | `elysia` peer                                                                  |
+| `@go-like/croner`          | context、core            | `croner`                                                                       |
+| `@go-like/bullmq`          | context、core            | `bullmq`                                                                       |
+| `@go-like/nats`            | context、core            | `@nats-io/transport-node`、`@nats-io/jetstream`                                |
+| `@go-like/pino`            | context、core            | `pino` production；Pino 自行拥有其 `sonic-boom` implementation dependency      |
+| `@go-like/winston`         | context、core            | `winston`                                                                      |
+| `@go-like/otel`            | context、core            | `@opentelemetry/api`、`@opentelemetry/sdk-metrics`、`@opentelemetry/sdk-trace` |
+| `@go-like/prometheus`      | web                      | `prom-client`                                                                  |
 
 `@go-like/testing/listener` 只通过 devDependency 进入 transport-http 与 Web 的测试图，绝不成为两者的 production
 依赖。`@go-like/web/node`、`@go-like/web/health` 等子路径已经计入所属 workspace 的依赖行，不是额外包。
@@ -261,48 +261,48 @@ identity，且不得执行 owner flush/end/destroy。
 稳定错误；这些强化不是对上游未定义行为的逐字复制。
 
 ```ts
-import type { Context } from "@go-like/context"
+import type { Context } from "@go-like/context";
 
 export interface Transport {
-  init(...options: readonly Option[]): void
-  options(): Options
+  init(...options: readonly Option[]): void;
+  options(): Options;
   dial(
     ctx: Context,
     address: string,
     ...options: readonly DialOption[]
-  ): Promise<Client>
+  ): Promise<Client>;
   listen(
     ctx: Context,
     address: string,
     ...options: readonly ListenOption[]
-  ): Promise<Listener>
-  string(): string
+  ): Promise<Listener>;
+  string(): string;
 }
 
 export interface Message {
-  readonly header: Readonly<Record<string, string>>
-  readonly body: Uint8Array
+  readonly header: Readonly<Record<string, string>>;
+  readonly body: Uint8Array;
 }
 
 export interface Socket {
-  recv(ctx: Context): Promise<Message>
-  send(ctx: Context, message: Message): Promise<void>
-  close(ctx: Context): Promise<void>
-  local(): string
-  remote(): string
+  recv(ctx: Context): Promise<Message>;
+  send(ctx: Context, message: Message): Promise<void>;
+  close(ctx: Context): Promise<void>;
+  local(): string;
+  remote(): string;
 }
 
 export interface Client extends Socket {}
 
 export type AcceptHandler = (
   ctx: Context,
-  socket: Socket
-) => void | PromiseLike<void>
+  socket: Socket,
+) => void | PromiseLike<void>;
 
 export interface Listener {
-  addr(): string
-  close(ctx: Context): Promise<void>
-  accept(ctx: Context, handler: AcceptHandler): Promise<void>
+  addr(): string;
+  close(ctx: Context): Promise<void>;
+  accept(ctx: Context, handler: AcceptHandler): Promise<void>;
 }
 ```
 
@@ -335,20 +335,20 @@ export interface Listener {
 保留 go-micro 的 `Option`、`DialOption`、`ListenOption` 三组 functional option 概念。公共 options 使用
 ECMAScript/Web 可表达的结构，不在公共包中 import Node `tls`、`net` 或供应商 Logger。
 
-| go-micro | go-like | v1 语义 |
-| --- | --- | --- |
-| `Addrs` | `addrs(...addresses)` | 中介地址不可变快照 |
-| `Codec` | `codec(value)` | 最小结构式 `MessageCodec`；仅供不原生支持 header 的实现使用 |
-| `Logger` | `logger(value)` | 最小结构式 `TransportLogger` 诊断 sink，不替代 Pino/Winston |
-| `Timeout` | `timeout(timeoutMs)` | `send`/`recv` 默认超时；有限非负整数毫秒 |
-| `Secure` | `secure(enabled)` | 要求安全传输；不自动生成自签名证书 |
-| `TLSConfig` | `tlsConfig(value)` | 使用可移植证书材料结构；不接受 Node 专属类型 |
-| `BuffSizeH2` | `http2BufferSize(bytes)` | HTTP/2 buffer 大小；非 HTTP 实现可明确拒绝 |
-| `WithStream` | `withStream()` | 请求可重复收发的流式 socket 能力 |
-| `WithTimeout` | `withTimeout(timeoutMs)` | 原始角色是 dial timeout；Fetch client 映射为每次 send 的连接/响应头阶段上限 |
-| `WithConnClose` | `withConnClose()` | 请求关闭 HTTP 连接；不支持时明确拒绝 |
-| `WithInsecureSkipVerify` | `withInsecureSkipVerify(enabled)` | 保留能力名；默认 false；Fetch 实现无法兑现时明确拒绝 |
-| `NetListener` | HTTP 包 `host(value)` | HTTP-specific listen option；改为结构式 runtime host，不泄漏 Node `net.Listener` |
+| go-micro                 | go-like                           | v1 语义                                                                          |
+| ------------------------ | --------------------------------- | -------------------------------------------------------------------------------- |
+| `Addrs`                  | `addrs(...addresses)`             | 中介地址不可变快照                                                               |
+| `Codec`                  | `codec(value)`                    | 最小结构式 `MessageCodec`；仅供不原生支持 header 的实现使用                      |
+| `Logger`                 | `logger(value)`                   | 最小结构式 `TransportLogger` 诊断 sink，不替代 Pino/Winston                      |
+| `Timeout`                | `timeout(timeoutMs)`              | `send`/`recv` 默认超时；有限非负整数毫秒                                         |
+| `Secure`                 | `secure(enabled)`                 | 要求安全传输；不自动生成自签名证书                                               |
+| `TLSConfig`              | `tlsConfig(value)`                | 使用可移植证书材料结构；不接受 Node 专属类型                                     |
+| `BuffSizeH2`             | `http2BufferSize(bytes)`          | HTTP/2 buffer 大小；非 HTTP 实现可明确拒绝                                       |
+| `WithStream`             | `withStream()`                    | 请求可重复收发的流式 socket 能力                                                 |
+| `WithTimeout`            | `withTimeout(timeoutMs)`          | 原始角色是 dial timeout；Fetch client 映射为每次 send 的连接/响应头阶段上限      |
+| `WithConnClose`          | `withConnClose()`                 | 请求关闭 HTTP 连接；不支持时明确拒绝                                             |
+| `WithInsecureSkipVerify` | `withInsecureSkipVerify(enabled)` | 保留能力名；默认 false；Fetch 实现无法兑现时明确拒绝                             |
+| `NetListener`            | HTTP 包 `host(value)`             | HTTP-specific listen option；改为结构式 runtime host，不泄漏 Node `net.Listener` |
 
 `Options` 包含 `addrs`、`codec`、`logger`、`timeoutMs`、`secure`、`tlsConfig`、
 `http2BufferSizeBytes`；`DialOptions` 包含 `timeoutMs`、`stream`、`connectionClose`、
@@ -358,69 +358,69 @@ option 承载，不复用 Context 作为隐式 option bag。
 实施前冻结的精确公共声明如下，避免 provider 各自猜测 codec、logger、TLS 或 reducer 形状：
 
 ```ts
-export type TransportLogLevel = "debug" | "info" | "warn" | "error"
+export type TransportLogLevel = "debug" | "info" | "warn" | "error";
 
 export interface TransportLogger {
   log(
     level: TransportLogLevel,
     message: string,
-    fields?: Readonly<Record<string, unknown>>
-  ): void
+    fields?: Readonly<Record<string, unknown>>,
+  ): void;
 }
 
 export interface MessageCodec {
-  marshal(message: Message): Uint8Array
-  unmarshal(bytes: Uint8Array): Message
+  marshal(message: Message): Uint8Array;
+  unmarshal(bytes: Uint8Array): Message;
 }
 
-export type TLSEncoding = "pem" | "der"
+export type TLSEncoding = "pem" | "der";
 
 export interface TLSEncodedBytes {
-  readonly encoding: TLSEncoding
-  readonly bytes: Uint8Array
+  readonly encoding: TLSEncoding;
+  readonly bytes: Uint8Array;
 }
 
 export interface TLSConfig {
-  readonly serverName: string | null
-  readonly caCertificate: TLSEncodedBytes | null
-  readonly certificateChain: TLSEncodedBytes | null
-  readonly privateKey: TLSEncodedBytes | null
+  readonly serverName: string | null;
+  readonly caCertificate: TLSEncodedBytes | null;
+  readonly certificateChain: TLSEncodedBytes | null;
+  readonly privateKey: TLSEncodedBytes | null;
 }
 
 export interface Options {
-  readonly addrs: readonly string[]
-  readonly codec: MessageCodec | null
-  readonly logger: TransportLogger | null
-  readonly timeoutMs: number
-  readonly secure: boolean
-  readonly tlsConfig: TLSConfig | null
-  readonly http2BufferSizeBytes: number
+  readonly addrs: readonly string[];
+  readonly codec: MessageCodec | null;
+  readonly logger: TransportLogger | null;
+  readonly timeoutMs: number;
+  readonly secure: boolean;
+  readonly tlsConfig: TLSConfig | null;
+  readonly http2BufferSizeBytes: number;
 }
 
 export interface DialOptions {
-  readonly timeoutMs: number
-  readonly stream: boolean
-  readonly connectionClose: boolean
-  readonly insecureSkipVerify: boolean
+  readonly timeoutMs: number;
+  readonly stream: boolean;
+  readonly connectionClose: boolean;
+  readonly insecureSkipVerify: boolean;
 }
 
 export interface ListenOptions {}
 
-export type Option = (options: Options) => Options
-export type DialOption = (options: DialOptions) => DialOptions
-export type ListenOption = <T extends ListenOptions>(options: T) => T
+export type Option = (options: Options) => Options;
+export type DialOption = (options: DialOptions) => DialOptions;
+export type ListenOption = <T extends ListenOptions>(options: T) => T;
 
-export function addrs(...addresses: readonly string[]): Option
-export function codec(value: MessageCodec | null): Option
-export function logger(value: TransportLogger | null): Option
-export function timeout(timeoutMs: number): Option
-export function secure(enabled: boolean): Option
-export function tlsConfig(value: TLSConfig | null): Option
-export function http2BufferSize(bytes: number): Option
-export function withStream(): DialOption
-export function withTimeout(timeoutMs: number): DialOption
-export function withConnClose(): DialOption
-export function withInsecureSkipVerify(enabled: boolean): DialOption
+export function addrs(...addresses: readonly string[]): Option;
+export function codec(value: MessageCodec | null): Option;
+export function logger(value: TransportLogger | null): Option;
+export function timeout(timeoutMs: number): Option;
+export function secure(enabled: boolean): Option;
+export function tlsConfig(value: TLSConfig | null): Option;
+export function http2BufferSize(bytes: number): Option;
+export function withStream(): DialOption;
+export function withTimeout(timeoutMs: number): DialOption;
+export function withConnClose(): DialOption;
+export function withInsecureSkipVerify(enabled: boolean): DialOption;
 ```
 
 三组 option 都是 immutable reducer，不得原地修改输入。`MessageCodec` 是同步纯计算边界，因此不接收
@@ -443,33 +443,33 @@ PEM/DER 编码，不承诺所有 implementation 都支持全部字段。implemen
 lowerCamelCase 值。所有项目自有 header 固定使用用户确认的 `Go-Like-` 前缀，不发布旧前缀 alias；标准
 HTTP header `Content-Type` 保持标准名称。
 
-| 导出 | 值 |
-| --- | --- |
-| `message` | `Go-Like-Topic` |
-| `request` | `Go-Like-Service` |
-| `error` | `Go-Like-Error` |
-| `endpoint` | `Go-Like-Endpoint` |
-| `method` | `Go-Like-Method` |
-| `id` | `Go-Like-ID` |
-| `prefix` | `Go-Like-` |
-| `namespace` | `Go-Like-Namespace` |
-| `protocol` | `Go-Like-Protocol` |
-| `target` | `Go-Like-Target` |
-| `contentType` | `Content-Type` |
-| `spanId` | `Go-Like-Span-ID` |
-| `traceId` | `Go-Like-Trace-ID` |
-| `stream` | `Go-Like-Stream` |
+| 导出          | 值                  |
+| ------------- | ------------------- |
+| `message`     | `Go-Like-Topic`     |
+| `request`     | `Go-Like-Service`   |
+| `error`       | `Go-Like-Error`     |
+| `endpoint`    | `Go-Like-Endpoint`  |
+| `method`      | `Go-Like-Method`    |
+| `id`          | `Go-Like-ID`        |
+| `prefix`      | `Go-Like-`          |
+| `namespace`   | `Go-Like-Namespace` |
+| `protocol`    | `Go-Like-Protocol`  |
+| `target`      | `Go-Like-Target`    |
+| `contentType` | `Content-Type`      |
+| `spanId`      | `Go-Like-Span-ID`   |
+| `traceId`     | `Go-Like-Trace-ID`  |
+| `stream`      | `Go-Like-Stream`    |
 
 ### 7.5 稳定错误
 
 公共包至少提供以下结构式错误，实例冻结并保留 `cause`：
 
-| 错误 | code | 用途 |
-| --- | --- | --- |
-| `TransportClosedError` | `GO_LIKE_TRANSPORT_CLOSED` | 已关闭的 socket/listener 上继续操作 |
-| `TransportStateError` | `GO_LIKE_TRANSPORT_STATE` | recv-before-send、重复 accept 等非法状态 |
-| `UnsupportedTransportCapabilityError` | `GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY` | implementation 无法兑现已请求能力 |
-| `TransportProtocolError` | `GO_LIKE_TRANSPORT_PROTOCOL` | wire 格式、响应或协议约束无效 |
+| 错误                                  | code                                       | 用途                                     |
+| ------------------------------------- | ------------------------------------------ | ---------------------------------------- |
+| `TransportClosedError`                | `GO_LIKE_TRANSPORT_CLOSED`                 | 已关闭的 socket/listener 上继续操作      |
+| `TransportStateError`                 | `GO_LIKE_TRANSPORT_STATE`                  | recv-before-send、重复 accept 等非法状态 |
+| `UnsupportedTransportCapabilityError` | `GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY` | implementation 无法兑现已请求能力        |
+| `TransportProtocolError`              | `GO_LIKE_TRANSPORT_PROTOCOL`               | wire 格式、响应或协议约束无效            |
 
 Context 取消继续使用 `@go-like/context` 的 `canceled` 或 `deadlineExceeded`，不重写成 transport 错误。
 
@@ -492,100 +492,100 @@ Context 取消继续使用 `@go-like/context` 的 `canceled` 或 `deadlineExceed
 公开构造面固定为：
 
 ```ts
-import type { Context } from "@go-like/context"
-import type { Server, ServerHandle } from "@go-like/core"
+import type { Context } from "@go-like/context";
+import type { Server, ServerHandle } from "@go-like/core";
 import type {
   AcceptHandler,
   Listener,
   TLSConfig,
-  Transport
-} from "@go-like/transport"
+  Transport,
+} from "@go-like/transport";
 
 export interface HTTPTransport extends Transport {
   listen(
     ctx: Context,
     address: string,
     ...options: readonly HTTPListenOption[]
-  ): Promise<HTTPListener>
+  ): Promise<HTTPListener>;
 }
 
 export interface HTTPListener extends Listener {
-  accepted(): Promise<void>
+  accepted(): Promise<void>;
 }
 
 export interface HTTPServer extends Server<HTTPServerHandle> {}
 
 export interface HTTPServerHandle extends ServerHandle {
-  address(): string
+  address(): string;
 }
 
 export interface HTTPServerDrainTimeoutError extends Error {
-  readonly name: "HTTPServerDrainTimeoutError"
-  readonly code: "GO_LIKE_HTTP_SERVER_DRAIN_TIMEOUT"
-  readonly operation: "stop" | "rollback"
-  readonly timeoutMs: number
-  readonly orphaned: true
-  readonly failures: readonly Error[]
+  readonly name: "HTTPServerDrainTimeoutError";
+  readonly code: "GO_LIKE_HTTP_SERVER_DRAIN_TIMEOUT";
+  readonly operation: "stop" | "rollback";
+  readonly timeoutMs: number;
+  readonly orphaned: true;
+  readonly failures: readonly Error[];
 }
 
 export interface HTTPTransportUnexpectedExitError extends Error {
-  readonly name: "HTTPTransportUnexpectedExitError"
-  readonly code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT"
-  readonly source: "serve" | "host"
-  readonly phase: "before-ready" | "running"
+  readonly name: "HTTPTransportUnexpectedExitError";
+  readonly code: "GO_LIKE_HTTP_TRANSPORT_UNEXPECTED_EXIT";
+  readonly source: "serve" | "host";
+  readonly phase: "before-ready" | "running";
 }
 
 export function newHTTPTransport(
   ...options: readonly HTTPTransportOption[]
-): HTTPTransport
+): HTTPTransport;
 
 export function newHTTPServer(
   httpHost: HTTPHost,
   handler: AcceptHandler,
   ...options: readonly HTTPServerOption[]
-): HTTPServer
+): HTTPServer;
 ```
 
 HTTP-specific options 与 Fetch executor 的精确声明固定为：
 
 ```ts
-import type { ListenOptions } from "@go-like/transport"
+import type { ListenOptions } from "@go-like/transport";
 
-export type HTTPExecutor = typeof globalThis.fetch
+export type HTTPExecutor = typeof globalThis.fetch;
 
 export interface HTTPTransportOptions {
-  readonly executor: HTTPExecutor
+  readonly executor: HTTPExecutor;
 }
 
 export type HTTPTransportOption = (
-  options: HTTPTransportOptions
-) => HTTPTransportOptions
+  options: HTTPTransportOptions,
+) => HTTPTransportOptions;
 
-export function executor(value: HTTPExecutor): HTTPTransportOption
+export function executor(value: HTTPExecutor): HTTPTransportOption;
 
 export interface HTTPListenOptions extends ListenOptions {
-  readonly host: HTTPHost | null
+  readonly host: HTTPHost | null;
 }
 
 export type HTTPListenOption = (
-  options: HTTPListenOptions
-) => HTTPListenOptions
+  options: HTTPListenOptions,
+) => HTTPListenOptions;
 
-export function host(value: HTTPHost): HTTPListenOption
+export function host(value: HTTPHost): HTTPListenOption;
 
 export interface HTTPServerOptions {
-  readonly address: string
-  readonly transport: HTTPTransport
-  readonly hardDrainTimeoutMs: number
+  readonly address: string;
+  readonly transport: HTTPTransport;
+  readonly hardDrainTimeoutMs: number;
 }
 
 export type HTTPServerOption = (
-  options: HTTPServerOptions
-) => HTTPServerOptions
+  options: HTTPServerOptions,
+) => HTTPServerOptions;
 
-export function address(value: string): HTTPServerOption
-export function transport(value: HTTPTransport): HTTPServerOption
-export function hardDrainTimeout(timeoutMs: number): HTTPServerOption
+export function address(value: string): HTTPServerOption;
+export function transport(value: HTTPTransport): HTTPServerOption;
+export function hardDrainTimeout(timeoutMs: number): HTTPServerOption;
 ```
 
 `executor(value)` 与注入的 transport 都是 borrowed。`newHTTPTransport()` 捕获 construction 当时的
@@ -608,12 +608,12 @@ Node 子路径另提供 `newNodeHTTPServer(handler, ...options)` 便利入口，
 
 对齐关系如下：
 
-| go-like 入口 | 角色 | 对齐来源 |
-| --- | --- | --- |
-| `newHTTPTransport().dial(...)` | Client 创建与 `send/recv/close` | go-micro `Transport.Dial`；对齐 go-kratos HTTP client 角色，不复制其 API |
-| `newHTTPTransport().listen(...)` | 低层 Server bind | go-micro `Transport.Listen` |
-| `listener.accept(...)` | 低层 Server request/socket dispatch | go-micro `Listener.Accept` |
-| `newHTTPServer(...).start(...)` | 应用可组合 lifecycle Server | go-kratos HTTP Server、go-like Core Server |
+| go-like 入口                     | 角色                                | 对齐来源                                                                 |
+| -------------------------------- | ----------------------------------- | ------------------------------------------------------------------------ |
+| `newHTTPTransport().dial(...)`   | Client 创建与 `send/recv/close`     | go-micro `Transport.Dial`；对齐 go-kratos HTTP client 角色，不复制其 API |
+| `newHTTPTransport().listen(...)` | 低层 Server bind                    | go-micro `Transport.Listen`                                              |
+| `listener.accept(...)`           | 低层 Server request/socket dispatch | go-micro `Listener.Accept`                                               |
+| `newHTTPServer(...).start(...)`  | 应用可组合 lifecycle Server         | go-kratos HTTP Server、go-like Core Server                               |
 
 ### 8.2 Runtime host SPI
 
@@ -623,48 +623,48 @@ Node 子路径另提供 `newNodeHTTPServer(handler, ...options)` 便利入口，
 
 ```ts
 export type HTTPHandler = (
-  input: HTTPHostRequest
-) => Response | Promise<Response>
+  input: HTTPHostRequest,
+) => Response | Promise<Response>;
 
 export interface HTTPHostRequest {
-  readonly request: Request
-  readonly localAddress: string
-  readonly remoteAddress: string
+  readonly request: Request;
+  readonly localAddress: string;
+  readonly remoteAddress: string;
 }
 
 export interface HTTPHostCapabilities {
-  readonly tls: boolean
-  readonly forceClose: boolean
-  readonly connectionMetadata: boolean
-  readonly http2BufferSize: boolean
+  readonly tls: boolean;
+  readonly forceClose: boolean;
+  readonly connectionMetadata: boolean;
+  readonly http2BufferSize: boolean;
 }
 
 export interface HTTPHostListenOptions {
-  readonly secure: boolean
-  readonly tlsConfig: TLSConfig | null
-  readonly http2BufferSizeBytes: number | null
+  readonly secure: boolean;
+  readonly tlsConfig: TLSConfig | null;
+  readonly http2BufferSizeBytes: number | null;
 }
 
 export interface HTTPHost {
-  capabilities(): HTTPHostCapabilities
+  capabilities(): HTTPHostCapabilities;
   bind(
     ctx: Context,
     address: string,
-    options: HTTPHostListenOptions
-  ): Promise<HTTPHostHandle>
+    options: HTTPHostListenOptions,
+  ): Promise<HTTPHostHandle>;
 }
 
 export interface HTTPHostHandle {
-  address(): string
-  serve(ctx: Context, handler: HTTPHandler): HTTPServeHandle
-  done(): Promise<void>
-  close(ctx: Context): Promise<void>
-  forceClose?(reason: Error): Promise<void>
+  address(): string;
+  serve(ctx: Context, handler: HTTPHandler): HTTPServeHandle;
+  done(): Promise<void>;
+  close(ctx: Context): Promise<void>;
+  forceClose?(reason: Error): Promise<void>;
 }
 
 export interface HTTPServeHandle {
-  ready(): Promise<void>
-  done(): Promise<void>
+  ready(): Promise<void>;
+  done(): Promise<void>;
 }
 ```
 
@@ -681,8 +681,8 @@ HTTP-specific `host(value)` 注入 borrowed host。host capability snapshot 在 
 固定为空字符串。host 若声明 `forceClose: true`，bind 返回的 handle 必须实际提供可调用的 `forceClose`，否则
 以 admission failure 结束并回滚。`http2BufferSize` 在内部保留 `{ value, explicit }`；未显式设置时传给 host 的
 `http2BufferSizeBytes` 为 `null`，不得把 transport 默认常量误判为调用方能力请求。`@go-like/transport-http/node`
-提供首个真实 Node host；Bun、Deno 或其他后端可结构式实现同一 SPI。根入口不静态 import `node:` 或
-`@hono/node-server`。
+提供首个真实 Node host；Bun、Deno 或其他后端可结构式实现同一 SPI。根入口不静态 import `node:`。Web 的
+Node Fetch bridge 留在 `@go-like/web/node` 依赖图内，不进入 portable 根入口。
 
 `dial` 在 unary Fetch 模式下只校验和冻结远端地址、options 与 executor，不伪造一个 Fetch 不具备的持久
 TCP connect；实际网络失败在 `send` 发起请求时暴露。`listen` 则必须完成真实 bind 后才 resolve。两种差异
@@ -761,12 +761,12 @@ HTTP status 错误的公共 ABI 固定为：
 
 ```ts
 export interface HTTPStatusError extends Error {
-  readonly name: "HTTPStatusError"
-  readonly code: "GO_LIKE_HTTP_STATUS"
-  readonly status: number
-  readonly statusText: string
-  readonly body: Uint8Array
-  readonly bodyTruncated: boolean
+  readonly name: "HTTPStatusError";
+  readonly code: "GO_LIKE_HTTP_STATUS";
+  readonly status: number;
+  readonly statusText: string;
+  readonly body: Uint8Array;
+  readonly bodyTruncated: boolean;
 }
 ```
 
@@ -851,112 +851,115 @@ v1 的标准 Fetch 实现只承诺 unary socket。以下 go-micro HTTP 线级行
 RegistrationHandle 的 `stop` 取代，不导出可变 `defaultRegistry`。
 
 ```ts
-import type { Context } from "@go-like/context"
-import type { Server, ServerHandle } from "@go-like/core"
+import type { Context } from "@go-like/context";
+import type { Server, ServerHandle } from "@go-like/core";
 
 export interface Value {
-  readonly name: string
-  readonly type: string
-  readonly values: readonly Value[]
+  readonly name: string;
+  readonly type: string;
+  readonly values: readonly Value[];
 }
 
 export interface Endpoint {
-  readonly name: string
-  readonly request: Value | null
-  readonly response: Value | null
-  readonly metadata: Readonly<Record<string, string>>
+  readonly name: string;
+  readonly request: Value | null;
+  readonly response: Value | null;
+  readonly metadata: Readonly<Record<string, string>>;
 }
 
 export interface Node {
-  readonly id: string
-  readonly addresses: readonly string[]
-  readonly metadata: Readonly<Record<string, string>>
+  readonly id: string;
+  readonly addresses: readonly string[];
+  readonly metadata: Readonly<Record<string, string>>;
 }
 
 export interface Service {
-  readonly name: string
-  readonly version: string
-  readonly metadata: Readonly<Record<string, string>>
-  readonly endpoints: readonly Endpoint[]
-  readonly nodes: readonly Node[]
+  readonly name: string;
+  readonly version: string;
+  readonly metadata: Readonly<Record<string, string>>;
+  readonly endpoints: readonly Endpoint[];
+  readonly nodes: readonly Node[];
 }
 
 export interface Result {
-  readonly action: "create" | "update" | "delete"
-  readonly service: Service
+  readonly action: "create" | "update" | "delete";
+  readonly service: Service;
 }
 
 export interface Watcher extends ServerHandle {
-  next(ctx: Context): Promise<Result>
+  next(ctx: Context): Promise<Result>;
 }
 
 export interface RegistrationHandle extends ServerHandle {}
 
-export type RegistryLogLevel = "debug" | "info" | "warn" | "error"
+export type RegistryLogLevel = "debug" | "info" | "warn" | "error";
 
 export interface RegistryLogger {
   log(
     level: RegistryLogLevel,
     message: string,
-    fields?: Readonly<Record<string, unknown>>
-  ): void
+    fields?: Readonly<Record<string, unknown>>,
+  ): void;
 }
 
 export interface RegistryOptions {
-  readonly addresses: readonly string[]
-  readonly logger: RegistryLogger | null
-  readonly timeoutMs: number
+  readonly addresses: readonly string[];
+  readonly logger: RegistryLogger | null;
+  readonly timeoutMs: number;
 }
 
 export interface RegistryCapabilities {
   readonly registrationTtl: {
-    readonly minimumMs: number
-    readonly maximumMs: number
-  } | null
-  readonly maximumServicePayloadBytes: number
+    readonly minimumMs: number;
+    readonly maximumMs: number;
+  } | null;
+  readonly maximumServicePayloadBytes: number;
   readonly addressKinds: readonly (
-    "opaque" | "hostname-port" | "ipv4-port" | "ipv6-port"
-  )[]
-  readonly watchUpdates: boolean
-  readonly watchOverflow: "error"
+    | "opaque"
+    | "hostname-port"
+    | "ipv4-port"
+    | "ipv6-port"
+  )[];
+  readonly watchUpdates: boolean;
+  readonly watchOverflow: "error";
 }
 
-export interface RegisterOptions { readonly ttlMs: number }
-export interface GetOptions { readonly timeoutMs: number }
-export interface ListOptions { readonly timeoutMs: number }
+export interface RegisterOptions {
+  readonly ttlMs: number;
+}
+export interface GetOptions {
+  readonly timeoutMs: number;
+}
+export interface ListOptions {
+  readonly timeoutMs: number;
+}
 export interface WatchOptions {
-  readonly service: string | null
-  readonly bufferSize: number
+  readonly service: string | null;
+  readonly bufferSize: number;
 }
 export interface DiscoveryOptions {
-  readonly resyncIntervalMs: number
-  readonly resyncRetries: number
+  readonly resyncIntervalMs: number;
+  readonly resyncRetries: number;
 }
 
-export type RegistryOption = (
-  options: RegistryOptions
-) => RegistryOptions
-export type RegisterOption = (
-  options: RegisterOptions
-) => RegisterOptions
-export type GetOption = (options: GetOptions) => GetOptions
-export type ListOption = (options: ListOptions) => ListOptions
-export type WatchOption = (options: WatchOptions) => WatchOptions
-export type DiscoveryOption = (
-  options: DiscoveryOptions
-) => DiscoveryOptions
+export type RegistryOption = (options: RegistryOptions) => RegistryOptions;
+export type RegisterOption = (options: RegisterOptions) => RegisterOptions;
+export type GetOption = (options: GetOptions) => GetOptions;
+export type ListOption = (options: ListOptions) => ListOptions;
+export type WatchOption = (options: WatchOptions) => WatchOptions;
+export type DiscoveryOption = (options: DiscoveryOptions) => DiscoveryOptions;
 
 export interface Registrar {
   register(
     ctx: Context,
     service: Service,
     ...options: readonly RegisterOption[]
-  ): Promise<RegistrationHandle>
+  ): Promise<RegistrationHandle>;
 }
 
-export type ServiceSource = Service | (
-  (ctx: Context) => Service | PromiseLike<Service>
-)
+export type ServiceSource =
+  | Service
+  | ((ctx: Context) => Service | PromiseLike<Service>);
 
 export interface RegistrationServer extends Server<RegistrationHandle> {}
 
@@ -964,31 +967,28 @@ export function registration(
   registrar: Registrar,
   source: ServiceSource,
   ...options: readonly RegisterOption[]
-): RegistrationServer
+): RegistrationServer;
 
 export interface Registry extends Registrar {
-  init(...options: readonly RegistryOption[]): void
-  options(): RegistryOptions
-  capabilities(): RegistryCapabilities
+  init(...options: readonly RegistryOption[]): void;
+  options(): RegistryOptions;
+  capabilities(): RegistryCapabilities;
   register(
     ctx: Context,
     service: Service,
     ...options: readonly RegisterOption[]
-  ): Promise<RegistrationHandle>
+  ): Promise<RegistrationHandle>;
   getService(
     ctx: Context,
     name: string,
     ...options: readonly GetOption[]
-  ): Promise<readonly Service[]>
+  ): Promise<readonly Service[]>;
   listServices(
     ctx: Context,
     ...options: readonly ListOption[]
-  ): Promise<readonly Service[]>
-  watch(
-    ctx: Context,
-    ...options: readonly WatchOption[]
-  ): Promise<Watcher>
-  string(): string
+  ): Promise<readonly Service[]>;
+  watch(ctx: Context, ...options: readonly WatchOption[]): Promise<Watcher>;
+  string(): string;
 }
 ```
 
@@ -1001,16 +1001,16 @@ capability validation，任何失败都发生在外部副作用前。
 
 v1 option 集合精确固定：
 
-| 类型 | helper | 字段、默认与约束 |
-| --- | --- | --- |
-| `RegistryOption` | `addresses(...values)` | 默认空；非空字符串、防御性复制、后一次整体覆盖 |
-| `RegistryOption` | `logger(value)` | 默认 null；最小结构式诊断 sink |
-| `RegistryOption` | `timeout(valueMs)` | 默认 5,000；1..2,147,483,647 的整数毫秒 |
-| `RegisterOption` | `ttl(valueMs)` | 默认 120,000；2,000..86,400,000 的整数毫秒 |
-| `GetOption` | `getTimeout(valueMs)` | 默认继承 Registry timeout；相同整数边界 |
-| `ListOption` | `listTimeout(valueMs)` | 默认继承 Registry timeout；相同整数边界 |
-| `WatchOption` | `watchService(name)` | 默认 null 表示全部；非空字符串 |
-| `WatchOption` | `watchBufferSize(count)` | 默认 128；1..4,096 的整数 |
+| 类型             | helper                   | 字段、默认与约束                               |
+| ---------------- | ------------------------ | ---------------------------------------------- |
+| `RegistryOption` | `addresses(...values)`   | 默认空；非空字符串、防御性复制、后一次整体覆盖 |
+| `RegistryOption` | `logger(value)`          | 默认 null；最小结构式诊断 sink                 |
+| `RegistryOption` | `timeout(valueMs)`       | 默认 5,000；1..2,147,483,647 的整数毫秒        |
+| `RegisterOption` | `ttl(valueMs)`           | 默认 120,000；2,000..86,400,000 的整数毫秒     |
+| `GetOption`      | `getTimeout(valueMs)`    | 默认继承 Registry timeout；相同整数边界        |
+| `ListOption`     | `listTimeout(valueMs)`   | 默认继承 Registry timeout；相同整数边界        |
+| `WatchOption`    | `watchService(name)`     | 默认 null 表示全部；非空字符串                 |
+| `WatchOption`    | `watchBufferSize(count)` | 默认 128；1..4,096 的整数                      |
 
 所有 option 都是上面公开的 immutable reducer type：constructor 从规范默认 snapshot 建立首个配置；每次
 `init(...options)` 则从当前 effective snapshot（包含 provider constructor 预置值）复制 candidate，按顺序应用
@@ -1075,38 +1075,35 @@ Registrar 的 wire input。便利层固定建立在 Registry 上：
 
 ```ts
 export interface ServiceInstance {
-  readonly id: string
-  readonly name: string
-  readonly version: string
-  readonly endpoints: readonly string[]
-  readonly metadata: Readonly<Record<string, string>>
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly endpoints: readonly string[];
+  readonly metadata: Readonly<Record<string, string>>;
 }
 
 export interface DiscoveryWatcher extends ServerHandle {
-  next(ctx: Context): Promise<readonly ServiceInstance[]>
+  next(ctx: Context): Promise<readonly ServiceInstance[]>;
 }
 
 export interface Discovery {
-  getService(
-    ctx: Context,
-    name: string
-  ): Promise<readonly ServiceInstance[]>
-  watch(ctx: Context, name: string): Promise<DiscoveryWatcher>
+  getService(ctx: Context, name: string): Promise<readonly ServiceInstance[]>;
+  watch(ctx: Context, name: string): Promise<DiscoveryWatcher>;
 }
 
 export interface ServiceInstanceResolver {
   resolve(
     ctx: Context,
     service: Service,
-    node: Node
-  ): ServiceInstance | PromiseLike<ServiceInstance>
+    node: Node,
+  ): ServiceInstance | PromiseLike<ServiceInstance>;
 }
 
 export function discovery(
   registry: Registry,
   resolver: ServiceInstanceResolver,
   ...options: readonly DiscoveryOption[]
-): Discovery
+): Discovery;
 ```
 
 `ServiceInstance` 保留现有 `{ id, name, version, endpoints: string[], metadata }` 便利形状；resolver 对每个 Node
@@ -1164,100 +1161,92 @@ Streams 与 AbortSignal 就能完成 mDNS。mDNS 根入口保持 portable，并�
 
 ```ts
 export interface MDNSHost {
-  networkInterfaces(
-    ctx: Context
-  ): Promise<readonly MDNSNetworkInterface[]>
+  networkInterfaces(ctx: Context): Promise<readonly MDNSNetworkInterface[]>;
   bindDatagram(
     ctx: Context,
-    options: MDNSBindOptions
-  ): Promise<MDNSDatagramSocket>
+    options: MDNSBindOptions,
+  ): Promise<MDNSDatagramSocket>;
 }
 
 export interface MDNSDatagramSocket {
-  done(): Promise<void>
+  done(): Promise<void>;
   joinMulticast(
     ctx: Context,
     group: string,
-    interfaceId: string | number
-  ): Promise<MDNSMembership>
-  setMulticastLoopback(ctx: Context, enabled: boolean): Promise<void>
+    interfaceId: string | number,
+  ): Promise<MDNSMembership>;
+  setMulticastLoopback(ctx: Context, enabled: boolean): Promise<void>;
   setMulticastInterface(
     ctx: Context,
-    interfaceId: string | number
-  ): Promise<void>
-  send(
-    ctx: Context,
-    data: Uint8Array,
-    target: MDNSAddress
-  ): Promise<void>
-  receive(ctx: Context): Promise<MDNSDatagram>
-  close(ctx: Context): Promise<void>
+    interfaceId: string | number,
+  ): Promise<void>;
+  send(ctx: Context, data: Uint8Array, target: MDNSAddress): Promise<void>;
+  receive(ctx: Context): Promise<MDNSDatagram>;
+  close(ctx: Context): Promise<void>;
 }
 
 export interface MDNSMembership {
-  leave(ctx: Context): Promise<void>
+  leave(ctx: Context): Promise<void>;
 }
 
-export type MDNSFamily = "ipv4" | "ipv6"
+export type MDNSFamily = "ipv4" | "ipv6";
 
 export interface MDNSNetworkInterface {
-  readonly id: string | number
-  readonly name: string
-  readonly family: MDNSFamily
-  readonly address: string
-  readonly internal: boolean
+  readonly id: string | number;
+  readonly name: string;
+  readonly family: MDNSFamily;
+  readonly address: string;
+  readonly internal: boolean;
 }
 
 export interface MDNSBindOptions {
-  readonly family: MDNSFamily
-  readonly bindAddress: string
-  readonly port: number
-  readonly interfaceId: string | number
-  readonly interfaceAddress: string
-  readonly reuseAddress: boolean
-  readonly multicastTTL: number
+  readonly family: MDNSFamily;
+  readonly bindAddress: string;
+  readonly port: number;
+  readonly interfaceId: string | number;
+  readonly interfaceAddress: string;
+  readonly reuseAddress: boolean;
+  readonly multicastTTL: number;
 }
 
 export interface MDNSAddress {
-  readonly family: MDNSFamily
-  readonly address: string
-  readonly port: number
+  readonly family: MDNSFamily;
+  readonly address: string;
+  readonly port: number;
 }
 
 export interface MDNSDatagram {
-  readonly data: Uint8Array
-  readonly remote: MDNSAddress
-  readonly interfaceId?: string | number
+  readonly data: Uint8Array;
+  readonly remote: MDNSAddress;
+  readonly interfaceId?: string | number;
 }
 
 export interface MDNSOptions {
-  readonly domain: string
-  readonly interfaceIds: readonly (string | number)[]
-  readonly families: readonly MDNSFamily[]
-  readonly queryTimeoutMs: number
-  readonly port: number
-  readonly maxPacketBytes: number
-  readonly maxDecodedPayloadBytes: number
+  readonly domain: string;
+  readonly interfaceIds: readonly (string | number)[];
+  readonly families: readonly MDNSFamily[];
+  readonly queryTimeoutMs: number;
+  readonly port: number;
+  readonly maxPacketBytes: number;
+  readonly maxDecodedPayloadBytes: number;
 }
 
-export type MDNSOption = (options: MDNSOptions) => MDNSOptions
+export type MDNSOption = (options: MDNSOptions) => MDNSOptions;
 
-export declare function domain(value: string): MDNSOption
+export declare function domain(value: string): MDNSOption;
 export declare function interfaces(
   ...ids: readonly (string | number)[]
-): MDNSOption
-export declare function families(
-  ...values: readonly MDNSFamily[]
-): MDNSOption
-export declare function queryTimeout(valueMs: number): MDNSOption
-export declare function port(value: number): MDNSOption
-export declare function maxPacketBytes(value: number): MDNSOption
-export declare function maxDecodedPayloadBytes(value: number): MDNSOption
+): MDNSOption;
+export declare function families(...values: readonly MDNSFamily[]): MDNSOption;
+export declare function queryTimeout(valueMs: number): MDNSOption;
+export declare function port(value: number): MDNSOption;
+export declare function maxPacketBytes(value: number): MDNSOption;
+export declare function maxDecodedPayloadBytes(value: number): MDNSOption;
 
 export function newMDNSRegistry(
   host: MDNSHost,
   ...options: readonly MDNSOption[]
-): Registry
+): Registry;
 ```
 
 Node host 按“一个 family/interface 一个 socket”绑定，接收 interface 优先从 socket identity 推导；平台能提供
@@ -1268,15 +1257,15 @@ Node host；Deno multicast 仍为 unstable 时不得进入稳定 runtime 声明�
 
 `MDNSOption` 的 v1 helper/字段不留扩展空白：
 
-| helper | 默认 | 校验与语义 |
-| --- | --- | --- |
-| `domain(value)` | `go-like` | 一个或多个 DNS-safe label；规范化为小写 FQDN，并对所有最终 owner/target 执行 DNS wire 长度校验 |
-| `interfaces(...ids)` | 空表示全部非 internal | 后一次整体覆盖；未知或 family 不匹配时 bind 前失败 |
-| `families(...values)` | `ipv4` | 去重后的 `ipv4`/`ipv6` 非空集合；IPv6 必须显式启用 |
-| `queryTimeout(valueMs)` | 1,000 | 1..60,000 整数毫秒 |
-| `port(value)` | 5353 | 1..65,535；非 5353 仅用于隔离测试/高级网络 |
-| `maxPacketBytes(value)` | 1,200 | 512..1,200；禁止通过调大来依赖 IP fragmentation |
-| `maxDecodedPayloadBytes(value)` | 65,536 | 1,024..65,536，解压和 JSON parse 前执行上限 |
+| helper                          | 默认                  | 校验与语义                                                                                     |
+| ------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
+| `domain(value)`                 | `go-like`             | 一个或多个 DNS-safe label；规范化为小写 FQDN，并对所有最终 owner/target 执行 DNS wire 长度校验 |
+| `interfaces(...ids)`            | 空表示全部非 internal | 后一次整体覆盖；未知或 family 不匹配时 bind 前失败                                             |
+| `families(...values)`           | `ipv4`                | 去重后的 `ipv4`/`ipv6` 非空集合；IPv6 必须显式启用                                             |
+| `queryTimeout(valueMs)`         | 1,000                 | 1..60,000 整数毫秒                                                                             |
+| `port(value)`                   | 5353                  | 1..65,535；非 5353 仅用于隔离测试/高级网络                                                     |
+| `maxPacketBytes(value)`         | 1,200                 | 512..1,200；禁止通过调大来依赖 IP fragmentation                                                |
+| `maxDecodedPayloadBytes(value)` | 65,536                | 1,024..65,536，解压和 JSON parse 前执行上限                                                    |
 
 `MDNSOption` 只在 `newMDNSRegistry(host, ...options)` construction 时按顺序 last-wins；`Registry.init` 只接受
 公共 `RegistryOption`，不通过 overload 偷渡 provider option。mDNS 不使用远端 registry endpoint，因此公共
@@ -1364,22 +1353,22 @@ go-like 参考 go-micro 的节点级 PTR/SRV/TXT/A/AAAA 角色，但不宣称与
 
 ```ts
 export interface ConsulRegistryOptions {
-  readonly fetch: typeof globalThis.fetch
-  readonly address: string
-  readonly token?: string
-  readonly datacenter?: string
-  readonly namespace?: string
-  readonly waitMs?: number
-  readonly minimumQueryIntervalMs?: number
-  readonly retryInitialMs?: number
-  readonly retryMaximumMs?: number
-  readonly hardDrainTimeoutMs?: number
-  readonly deregisterCriticalServiceAfterMs?: number
+  readonly fetch: typeof globalThis.fetch;
+  readonly address: string;
+  readonly token?: string;
+  readonly datacenter?: string;
+  readonly namespace?: string;
+  readonly waitMs?: number;
+  readonly minimumQueryIntervalMs?: number;
+  readonly retryInitialMs?: number;
+  readonly retryMaximumMs?: number;
+  readonly hardDrainTimeoutMs?: number;
+  readonly deregisterCriticalServiceAfterMs?: number;
 }
 
 export declare function newConsulRegistry(
-  options: ConsulRegistryOptions
-): Registry
+  options: ConsulRegistryOptions,
+): Registry;
 ```
 
 `@go-like/registry-consul` 导出 `newConsulRegistry(options)`；provider options 精确沿用已验证实现：必填 borrowed
@@ -1487,23 +1476,21 @@ token 只进入 header。
 ### 10.1 Portable 根入口
 
 ```ts
-export type Handler = (
-  request: Request
-) => Response | Promise<Response>
+export type Handler = (request: Request) => Response | Promise<Response>;
 
 export type ContextHandler = (
   ctx: Context,
-  request: Request
-) => Response | Promise<Response>
+  request: Request,
+) => Response | Promise<Response>;
 
 export interface ContextHandlerOptions {
-  readonly timeoutMs?: number
+  readonly timeoutMs?: number;
 }
 
 export function contextHandler(
   handler: ContextHandler,
-  options?: ContextHandlerOptions
-): Handler
+  options?: ContextHandlerOptions,
+): Handler;
 ```
 
 旧 API 精确迁移：`FetchHandler -> Handler`，`toFetchHandler -> contextHandler`；`ContextHandler` 与
@@ -1516,57 +1503,57 @@ identity 和 listener/timer cleanup，不使用 AsyncLocalStorage、Request muta
 
 ```ts
 export interface NodeAddress {
-  readonly address: string
-  readonly family: "IPv4" | "IPv6"
-  readonly port: number
+  readonly address: string;
+  readonly family: "IPv4" | "IPv6";
+  readonly port: number;
 }
 
 export interface NodeServer extends Server<NodeServerHandle> {}
 
 export interface NodeServerHandle extends ServerHandle {
-  address(): NodeAddress
+  address(): NodeAddress;
 }
 
 export interface NodeServerOptions {
-  readonly hostname: string
-  readonly port: number
-  readonly hardDrainTimeoutMs: number
+  readonly hostname: string;
+  readonly port: number;
+  readonly hardDrainTimeoutMs: number;
 }
 
 export type NodeServerOption = (
-  options: NodeServerOptions
-) => NodeServerOptions
+  options: NodeServerOptions,
+) => NodeServerOptions;
 
 export interface NodeServerAlreadyStartedError extends Error {
-  readonly name: "NodeServerAlreadyStartedError"
-  readonly code: "GO_LIKE_NODE_SERVER_ALREADY_STARTED"
-  readonly status: "starting" | "running" | "stopping" | "stopped" | "failed"
+  readonly name: "NodeServerAlreadyStartedError";
+  readonly code: "GO_LIKE_NODE_SERVER_ALREADY_STARTED";
+  readonly status: "starting" | "running" | "stopping" | "stopped" | "failed";
 }
 
 export interface NodeServerForceCloseError extends Error {
-  readonly name: "NodeServerForceCloseError"
-  readonly code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE"
-  readonly timeoutMs: number
-  readonly activeConnections: number
+  readonly name: "NodeServerForceCloseError";
+  readonly code: "GO_LIKE_NODE_SERVER_FORCE_CLOSE";
+  readonly timeoutMs: number;
+  readonly activeConnections: number;
 }
 
 export interface NodeServerUnexpectedCloseError extends Error {
-  readonly name: "NodeServerUnexpectedCloseError"
-  readonly code: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE"
+  readonly name: "NodeServerUnexpectedCloseError";
+  readonly code: "GO_LIKE_NODE_SERVER_UNEXPECTED_CLOSE";
 }
 
-export function hostname(value: string): NodeServerOption
-export function port(value: number): NodeServerOption
-export function hardDrainTimeout(timeoutMs: number): NodeServerOption
+export function hostname(value: string): NodeServerOption;
+export function port(value: number): NodeServerOption;
+export function hardDrainTimeout(timeoutMs: number): NodeServerOption;
 
 export function newNodeServer(
   handler: Handler,
   ...options: readonly NodeServerOption[]
-): NodeServer
+): NodeServer;
 ```
 
 它继续结构式实现 `@go-like/core` 的 `Server<NodeServerHandle>`，并只负责 listen accepted、实际地址、稳定
-`done()`、graceful drain、hard force 与真实 terminal；协议转换由 `@hono/node-server` 提供。其他 runtime
+`done()`、graceful drain、hard force 与真实 terminal；协议转换由包内 Node Fetch bridge 提供。其他 runtime
 可以自行实现接收 Handler 的结构式 Server，go-like 不要求继承或 decorator。
 
 旧 `NodeFetch*` 类型和 `newNodeFetchServer*` 不发布 alias；地址快照字段与 TCP family 语义保持不变，
@@ -1577,14 +1564,14 @@ export function newNodeServer(
 
 ```ts
 export interface HealthHandlerOptions {
-  readonly livePath?: string
-  readonly readyPath?: string
+  readonly livePath?: string;
+  readonly readyPath?: string;
 }
 
 export function createHealthHandler(
   registry: ProbeRegistry,
-  options?: HealthHandlerOptions
-): Handler
+  options?: HealthHandlerOptions,
+): Handler;
 ```
 
 `@go-like/health` 仅保留 probe registry 和检查语义。`HealthFetchOptions` 与 `createHealthFetch` 不发布 alias。
@@ -1595,13 +1582,13 @@ export function createHealthHandler(
 `@go-like/hono`、`@go-like/h3`、`@go-like/elysia` 各自只把 native app 变成稳定绑定的 Handler：
 
 ```ts
-import type { Elysia } from "elysia"
-import type { H3 } from "h3"
-import type { Hono } from "hono"
+import type { Elysia } from "elysia";
+import type { H3 } from "h3";
+import type { Hono } from "hono";
 
-export declare function newHonoHandler(app: Hono): Handler
-export declare function newH3Handler(app: H3): Handler
-export declare function newElysiaHandler(app: Elysia): Handler
+export declare function newHonoHandler(app: Hono): Handler;
+export declare function newH3Handler(app: H3): Handler;
+export declare function newElysiaHandler(app: Elysia): Handler;
 ```
 
 适配器保持 native `this`、Response、stream 和异常 identity，不创建 router，不导出 `get`、`post`、`use`、
@@ -1741,14 +1728,14 @@ schema、fixture、validator、runtime manifest、published gate 和文档生成
 
 Registry 相关 exports 的 v2 residency/ownership 固定如下，不能只写“portable graph”后省略 resident 事实：
 
-| package/export | kind | residency | ownerResources | terminal evidence |
-| --- | --- | --- | --- | --- |
-| `@go-like/registry` `.` | portable | resident | `service-registration`、`discovery-watcher` | 返回的 RegistrationHandle/DiscoveryWatcher `done()` |
-| `@go-like/registry` `./testing` | portable | non-resident | 空 | not-applicable |
-| `@go-like/registry-consul` `.` | portable | resident | `consul-registration`、`consul-watcher` | RegistrationHandle/Watcher `done()` |
-| `@go-like/registry-mdns` `.` | portable | resident | `mdns-registration`、`mdns-watcher` | RegistrationHandle/Watcher `done()` |
-| `@go-like/registry-mdns` `./node` | integration | resident | `node-mdns-datagram` | MDNSDatagramSocket `done()` |
-| `@go-like/registry-mdns` `./testing` | portable | non-resident | 空 | not-applicable |
+| package/export                       | kind        | residency    | ownerResources                              | terminal evidence                                   |
+| ------------------------------------ | ----------- | ------------ | ------------------------------------------- | --------------------------------------------------- |
+| `@go-like/registry` `.`              | portable    | resident     | `service-registration`、`discovery-watcher` | 返回的 RegistrationHandle/DiscoveryWatcher `done()` |
+| `@go-like/registry` `./testing`      | portable    | non-resident | 空                                          | not-applicable                                      |
+| `@go-like/registry-consul` `.`       | portable    | resident     | `consul-registration`、`consul-watcher`     | RegistrationHandle/Watcher `done()`                 |
+| `@go-like/registry-mdns` `.`         | portable    | resident     | `mdns-registration`、`mdns-watcher`         | RegistrationHandle/Watcher `done()`                 |
+| `@go-like/registry-mdns` `./node`    | integration | resident     | `node-mdns-datagram`                        | MDNSDatagramSocket `done()`                         |
+| `@go-like/registry-mdns` `./testing` | portable    | non-resident | 空                                          | not-applicable                                      |
 
 Registry/MDNS/Consul object construction 本身不启动资源；表中 resident 表示 export 可以创建显式 owner handle。
 每个 owner resource 都必须在 owner manifest 唯一登记，并有正常 stop、被动 failure、Context-abandoned wait 与
@@ -1756,24 +1743,24 @@ Registry/MDNS/Consul object construction 本身不启动资源；表中 resident
 
 ### 11.3 Transport 与 Web residency 清单
 
-| package/export | kind | residency | ownerResources | terminal evidence |
-| --- | --- | --- | --- | --- |
-| `@go-like/transport` `.` | portable | non-resident | 空 | not-applicable |
-| `@go-like/transport` `./headers` | portable | non-resident | 空 | not-applicable |
-| `@go-like/transport` `./testing` | portable | non-resident | 空 | not-applicable |
-| `@go-like/transport-http` `.` | portable | resident | `http-client`、`http-listener`、`http-server` | Client `close()`、Listener `accept()/close()`、ServerHandle `done()` |
-| `@go-like/transport-http` `./node` | integration | resident | `http-server`、`node-http-host` | ServerHandle 与 HTTPHostHandle `done()` |
-| `@go-like/transport-http` `./testing` | portable | non-resident | 空 | not-applicable |
-| `@go-like/web` `.` | portable | non-resident | 空 | not-applicable |
-| `@go-like/web` `./health` | portable | non-resident | 空 | not-applicable |
-| `@go-like/web` `./node` | integration | resident | `node-server` | NodeServerHandle `done()` |
-| `@go-like/web` `./node/testing` | integration | non-resident | 空 | not-applicable |
+| package/export                        | kind        | residency    | ownerResources                                | terminal evidence                                                    |
+| ------------------------------------- | ----------- | ------------ | --------------------------------------------- | -------------------------------------------------------------------- |
+| `@go-like/transport` `.`              | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/transport` `./headers`      | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/transport` `./testing`      | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/transport-http` `.`         | portable    | resident     | `http-client`、`http-listener`、`http-server` | Client `close()`、Listener `accept()/close()`、ServerHandle `done()` |
+| `@go-like/transport-http` `./node`    | integration | resident     | `http-server`、`node-http-host`               | ServerHandle 与 HTTPHostHandle `done()`                              |
+| `@go-like/transport-http` `./testing` | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/web` `.`                    | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/web` `./health`             | portable    | non-resident | 空                                            | not-applicable                                                       |
+| `@go-like/web` `./node`               | integration | resident     | `node-server`                                 | NodeServerHandle `done()`                                            |
+| `@go-like/web` `./node/testing`       | integration | non-resident | 空                                            | not-applicable                                                       |
 
 `@go-like/transport-http/owner.json` 精确登记 `http-client`、`http-listener`、`http-server`、
 `node-http-host` 四项；每项都使用 `owner:"go-like-owned"`、`exposure:"managed-private"` 和
 `stopContract:"go-like-owned"`。`@go-like/web` 只登记 `node-server`，使用相同三个 ownership 值。
-borrowed executor、HTTPHost factory、注入的 HTTPTransport、handler 与 `@hono/node-server` factory 不登记为
-go-like-owned resource。
+borrowed executor、HTTPHost factory、注入的 HTTPTransport 与 handler 不登记为 go-like-owned resource；
+包内 Node Fetch bridge 是实现细节，不单独登记为 resident resource。
 
 最终 workspace 数为 27：23 个发布包和 4 个 private examples。`tsconfig.base.json` paths、
 `tsconfig.build.json` references、每包相对 build 路径、E2E cwd、coverage glob 和 `bun.lock` 必须全部识别

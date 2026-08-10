@@ -1,10 +1,12 @@
 import { background } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
+import { newMaintenanceHandler } from "../src/http"
 import {
   newHandler,
   newMemoryMaintenanceRepository,
   newProcessMaintenanceSignal,
-  newRuntime
+  newRuntime,
+  validateMaintenanceSignal
 } from "../src/service"
 
 describe("manufacturing maintenance", () => {
@@ -105,5 +107,103 @@ describe("manufacturing maintenance", () => {
     expect(report.ok).toBe(true)
     expect(report.checks).toHaveLength(1)
     expect(report.checks[0]?.name).toBe("maintenance_repository")
+  })
+
+  test("validates signal shape and ordering before changing the window", () => {
+    const validRecovery = {
+      signalId: "recovery-1",
+      machineId: "press-7",
+      kind: "recovered" as const,
+      faultCode: null,
+      occurredAt: 1_000
+    }
+    expect(() => validateMaintenanceSignal(validRecovery)).not.toThrow()
+    expect(() => validateMaintenanceSignal({ ...validRecovery, signalId: "bad id" })).toThrow(
+      "invalid signalId"
+    )
+    expect(() => validateMaintenanceSignal({ ...validRecovery, machineId: "bad id" })).toThrow(
+      "invalid machineId"
+    )
+    expect(() => validateMaintenanceSignal({ ...validRecovery, occurredAt: -1 })).toThrow(
+      "invalid occurredAt"
+    )
+    expect(() =>
+      validateMaintenanceSignal({ ...validRecovery, kind: "fault", faultCode: null })
+    ).toThrow("faultCode is required for fault")
+    expect(() =>
+      validateMaintenanceSignal({ ...validRecovery, kind: "fault", faultCode: "bad code" })
+    ).toThrow("faultCode is required for fault")
+    expect(() => validateMaintenanceSignal({ ...validRecovery, faultCode: "unexpected" })).toThrow(
+      "faultCode must be null for recovery"
+    )
+
+    const process = newProcessMaintenanceSignal(newMemoryMaintenanceRepository())
+    process(background(), {
+      signalId: "ordered-1",
+      machineId: "press-7",
+      kind: "fault",
+      faultCode: "overheat",
+      occurredAt: 2_000
+    })
+    expect(() =>
+      process(background(), {
+        signalId: "ordered-2",
+        machineId: "press-7",
+        kind: "recovered",
+        faultCode: null,
+        occurredAt: 1_999
+      })
+    ).toThrow("out-of-order signal")
+  })
+
+  test("maps HTTP not-found, malformed and domain failures to stable responses", async () => {
+    const handler = newMaintenanceHandler(
+      newProcessMaintenanceSignal(newMemoryMaintenanceRepository())
+    )
+    const notFound = await handler(new Request("https://example.test/other"))
+    expect(notFound.status).toBe(404)
+    expect(await notFound.json()).toEqual({ code: "not_found" })
+
+    const malformed = await handler(
+      new Request("https://example.test/v1/maintenance-signals", {
+        method: "POST",
+        body: JSON.stringify({ signalId: "bad" })
+      })
+    )
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toMatchObject({
+      code: "maintenance_signal_rejected",
+      message: "invalid maintenance signal"
+    })
+
+    await handler(
+      new Request("https://example.test/v1/maintenance-signals", {
+        method: "POST",
+        body: JSON.stringify({
+          signalId: "ordered-http-1",
+          machineId: "press-7",
+          kind: "fault",
+          faultCode: "overheat",
+          occurredAt: 2_000
+        })
+      })
+    )
+    const rejected = await handler(
+      new Request("https://example.test/v1/maintenance-signals", {
+        method: "POST",
+        body: JSON.stringify({
+          signalId: "late",
+          machineId: "press-7",
+          kind: "recovered",
+          faultCode: null,
+          occurredAt: 1
+        })
+      })
+    )
+    expect(rejected.status).toBe(409)
+    expect(await rejected.json()).toMatchObject({
+      code: "maintenance_signal_rejected",
+      message: "out-of-order signal"
+    })
   })
 })

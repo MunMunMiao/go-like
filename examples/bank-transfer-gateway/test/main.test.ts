@@ -1,8 +1,13 @@
-import { background } from "@go-like/context"
+import { background, withCancel } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { newBankTransferHandler } from "../src/http"
-import { newMemoryTransferNetworkDirectory, newQuoteTransfer } from "../src/service"
+import {
+  buildTransferQuote,
+  newMemoryTransferNetworkDirectory,
+  newQuoteTransfer,
+  validateTransferQuote
+} from "../src/service"
 import { newBankTransferMicroservice } from "../src/transport"
 
 function quoteTransfer() {
@@ -114,5 +119,74 @@ describe("bank transfer gateway", () => {
       await app.stop()
       await running
     }
+  })
+
+  test("validates transfer commands and maps Fetch errors", async () => {
+    const valid = {
+      requestId: "valid:1",
+      sourceCountry: "DE",
+      beneficiaryCountry: "US",
+      currency: "USD",
+      amountMinor: 100_000,
+      beneficiaryBic: "BOFAUS3NXXX"
+    }
+    expect(validateTransferQuote(valid)).toBeUndefined()
+    for (const [field, value, message] of [
+      ["requestId", "", "invalid requestId"],
+      ["sourceCountry", "D", "invalid sourceCountry"],
+      ["beneficiaryCountry", "USA", "invalid beneficiaryCountry"],
+      ["currency", "US", "invalid currency"],
+      ["amountMinor", 0, "amountMinor is outside the supported range"],
+      ["amountMinor", 1.5, "amountMinor is outside the supported range"],
+      ["beneficiaryBic", "bad", "invalid beneficiaryBic"]
+    ] as const) {
+      expect(() => validateTransferQuote({ ...valid, [field]: value })).toThrow(message)
+    }
+    expect(() => newMemoryTransferNetworkDirectory(["D"])).toThrow("invalid SEPA country")
+    expect(
+      buildTransferQuote({ ...valid, beneficiaryBic: "BOFAUS3NXXX" }, false, false)
+    ).toMatchObject({
+      rail: "swift",
+      feeMinor: 1500,
+      settlementBusinessDays: 3
+    })
+    expect(buildTransferQuote({ ...valid, amountMinor: 2_000_000 }, false, false).feeMinor).toBe(
+      3000
+    )
+
+    const validHandler = newBankTransferHandler(quoteTransfer())
+    const invalidResponse = await validHandler(
+      new Request("https://example.test/v1/transfer-quotes", {
+        method: "POST",
+        body: JSON.stringify({ ...valid, amountMinor: 0 })
+      })
+    )
+    expect(invalidResponse.status).toBe(400)
+    expect(await invalidResponse.json()).toMatchObject({
+      code: "transfer_quote_rejected",
+      message: "amountMinor is outside the supported range"
+    })
+    expect(
+      (await validHandler(new Request("https://example.test/other", { method: "GET" }))).status
+    ).toBe(404)
+
+    const handler = newBankTransferHandler(() => {
+      throw new Error("provider unavailable")
+    })
+    const response = await handler(
+      new Request("https://example.test/v1/transfer-quotes", {
+        method: "POST",
+        body: JSON.stringify({ ...valid, beneficiaryBic: null })
+      })
+    )
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({
+      code: "transfer_quote_rejected",
+      message: "provider unavailable"
+    })
+
+    const [ctx, cancel] = withCancel(background())
+    cancel()
+    expect(() => newMemoryTransferNetworkDirectory(["DE"]).isSepaCountry(ctx, "DE")).toThrow()
   })
 })

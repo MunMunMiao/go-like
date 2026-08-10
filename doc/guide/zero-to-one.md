@@ -60,7 +60,7 @@ From the repository root:
 bun install --frozen-lockfile
 ```
 
-The packages are workspace dependencies in this checkout. The root repository records Bun `1.3.14`, Node.js `26.x`, Deno `2.9.4`, TypeScript `7.0.2`, and k6 `2.1.0` as the validation matrix. Any Node.js 26.x patch is acceptable for this project. The current package documentation says the packages are not yet published to npm.
+The packages are workspace dependencies in this checkout. The root repository records Bun `1.x`, Node.js `26.x`, Deno with no fixed version requirement, TypeScript `7.0.2`, and k6 `2.1.0` as the validation matrix. Any Bun 1.x or Node.js 26.x release is acceptable for this project; Deno is still probed and tested without a repository-enforced version pin. The current package documentation says the packages are not yet published to npm.
 
 Run the existing baseline example:
 

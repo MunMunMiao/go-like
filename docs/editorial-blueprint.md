@@ -45,10 +45,10 @@ The synthesis uses these evidence labels:
 - Not established by that audit: `build`, `doc:build`, `audit`, provider Docker E2E,
   cross-runtime execution, published tarball consumers, npm publication, hosted CI,
   production adoption, or the 60-minute soak.
-- Required validation versions recorded by the repository are Bun `1.3.14`, Node.js
-  `26.x`, Deno `2.9.4`, TypeScript `7.0.2`, and k6 `2.1.0`. One research probe saw
-  local Node `26.5.0`, which is inside the declared Node range; that probe alone still
-  does not establish a full runtime claim.
+- The repository records Bun `1.x`, Node.js `26.x`, Deno with no fixed version
+  requirement, TypeScript `7.0.2`, and k6 `2.1.0` as its validation matrix. One research
+  probe saw local Node `26.5.0`, which is inside the declared Node range; that probe alone
+  still does not establish a full runtime claim.
 
 ## 1. Audience map and learning paths
 

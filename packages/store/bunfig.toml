@@ -4,4 +4,5 @@ timeout = 30000
 coverageSkipTestFiles = true
 coverageReporter = ["text", "lcov"]
 coverageDir = ".artifacts/coverage"
-coveragePathIgnorePatterns = ["../context/**", "../core/**", "test/**"]
+coverageThreshold = { lines = 1.0, functions = 1.0 }
+coveragePathIgnorePatterns = ["../**", "test/**"]

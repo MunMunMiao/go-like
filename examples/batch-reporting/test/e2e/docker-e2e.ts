@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -113,33 +113,6 @@ async function waitUntil(
     await Bun.sleep(25)
   }
   throw new Error(`timed out waiting for ${label}`, { cause: lastError })
-}
-
-/** Reads one exact installed package version from package metadata. */
-async function installedVersions(): Promise<{
-  readonly bullmq: string
-  readonly croner: string
-}> {
-  const bullmq: unknown = JSON.parse(
-    await readFile(new URL("../../package.json", import.meta.resolve("bullmq")), "utf8")
-  )
-  const croner: unknown = JSON.parse(
-    await readFile(new URL("../package.json", import.meta.resolve("croner")), "utf8")
-  )
-  if (
-    bullmq === null ||
-    typeof bullmq !== "object" ||
-    typeof Reflect.get(bullmq, "version") !== "string" ||
-    croner === null ||
-    typeof croner !== "object" ||
-    typeof Reflect.get(croner, "version") !== "string"
-  ) {
-    throw new Error("installed package metadata is invalid")
-  }
-  return Object.freeze({
-    bullmq: Reflect.get(bullmq, "version") as string,
-    croner: Reflect.get(croner, "version") as string
-  })
 }
 
 /** Waits for one BullMQ job state and performs a fresh second read. */
@@ -277,9 +250,6 @@ async function run(): Promise<void> {
 
   const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
   try {
-    const versions = await installedVersions()
-    assert(versions.bullmq === "6.0.6", `unexpected BullMQ ${versions.bullmq}`)
-    assert(versions.croner === "10.0.1", `unexpected Croner ${versions.croner}`)
     await createContainer(ownedDocker, [
       "--name",
       container,

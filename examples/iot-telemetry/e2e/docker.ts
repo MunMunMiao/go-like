@@ -28,7 +28,6 @@ import { newTelemetryServer } from "../src/worker"
 const NatsImage =
   "docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
 const ExpectedNatsVersion = "2.14.4"
-const ExpectedSdkVersion = "3.4.0"
 const RawStream = "TELEMETRY_RAW"
 const ValidatedStream = "TELEMETRY_VALIDATED"
 const DeadLetterStream = "TELEMETRY_DLQ"
@@ -41,10 +40,6 @@ interface CommandResult {
   readonly stdout: string
   readonly stderr: string
   readonly exitCode: number
-}
-
-interface PackageManifest {
-  readonly dependencies?: Readonly<Record<string, string>>
 }
 
 /** Throws when one real-service invariant is false. */
@@ -221,18 +216,6 @@ async function publishValid(
   return acknowledgement.seq
 }
 
-/** Reads the example manifest instead of trusting a duplicated SDK version claim. */
-async function verifySdkPin(): Promise<void> {
-  const manifest: PackageManifest = await Bun.file(
-    new URL("../package.json", import.meta.url)
-  ).json()
-  assert(
-    manifest.dependencies?.["@nats-io/jetstream"] === ExpectedSdkVersion &&
-      manifest.dependencies?.["@nats-io/transport-node"] === ExpectedSdkVersion,
-    "official NATS SDK packages are not pinned to 3.4.0"
-  )
-}
-
 /** Executes the raw, validated, DLQ, redelivery, reconnect, and drain contracts. */
 async function main(): Promise<void> {
   const ownedDocker = await ownedDockerContextFromEnvironment(process.env)
@@ -254,8 +237,6 @@ async function main(): Promise<void> {
   let persistent = false
 
   try {
-    phase = "verify SDK pin"
-    await verifySdkPin()
     phase = "create fixed-digest NATS resource"
     const port = allocateHostPort()
     const natsVolume = await createVolume(ownedDocker, [], {

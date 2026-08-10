@@ -23,6 +23,8 @@ import {
   type RuntimeProbeRunner
 } from "../e2e/runtime-versions"
 
+const RepresentativeBunVersion = "1.3.14"
+const RepresentativeDenoVersion = "99.0.0"
 const RepresentativeNodeVersion = "26.0.0"
 
 function result(stdout = "", exitCode = 0): CommandResult {
@@ -65,7 +67,7 @@ function probeVersions(overrides: Partial<Record<string, string>> = {}): {
 } {
   return Object.freeze({
     dependencies: Object.freeze({
-      bunVersion: () => overrides.bun ?? RequiredRuntimeVersions.bun
+      bunVersion: () => overrides.bun ?? RepresentativeBunVersion
     }),
     runner: async (_root: string, definition: CommandDefinition) => {
       const executable = definition.command[0] ?? ""
@@ -73,7 +75,7 @@ function probeVersions(overrides: Partial<Record<string, string>> = {}): {
       if (executable === "deno") {
         return result(
           overrides.deno ??
-            `deno ${RequiredRuntimeVersions.deno}\nv8 fixture\ntypescript ${RequiredRuntimeVersions.typescript}`
+            `deno ${RepresentativeDenoVersion}\nv8 fixture\ntypescript ${RequiredRuntimeVersions.typescript}`
         )
       }
       if (executable === "docker") return result(overrides.docker ?? "29.6.2")
@@ -154,9 +156,9 @@ async function expectPathMismatch(tool: Exclude<RequiredTool, "bun" | "docker">)
   }
 }
 
-test("runtime version parsers accept exact supported formats", () => {
-  expect(parseNodeVersion("v26.0.0\n")).toBe("26.0.0")
-  expect(parseDenoVersion("deno 2.9.4 (stable)\nv8 14\ntypescript 7.0.2\n")).toBe("2.9.4")
+test("runtime version parsers accept valid output formats", () => {
+  expect(parseNodeVersion("v26.12.1\n")).toBe("26.12.1")
+  expect(parseDenoVersion("deno 2.17.4 (stable)\nv8 14\ntypescript 7.0.2\n")).toBe("2.17.4")
   expect(parseTypeScriptVersion("Version 7.0.2\n")).toBe("7.0.2")
 })
 
@@ -169,17 +171,26 @@ test("runtime version parsers reject malformed or ambiguous output", () => {
   )
 })
 
-test("Node runtime requirement accepts every 26.x patch but rejects adjacent majors", () => {
+test("JavaScript runtime requirements allow supported major drift and unrestricted Deno", () => {
+  expect(RequiredRuntimeVersions.deno).toBeNull()
   expect(() =>
     assertRequiredRuntimeVersions([
-      Object.freeze({ tool: "node", required: RequiredRuntimeVersions.node, actual: "26.5.0" })
+      Object.freeze({ tool: "bun", required: RequiredRuntimeVersions.bun, actual: "1.99.0" }),
+      Object.freeze({ tool: "node", required: RequiredRuntimeVersions.node, actual: "26.5.0" }),
+      Object.freeze({ tool: "deno", required: RequiredRuntimeVersions.deno, actual: "99.0.0" })
     ])
   ).not.toThrow()
-  expect(() =>
-    assertRequiredRuntimeVersions([
-      Object.freeze({ tool: "node", required: RequiredRuntimeVersions.node, actual: "27.0.0" })
-    ])
-  ).toThrow("node required=26.x actual=27.0.0")
+})
+
+test("JavaScript runtime requirements reject adjacent constrained majors", () => {
+  for (const [tool, required, actual] of [
+    ["bun", RequiredRuntimeVersions.bun, "2.0.0"],
+    ["node", RequiredRuntimeVersions.node, "27.0.0"]
+  ] as const) {
+    expect(() =>
+      assertRequiredRuntimeVersions([Object.freeze({ tool, required, actual })])
+    ).toThrow(`${tool} required=${required} actual=${actual}`)
+  }
 })
 
 test("tool union probes only explicit definition requirements in fixed order", async () => {
@@ -187,7 +198,7 @@ test("tool union probes only explicit definition requirements in fixed order", a
   const dependencies: RuntimeProbeDependencies = {
     bunVersion: () => {
       calls.push("bun")
-      return RequiredRuntimeVersions.bun
+      return RepresentativeBunVersion
     }
   }
   const runner: RuntimeProbeRunner = async (_root, definition) => {
@@ -269,11 +280,11 @@ test("platform preflight failure prevents runtime probes and selected consumers"
   expect(events).toEqual(["validate", "platform-preflight", "close"])
 })
 
-test("version mismatch reports required and actual before any selected consumer starts", async () => {
+test("runtime major mismatch reports required and actual before any selected consumer starts", async () => {
   const logs: string[] = []
   let started = 0
   let failure: unknown = null
-  const probes = probeVersions({ node: "v0.0.1" })
+  const probes = probeVersions({ node: "v27.0.0" })
   try {
     await runE2eRequest(
       "/repo",
@@ -296,43 +307,91 @@ test("version mismatch reports required and actual before any selected consumer 
   }
   expect(started).toBe(0)
   expect(String(failure)).toContain("prerequisite-version-mismatch")
-  expect(logs.join("")).toContain("node=0.0.1(required=26.x)")
+  expect(logs.join("")).toContain("node=27.0.0(required=26.x)")
   expect(logs.join("")).toContain("selected=1 started=0 passed=0 failed=0 notRun=1")
   expect(logs.join("")).toContain("status=failed")
 })
 
-test("Bun, Deno, and project-local TypeScript mismatches all fail before execution", async () => {
-  for (const [tool, overrides] of [
-    ["bun", { bun: "0.0.1" }],
-    ["deno", { deno: "deno 0.0.1" }],
-    ["typescript", { typescript: "Version 0.0.1" }]
-  ] as const) {
+test("unrestricted Deno drift is allowed while toolchain mismatch still fails before execution", async () => {
+  for (const [tool, overrides] of [["deno", { deno: "deno 2.99.1" }]] as const) {
     let started = false
     const probes = probeVersions(overrides)
-    await expect(
-      runE2eRequest(
-        "/repo",
-        { kind: "scope", scope: "suites", processMode: "managed" },
-        undefined,
-        {
-          definitions: [selectedDefinition(`${tool}-consumer`, [tool])],
-          validatePlan: async () => {},
-          createSupervisor: async () => testSupervisor(probes.runner),
-          runtimeProbe: probes.dependencies,
-          executeDefinition: async () => {
-            started = true
-            return result()
-          },
-          write: () => {}
-        }
-      )
-    ).rejects.toThrow("prerequisite-version-mismatch")
-    expect(started).toBe(false)
+    await runE2eRequest(
+      "/repo",
+      { kind: "scope", scope: "suites", processMode: "managed" },
+      undefined,
+      {
+        definitions: [selectedDefinition(`${tool}-consumer`, [tool])],
+        validatePlan: async () => {},
+        createSupervisor: async () => testSupervisor(probes.runner),
+        runtimeProbe: probes.dependencies,
+        executeDefinition: async () => {
+          started = true
+          return result()
+        },
+        write: () => {}
+      }
+    )
+    expect(started).toBe(true)
+  }
+
+  let typecheckStarted = false
+  const typecheckProbes = probeVersions({ typescript: "Version 6.0.0" })
+  await expect(
+    runE2eRequest("/repo", { kind: "scope", scope: "suites", processMode: "managed" }, undefined, {
+      definitions: [selectedDefinition("typescript-consumer", ["typescript"])],
+      validatePlan: async () => {},
+      createSupervisor: async () => testSupervisor(typecheckProbes.runner),
+      runtimeProbe: typecheckProbes.dependencies,
+      executeDefinition: async () => {
+        typecheckStarted = true
+        return result()
+      },
+      write: () => {}
+    })
+  ).rejects.toThrow("prerequisite-version-mismatch")
+  expect(typecheckStarted).toBe(false)
+})
+
+async function expectPathRuntimeDrift(tool: "deno"): Promise<void> {
+  const directory = await createTempDirectory(`go-like-${tool}-drift-`)
+  const marker = join(directory.path, "consumer-started")
+  try {
+    await writeVersionShim(join(directory.path, tool), `printf '%s\\n' 'deno 2.0.1'`)
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        resolve("e2e/fixtures/runner/version-preflight.ts"),
+        tool,
+        process.cwd(),
+        marker
+      ],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, PATH: `${directory.path}:${process.env.PATH ?? ""}` },
+        stdout: "pipe",
+        stderr: "pipe"
+      }
+    )
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text()
+    ])
+    expect(exitCode).toBe(0)
+    expect(`${stdout}\\n${stderr}`).not.toContain("prerequisite-version-mismatch")
+    expect(await Bun.file(marker).text()).toBe("consumer started")
+  } finally {
+    await removeTempDirectory(directory)
+  }
+}
+
+test("fake PATH Node and project-local TypeScript major mismatches leave no consumer marker", async () => {
+  for (const tool of ["node", "typescript"] as const) {
+    await expectPathMismatch(tool)
   }
 })
 
-test("fake PATH Node, Deno, and project-local TypeScript mismatches leave no consumer marker", async () => {
-  for (const tool of ["node", "deno", "typescript"] as const) {
-    await expectPathMismatch(tool)
-  }
+test("fake PATH Deno minor and patch drift still allows the consumer to start", async () => {
+  await expectPathRuntimeDrift("deno")
 })

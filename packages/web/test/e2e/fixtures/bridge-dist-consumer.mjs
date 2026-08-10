@@ -22,12 +22,7 @@ function assertStaged(specifier) {
   )
 }
 
-for (const specifier of [
-  "@go-like/context",
-  "@go-like/web",
-  "@go-like/web/node",
-  "@hono/node-server"
-]) {
+for (const specifier of ["@go-like/context", "@go-like/web", "@go-like/web/node"]) {
   assertStaged(specifier)
 }
 

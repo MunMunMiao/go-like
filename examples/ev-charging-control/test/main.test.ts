@@ -4,7 +4,9 @@ import { describe, expect, test } from "bun:test"
 import {
   newChargingControlRuntime,
   newMemoryChargingRepository,
-  newStartCharging
+  newStartCharging,
+  validateChargingStation,
+  validateStartCharging
 } from "../src/service"
 
 const stations = Object.freeze([
@@ -90,5 +92,46 @@ describe("EV charging control", () => {
     )
     expect(response.status).toBe(201)
     expect(await response.json()).toMatchObject({ status: "charging", requestedKw: 20 })
+  })
+
+  test("rejects malformed public requests and routes unknown methods", async () => {
+    const runtime = newChargingControlRuntime(stations)
+    const notFound = await runtime.handler(
+      new Request("https://example.test/v1/charging-sessions", { method: "GET" })
+    )
+    expect(notFound.status).toBe(404)
+
+    for (const body of ["[]", JSON.stringify({ sessionId: "missing-fields" })]) {
+      const response = await runtime.handler(
+        new Request("https://example.test/v1/charging-sessions", {
+          method: "POST",
+          body
+        })
+      )
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ code: "charging_rejected" })
+    }
+  })
+
+  test("validates station capacity and charging identities before admission", () => {
+    expect(() =>
+      validateChargingStation({ stationId: "station-1", capacityKw: 0, online: true })
+    ).toThrow("capacityKw must be a positive safe integer")
+    expect(() =>
+      validateStartCharging({
+        sessionId: "invalid/id",
+        stationId: "station-1",
+        connectorId: "connector-1",
+        requestedKw: 20
+      })
+    ).toThrow("invalid charging identity")
+    expect(() =>
+      validateStartCharging({
+        sessionId: "session-1",
+        stationId: "station-1",
+        connectorId: "connector-1",
+        requestedKw: 0
+      })
+    ).toThrow("requestedKw must be a positive safe integer")
   })
 })

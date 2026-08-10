@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { decodeJson } from "../src/codec/json"
+import { decodeJson } from "../src/codec"
 import { StructError, struct } from "../src/index"
 import { parseStructTuple as parse } from "../src/introspection"
 

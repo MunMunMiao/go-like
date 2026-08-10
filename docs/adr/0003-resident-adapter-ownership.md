@@ -8,6 +8,10 @@
 > `ServerHandle`、`done()`、owner drain 与 orphan 诊断已不再属于公共契约。
 > 当前公共生命周期见
 > [`../developer-experience-alignment.md`](../developer-experience-alignment.md)。
+>
+> 更新（2026-08-05）：`@go-like/web/node` 的 Node Fetch 协议转换已内置在 `@go-like/web` 包内，
+> 不再通过 `@hono/node-server` 进入供应链；该子路径仍只接收标准单参数 Web Handler，并继续独立于
+> transport HTTP host。
 
 ## 背景
 
@@ -49,7 +53,7 @@ transport 和 child logger 归 Pino/Winston。go-like 只负责把这些对象�
 
 ### Web Node host 与内部 HTTP transport
 
-`@go-like/web/node` 使用 `@hono/node-server` 将标准单参数 Web Handler 托管到 Node listener。go-like
+`@go-like/web/node` 使用包内 Node Fetch bridge 将标准单参数 Web Handler 托管到 Node listener。go-like
 不重新实现外部 Web router，也不决定框架 handler error 如何映射响应；该入口只等待 listener ready，观察
 原生 error/close，保存地址，并在 stop 时执行有界 graceful/force 关闭。Vanilla、Hono、Elysia 和 H3
 共用这一 Web host。Hono、Elysia 与 H3 2.x 直接提供原生 `app.fetch`，H3 1.x 使用官方

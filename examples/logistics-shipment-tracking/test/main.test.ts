@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background, withCancel } from "@go-like/context"
 import { describe, expect, test } from "bun:test"
 import { newCachedShipmentTrackingService } from "../src/cache"
 import { newShipmentTrackingHandler } from "../src/http"
@@ -123,5 +123,117 @@ describe("logistics shipment tracking", () => {
       occurredAt: 3_000
     })
     expect(await service.current(background(), "missing")).toBeNull()
+  })
+
+  test("validates tracking boundaries and every HTTP rejection mapping", async () => {
+    const repository = newMemoryShipmentTrackingRepository()
+    const track = newTrackShipment(repository)
+    for (const eventId of ["", " "]) {
+      expect(() =>
+        track(background(), {
+          eventId,
+          shipmentId: "shipment",
+          status: "created",
+          occurredAt: 1
+        })
+      ).toThrow("invalid eventId")
+    }
+    expect(() =>
+      track(background(), {
+        eventId: "event",
+        shipmentId: "",
+        status: "created",
+        occurredAt: 1
+      })
+    ).toThrow("invalid shipmentId")
+    for (const occurredAt of [-1, 1.5]) {
+      expect(() =>
+        track(background(), {
+          eventId: "event",
+          shipmentId: "shipment",
+          status: "created",
+          occurredAt
+        })
+      ).toThrow("occurredAt must be a non-negative safe integer")
+    }
+    expect(() =>
+      track(background(), {
+        eventId: "event-not-created",
+        shipmentId: "new-shipment",
+        status: "pickedUp",
+        occurredAt: 1
+      })
+    ).toThrow("shipment must start at created")
+
+    const handler = newShipmentTrackingHandler(async () => {
+      throw "non-error failure"
+    })
+    expect(
+      (await handler(new Request("https://example.test/v1/other", { method: "GET" }))).status
+    ).toBe(404)
+    const invalidShape = await handler(
+      new Request("https://example.test/v1/tracking-events", {
+        method: "POST",
+        body: JSON.stringify({ eventId: "event", shipmentId: "shipment", status: "created" })
+      })
+    )
+    expect(invalidShape.status).toBe(400)
+    const invalidStatus = await handler(
+      new Request("https://example.test/v1/tracking-events", {
+        method: "POST",
+        body: JSON.stringify({
+          eventId: "event",
+          shipmentId: "shipment",
+          status: "unknown",
+          occurredAt: 1
+        })
+      })
+    )
+    expect(invalidStatus.status).toBe(400)
+    const unknownFailure = await handler(
+      new Request("https://example.test/v1/tracking-events", {
+        method: "POST",
+        body: JSON.stringify({
+          eventId: "event",
+          shipmentId: "shipment",
+          status: "created",
+          occurredAt: 1
+        })
+      })
+    )
+    expect(unknownFailure.status).toBe(409)
+    expect(await unknownFailure.json()).toMatchObject({ message: "tracking event rejected" })
+  })
+
+  test("rejects malformed cached snapshots and terminal contexts through real Memory Cache", async () => {
+    const service = newCachedShipmentTrackingService()
+    const encoder = new TextEncoder()
+    const cases = [
+      JSON.stringify(null),
+      JSON.stringify({ shipmentId: "shipment", status: "created", lastEventId: "event" }),
+      JSON.stringify({
+        shipmentId: "shipment",
+        status: "not-a-status",
+        lastEventId: "event",
+        occurredAt: 1
+      })
+    ]
+    for (const [index, value] of cases.entries()) {
+      await service.cache.put(background(), `shipment:bad-${index}`, encoder.encode(value))
+      await expect(service.current(background(), `bad-${index}`)).rejects.toThrow(
+        index === 2 ? "cached shipment status is invalid" : "cached shipment snapshot is invalid"
+      )
+    }
+    const [ctx, cancel] = withCancel(background())
+    cancel()
+    await expect(service.current(ctx, "missing")).rejects.toThrow()
+    await expect(
+      service.track(ctx, {
+        eventId: "canceled",
+        shipmentId: "shipment",
+        status: "created",
+        occurredAt: 1
+      })
+    ).rejects.toThrow()
   })
 })

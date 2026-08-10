@@ -98,4 +98,92 @@ describe("hotel room reservation", () => {
     const ready = newRuntime({ standard: 1 })
     expect((await ready.probes.check(background(), "ready")).ok).toBe(true)
   })
+
+  test("rejects malformed Fetch commands and unsupported room-hold routes", async () => {
+    const handler = newHandler({ standard: 1 })
+
+    const malformed = await handler(
+      new Request("https://example.test/v1/room-holds", {
+        method: "POST",
+        body: JSON.stringify({ holdId: "missing-fields" })
+      })
+    )
+    expect(malformed.status).toBe(400)
+    expect(await malformed.json()).toMatchObject({
+      code: "room_hold_rejected",
+      message: "invalid room hold command"
+    })
+
+    const notFound = await handler(
+      new Request("https://example.test/v1/room-holds/hold-1", { method: "GET" })
+    )
+    expect(notFound.status).toBe(404)
+
+    const invalidRelease = await handler(
+      new Request("https://example.test/v1/room-holds/unknown/release", { method: "POST" })
+    )
+    expect(invalidRelease.status).toBe(409)
+    expect(await invalidRelease.json()).toMatchObject({
+      code: "room_hold_rejected",
+      message: "room hold not found"
+    })
+  })
+
+  test("validates intervals, capacities, room types and releases", () => {
+    expect(() => newMemoryRoomHoldRepository({ standard: 0 })).toThrow("invalid room capacity")
+    expect(() => newMemoryRoomHoldRepository({ "bad room": 1 })).toThrow("invalid roomType")
+
+    const repository = newMemoryRoomHoldRepository({ standard: 1 })
+    const hold = newHoldRoom(repository)
+    expect(() =>
+      hold(background(), {
+        holdId: "bad interval",
+        roomType: "standard",
+        checkInNight: 1,
+        checkOutNight: 2,
+        rooms: 1
+      })
+    ).toThrow("invalid holdId")
+    expect(() =>
+      hold(background(), {
+        holdId: "too-long",
+        roomType: "standard",
+        checkInNight: 1,
+        checkOutNight: 33,
+        rooms: 1
+      })
+    ).toThrow("invalid stay interval")
+    expect(() =>
+      hold(background(), {
+        holdId: "bad-rooms",
+        roomType: "standard",
+        checkInNight: 1,
+        checkOutNight: 2,
+        rooms: 0
+      })
+    ).toThrow("rooms is outside the supported range")
+    expect(() =>
+      hold(background(), {
+        holdId: "unknown-type",
+        roomType: "suite",
+        checkInNight: 1,
+        checkOutNight: 2,
+        rooms: 1
+      })
+    ).toThrow("room type not found")
+    expect(() => repository.available(background(), "suite", 1)).toThrow("room type not found")
+    expect(() => newReleaseRoomHold(repository)(background(), "missing")).toThrow(
+      "room hold not found"
+    )
+    const same = Object.freeze({
+      holdId: "same-hold",
+      roomType: "standard",
+      checkInNight: 10,
+      checkOutNight: 11,
+      rooms: 1
+    })
+    expect(hold(background(), same)).toBe(hold(background(), same))
+    expect(newReleaseRoomHold(repository)(background(), "same-hold").status).toBe("released")
+    expect(hold(background(), same).status).toBe("released")
+  })
 })

@@ -88,12 +88,22 @@ export function matchesDefinition(
       )
     case "discriminatedUnion":
       return isPlainObject(value) && definition.map.has(value[definition.discriminator])
-    case "intersection": {
-      const left = definition.left as RuntimeStruct
-      const right = definition.right as RuntimeStruct
-      return matchesRuntimeValue(left, value) && matchesRuntimeValue(right, value)
-    }
+    case "intersection":
+      return matchesIntersectionValue(
+        definition.left as RuntimeStruct,
+        definition.right as RuntimeStruct,
+        value
+      )
   }
+}
+
+function matchesIntersectionValue(
+  leftStruct: RuntimeStruct,
+  rightStruct: RuntimeStruct,
+  value: unknown
+): boolean {
+  const leftMatches = matchesRuntimeValue(leftStruct, value)
+  return leftMatches && matchesRuntimeValue(rightStruct, value)
 }
 
 function matchesObjectValue(struct: RuntimeStruct, value: { [key: string]: unknown }): boolean {

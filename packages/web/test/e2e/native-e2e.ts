@@ -1,5 +1,5 @@
 import { once } from "node:events"
-import { mkdir, readFile, symlink } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
 import { createServer } from "node:http"
 import { Socket } from "node:net"
 import { dirname, resolve } from "node:path"
@@ -48,6 +48,66 @@ async function abortAfterFirstResponseData(port: number, path: string): Promise<
     socket.connect(port, "127.0.0.1", () => {
       socket.write(`GET ${path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`)
     })
+  })
+}
+
+/** Sends one raw HTTP request so tests can exercise methods Fetch refuses to construct. */
+async function rawHttpRequest(port: number, requestText: string): Promise<string> {
+  return await new Promise<string>((resolveResponse, rejectResponse) => {
+    const socket = new Socket()
+    let response = ""
+    socket.setEncoding("utf8")
+    socket.on("data", (chunk: string) => {
+      response += chunk
+    })
+    socket.once("error", rejectResponse)
+    socket.once("end", () => {
+      resolveResponse(response)
+    })
+    socket.connect(port, "127.0.0.1", () => {
+      socket.write(requestText)
+    })
+  })
+}
+
+/** Writes one raw request and resets the client connection after Node accepts its bytes. */
+async function resetAfterRawRequest(port: number, requestText: string): Promise<void> {
+  await new Promise<void>((resolveReset, rejectReset) => {
+    const socket = new Socket()
+    socket.once("error", (error) => {
+      if ((error as NodeJS.ErrnoException).code !== "ECONNRESET") rejectReset(error)
+    })
+    socket.once("close", () => resolveReset())
+    socket.connect(port, "127.0.0.1", () => {
+      socket.write(requestText, () => setTimeout(() => socket.resetAndDestroy(), 10))
+    })
+  })
+}
+
+/** Keeps one incomplete request open until the Node bridge enforces its drain deadline. */
+async function waitForServerDrainClose(port: number, requestText: string): Promise<string> {
+  return await new Promise<string>((resolveClose, rejectClose) => {
+    const socket = new Socket()
+    let response = ""
+    const timer = setTimeout(() => {
+      socket.destroy()
+      rejectClose(new Error("Node bridge did not enforce the request drain deadline"))
+    }, 1_500)
+    const finish = (): void => {
+      clearTimeout(timer)
+      socket.destroy()
+      resolveClose(response)
+    }
+    socket.setEncoding("utf8")
+    socket.on("data", (chunk: string) => {
+      response += chunk
+    })
+    socket.once("error", (error) => {
+      if ((error as NodeJS.ErrnoException).code === "ECONNRESET") finish()
+      else rejectClose(error)
+    })
+    socket.once("close", finish)
+    socket.connect(port, "127.0.0.1", () => socket.write(requestText))
   })
 }
 
@@ -115,28 +175,10 @@ function isTimeoutResource(resource: string): boolean {
   return resource === "Timeout"
 }
 
-/** Reads one exact package version from validated JSON metadata. */
-function metadataVersion(value: unknown): string {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("version" in value) ||
-    typeof value.version !== "string"
-  ) {
-    throw new Error("@hono/node-server package metadata has no string version")
-  }
-  return value.version
-}
-
 await ensureWorkspaceLinks()
 
 const { background } = await import("@go-like/context")
 const { nodeShutdownTimeout, newNodeServer, port: listenPort } = await import("@go-like/web/node")
-const hostMetadata: unknown = JSON.parse(
-  await readFile(new URL("../package.json", import.meta.resolve("@hono/node-server")), "utf8")
-)
-const hostVersion = metadataVersion(hostMetadata)
-verify(hostVersion === "2.0.12", `unexpected @hono/node-server version: ${hostVersion}`)
 
 const baselineTimeouts = process.getActiveResourcesInfo().filter(isTimeoutResource).length
 const baselineUnhandledListeners = process.listenerCount("unhandledRejection")
@@ -160,16 +202,43 @@ const drainReleaseCallbacks: { resolve?: () => void } = {}
 const drainRelease = new Promise<void>((resolve) => {
   drainReleaseCallbacks.resolve = resolve
 })
+let recoveryGate = Promise.resolve()
+let releaseRecovery: (() => void) | undefined
+let recoveryEntered: (() => void) | undefined
+let recoveryObservation: { body?: string; error?: string } | undefined
 let handlerArgumentCount = 0
 const mainPort = await availablePort()
 const server = newNodeServer(async function fetchHandler(request) {
   handlerArgumentCount = arguments.length
+  const url = new URL(request.url)
+  if (url.pathname.startsWith("/recovery-")) {
+    recoveryEntered?.()
+    await recoveryGate
+    try {
+      recoveryObservation = {
+        body:
+          url.pathname === "/recovery-lazy"
+            ? await new Response(request.body).text()
+            : await request.text()
+      }
+    } catch (error) {
+      recoveryObservation = { error: error instanceof Error ? error.message : String(error) }
+    }
+    return new Response("observed")
+  }
+  if (url.pathname === "/bounded-drain") return new Response("drained")
+  if (url.pathname === "/clone") {
+    const cloned = request.clone()
+    const originalBody = await request.text()
+    const clonedBody = await cloned.text()
+    return Response.json({ bodyUsed: request.bodyUsed, clonedBody, originalBody })
+  }
   seen.push({
     method: request.method,
     url: request.url,
     body: request.body === null ? "" : await request.text()
   })
-  if (new URL(request.url).pathname === "/sse") {
+  if (url.pathname === "/sse") {
     return new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
@@ -182,7 +251,7 @@ const server = newNodeServer(async function fetchHandler(request) {
       })
     )
   }
-  if (new URL(request.url).pathname === "/drain") {
+  if (url.pathname === "/drain") {
     drainEnteredCallbacks.resolve?.()
     await drainRelease
     return new Response("drained")
@@ -212,6 +281,57 @@ const responseCookie = basic.headers.get("set-cookie")
 verify(responseHeader === "POST", "response method header")
 verify(responseCookie === "a=b", "response cookie header")
 scenarios.push("request-response-method-body-headers")
+
+const boundedDrain = await waitForServerDrainClose(
+  mainPort,
+  "POST /bounded-drain HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100000000\r\nConnection: keep-alive\r\n\r\nhello"
+)
+verify(boundedDrain.includes("\r\n\r\ndrained"), "bounded drain response")
+scenarios.push("bounded-incomplete-request-drain")
+
+for (const [path, payload, expected] of [
+  ["/recovery-direct", "hello-world", JSON.stringify({ body: "hello-world" })],
+  ["/recovery-lazy", "hello-world", JSON.stringify({ body: "hello-world" })],
+  ["/recovery-truncated", "hello", JSON.stringify({ error: "aborted" })]
+] as const) {
+  recoveryObservation = undefined
+  recoveryGate = new Promise<void>((resolveRecovery) => {
+    releaseRecovery = resolveRecovery
+  })
+  const entered = new Promise<void>((resolveEntered) => {
+    recoveryEntered = resolveEntered
+  })
+  const reset = resetAfterRawRequest(
+    mainPort,
+    `POST ${path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 11\r\nConnection: keep-alive\r\n\r\n${payload}`
+  )
+  await entered
+  await reset
+  releaseRecovery?.()
+  const deadline = Date.now() + 1_000
+  while (recoveryObservation === undefined && Date.now() < deadline) {
+    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 1))
+  }
+  verify(JSON.stringify(recoveryObservation) === expected, `${path} recovery observation`)
+  scenarios.push(path.slice(1))
+}
+
+const cloned = await fetch(`${base}/clone`, { method: "POST", body: "clone-body" })
+verify(cloned.status === 200, "clone status")
+verify(
+  JSON.stringify(await cloned.json()) ===
+    JSON.stringify({ bodyUsed: true, clonedBody: "clone-body", originalBody: "clone-body" }),
+  "request clone body"
+)
+scenarios.push("request-clone-body")
+
+const traced = await rawHttpRequest(
+  mainPort,
+  "TRACE /trace HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+)
+verify(traced.includes("\r\nx-method: TRACE\r\n"), "TRACE method header")
+verify(traced.endsWith("ok"), "TRACE response body")
+scenarios.push("trace-method-bridge")
 
 const started = Date.now()
 const sse = await fetch(`${base}/sse`)
@@ -398,7 +518,7 @@ const unhandledListenerDelta =
   process.listenerCount("unhandledRejection") - baselineUnhandledListeners
 const stableScenarios = Array.from(new Set(scenarios))
 verify(stableScenarios.length === scenarios.length, "duplicate Web Node E2E scenario slug")
-verify(stableScenarios.length === 8, `Web Node E2E scenario inventory: ${stableScenarios.length}`)
+verify(stableScenarios.length === 14, `Web Node E2E scenario inventory: ${stableScenarios.length}`)
 verify(acceptedServers === terminalServers, "Web server cleanup mismatch")
 verify(portReleased, "Fetch port was not released")
 verify(forcePortReleased, "forced Fetch port was not released")
