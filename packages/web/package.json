@@ -29,7 +29,7 @@
     "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && tsx test/e2e/node-dist-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/portable-runtime.ts"
   },
   "dependencies": {
-    "@hono/node-server": "2.0.12",
+    "@hono/node-server": "2.1.0",
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
     "@go-like/health": "0.0.1",
