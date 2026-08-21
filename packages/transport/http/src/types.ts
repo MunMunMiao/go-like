@@ -33,6 +33,8 @@ export interface HTTPHostRequest {
   readonly request: Request
   readonly localAddress: string
   readonly remoteAddress: string
+  /** Verified client URI SAN when `clientAuth("require")` admitted the connection. */
+  readonly peerIdentity?: string
 }
 
 /** Declares capabilities a borrowed runtime HTTP host can actually honor. */

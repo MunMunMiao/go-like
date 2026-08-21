@@ -19,7 +19,9 @@ import {
   contentType as contentTypeHeader,
   endpoint as endpointHeader,
   metadata as metadataHeader,
-  request as serviceHeader
+  method as methodHeader,
+  request as serviceHeader,
+  target as targetHeader
 } from "@go-like/transport/headers"
 import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@go-like/transport/json"
 import {
@@ -30,6 +32,7 @@ import {
 } from "@go-like/transport/provider"
 
 const DefaultAddress = "127.0.0.1:0"
+const HTTPCarrierStatusHeader = "Go-Like-HTTP-Status"
 
 /** Handles one internal unary request. */
 export type Handler = (ctx: Context, request: Message) => Message | PromiseLike<Message>
@@ -43,6 +46,15 @@ export type TypedHandler<Request extends Struct, Response extends Struct> = (
 /** Wraps one internal unary handler. */
 export type Middleware = (next: Handler) => Handler
 
+/** Records one exact HTTP method and pathname mapped onto a unary endpoint. */
+export interface HTTPRoute {
+  readonly method: string
+  readonly path: string
+  readonly service: string
+  readonly endpoint: string
+  readonly successStatus: number
+}
+
 /** Holds the effective server construction options. */
 export interface ServerOptions {
   readonly address: string
@@ -52,6 +64,7 @@ export interface ServerOptions {
   readonly middleware: readonly Middleware[]
   readonly operationMiddleware: ReadonlyMap<string, readonly Middleware[]>
   readonly listenOptions: readonly ListenOption[]
+  readonly httpRoutes: readonly HTTPRoute[]
 }
 
 /** Applies one Go-style server option. */
@@ -174,6 +187,71 @@ function requiredTransport(value: Transport | null): Transport {
   return selected
 }
 
+/** Validates one HTTP method token and stores it in uppercase. */
+function httpMethod(value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z]+$/u.test(value)) {
+    throw new TypeError("server httpRoute method must be an HTTP method token")
+  }
+  return value.toUpperCase()
+}
+
+/** Validates one exact pathname without query or fragment. */
+function httpPath(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError("server httpRoute path must be a non-empty string")
+  }
+  if (value.includes("?") || value.includes("#")) {
+    throw new TypeError("server httpRoute path must not include query or fragment")
+  }
+  return value
+}
+
+/** Validates one HTTP success carrier or defaults to 200. */
+function httpSuccessStatus(value: unknown): number {
+  if (value === undefined) return 200
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 100 || value > 599) {
+    throw new TypeError("server httpRoute successStatus must be an HTTP status code")
+  }
+  return value
+}
+
+/** Validates one httpRoute snapshot entry. */
+function httpRouteValue(value: unknown): HTTPRoute {
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("server httpRoute must be an object")
+  }
+  const record = value as {
+    readonly method?: unknown
+    readonly path?: unknown
+    readonly service?: unknown
+    readonly endpoint?: unknown
+    readonly successStatus?: unknown
+  }
+  return Object.freeze({
+    method: httpMethod(record.method),
+    path: httpPath(record.path),
+    service: routeToken(record.service, "service"),
+    endpoint: routeToken(record.endpoint, "endpoint"),
+    successStatus: httpSuccessStatus(record.successStatus)
+  })
+}
+
+/** Copies httpRoute entries and rejects duplicated method+path pairs. */
+function snapshotHttpRoutes(value: unknown): readonly HTTPRoute[] {
+  if (value === undefined || value === null) return Object.freeze([])
+  if (!Array.isArray(value)) throw new TypeError("server httpRoutes must be an array")
+  const routes: HTTPRoute[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    const route = httpRouteValue(entry)
+    const key = `${route.method} ${route.path}`
+    if (seen.has(key)) throw new TypeError(`server httpRoute is duplicated: ${key}`)
+    seen.add(key)
+    routes.push(route)
+  }
+  return Object.freeze(routes)
+}
+
 /** Returns a defensive immutable server option snapshot. */
 function snapshotOptions(value: ServerOptions): ServerOptions {
   const handlers = new Map<string, ReadonlyMap<string, Handler>>()
@@ -205,7 +283,8 @@ function snapshotOptions(value: ServerOptions): ServerOptions {
     handlers,
     middleware: Object.freeze(middlewareValues),
     operationMiddleware,
-    listenOptions: Object.freeze(listenValues)
+    listenOptions: Object.freeze(listenValues),
+    httpRoutes: snapshotHttpRoutes(value.httpRoutes)
   })
 }
 
@@ -218,7 +297,8 @@ function defaultOptions(): ServerOptions {
     handlers: new Map(),
     middleware: Object.freeze([]),
     operationMiddleware: new Map(),
-    listenOptions: Object.freeze([])
+    listenOptions: Object.freeze([]),
+    httpRoutes: Object.freeze([])
   })
 }
 
@@ -246,7 +326,8 @@ export function transport(value: Transport): ServerOption {
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyTransport
@@ -264,7 +345,8 @@ export function address(value: string): ServerOption {
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyAddress
@@ -286,7 +368,8 @@ export function advertise(value: string): ServerOption {
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyAdvertise
@@ -401,7 +484,8 @@ export function handler<Request extends Struct, Response extends Struct>(
       handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyHandler
@@ -422,7 +506,8 @@ export function middleware(
       handlers: options.handlers,
       middleware: Object.freeze(options.middleware.concat(selected)),
       operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyMiddleware
@@ -478,7 +563,8 @@ export function use(
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware,
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     })
   }
   return applyUse
@@ -502,14 +588,51 @@ export function listenOption(
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
-      listenOptions: Object.freeze(options.listenOptions.concat(selected))
+      listenOptions: Object.freeze(options.listenOptions.concat(selected)),
+      httpRoutes: options.httpRoutes
     })
   }
   return applyListenOptions
 }
 
-/** Reads one required routing header. */
-function routeHeader(header: Readonly<Record<string, string>>, name: string): string {
+/** Maps one exact HTTP method and pathname onto an existing unary endpoint. */
+export function httpRoute(
+  method: string,
+  path: string,
+  service: string,
+  endpoint: string,
+  successStatus?: number
+): ServerOption {
+  const selected = httpRouteValue(
+    Object.freeze({
+      method,
+      path,
+      service,
+      endpoint,
+      successStatus
+    })
+  )
+  /** Adds the validated HTTP path route. */
+  function applyHttpRoute(options: ServerOptions): ServerOptions {
+    return snapshotOptions({
+      address: options.address,
+      advertise: options.advertise,
+      transport: options.transport,
+      handlers: options.handlers,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      listenOptions: options.listenOptions,
+      httpRoutes: Object.freeze(options.httpRoutes.concat(selected))
+    })
+  }
+  return applyHttpRoute
+}
+
+/** Reads one routing header without requiring it to be present. */
+function optionalRouteHeader(
+  header: Readonly<Record<string, string>>,
+  name: string
+): string | null {
   const expected = name.toLowerCase()
   let found: string | null = null
   for (const key of Object.keys(header)) {
@@ -517,13 +640,105 @@ function routeHeader(header: Readonly<Record<string, string>>, name: string): st
     if (found !== null) throw serviceError("invalid_request", `duplicate ${name} header`, 400)
     found = header[key] ?? ""
   }
-  if (found === null || found.length === 0) {
-    throw serviceError("invalid_request", `missing ${name} header`, 400)
-  }
+  if (found === null || found.length === 0) return null
+  return found
+}
+
+/** Reads one required routing header. */
+function routeHeader(header: Readonly<Record<string, string>>, name: string): string {
+  const found = optionalRouteHeader(header, name)
+  if (found === null) throw serviceError("invalid_request", `missing ${name} header`, 400)
   try {
     return routeToken(found, name)
   } catch {
     throw serviceError("invalid_request", `invalid ${name} header`, 400)
+  }
+}
+
+/** Overwrites one header name, dropping case variants so routeHeader cannot see duplicates. */
+function writeHeader(header: Record<string, string>, name: string, value: string): void {
+  const expected = name.toLowerCase()
+  for (const key of Object.keys(header)) {
+    if (key.toLowerCase() === expected) delete header[key]
+  }
+  header[name] = value
+}
+
+/** Returns the pathname of one Go-Like-Target value without query or fragment. */
+function requestPathname(value: string): string {
+  try {
+    return new URL(value, "http://go-like.invalid").pathname
+  } catch {
+    return value
+  }
+}
+
+/** Finds one exact method+path route, or whether the pathname exists with another method. */
+function lookupHttpRoute(
+  method: string,
+  path: string,
+  routes: readonly HTTPRoute[]
+): HTTPRoute | "method" | null {
+  let pathMatched = false
+  for (const route of routes) {
+    if (route.path !== path) continue
+    pathMatched = true
+    if (route.method === method) return route
+  }
+  return pathMatched ? "method" : null
+}
+
+/** Encodes one non-envelope HTTP carrier failure without the unary ServiceError body. */
+function httpCarrierMessage(status: number, body: string): Message {
+  return snapshotMessage({
+    header: {
+      [HTTPCarrierStatusHeader]: String(status),
+      [contentTypeHeader]: "text/plain; charset=utf-8"
+    },
+    body: new TextEncoder().encode(body)
+  })
+}
+
+/** Copies the path-route success carrier onto one handler Message. */
+function withHttpCarrierStatus(message: Message, status: number): Message {
+  const header: Record<string, string> = { ...message.header }
+  writeHeader(header, HTTPCarrierStatusHeader, String(status))
+  return snapshotMessage({ header, body: message.body })
+}
+
+/** Injects envelope routing headers from an exact httpRoute, or returns an HTTP carrier response. */
+function routeHttpRequest(
+  request: Message,
+  routes: readonly HTTPRoute[]
+):
+  | { readonly kind: "routed"; readonly request: Message; readonly successStatus: number | null }
+  | { readonly kind: "http-ok" }
+  | { readonly kind: "http-failure"; readonly status: number } {
+  if (optionalRouteHeader(request.header, serviceHeader) !== null) {
+    return { kind: "routed", request, successStatus: null }
+  }
+  const method = optionalRouteHeader(request.header, methodHeader)
+  const target = optionalRouteHeader(request.header, targetHeader)
+  if (method === null || target === null) {
+    return { kind: "routed", request, successStatus: null }
+  }
+  const token = method.toUpperCase()
+  const path = requestPathname(target)
+  const matched = lookupHttpRoute(token, path, routes)
+  if (matched === "method") return { kind: "http-failure", status: 405 }
+  if (matched === null) {
+    if ((token === "GET" || token === "HEAD") && path === "/healthz") {
+      return { kind: "http-ok" }
+    }
+    return { kind: "http-failure", status: 404 }
+  }
+  const header: Record<string, string> = { ...request.header }
+  writeHeader(header, serviceHeader, matched.service)
+  writeHeader(header, endpointHeader, matched.endpoint)
+  return {
+    kind: "routed",
+    request: snapshotMessage({ header, body: request.body }),
+    successStatus: matched.successStatus
   }
 }
 
@@ -583,7 +798,8 @@ function failureMessage(value: unknown): Message {
 function dispatcher(
   handlers: ReadonlyMap<string, ReadonlyMap<string, Handler>>,
   middlewareValues: readonly Middleware[],
-  operationMiddleware: ReadonlyMap<string, readonly Middleware[]>
+  operationMiddleware: ReadonlyMap<string, readonly Middleware[]>,
+  httpRoutes: readonly HTTPRoute[]
 ): (ctx: Context, socket: Socket) => Promise<void> {
   const routes = new Map<string, ReadonlyMap<string, Handler>>()
   for (const [service, endpoints] of handlers) {
@@ -600,13 +816,28 @@ function dispatcher(
     const request = snapshotMessage(await socket.recv(ctx))
     let response: Message
     try {
-      const service = routeHeader(request.header, serviceHeader)
-      const endpoint = routeHeader(request.header, endpointHeader)
-      const handle = routes.get(service)?.get(endpoint)
-      if (handle === undefined) {
-        throw serviceError("not_found", `unknown service endpoint: ${service}/${endpoint}`, 404)
+      const routed = routeHttpRequest(request, httpRoutes)
+      if (routed.kind === "http-ok") {
+        response = httpCarrierMessage(200, "")
+      } else if (routed.kind === "http-failure") {
+        response = httpCarrierMessage(
+          routed.status,
+          routed.status === 405 ? "Method Not Allowed" : "Not Found"
+        )
+      } else {
+        const service = routeHeader(routed.request.header, serviceHeader)
+        const endpoint = routeHeader(routed.request.header, endpointHeader)
+        const handle = routes.get(service)?.get(endpoint)
+        if (handle === undefined) {
+          throw serviceError("not_found", `unknown service endpoint: ${service}/${endpoint}`, 404)
+        }
+        response = snapshotMessage(
+          await handle(requestContext(ctx, routed.request), routed.request)
+        )
+        if (routed.successStatus !== null) {
+          response = withHttpCarrierStatus(response, routed.successStatus)
+        }
       }
-      response = snapshotMessage(await handle(requestContext(ctx, request), request))
     } catch (value) {
       response = failureMessage(value)
     }
@@ -734,7 +965,12 @@ export function newServer(
     try {
       await accepted.accept(
         ctx,
-        dispatcher(options.handlers, options.middleware, options.operationMiddleware)
+        dispatcher(
+          options.handlers,
+          options.middleware,
+          options.operationMiddleware,
+          options.httpRoutes
+        )
       )
     } finally {
       listener = null

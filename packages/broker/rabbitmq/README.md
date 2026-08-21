@@ -8,6 +8,16 @@ go-like 的 RabbitMQ AMQP 0-9-1 Broker provider，基于官方生态维护的 `a
 QoS 与 consumer。稳定 subscriber 一旦 `unsubscribe` 就不会在后续 generation 复活。该入口的
 `await publish()` 在当前 generation 的 broker ack 后完成；nack 或 channel close 会拒绝发布。
 
+需要在 connector / initial setup 完成前拿到 Broker（例如绑定 HTTP）时，使用同步入口
+`startRecoveringRabbitMqBroker(ctx, connector)`。它立即返回 `RecoveringRabbitMqHandle`，不
+`await` connector。`handle.broker` 与日后 `ready()` 给出的 broker 是同一对象：`publish` 在
+generation 出现前以 `RabbitMQ recovering broker is disconnected` 拒绝；`subscribe` 仍接纳
+descriptor，并在首次成功 setup 时 attach。`ready(ctx)` 等待 connector 返回且 initial setup 完成，
+语义与 `newRecoveringRabbitMqBroker(ctx, connector)` 相同——后者就是
+`startRecoveringRabbitMqBroker(ctx, connector).ready(ctx)`。跳过 setup 的 connector 仍被拒绝，
+文案为 `RabbitMQ recovery connector must complete its initial setup`。`stop(ctx)` 可在从未
+`ready` 时拆掉后台 connector 与已接纳 generation。本包不提供 HTTP health 端点。
+
 内部 channel 没有独立公共 stop 契约：setup/connector 失败时 provider 会回滚关闭；已接纳 generation 在
 上游断线或应用关闭其 `RecoveringChannelModel` 时由 amqplib connection 从属关闭。因此 provider 只独立停止
 consumer；应用拥有并负责关闭 connection。

@@ -1,6 +1,12 @@
 import { canceled, withCancel, type Context } from "@go-like/context"
 import { type AcceptHandler, type Message, type TransportLogger } from "@go-like/transport"
 import {
+  method as methodHeader,
+  peerIdentity as peerIdentityHeader,
+  request as serviceHeader,
+  target as targetHeader
+} from "@go-like/transport/headers"
+import {
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
@@ -20,6 +26,7 @@ import { withHTTPServerTransportInfo } from "./transport-info"
 import type { HTTPHostRequest } from "./types"
 
 const InternalServerErrorBody = "Internal Server Error"
+const HTTPCarrierStatusHeader = "Go-Like-HTTP-Status"
 
 /** Intentionally observes a best-effort body cancellation rejection. */
 function ignoreRejection(): void {}
@@ -81,13 +88,29 @@ function waitForContext<T>(
   })
 }
 
+/** Reports whether the incoming Headers already carry a non-empty service envelope. */
+function hasServiceEnvelope(headers: Headers): boolean {
+  let found = false
+  headers.forEach(function inspect(value, key): void {
+    if (key === serviceHeader.toLowerCase() && value.length > 0) found = true
+  })
+  return found
+}
+
 /** Converts one Request into a detached Message with owned body cancellation. */
 function receiveRequest(input: HTTPHostRequest, maxMessageBytes: number) {
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   /** Consumes the request body through one transport-owned standard reader. */
   async function consume(): Promise<Message> {
-    if (input.request.method.toUpperCase() !== "POST") {
+    const method = input.request.method.toUpperCase()
+    const headers = new Headers(input.request.headers)
+    if (hasServiceEnvelope(headers) && method !== "POST") {
       throw newTransportProtocolError("HTTP transport request method must be POST")
+    }
+    headers.set(methodHeader, method)
+    headers.set(targetHeader, new URL(input.request.url).pathname)
+    if (typeof input.peerIdentity === "string" && input.peerIdentity.length > 0) {
+      headers.set(peerIdentityHeader, input.peerIdentity)
     }
     const chunks: Uint8Array[] = []
     let length = 0
@@ -146,7 +169,7 @@ function receiveRequest(input: HTTPHostRequest, maxMessageBytes: number) {
     }
     return snapshotMessage(
       Object.freeze({
-        header: snapshotResponseHeaders(input.request.headers),
+        header: snapshotResponseHeaders(headers),
         body: bytes
       })
     )
@@ -176,10 +199,17 @@ function responseMessage(message: Message, maxMessageBytes: number): Response {
   )
   const detached = new ArrayBuffer(body.byteLength)
   new Uint8Array(detached).set(body)
+  const statusHeader = prepared.headers.get(HTTPCarrierStatusHeader)
+  let status = 200
+  if (statusHeader !== null) {
+    prepared.headers.delete(HTTPCarrierStatusHeader)
+    const parsed = Number(statusHeader)
+    if (Number.isInteger(parsed) && parsed >= 100 && parsed <= 599) status = parsed
+  }
   return new Response(
     detached,
     Object.freeze({
-      status: 200,
+      status,
       headers: prepared.headers
     })
   )

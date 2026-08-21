@@ -51,7 +51,7 @@ test("provider subpath exports exactly the reviewed lower-camel wire surface", (
   ])
 })
 
-test("headers subpath exports the 18 exact reviewed names and values", () => {
+test("headers subpath exports the 19 exact reviewed names and values", () => {
   expect(Headers).toEqual({
     message: "Go-Like-Topic",
     request: "Go-Like-Service",
@@ -70,7 +70,8 @@ test("headers subpath exports the 18 exact reviewed names and values", () => {
     serviceErrorStatus: "Go-Like-Service-Error-Status",
     spanId: "Go-Like-Span-ID",
     traceId: "Go-Like-Trace-ID",
-    stream: "Go-Like-Stream"
+    stream: "Go-Like-Stream",
+    peerIdentity: "Go-Like-Peer-Identity"
   })
 })
 

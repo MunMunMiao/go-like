@@ -48,7 +48,8 @@ transport.init(
 const listener = await transport.listen(ctx, "127.0.0.1:9443")
 ```
 
-`clientAuth("require")` 会用 `caCertificate` 验证客户端证书；`allowHTTP1(false)` 只允许 HTTP/2。
+`clientAuth("require")` 会用 `caCertificate` 验证客户端证书，并把已验证证书的 URI SAN 写入请求头
+`Go-Like-Peer-Identity`；`allowHTTP1(false)` 只允许 HTTP/2。
 默认值分别是 `"none"` 和 `true`。这些是 Node transport construction options，不会公开内部 Host SPI。
 
 内部微服务 Server 由 `@go-like/server` 组合：

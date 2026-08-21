@@ -1,3 +1,4 @@
+import { X509Certificate } from "node:crypto"
 import {
   createServer,
   type IncomingMessage,
@@ -129,6 +130,7 @@ interface NodeHostRuntime {
   serveUsed: boolean
   serveSignal: AbortSignal | null
   serveAbort: (() => void) | null
+  readonly clientAuth: NodeHTTPClientAuth
 }
 
 interface NodeActiveRequest {
@@ -653,6 +655,58 @@ function startForce(runtime: NodeHostRuntime): void {
   maybeFinish(runtime)
 }
 
+/** Reads URI SAN values from one X.509 subjectAltName list. */
+function uriSubjectAltNames(altName: string): string[] {
+  const uris: string[] = []
+  for (const part of altName.split(",")) {
+    const item = part.trim()
+    if (!item.toLowerCase().startsWith("uri:")) continue
+    const value = item.slice(4)
+    if (value.length > 0) uris.push(value)
+  }
+  return uris
+}
+
+/** Returns the verified client URI SAN after required mTLS admission. */
+function verifiedPeerIdentity(
+  request: NodeIncomingMessage,
+  clientAuth: NodeHTTPClientAuth
+): string | undefined {
+  if (clientAuth !== "require") return undefined
+  const sockets: unknown[] = [request.socket]
+  if ("stream" in request) {
+    try {
+      const sessionSocket = (request as Http2ServerRequest).stream.session?.socket
+      if (sessionSocket !== undefined) sockets.push(sessionSocket)
+    } catch {
+      // HTTP/2 compatibility requests may omit the session socket.
+    }
+  }
+  for (const socket of sockets) {
+    if (socket === null || typeof socket !== "object") continue
+    if (Reflect.get(socket, "authorized") === false) continue
+    const getPeerCertificate = Reflect.get(socket, "getPeerCertificate")
+    if (typeof getPeerCertificate !== "function") continue
+    let cert: unknown
+    try {
+      cert = getPeerCertificate.call(socket)
+    } catch {
+      continue
+    }
+    if (cert === null || typeof cert !== "object") continue
+    const raw = Reflect.get(cert, "raw")
+    if (!(raw instanceof Uint8Array) || raw.byteLength === 0) continue
+    try {
+      const uris = uriSubjectAltNames(new X509Certificate(raw).subjectAltName ?? "")
+      const selected = uris[0]
+      if (selected !== undefined) return selected
+    } catch {
+      continue
+    }
+  }
+  return undefined
+}
+
 /** Converts native repeated header pairs to one standard Headers object. */
 function requestHeaders(request: NodeIncomingMessage): Headers {
   const headers = new Headers()
@@ -940,13 +994,15 @@ function dispatchRequest(
   /** Runs borrowed standard handler work without rejecting from an event callback. */
   async function run(): Promise<void> {
     try {
+      const peerIdentity = verifiedPeerIdentity(request, runtime.clientAuth)
       const envelope: HTTPHostRequest = Object.freeze({
         request: standardRequest(runtime, request, aborter),
         localAddress: requestLocalAddress(runtime, request),
         remoteAddress:
           request.socket.remoteAddress === undefined
             ? ""
-            : formatAddress(request.socket.remoteAddress, request.socket.remotePort ?? 0)
+            : formatAddress(request.socket.remoteAddress, request.socket.remotePort ?? 0),
+        ...(peerIdentity === undefined ? {} : { peerIdentity })
       })
       const output = await selectedHandler(envelope)
       if (!(output instanceof Response))
@@ -965,7 +1021,8 @@ function dispatchRequest(
 /** Creates the complete per-bind runtime before any listen side effect. */
 function makeRuntime(
   factory: NodeNativeServerFactory,
-  options: HTTPHostListenOptions
+  options: HTTPHostListenOptions,
+  clientAuth: NodeHTTPClientAuth
 ): NodeHostRuntime {
   const terminal = deferred<void>()
   let runtime: NodeHostRuntime | null = null
@@ -1002,7 +1059,8 @@ function makeRuntime(
     settled: false,
     serveUsed: false,
     serveSignal: null,
-    serveAbort: null
+    serveAbort: null,
+    clientAuth
   }
   runtime = created
   observe(terminal.promise)
@@ -1141,7 +1199,8 @@ async function bindRuntime(
   capabilities: HTTPHostCapabilities,
   ctx: Context,
   address: string,
-  options: HTTPHostListenOptions
+  options: HTTPHostListenOptions,
+  clientAuth: NodeHTTPClientAuth
 ): Promise<HTTPHostHandle> {
   let target: { readonly hostname: string; readonly port: number }
   try {
@@ -1156,7 +1215,7 @@ async function bindRuntime(
   }
   let runtime: NodeHostRuntime
   try {
-    runtime = makeRuntime(factory, options)
+    runtime = makeRuntime(factory, options, clientAuth)
     observeRuntime(runtime)
   } catch (error) {
     throw normalizeHTTPError(error, "Node HTTP host construction failed")
@@ -1281,7 +1340,7 @@ export function newNodeHTTPHostWithFactory(factory: NodeHTTPServerFactory): HTTP
     },
     /** Binds one independently owned native Node HTTP server. */
     bind(ctx: Context, address: string, options: HTTPHostListenOptions): Promise<HTTPHostHandle> {
-      return bindRuntime(nativeFactory, PlainCapabilities, ctx, address, options)
+      return bindRuntime(nativeFactory, PlainCapabilities, ctx, address, options, "none")
     }
   })
 }
@@ -1305,7 +1364,14 @@ export function newNodeHTTPHostWithSecureFactory(
       address: string,
       listenOptions: HTTPHostListenOptions
     ): Promise<HTTPHostHandle> {
-      return bindRuntime(nativeFactory, SecureCapabilities, ctx, address, listenOptions)
+      return bindRuntime(
+        nativeFactory,
+        SecureCapabilities,
+        ctx,
+        address,
+        listenOptions,
+        hostOptions.clientAuth
+      )
     }
   })
 }
@@ -1325,7 +1391,14 @@ export function newNodeHTTPHost(...options: readonly NodeHTTPHostOption[]): HTTP
       address: string,
       listenOptions: HTTPHostListenOptions
     ): Promise<HTTPHostHandle> {
-      return bindRuntime(factory, SecureCapabilities, ctx, address, listenOptions)
+      return bindRuntime(
+        factory,
+        SecureCapabilities,
+        ctx,
+        address,
+        listenOptions,
+        hostOptions.clientAuth
+      )
     }
   })
 }

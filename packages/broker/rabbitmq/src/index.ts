@@ -95,6 +95,13 @@ export interface RecoveringRabbitMqBroker {
   readonly connection: RecoveringChannelModel
 }
 
+/** Admits a recovering Broker before the recovery connector finishes initial setup. */
+export interface RecoveringRabbitMqHandle {
+  readonly broker: RabbitMqBroker
+  ready(ctx: Context): Promise<RecoveringRabbitMqBroker>
+  stop(ctx: Context): Promise<void>
+}
+
 interface PreparedMessage {
   readonly body: Buffer
   readonly headers: Readonly<Record<string, string>>
@@ -657,21 +664,22 @@ function createRabbitMqBroker(
 }
 
 /**
- * Creates the canonical recovery-aware provider through amqplib's own recovery setup callback.
+ * Starts recovery setup in the background and returns a handle before the connector resolves.
  *
- * The returned connection remains application-owned. go-like owns each generated channel and
- * replays active topology and consumers, but never closes the recovering connection.
+ * `broker` is the same object later returned by `ready()`. Publish stays fail-closed until a
+ * generation exists. `newRecoveringRabbitMqBroker(ctx, connector)` is `ready(ctx)`.
  */
-export async function newRecoveringRabbitMqBroker(
+export function startRecoveringRabbitMqBroker(
   ctx: Context,
   connector: RabbitMqRecoveryConnector
-): Promise<RecoveringRabbitMqBroker> {
+): RecoveringRabbitMqHandle {
   const initialFailure = contextFailure(ctx)
   if (initialFailure !== null) throw initialFailure
   if (typeof connector !== "function") {
     throw new TypeError("RabbitMQ recovery connector must be callable")
   }
 
+  const stoppedFailure = new Error("RabbitMQ recovering broker was stopped")
   const subscriptions = new Set<RecoveringSubscription>()
   const settlements = new WeakMap<ConsumeMessage, SettlementBinding>()
   let generation = 0
@@ -679,6 +687,16 @@ export async function newRecoveringRabbitMqBroker(
   let activeChannel: Channel | null = null
   let setupRunning: Promise<void> | null = null
   let setupCompleted = false
+  let stopped = false
+  let connectionDiscarded = false
+  let retainedConnection: RecoveringChannelModel | null = null
+  let provider: RecoveringRabbitMqBroker | null = null
+  let stopping: Promise<void> | null = null
+  let rejectStopped: (error: Error) => void = () => {}
+  const stoppedAt = new Promise<never>((_, reject) => {
+    rejectStopped = reject
+  })
+  void stoppedAt.catch(consumeFailure)
 
   /** Closes the currently retained private generation channel when one exists. */
   async function closeActiveChannel(): Promise<void> {
@@ -692,9 +710,13 @@ export async function newRecoveringRabbitMqBroker(
 
   /** Closes a returned recovering connection and every retained private channel without leaking cleanup failures. */
   async function discardConnection(connection: RecoveringChannelModel): Promise<void> {
-    try {
-      await connection.close()
-    } catch {}
+    const shouldClose = !connectionDiscarded
+    connectionDiscarded = true
+    if (shouldClose) {
+      try {
+        await connection.close()
+      } catch {}
+    }
     await closeActiveChannel()
     activeBroker = null
   }
@@ -783,7 +805,14 @@ export async function newRecoveringRabbitMqBroker(
 
   /** Rebuilds one channel and atomically publishes it only after all topology is ready. */
   async function rebuild(model: ChannelModel): Promise<void> {
+    if (stopped) return
     const channel = await model.createConfirmChannel()
+    if (stopped) {
+      try {
+        await channel.close()
+      } catch {}
+      return
+    }
     const broker = newConfirmRabbitMqBroker(channel)
     generation += 1
     const selectedGeneration = generation
@@ -791,6 +820,12 @@ export async function newRecoveringRabbitMqBroker(
     try {
       for (const subscription of subscriptions) {
         await attach(subscription, broker, selectedGeneration)
+      }
+      if (stopped) {
+        try {
+          await channel.close()
+        } catch {}
+        return
       }
       activeChannel = channel
       activeBroker = broker
@@ -804,11 +839,12 @@ export async function newRecoveringRabbitMqBroker(
 
   /** Installs one observable setup barrier into amqplib's official recovery callback. */
   async function setup(model: ChannelModel): Promise<void> {
+    if (stopped) return
     const operation = rebuild(model)
     setupRunning = operation
     try {
       await operation
-      setupCompleted = true
+      if (!stopped) setupCompleted = true
     } finally {
       if (setupRunning === operation) setupRunning = null
     }
@@ -826,49 +862,6 @@ export async function newRecoveringRabbitMqBroker(
   }
 
   const connecting = connectRecovery()
-  let connection: RecoveringChannelModel
-  try {
-    connection = await waitForContext(ctx, connecting)
-  } catch (value) {
-    activeBroker = null
-    void connecting
-      .then((lateConnection) => discardConnection(lateConnection), consumeFailure)
-      .catch(consumeFailure)
-    await closeActiveChannel()
-    throw value
-  }
-  if (
-    typeof connection !== "object" ||
-    connection === null ||
-    typeof connection.on !== "function" ||
-    typeof connection.close !== "function"
-  ) {
-    await discardConnection(connection)
-    throw new TypeError("RabbitMQ recovery connector must return a RecoveringChannelModel")
-  }
-  if (!setupCompleted || activeBroker === null) {
-    await discardConnection(connection)
-    throw new Error("RabbitMQ recovery connector must complete its initial setup")
-  }
-
-  /** Invalidates exact native handles after amqplib reports one lost generation. */
-  const disconnected = (): void => {
-    generation += 1
-    activeBroker = null
-    activeChannel = null
-    for (const subscription of subscriptions) {
-      subscription.native = null
-      subscription.nativeGeneration = 0
-    }
-  }
-  connection.on("disconnect", disconnected)
-  connection.on("connect-failed", disconnected)
-
-  const postConnectFailure = contextFailure(ctx)
-  if (postConnectFailure !== null) {
-    await discardConnection(connection)
-    throw postConnectFailure
-  }
 
   /** Starts or joins permanent stable-subscription shutdown. */
   function beginStableStop(subscription: RecoveringSubscription): Promise<void> {
@@ -1014,5 +1007,116 @@ export async function newRecoveringRabbitMqBroker(
     }
   })
 
-  return Object.freeze({ broker, connection })
+  /** Invalidates exact native handles after amqplib reports one lost generation. */
+  function disconnectGeneration(): void {
+    generation += 1
+    activeBroker = null
+    activeChannel = null
+    for (const subscription of subscriptions) {
+      subscription.native = null
+      subscription.nativeGeneration = 0
+    }
+  }
+
+  /** Accepts one RecoveringChannelModel after the connector returns, sharing one setup barrier. */
+  async function acceptConnection(
+    connection: RecoveringChannelModel
+  ): Promise<RecoveringRabbitMqBroker> {
+    if (provider !== null) return provider
+    if (stopped) {
+      await discardConnection(connection)
+      throw stoppedFailure
+    }
+    if (
+      typeof connection !== "object" ||
+      connection === null ||
+      typeof connection.on !== "function" ||
+      typeof connection.close !== "function"
+    ) {
+      await discardConnection(connection)
+      throw new TypeError("RabbitMQ recovery connector must return a RecoveringChannelModel")
+    }
+    if (!setupCompleted || activeBroker === null) {
+      await discardConnection(connection)
+      throw new Error("RabbitMQ recovery connector must complete its initial setup")
+    }
+    connection.on("disconnect", disconnectGeneration)
+    connection.on("connect-failed", disconnectGeneration)
+    const postConnectFailure = contextFailure(ctx)
+    if (postConnectFailure !== null) {
+      await discardConnection(connection)
+      throw postConnectFailure
+    }
+    if (stopped) {
+      await discardConnection(connection)
+      throw stoppedFailure
+    }
+    retainedConnection = connection
+    provider = Object.freeze({ broker, connection })
+    return provider
+  }
+
+  const admitted = connecting.then(
+    (connection) => acceptConnection(connection),
+    async (value: unknown) => {
+      await closeActiveChannel()
+      activeBroker = null
+      throw value
+    }
+  )
+  void admitted.catch(consumeFailure)
+
+  /** Permanently stops background setup and discards any returned recovering connection. */
+  function performStop(): Promise<void> {
+    if (stopping !== null) return stopping
+    stopping = (async () => {
+      stopped = true
+      rejectStopped(stoppedFailure)
+      generation += 1
+      for (const subscription of subscriptions) {
+        subscription.native = null
+        subscription.nativeGeneration = 0
+      }
+      if (retainedConnection !== null) {
+        await discardConnection(retainedConnection)
+        return
+      }
+      await closeActiveChannel()
+      activeBroker = null
+      void connecting
+        .then((lateConnection) => discardConnection(lateConnection), consumeFailure)
+        .catch(consumeFailure)
+    })()
+    void stopping.catch(consumeFailure)
+    return stopping
+  }
+
+  return Object.freeze({
+    broker,
+    ready(waitCtx: Context): Promise<RecoveringRabbitMqBroker> {
+      return waitForContext(
+        waitCtx,
+        Promise.race([admitted, stoppedAt]).then((recovered) => {
+          if (stopped) throw stoppedFailure
+          return recovered
+        })
+      )
+    },
+    stop(stopCtx: Context): Promise<void> {
+      return waitForContext(stopCtx, performStop())
+    }
+  })
+}
+
+/**
+ * Creates the canonical recovery-aware provider through amqplib's own recovery setup callback.
+ *
+ * The returned connection remains application-owned. go-like owns each generated channel and
+ * replays active topology and consumers, but never closes the recovering connection.
+ */
+export async function newRecoveringRabbitMqBroker(
+  ctx: Context,
+  connector: RabbitMqRecoveryConnector
+): Promise<RecoveringRabbitMqBroker> {
+  return startRecoveringRabbitMqBroker(ctx, connector).ready(ctx)
 }

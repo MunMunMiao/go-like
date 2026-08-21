@@ -14,6 +14,7 @@ import {
   address,
   advertise,
   handler,
+  httpRoute,
   listenOption,
   middleware,
   newServer,
@@ -55,24 +56,27 @@ const limited: Middleware = rateLimitMiddleware(limiter)
 const option: ServerOption = handler("orders", "get", operation)
 const increment = typedEndpoint("calculator", "increment", NumberValue, NumberValue)
 const typedOption: ServerOption = handler(increment, (_ctx, request) => request + 1)
+const pathOption: ServerOption = httpRoute("POST", "/v1/orders", "orders", "get", 201)
 const server: Server = newServer(
   transport(transportValue),
   address("127.0.0.1:0"),
   advertise("server.internal"),
   option,
   typedOption,
+  pathOption,
   middleware(wrapper, limited),
   use("orders/*", wrapper),
   listenOption()
 )
 const options: ServerOptions = server.options()
 const advertised: string | null = options.advertise
+const httpRoutes: ServerOptions["httpRoutes"] = options.httpRoutes
 const operationMiddleware: ReadonlyMap<string, readonly Middleware[]> = options.operationMiddleware
 const endpoint: Promise<string> = server.endpoint(background())
 const running: Promise<void> = server.start(background())
 const stopping: Promise<void> = server.stop(background())
 
-void [options, advertised, operationMiddleware, endpoint, running, stopping, limited]
+void [options, advertised, httpRoutes, operationMiddleware, endpoint, running, stopping, limited]
 
 // @ts-expect-error Context is an independent first argument.
 operation({ header: {}, body: new Uint8Array() })

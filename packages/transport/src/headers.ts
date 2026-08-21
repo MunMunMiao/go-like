@@ -34,3 +34,5 @@ export const spanId = "Go-Like-Span-ID"
 export const traceId = "Go-Like-Trace-ID"
 /** Header carrying the stream capability marker. */
 export const stream = "Go-Like-Stream"
+/** Header carrying the verified mTLS client URI SAN. */
+export const peerIdentity = "Go-Like-Peer-Identity"

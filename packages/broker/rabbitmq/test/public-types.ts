@@ -5,11 +5,13 @@ import {
   newConfirmRabbitMqBroker,
   newRabbitMqBroker,
   newRecoveringRabbitMqBroker,
+  startRecoveringRabbitMqBroker,
   type RabbitMqBroker,
   type RabbitMqPublishOptions,
   type RabbitMqRecoveryConnector,
   type RabbitMqSubscribeOptions,
-  type RecoveringRabbitMqBroker
+  type RecoveringRabbitMqBroker,
+  type RecoveringRabbitMqHandle
 } from "../src/index"
 
 declare const channel: Channel
@@ -49,10 +51,20 @@ void confirmedPublish
 const connector: RabbitMqRecoveryConnector = async (_setup) => {
   return {} as RecoveringChannelModel
 }
+const recoveringHandle: RecoveringRabbitMqHandle = startRecoveringRabbitMqBroker(
+  background(),
+  connector
+)
+const recoveringFromStart: Promise<RecoveringRabbitMqBroker> = recoveringHandle.ready(background())
+const recoveringStopped: Promise<void> = recoveringHandle.stop(background())
 const recovering: Promise<RecoveringRabbitMqBroker> = newRecoveringRabbitMqBroker(
   background(),
   connector
 )
+void recoveringFromStart
+void recoveringStopped
+const startedBroker: RabbitMqBroker = recoveringHandle.broker
+void startedBroker
 async function consumeRecovery(): Promise<void> {
   const recovered = await recovering
   const stable: RabbitMqBroker = recovered.broker

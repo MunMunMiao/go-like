@@ -835,7 +835,8 @@ test("requires a transport and at least one handler", () => {
         handlers: options.handlers,
         middleware: options.middleware,
         operationMiddleware: options.operationMiddleware,
-        listenOptions: [null as never]
+        listenOptions: [null as never],
+        httpRoutes: options.httpRoutes
       })
     )
   ).toThrow("server listen option must be a function")
@@ -998,7 +999,8 @@ test("validates operation middleware injected by custom ServerOption values", ()
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/*/get", Object.freeze([])]]),
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     }))
   ).toThrow("server middleware selector must be exact or end with one *")
   expect(() =>
@@ -1009,7 +1011,8 @@ test("validates operation middleware injected by custom ServerOption values", ()
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/", Object.freeze([])]]),
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     }))
   ).toThrow("server middleware selector must identify a canonical operation or trailing wildcard")
   expect(() =>
@@ -1020,7 +1023,8 @@ test("validates operation middleware injected by custom ServerOption values", ()
       handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/get", Object.freeze([null as never])]]),
-      listenOptions: options.listenOptions
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes
     }))
   ).toThrow("server middleware must be a function")
 })

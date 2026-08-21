@@ -7,6 +7,7 @@ test("exports exactly the go-style internal server runtime surface", () => {
     "address",
     "advertise",
     "handler",
+    "httpRoute",
     "listenOption",
     "middleware",
     "newServer",
@@ -14,6 +15,7 @@ test("exports exactly the go-style internal server runtime surface", () => {
     "transport",
     "use"
   ])
+  expect(typeof Reflect.get(Server, "httpRoute")).toBe("function")
   expect(Server).not.toHaveProperty("registeredUnaryService")
   expect(Server).not.toHaveProperty("registeredFetchService")
   expect(Server).not.toHaveProperty("composeUnary")

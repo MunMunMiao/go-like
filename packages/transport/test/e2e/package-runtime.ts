@@ -46,7 +46,7 @@ if (JSON.stringify(actualProviderExports) !== JSON.stringify(expectedProviderExp
   )
 }
 if (
-  Object.keys(Headers).length !== 18 ||
+  Object.keys(Headers).length !== 19 ||
   Headers.prefix !== "Go-Like-" ||
   Headers.metadata !== "Go-Like-Metadata" ||
   Headers.contentType !== "Content-Type"
