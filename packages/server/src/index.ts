@@ -815,8 +815,10 @@ function dispatcher(
   async function dispatch(ctx: Context, socket: Socket): Promise<void> {
     const request = snapshotMessage(await socket.recv(ctx))
     let response: Message
+    let httpPathRoute = false
     try {
       const routed = routeHttpRequest(request, httpRoutes)
+      httpPathRoute = routed.kind !== "routed" || routed.successStatus !== null
       if (routed.kind === "http-ok") {
         response = httpCarrierMessage(200, "")
       } else if (routed.kind === "http-failure") {
@@ -840,6 +842,9 @@ function dispatcher(
       }
     } catch (value) {
       response = failureMessage(value)
+      if (httpPathRoute && isServiceError(value)) {
+        response = withHttpCarrierStatus(response, value.status)
+      }
     }
     await socket.send(ctx, response)
   }

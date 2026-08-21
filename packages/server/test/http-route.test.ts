@@ -257,6 +257,25 @@ test("envelope POST with Go-Like-Service is not rewritten by a matching httpRout
   expect(decodeServiceError("unary", 200, response.header, response.body)).toBeNull()
 })
 
+test("httpRoute ServiceError uses HTTP carrier status not dest 200", async () => {
+  const response = await dispatch(
+    jsonMessage(
+      {
+        "Go-Like-Method": "POST",
+        "Go-Like-Target": "/v1/machine-commands"
+      },
+      Object.freeze({ command: "reboot" })
+    ),
+    handler("machine-gateway", "command", () => {
+      throw serviceError("invalid_argument", "invalid JSON", 400)
+    }),
+    httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
+  )
+
+  expect(headerValue(response.header, HTTPCarrierStatusHeader)).toBe("400")
+  expect(headerValue(response.header, HTTPCarrierStatusHeader)).not.toBe("201")
+})
+
 test("envelope ServiceError still decodes as unary carrier 200", async () => {
   const response = await dispatch(
     jsonMessage(
