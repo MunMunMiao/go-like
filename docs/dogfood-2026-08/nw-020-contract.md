@@ -2,14 +2,14 @@
 
 本文钉死 `NW-020`（findings `MS-020-001` … `MS-020-006`）的公共 API 与可观察行为。标识符、头名、状态码与包名保持英文。实现必须满足下列条款；未列入的行为不得借本票扩大范围。
 
-| 项 | 值 |
-| --- | --- |
-| ID | `NW-020` |
-| dest | `fw-r183` / `MS-020` |
-| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c` |
-| 包 | `@go-like/server`、`@go-like/transport-http`、`@go-like/transport` |
-| 对照 | 同 dest 上 competitor（Node `http2`/`tls`）六槽返回 HTTP 201 及 `peerIdentity spiffe://ms020/machine/alpha` |
-| 本文状态 | 契约钉死；不授权修改 `packages/`、不启动 dest、不提交 git |
+| 项         | 值                                                                                                          |
+| ---------- | ----------------------------------------------------------------------------------------------------------- |
+| ID         | `NW-020`                                                                                                    |
+| dest       | `fw-r183` / `MS-020`                                                                                        |
+| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c`                                                                  |
+| 包         | `@go-like/server`、`@go-like/transport-http`、`@go-like/transport`                                          |
+| 对照       | 同 dest 上 competitor（Node `http2`/`tls`）六槽返回 HTTP 201 及 `peerIdentity spiffe://ms020/machine/alpha` |
+| 本文状态   | 契约钉死；不授权修改 `packages/`、不启动 dest、不提交 git                                                   |
 
 ---
 
@@ -77,11 +77,11 @@ Finding workaround 原文（`MS-020-001.json` 等）：public `@go-like/transpor
 
 无信封且无 `httpRoute` 匹配时，实现必须使用**非**「200 + `missing Go-Like-Service header`」的失败。推荐可观察默认（不改变 unary encoder）：
 
-| 条件 | HTTP 载体 | body |
-| --- | --- | --- |
+| 条件                                                    | HTTP 载体          | body                                                              |
+| ------------------------------------------------------- | ------------------ | ----------------------------------------------------------------- |
 | pathname 未匹配任何 `httpRoute`，且无 `Go-Like-Service` | 非 200（建议 404） | 不得使用 `missing Go-Like-Service header` 的 unary `ServiceError` |
-| pathname 匹配但 method 不匹配 | 非 200（建议 405） | 同上 |
-| 已带信封头 | 条款 1 | unary `ServiceError` carrier 200 |
+| pathname 匹配但 method 不匹配                           | 非 200（建议 405） | 同上                                                              |
+| 已带信封头                                              | 条款 1             | unary `ServiceError` carrier 200                                  |
 
 ### 条款 3 — 公共 `httpRoute(method, path, service, endpoint, successStatus?)`
 
@@ -177,13 +177,13 @@ Go-Like-Peer-Identity: spiffe://ms020/machine/alpha
 
 ## 3. 可观察行为矩阵
 
-| 入站 | 路由 | 成功 HTTP | 失败形状 |
-| --- | --- | --- | --- |
-| `POST` + `Go-Like-Service` + `Go-Like-Endpoint` | 信封 unary | 200 | unary `ServiceError`，`carrierStatus` 200 |
-| `POST /v1/machine-commands`，无信封头，已 `httpRoute(..., 201)` | 路径路由 → 注入信封头后 `routeHeader` | **201** | 不得为「200 + missing Go-Like-Service header」 |
-| 无信封头，无 `httpRoute` 命中 | 不进入「缺头即信封 400」 | 非 200 | 禁止 `missing Go-Like-Service header` 的 200 载体 |
-| `GET` 未登记 `httpRoute` | 非信封成功 | 非 200 | 不得把 GET 偷偷改成信封 POST |
-| `clientAuth("require")` 且证书 URI SAN 为 `spiffe://ms020/machine/alpha` | 头 `Go-Like-Peer-Identity` 可见 | handler 可写入 JSON `peerIdentity` | 未知 CA 仍为握手失败 |
+| 入站                                                                     | 路由                                  | 成功 HTTP                          | 失败形状                                          |
+| ------------------------------------------------------------------------ | ------------------------------------- | ---------------------------------- | ------------------------------------------------- |
+| `POST` + `Go-Like-Service` + `Go-Like-Endpoint`                          | 信封 unary                            | 200                                | unary `ServiceError`，`carrierStatus` 200         |
+| `POST /v1/machine-commands`，无信封头，已 `httpRoute(..., 201)`          | 路径路由 → 注入信封头后 `routeHeader` | **201**                            | 不得为「200 + missing Go-Like-Service header」    |
+| 无信封头，无 `httpRoute` 命中                                            | 不进入「缺头即信封 400」              | 非 200                             | 禁止 `missing Go-Like-Service header` 的 200 载体 |
+| `GET` 未登记 `httpRoute`                                                 | 非信封成功                            | 非 200                             | 不得把 GET 偷偷改成信封 POST                      |
+| `clientAuth("require")` 且证书 URI SAN 为 `spiffe://ms020/machine/alpha` | 头 `Go-Like-Peer-Identity` 可见       | handler 可写入 JSON `peerIdentity` | 未知 CA 仍为握手失败                              |
 
 `POST /v1/machine-commands` 的冻结成功体仍由应用提供。库验收只需：HTTP 201、请求头含已验证 URI SAN、handler 能把它放进 body。dest 字段级 JSON 相等是样本职责。
 
@@ -191,11 +191,11 @@ Go-Like-Peer-Identity: spiffe://ms020/machine/alpha
 
 ## 4. 建议改动面（不扩大范围）
 
-| 包 | 允许的变化 | 明确不做 |
-| --- | --- | --- |
-| `@go-like/server` | 导出 `httpRoute`；`ServerOptions` 快照路由表；`dispatch` 在 `routeHeader` 前按 method+pathname 注入 `Go-Like-Service` / `Go-Like-Endpoint`；无匹配且无信封头时不抛 `missing Go-Like-Service header` | 不改 `handler` 签名；不改 unary `failureMessage` 对**信封**请求的 encoder |
-| `@go-like/transport-http` | 路径路由成功使用 `successStatus`；信封成功保持 200；`clientAuth("require")` 写入 `Go-Like-Peer-Identity`；允许已登记路径方法进入 `recv`（信封仍 POST-only） | 不把 `createSecureServer` 提升为 `./node` 导出；不新增必选 `TransportInfo` 方法；不修改 `examples/`、`e2e/` |
-| `@go-like/transport` | 可选：导出头常量 `Go-Like-Peer-Identity` | **禁止**修改 unary `carrierStatus: 200`；**禁止**给 `TransportInfo` 加必选成员 |
+| 包                        | 允许的变化                                                                                                                                                                                          | 明确不做                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@go-like/server`         | 导出 `httpRoute`；`ServerOptions` 快照路由表；`dispatch` 在 `routeHeader` 前按 method+pathname 注入 `Go-Like-Service` / `Go-Like-Endpoint`；无匹配且无信封头时不抛 `missing Go-Like-Service header` | 不改 `handler` 签名；不改 unary `failureMessage` 对**信封**请求的 encoder                                   |
+| `@go-like/transport-http` | 路径路由成功使用 `successStatus`；信封成功保持 200；`clientAuth("require")` 写入 `Go-Like-Peer-Identity`；允许已登记路径方法进入 `recv`（信封仍 POST-only）                                         | 不把 `createSecureServer` 提升为 `./node` 导出；不新增必选 `TransportInfo` 方法；不修改 `examples/`、`e2e/` |
+| `@go-like/transport`      | 可选：导出头常量 `Go-Like-Peer-Identity`                                                                                                                                                            | **禁止**修改 unary `carrierStatus: 200`；**禁止**给 `TransportInfo` 加必选成员                              |
 
 路径路由如何把 `successStatus` 从 server 传到 HTTP `Response`（内部头、accept 元数据、或 listener 可见的路由表）是实现细节，但可观察结果必须是条款 4。
 
@@ -228,21 +228,21 @@ dest 回归（本契约不执行）：`go-like-dogfood` `projects/MS-020/finding
 
 ## 7. 证据索引
 
-| 主张 | 位置 |
-| --- | --- |
-| dest 期望 201 + `peerIdentity spiffe://ms020/machine/alpha` | `MS-020-001.json` `expected`（同文案：`MS-020-002` … `006`） |
-| dest actual：200 + missing `Go-Like-Service` | `MS-020-001.json` `actual` |
-| 禁止原生 `http2` workaround | `MS-020-001.json` `workaround`；`docs/dogfood-2026-08/next-work.md:13-21` |
-| NW-020 仍未核实项（本文关闭） | `docs/dogfood-2026-08/next-work.md:21` |
-| `receiveRequest` 仅 POST | `packages/transport/http/src/socket.ts:85-91` |
-| 成功 HTTP 写死 200 | `packages/transport/http/src/socket.ts:167-186` |
-| 缺信封头 → `invalid_request` 400 | `packages/server/src/index.ts:511-528`、`598-614` |
-| unary `carrierStatus` 200 | `packages/transport/src/errors.ts:201`、`276` |
-| `TransportInfo` 五方法、无 SAN | `packages/transport/src/types.ts:21-32`；`packages/transport/http/src/transport-info.ts:35-64` |
-| `clientAuth` 只做握手策略 | `packages/transport/http/src/node-host.ts:186-195`、`206-224` |
-| `standardRequest` 不拷证书 | `packages/transport/http/src/node-host.ts:656-668`、`728-755` |
-| 无 `httpRoute` / 无 `Go-Like-Peer-Identity` | `packages/server/src/index.ts` 导出表；`packages/transport/src/headers.ts:1-36` |
-| 信封客户端拒绝非 200 | `packages/transport/http/src/client.ts:318-322` |
-| 内部 `createSecureServer` 非包导出 | `packages/transport/http/src/node-host.ts:334-347`；`packages/transport/http/package.json` `exports` |
-| 公共入口隐藏 Host SPI | `packages/transport/http/src/node.ts:74-78`、`151-165` |
-| 禁止 bind-first | `docs/dogfood-2026-08/ux-summary.md:28-37` |
+| 主张                                                        | 位置                                                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| dest 期望 201 + `peerIdentity spiffe://ms020/machine/alpha` | `MS-020-001.json` `expected`（同文案：`MS-020-002` … `006`）                                         |
+| dest actual：200 + missing `Go-Like-Service`                | `MS-020-001.json` `actual`                                                                           |
+| 禁止原生 `http2` workaround                                 | `MS-020-001.json` `workaround`；`docs/dogfood-2026-08/next-work.md:13-21`                            |
+| NW-020 仍未核实项（本文关闭）                               | `docs/dogfood-2026-08/next-work.md:21`                                                               |
+| `receiveRequest` 仅 POST                                    | `packages/transport/http/src/socket.ts:85-91`                                                        |
+| 成功 HTTP 写死 200                                          | `packages/transport/http/src/socket.ts:167-186`                                                      |
+| 缺信封头 → `invalid_request` 400                            | `packages/server/src/index.ts:511-528`、`598-614`                                                    |
+| unary `carrierStatus` 200                                   | `packages/transport/src/errors.ts:201`、`276`                                                        |
+| `TransportInfo` 五方法、无 SAN                              | `packages/transport/src/types.ts:21-32`；`packages/transport/http/src/transport-info.ts:35-64`       |
+| `clientAuth` 只做握手策略                                   | `packages/transport/http/src/node-host.ts:186-195`、`206-224`                                        |
+| `standardRequest` 不拷证书                                  | `packages/transport/http/src/node-host.ts:656-668`、`728-755`                                        |
+| 无 `httpRoute` / 无 `Go-Like-Peer-Identity`                 | `packages/server/src/index.ts` 导出表；`packages/transport/src/headers.ts:1-36`                      |
+| 信封客户端拒绝非 200                                        | `packages/transport/http/src/client.ts:318-322`                                                      |
+| 内部 `createSecureServer` 非包导出                          | `packages/transport/http/src/node-host.ts:334-347`；`packages/transport/http/package.json` `exports` |
+| 公共入口隐藏 Host SPI                                       | `packages/transport/http/src/node.ts:74-78`、`151-165`                                               |
+| 禁止 bind-first                                             | `docs/dogfood-2026-08/ux-summary.md:28-37`                                                           |

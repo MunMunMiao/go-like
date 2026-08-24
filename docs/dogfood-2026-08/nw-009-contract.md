@@ -2,14 +2,14 @@
 
 本文钉死 `NW-009`（findings `MS-009-001` … `MS-009-006`）的公共 API 与可观察行为。标识符、头名、状态码、路径与包名保持英文。实现必须满足下列条款；未列入的行为不得借本票扩大范围。
 
-| 项 | 值 |
-| --- | --- |
-| ID | `NW-009` |
-| dest | `fw-r230` / `MS-009` |
-| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c` |
-| 包 | `@go-like/server`（配合已落地的 `@go-like/transport-http` GET 无信封接纳） |
-| 对照 | 同 dest 上 competitor 原生 HTTP `GET\|HEAD /healthz` 写 `HTTP 200` 空 body；六槽 healthy-path / invariants / fault-matrix / cleanup 均通过 |
-| 本文状态 | 契约钉死；不授权启动 dest、不 compose、不提交 git。后续实现只改完成本票所必需的 `@go-like/server`（及已有 HTTP 载体路径）；不得借本票实现其他 `NW-*` |
+| 项         | 值                                                                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ID         | `NW-009`                                                                                                                                             |
+| dest       | `fw-r230` / `MS-009`                                                                                                                                 |
+| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c`                                                                                                           |
+| 包         | `@go-like/server`（配合已落地的 `@go-like/transport-http` GET 无信封接纳）                                                                           |
+| 对照       | 同 dest 上 competitor 原生 HTTP `GET\|HEAD /healthz` 写 `HTTP 200` 空 body；六槽 healthy-path / invariants / fault-matrix / cleanup 均通过           |
+| 本文状态   | 契约钉死；不授权启动 dest、不 compose、不提交 git。后续实现只改完成本票所必需的 `@go-like/server`（及已有 HTTP 载体路径）；不得借本票实现其他 `NW-*` |
 
 `docs/dogfood-2026-08/next-work.md:41` 将三项列为仍未核实。本文关闭它们：
 
@@ -25,9 +25,9 @@
 
 `MS-009` 黑盒冻结面是 bootstrap：`APP_ROLES` 先起 `fault-worker`，harness 在 60s 内要求 `GET /healthz` 得到 **200 或 503**。探测端口：
 
-| 车道 | `fault-worker` `/healthz` |
-| --- | --- |
-| `local-go-like` | `http://127.0.0.1:40901/healthz`（`MS-009-001` … `003`） |
+| 车道             | `fault-worker` `/healthz`                                |
+| ---------------- | -------------------------------------------------------- |
+| `local-go-like`  | `http://127.0.0.1:40901/healthz`（`MS-009-001` … `003`） |
 | `docker-go-like` | `http://127.0.0.1:40911/healthz`（`MS-009-004` … `006`） |
 
 六条 finding 的 `actual` 均为：
@@ -41,7 +41,7 @@ timed out waiting for http://127.0.0.1:40901/healthz: 500
 dest 角色顺序（`scripts/lane-runtime.mjs:25`）：
 
 ```js
-["fault-worker", "signal-correlator", "ingest-gateway"]
+;["fault-worker", "signal-correlator", "ingest-gateway"]
 ```
 
 因此 40901/40911 是 `fault-worker`，不是 `ingest-gateway`。UX `first-service-startup` surprise：`fault-worker published /healthz returns 500 from @go-like/server while ingest-gateway custom /healthz is 200`（`projects/MS-009/ux/golike.json:16-28`）。`first-inter-service-call` 从未 POST `/v1/failure-correlations`，因为 bootstrap 停在 worker `/healthz` 500。
@@ -95,12 +95,12 @@ accept: (status) => status === 200 || status === 503
 
 实现细节必须写清，避免把 404 误当成已修复：
 
-| 观察点 | 对 `/healthz` 状态的态度 |
-| --- | --- |
-| `waitForHttp` 循环（`lane-runtime.mjs:235`） | `status < 500` 会直接返回，故 **4xx 也会结束等待**；5xx 只有 `accept` 为真才返回。500 不在 `{200, 503}` 中，故重试到超时 |
-| 角色 `accept` 回调 | 只额外放行 5xx 中的 **503**；产品文案与 finding expected 点名 **200 或 503** |
-| Docker `HEALTHCHECK` `scripts/healthz-probe.mjs:12` | `code >= 200 && code < 300`，只要 **2xx**。404 与 503 都会让探针 exit 1 |
-| Compose `healthcheck.test` | 三角色均 `node ./scripts/healthz-probe.mjs`（如 `infra/compose.local-go-like.yaml:106-111`） |
+| 观察点                                              | 对 `/healthz` 状态的态度                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `waitForHttp` 循环（`lane-runtime.mjs:235`）        | `status < 500` 会直接返回，故 **4xx 也会结束等待**；5xx 只有 `accept` 为真才返回。500 不在 `{200, 503}` 中，故重试到超时 |
+| 角色 `accept` 回调                                  | 只额外放行 5xx 中的 **503**；产品文案与 finding expected 点名 **200 或 503**                                             |
+| Docker `HEALTHCHECK` `scripts/healthz-probe.mjs:12` | `code >= 200 && code < 300`，只要 **2xx**。404 与 503 都会让探针 exit 1                                                  |
+| Compose `healthcheck.test`                          | 三角色均 `node ./scripts/healthz-probe.mjs`（如 `infra/compose.local-go-like.yaml:106-111`）                             |
 
 本票把 dest 可观察成功钉成：**HTTP 200**（对照与 dest 样本的缺省）。503 仍在 finding expected / `waitForHttp` `accept` 里，但是 **应用显式映射 not-ready** 的权利，不是本票给 unary server 发明的缺省。禁止把空 `ProbeRegistry` ready fail-closed 503 当成 dest 缺省。
 
@@ -110,11 +110,11 @@ accept: (status) => status === 200 || status === 503
 
 ### 条款 1 — 三种 HTTP 形状不得混淆
 
-| 世代 | 无信封 `GET /healthz`、无匹配 `httpRoute` | dest 是否过 bootstrap |
-| --- | --- | --- |
-| 冻结 SHA `cd15313d` unary HTTP | 协议 POST-only → HTTP **500** | 否（finding `actual`） |
-| 仅 NW-020 | 未匹配路径 → HTTP **404** | 否（不是 200/503；Docker 探针只要 2xx） |
-| 本票完成后 | HTTP **200**（空 body 允许） | 是 |
+| 世代                           | 无信封 `GET /healthz`、无匹配 `httpRoute` | dest 是否过 bootstrap                   |
+| ------------------------------ | ----------------------------------------- | --------------------------------------- |
+| 冻结 SHA `cd15313d` unary HTTP | 协议 POST-only → HTTP **500**             | 否（finding `actual`）                  |
+| 仅 NW-020                      | 未匹配路径 → HTTP **404**                 | 否（不是 200/503；Docker 探针只要 2xx） |
+| 本票完成后                     | HTTP **200**（空 body 允许）              | 是                                      |
 
 禁止：
 
@@ -187,12 +187,12 @@ dest `fault-worker` 的业务面仍是信封 unary `handler(executeFault, …)`�
 
 原因（dest 证据，不是口味）：
 
-| 若采用 | 为何不是 dest 缺省 |
-| --- | --- |
-| `@go-like/web` `createHealthHandler` | 默认路径 `/livez`、`/readyz`（`packages/web/src/health.ts:5-6`），dest 探测 `/healthz` |
-| 空 `ProbeRegistry` 当 ready | `freezeReport`：ready 在 `checks.length === 0` 时 `ok === false`（`packages/health/src/registry.ts:223-231`）；Web handler 映成 JSON 503（`packages/web/src/health.ts:139`、`189-192`） |
-| dest Docker 探针 | 只要 2xx（`healthz-probe.mjs:12`）。空 ready 503 会 fail HEALTHCHECK |
-| competitor / dest gateway | HTTP 200、空 body，无 checks JSON |
+| 若采用                               | 为何不是 dest 缺省                                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@go-like/web` `createHealthHandler` | 默认路径 `/livez`、`/readyz`（`packages/web/src/health.ts:5-6`），dest 探测 `/healthz`                                                                                                  |
+| 空 `ProbeRegistry` 当 ready          | `freezeReport`：ready 在 `checks.length === 0` 时 `ok === false`（`packages/health/src/registry.ts:223-231`）；Web handler 映成 JSON 503（`packages/web/src/health.ts:139`、`189-192`） |
+| dest Docker 探针                     | 只要 2xx（`healthz-probe.mjs:12`）。空 ready 503 会 fail HEALTHCHECK                                                                                                                    |
+| competitor / dest gateway            | HTTP 200、空 body，无 checks JSON                                                                                                                                                       |
 
 dest 应用 `package.json` 虽 vendor 了 `@go-like/health` 与 `@go-like/web`，源码 **零** `createHealthHandler` / `newProbeRegistry` 引用。本票不得要求 dest 去挂它们，也不得在库侧把它们接进 `newServer`。
 
@@ -213,16 +213,16 @@ dest 应用 `package.json` 虽 vendor 了 `@go-like/health` 与 `@go-like/web`�
 
 ## 3. 可观察行为矩阵
 
-| 入站 | 路由 | HTTP | body / 失败形状 |
-| --- | --- | --- | --- |
-| 无信封 `GET /healthz`，无 `httpRoute` | 缺省探针（本票） | **200** | 空 body 允许；不跑 unary handler / middleware |
-| 无信封 `HEAD /healthz`，无 `httpRoute` | 缺省探针 | **200** | 空 body 允许 |
-| 无信封 `GET /livez` 或其它未匹配 path | NW-020 未匹配 | 非 200（今日 404） | 不得变成缺省 200 |
-| 精确 `httpRoute("GET", "/healthz", …)` | 路径路由覆盖缺省 | 该路由 `successStatus` | 调用对应 unary `handler` |
-| `POST` + `Go-Like-Service` + `Go-Like-Endpoint` | 信封 unary | **200** | 成功体或 unary `ServiceError`，`carrierStatus` 200 |
-| 信封 `GET`（有 `Go-Like-Service`） | 协议 POST-only | 500 协议错误 | 不改 `encodeServiceError` |
-| 无信封 `POST /healthz`，无 `httpRoute` | 未匹配 | 404 | 缺省探针只认 GET/HEAD |
-| 冻结 SHA dest vendor `GET /healthz` | 协议 POST-only | 500 | finding 现状；本票在生产者树修复 |
+| 入站                                            | 路由             | HTTP                   | body / 失败形状                                    |
+| ----------------------------------------------- | ---------------- | ---------------------- | -------------------------------------------------- |
+| 无信封 `GET /healthz`，无 `httpRoute`           | 缺省探针（本票） | **200**                | 空 body 允许；不跑 unary handler / middleware      |
+| 无信封 `HEAD /healthz`，无 `httpRoute`          | 缺省探针         | **200**                | 空 body 允许                                       |
+| 无信封 `GET /livez` 或其它未匹配 path           | NW-020 未匹配    | 非 200（今日 404）     | 不得变成缺省 200                                   |
+| 精确 `httpRoute("GET", "/healthz", …)`          | 路径路由覆盖缺省 | 该路由 `successStatus` | 调用对应 unary `handler`                           |
+| `POST` + `Go-Like-Service` + `Go-Like-Endpoint` | 信封 unary       | **200**                | 成功体或 unary `ServiceError`，`carrierStatus` 200 |
+| 信封 `GET`（有 `Go-Like-Service`）              | 协议 POST-only   | 500 协议错误           | 不改 `encodeServiceError`                          |
+| 无信封 `POST /healthz`，无 `httpRoute`          | 未匹配           | 404                    | 缺省探针只认 GET/HEAD                              |
+| 冻结 SHA dest vendor `GET /healthz`             | 协议 POST-only   | 500                    | finding 现状；本票在生产者树修复                   |
 
 dest `fault-worker` / `signal-correlator` 落在第一行。dest `ingest-gateway` 与 competitor 已是原生 200，本票不改它们。
 
@@ -230,13 +230,13 @@ dest `fault-worker` / `signal-correlator` 落在第一行。dest `ingest-gateway
 
 ## 4. 建议改动面（不扩大范围）
 
-| 包 | 允许的变化 | 明确不做 |
-| --- | --- | --- |
-| `@go-like/server` | 在 `routeHttpRequest` / `dispatcher` 对无信封、无 `httpRoute` 的 `GET\|HEAD /healthz` 写 HTTP 200 载体（空 body）；unit 覆盖条款 2–4 | 不新增 public health option；不改 `handler` 签名；不改信封 `failureMessage`；不把 `/livez` `/readyz` 登记进 `httpRoutes`；不增加 `@go-like/health` / `@go-like/web` 依赖 |
-| `@go-like/transport-http` | 仅当缺省 200 的 HTTP 圆测需要：保持无信封 GET/HEAD 进入 `recv`；`Go-Like-HTTP-Status: 200` 空 body 必须能变成 HTTP 200。不得恢复冻结 POST-only | 不在 socket 层无条件劫持 `/healthz`；不改 `encodeServiceError`；不新增公共 `http2` API |
-| `@go-like/transport` | 无 | **禁止**修改 `encodeServiceError` / unary `carrierStatus: 200` |
-| `@go-like/health`、`@go-like/web` | 无 | **禁止**本票改动或被 server 依赖 |
-| dest / examples / e2e | 无 | 条款 6 |
+| 包                                | 允许的变化                                                                                                                                     | 明确不做                                                                                                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@go-like/server`                 | 在 `routeHttpRequest` / `dispatcher` 对无信封、无 `httpRoute` 的 `GET\|HEAD /healthz` 写 HTTP 200 载体（空 body）；unit 覆盖条款 2–4           | 不新增 public health option；不改 `handler` 签名；不改信封 `failureMessage`；不把 `/livez` `/readyz` 登记进 `httpRoutes`；不增加 `@go-like/health` / `@go-like/web` 依赖 |
+| `@go-like/transport-http`         | 仅当缺省 200 的 HTTP 圆测需要：保持无信封 GET/HEAD 进入 `recv`；`Go-Like-HTTP-Status: 200` 空 body 必须能变成 HTTP 200。不得恢复冻结 POST-only | 不在 socket 层无条件劫持 `/healthz`；不改 `encodeServiceError`；不新增公共 `http2` API                                                                                   |
+| `@go-like/transport`              | 无                                                                                                                                             | **禁止**修改 `encodeServiceError` / unary `carrierStatus: 200`                                                                                                           |
+| `@go-like/health`、`@go-like/web` | 无                                                                                                                                             | **禁止**本票改动或被 server 依赖                                                                                                                                         |
+| dest / examples / e2e             | 无                                                                                                                                             | 条款 6                                                                                                                                                                   |
 
 `packages/server/test/public-api.test.ts:5-16` 今日导出名不含 health API。本票 **不得** 新增 `createHealthHandler` / `ProbeRegistry` 到 `@go-like/server` 导出表。
 
@@ -274,37 +274,37 @@ dest 回归（本契约不执行）：`go-like-dogfood` `projects/MS-009/finding
 
 ## 7. 证据索引
 
-| 主张 | 位置 |
-| --- | --- |
-| dest 期望：worker `GET /healthz` 200 或 503；对照原生 200 | `MS-009-001.json` `expected`（同文案：`MS-009-002` … `006`） |
-| dest actual：60s 内持续 HTTP 500 | `MS-009-001.json` `actual`；artifact `run-ce64498f-…/stdout/healthy-path.log:1` |
-| 无自定义 GET `/healthz`；禁止 bind-first | `MS-009-001.json` `workaround` |
-| NW-009 仍未核实项（本文关闭） | `docs/dogfood-2026-08/next-work.md:33-41` |
-| first-service-startup：worker 500、gateway 200 | `projects/MS-009/ux/golike.json:16-28` |
-| 从未 POST `/v1/failure-correlations` | 同上 `40`；`next-work.md:40` |
-| `APP_ROLES` 先起 fault-worker | dest `scripts/lane-runtime.mjs:25`；UX `golike.json:69` |
-| dest worker：`newServer` + `transport-http`，无 health | `implementations/go-like/src/worker.ts:26-48` |
-| dest correlator：同样无 health 的 `newServer` | `implementations/go-like/src/correlator.ts:16-57` |
-| dest gateway 自定义 `/healthz` 200 空 body | `implementations/go-like/src/gateway.ts:147-149` |
-| dest `startRole` 把 worker server 交给 `newApp` | `implementations/go-like/src/main.ts:40-54` |
-| 对照 worker `/healthz` 200 空 body | `implementations/otel-native/src/fault.ts:13-16` |
-| 对照 correlator 同文 | `implementations/otel-native/src/collector.ts:12-15` |
-| harness 60s、`accept` 200/503 | dest `scripts/lane-runtime.mjs:247-249`、`593-595`、`698-700` |
-| `waitForHttp`：4xx 因 `status < 500` 返回；5xx 走 `accept` | dest `scripts/lane-runtime.mjs:209-240`（判定在 `235`） |
-| Docker 探针只要 2xx | dest `scripts/healthz-probe.mjs:12`；`infra/compose.local-go-like.yaml:106-111` |
-| 冻结 SHA：非 POST 即协议错误 | dest `node_modules/@go-like/transport-http/transport-CWmmDUXP.js:1052` |
-| 冻结 SHA server：`recv` 后立刻要 `Go-Like-Service` | dest `node_modules/@go-like/server/index.js:416-421`、`341-349` |
-| 当前：无信封 GET 可 `recv`，写入 method/target | `packages/transport/http/src/socket.ts:107-111` |
-| 协议错误 / 未 send → HTTP 500 | `packages/transport/http/src/socket.ts:219-226`、`325-330` |
-| 当前：无信封未匹配 → HTTP 404 载体 | `packages/server/src/index.ts:710-735`、`811-816` |
-| 精确 `httpRoute` 与 duplicated method+path | `packages/server/src/index.ts:599-628`、`248` |
-| 信封 `failureMessage` → `encodeServiceError("unary")` | `packages/server/src/index.ts:783-786` |
-| unary `carrierStatus` 200；禁止改 encoder | `packages/transport/src/errors.ts:201`、`212-218`、`276` |
-| Web health 默认 `/livez` `/readyz` | `packages/web/src/health.ts:5-6` |
-| 空 ready fail-closed → 503 JSON | `packages/health/src/registry.ts:223-231`；`packages/web/src/health.ts:139`、`189-192` |
-| server 不依赖 health/web | `packages/server/package.json:26-33` |
-| dest 应用未调用 health/web API | `implementations/go-like/src` 无 `createHealthHandler` / `newProbeRegistry` |
-| 禁止 HTTP bind-first（综述） | `docs/dogfood-2026-08/ux-summary.md:28-37` |
-| 不启动 dest、不改 packages（收获表授权） | `docs/dogfood-2026-08/next-work.md:3` |
-| NW-020 无信封未匹配 404 回归 | `packages/transport/http/test/http-route.test.ts:217-238`；`packages/server/test/http-route.test.ts:281-300` |
-| 信封 ServiceError 仍 200 | `packages/server/test/http-route.test.ts:260-278` |
+| 主张                                                       | 位置                                                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| dest 期望：worker `GET /healthz` 200 或 503；对照原生 200  | `MS-009-001.json` `expected`（同文案：`MS-009-002` … `006`）                                                 |
+| dest actual：60s 内持续 HTTP 500                           | `MS-009-001.json` `actual`；artifact `run-ce64498f-…/stdout/healthy-path.log:1`                              |
+| 无自定义 GET `/healthz`；禁止 bind-first                   | `MS-009-001.json` `workaround`                                                                               |
+| NW-009 仍未核实项（本文关闭）                              | `docs/dogfood-2026-08/next-work.md:33-41`                                                                    |
+| first-service-startup：worker 500、gateway 200             | `projects/MS-009/ux/golike.json:16-28`                                                                       |
+| 从未 POST `/v1/failure-correlations`                       | 同上 `40`；`next-work.md:40`                                                                                 |
+| `APP_ROLES` 先起 fault-worker                              | dest `scripts/lane-runtime.mjs:25`；UX `golike.json:69`                                                      |
+| dest worker：`newServer` + `transport-http`，无 health     | `implementations/go-like/src/worker.ts:26-48`                                                                |
+| dest correlator：同样无 health 的 `newServer`              | `implementations/go-like/src/correlator.ts:16-57`                                                            |
+| dest gateway 自定义 `/healthz` 200 空 body                 | `implementations/go-like/src/gateway.ts:147-149`                                                             |
+| dest `startRole` 把 worker server 交给 `newApp`            | `implementations/go-like/src/main.ts:40-54`                                                                  |
+| 对照 worker `/healthz` 200 空 body                         | `implementations/otel-native/src/fault.ts:13-16`                                                             |
+| 对照 correlator 同文                                       | `implementations/otel-native/src/collector.ts:12-15`                                                         |
+| harness 60s、`accept` 200/503                              | dest `scripts/lane-runtime.mjs:247-249`、`593-595`、`698-700`                                                |
+| `waitForHttp`：4xx 因 `status < 500` 返回；5xx 走 `accept` | dest `scripts/lane-runtime.mjs:209-240`（判定在 `235`）                                                      |
+| Docker 探针只要 2xx                                        | dest `scripts/healthz-probe.mjs:12`；`infra/compose.local-go-like.yaml:106-111`                              |
+| 冻结 SHA：非 POST 即协议错误                               | dest `node_modules/@go-like/transport-http/transport-CWmmDUXP.js:1052`                                       |
+| 冻结 SHA server：`recv` 后立刻要 `Go-Like-Service`         | dest `node_modules/@go-like/server/index.js:416-421`、`341-349`                                              |
+| 当前：无信封 GET 可 `recv`，写入 method/target             | `packages/transport/http/src/socket.ts:107-111`                                                              |
+| 协议错误 / 未 send → HTTP 500                              | `packages/transport/http/src/socket.ts:219-226`、`325-330`                                                   |
+| 当前：无信封未匹配 → HTTP 404 载体                         | `packages/server/src/index.ts:710-735`、`811-816`                                                            |
+| 精确 `httpRoute` 与 duplicated method+path                 | `packages/server/src/index.ts:599-628`、`248`                                                                |
+| 信封 `failureMessage` → `encodeServiceError("unary")`      | `packages/server/src/index.ts:783-786`                                                                       |
+| unary `carrierStatus` 200；禁止改 encoder                  | `packages/transport/src/errors.ts:201`、`212-218`、`276`                                                     |
+| Web health 默认 `/livez` `/readyz`                         | `packages/web/src/health.ts:5-6`                                                                             |
+| 空 ready fail-closed → 503 JSON                            | `packages/health/src/registry.ts:223-231`；`packages/web/src/health.ts:139`、`189-192`                       |
+| server 不依赖 health/web                                   | `packages/server/package.json:26-33`                                                                         |
+| dest 应用未调用 health/web API                             | `implementations/go-like/src` 无 `createHealthHandler` / `newProbeRegistry`                                  |
+| 禁止 HTTP bind-first（综述）                               | `docs/dogfood-2026-08/ux-summary.md:28-37`                                                                   |
+| 不启动 dest、不改 packages（收获表授权）                   | `docs/dogfood-2026-08/next-work.md:3`                                                                        |
+| NW-020 无信封未匹配 404 回归                               | `packages/transport/http/test/http-route.test.ts:217-238`；`packages/server/test/http-route.test.ts:281-300` |
+| 信封 ServiceError 仍 200                                   | `packages/server/test/http-route.test.ts:260-278`                                                            |

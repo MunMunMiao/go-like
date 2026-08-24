@@ -2,14 +2,14 @@
 
 本文钉死 `NW-006`（findings `MS-006-001` … `MS-006-006`）的公共 API 与可观察行为。标识符、错误文案、状态码与包名保持英文。实现必须满足下列条款；未列入的行为不得借本票扩大范围。
 
-| 项 | 值 |
-| --- | --- |
-| ID | `NW-006` |
-| dest | `fw-r214` / `MS-006` |
-| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c` |
-| 包 | `@go-like/broker-rabbitmq` |
-| 对照 | 同 dest 上 competitor（`amqplib` 2.0.1）`openBus` 后 `serveHttp`，`/healthz` 为 200；healthy-path / invariants / fault-matrix 均通过 |
-| 本文状态 | 契约钉死；不授权启动 dest、不 compose、不提交 git。后续实现只改 `@go-like/broker-rabbitmq` |
+| 项         | 值                                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ID         | `NW-006`                                                                                                                             |
+| dest       | `fw-r214` / `MS-006`                                                                                                                 |
+| 生产者 SHA | `cd15313d50e6804cfe34a7e7291cb65a861dec1c`                                                                                           |
+| 包         | `@go-like/broker-rabbitmq`                                                                                                           |
+| 对照       | 同 dest 上 competitor（`amqplib` 2.0.1）`openBus` 后 `serveHttp`，`/healthz` 为 200；healthy-path / invariants / fault-matrix 均通过 |
+| 本文状态   | 契约钉死；不授权启动 dest、不 compose、不提交 git。后续实现只改 `@go-like/broker-rabbitmq`                                           |
 
 `docs/dogfood-2026-08/next-work.md:31` 将三项列为仍未核实。本文关闭它们：
 
@@ -23,10 +23,10 @@
 
 `MS-006` 黑盒冻结面是 bootstrap：`ensureSchema` 之后，角色必须在 60s 内让 `GET /healthz` 返回 **200 或 503**。探测端口：
 
-| 车道 | `lending-desk` `/healthz` |
-| --- | --- |
+| 车道             | `lending-desk` `/healthz`                                |
+| ---------------- | -------------------------------------------------------- |
 | `docker-go-like` | `http://127.0.0.1:40611/healthz`（`MS-006-001` … `003`） |
-| `local-go-like` | `http://127.0.0.1:40601/healthz`（`MS-006-004` … `006`） |
+| `local-go-like`  | `http://127.0.0.1:40601/healthz`（`MS-006-004` … `006`） |
 
 六条 finding 的 `actual` 均为：
 
@@ -186,14 +186,14 @@ dest `lending-desk`（以及 `fulfillment-worker`）在 `bindHttp(newHealthHandl
 
 ## 3. 可观察行为矩阵
 
-| 调用 | 返回时机 | `broker.publish` | `broker.subscribe` | HTTP（dest 应用） |
-| --- | --- | --- | --- | --- |
-| `newRecoveringRabbitMqBroker(ctx, connector)` | connector 返回 **且** `setupCompleted` | 当前 generation；无 generation 则 disconnected | 立即 attach 到当前 generation | dest 今日会一直等到这里才 `bindHttp`（缺口） |
-| 同上，connector 从不调用 `setup` | 拒绝 `must complete its initial setup`，关闭 connection | 不返回 broker | 不保留 descriptor | 不适用 |
-| `startRecoveringRabbitMqBroker(ctx, hangingConnector)` | **同步立即** | disconnected 错误 | 接纳 descriptor，等首次成功 setup 再 `attach` | 应用现在就可以 `bindHttp`；dest health 静态 200 |
-| hanging connector 稍后 `setup` + 返回 model，再 `ready(ctx)` | `ready` resolve `{ broker, connection }` | 走当前 generation | rebuild 挂上已接纳订阅 | 已在听的 `/healthz` 不受影响 |
-| `ready(ctx)` 在 skip-setup connector 上 | 与 `newRecoveringRabbitMqBroker` 相同拒绝 + `discardConnection` | disconnected | 回滚未成功 admission | 若应用已 `bindHttp`，health 仍是应用静态 200 |
-| `stop(ctx)` 发生在 `ready` 前 | `stop` 完成；迟到 connection discard | disconnected | 停止 replay | 应用自行关 HTTP；库不管端口 |
+| 调用                                                         | 返回时机                                                        | `broker.publish`                               | `broker.subscribe`                            | HTTP（dest 应用）                               |
+| ------------------------------------------------------------ | --------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| `newRecoveringRabbitMqBroker(ctx, connector)`                | connector 返回 **且** `setupCompleted`                          | 当前 generation；无 generation 则 disconnected | 立即 attach 到当前 generation                 | dest 今日会一直等到这里才 `bindHttp`（缺口）    |
+| 同上，connector 从不调用 `setup`                             | 拒绝 `must complete its initial setup`，关闭 connection         | 不返回 broker                                  | 不保留 descriptor                             | 不适用                                          |
+| `startRecoveringRabbitMqBroker(ctx, hangingConnector)`       | **同步立即**                                                    | disconnected 错误                              | 接纳 descriptor，等首次成功 setup 再 `attach` | 应用现在就可以 `bindHttp`；dest health 静态 200 |
+| hanging connector 稍后 `setup` + 返回 model，再 `ready(ctx)` | `ready` resolve `{ broker, connection }`                        | 走当前 generation                              | rebuild 挂上已接纳订阅                        | 已在听的 `/healthz` 不受影响                    |
+| `ready(ctx)` 在 skip-setup connector 上                      | 与 `newRecoveringRabbitMqBroker` 相同拒绝 + `discardConnection` | disconnected                                   | 回滚未成功 admission                          | 若应用已 `bindHttp`，health 仍是应用静态 200    |
+| `stop(ctx)` 发生在 `ready` 前                                | `stop` 完成；迟到 connection discard                            | disconnected                                   | 停止 replay                                   | 应用自行关 HTTP；库不管端口                     |
 
 dest 对照：competitor `openBus` 完成后才 `serveHttp`，但 `openBus` 无 Infinity recovery wait，故 60s 内能听。go-like 不得靠「把 dest 改成 bind-first」追平，必须靠条款 2。
 
@@ -201,12 +201,12 @@ dest 对照：competitor `openBus` 完成后才 `serveHttp`，但 `openBus` 无 
 
 ## 4. 建议改动面（不扩大范围）
 
-| 包 | 允许的变化 | 明确不做 |
-| --- | --- | --- |
-| `@go-like/broker-rabbitmq` | 导出 `startRecoveringRabbitMqBroker` 与 `RecoveringRabbitMqHandle`；`newRecoveringRabbitMqBroker` 改为 `start(…).ready(ctx)`；README 增加 admit-before-setup 入口说明；`public-api.test.ts` / `public-types.ts` 登记新导出 | 不改 `newConfirmRabbitMqBroker` / `newRabbitMqBroker`；不改 publish disconnected 文案；不改 skip-setup 文案；不把 `waitForConnect` 搬进本包；不新增 HTTP |
-| `@go-like/broker` | 无 | 不改 `Broker` / `newBrokerServer` |
-| `@go-like/server`、`@go-like/web`、`@go-like/health` | 无 | **禁止**本票改动（条款 4、条款 5.6） |
-| dest / examples / e2e / amqplib | 无 | 条款 5 |
+| 包                                                   | 允许的变化                                                                                                                                                                                                                 | 明确不做                                                                                                                                                 |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@go-like/broker-rabbitmq`                           | 导出 `startRecoveringRabbitMqBroker` 与 `RecoveringRabbitMqHandle`；`newRecoveringRabbitMqBroker` 改为 `start(…).ready(ctx)`；README 增加 admit-before-setup 入口说明；`public-api.test.ts` / `public-types.ts` 登记新导出 | 不改 `newConfirmRabbitMqBroker` / `newRabbitMqBroker`；不改 publish disconnected 文案；不改 skip-setup 文案；不把 `waitForConnect` 搬进本包；不新增 HTTP |
+| `@go-like/broker`                                    | 无                                                                                                                                                                                                                         | 不改 `Broker` / `newBrokerServer`                                                                                                                        |
+| `@go-like/server`、`@go-like/web`、`@go-like/health` | 无                                                                                                                                                                                                                         | **禁止**本票改动（条款 4、条款 5.6）                                                                                                                     |
+| dest / examples / e2e / amqplib                      | 无                                                                                                                                                                                                                         | 条款 5                                                                                                                                                   |
 
 `packages/broker/rabbitmq/test/public-api.test.ts:6-10` 今日只导出三个 runtime 名。实现本票时必须把 `startRecoveringRabbitMqBroker` 列入；可与实现同一 PR 更新期望列表。
 
@@ -244,30 +244,30 @@ dest 回归（本契约不执行）：`go-like-dogfood` `projects/MS-006/finding
 
 ## 7. 证据索引
 
-| 主张 | 位置 |
-| --- | --- |
-| dest 期望：setup 完成后 bind HTTP，`/healthz` 200 或 503；对照 `openBus` 后 `serveHttp` | `MS-006-001.json` `expected`（同文案：`MS-006-002` … `006`） |
-| dest actual：`socket hang up` | `MS-006-001.json` `actual`；artifact `run-91956233-…/stdout/healthy-path.log:1` |
-| 禁止 bind-first；构造函数等到 `setupCompleted` | `MS-006-001.json` `workaround` |
-| NW-006 仍未核实项（本文关闭） | `docs/dogfood-2026-08/next-work.md:23-31` |
-| first-service-startup：`/healthz` 挂到 `setupCompleted` | `projects/MS-006/ux/golike.json:17-31` |
-| first-failure-and-diagnosis：Infinity retries 挡住 `startRole` | `projects/MS-006/ux/golike.json:61-73` |
-| dest `startRole`：`await openRecoveringBroker` 后才 `bindHttp` | `implementations/go-like/src/main.ts:12-19` |
-| dest connector = `newRecoveringRabbitMqBroker` + `connect(..., { recovery })`，无 `maxRetries` | `implementations/go-like/src/rabbit.ts:17-30` |
-| dest lending-desk health 静态 200 | `implementations/go-like/src/http.ts:52-59` |
-| 战役断言源码顺序：`openRecoveringBroker` 在 `bindHttp` 前 | `MS-006.src/test/run-lane.test.mjs:156-157` |
-| 对照 `openBus` 无 recovery | `implementations/amqplib/src/bus.ts:13-21` |
-| 对照 `bootRole`：`openBus` 后 `serveHttp` | `implementations/amqplib/src/boot.ts:10-19` |
-| 对照 `/healthz` 静态 200 | `implementations/amqplib/src/listen.ts:41-43` |
-| harness 60s、接受 200/503 | `scripts/lane-runtime.mjs:574-577`、`216-247` |
-| `newRecoveringRabbitMqBroker` 等待 connector + `setupCompleted` | `packages/broker/rabbitmq/src/index.ts:665-668`、`828-852` |
-| `setupCompleted` 只在 `rebuild` 成功后置位 | `index.ts:681`、`784-815` |
-| skip-setup 拒绝并 `discardConnection` | `index.ts:849-852`、`694-700`；`test/broker.test.ts:995-1008` |
-| `publish` disconnected fail-closed | `index.ts:904-913` |
-| `subscribe` 无 generation 时仍接纳，setup 时 `attach` | `index.ts:784-803`、`953-958` |
-| `waitForConnect` / Infinity / `_connect` / `runSetup` | dest `amqplib/lib/recovery.js:8`、`75-98`、`131-133`、`256-306`、`386-388`、`453-456` |
-| recovery `connect` 只返回 `waitForConnect()` | dest `amqplib/channel_api.js:6-11` |
-| 禁止 HTTP bind-first（综述） | `docs/dogfood-2026-08/ux-summary.md:28-34` |
-| 不启动 dest、不改 packages（收获表） | `docs/dogfood-2026-08/next-work.md:3` |
-| NW-009 不得并入本票 | `docs/dogfood-2026-08/next-work.md:33-41` |
-| 公共导出仅三个 runtime 名（实现时追加第四个） | `packages/broker/rabbitmq/test/public-api.test.ts:6-10` |
+| 主张                                                                                           | 位置                                                                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| dest 期望：setup 完成后 bind HTTP，`/healthz` 200 或 503；对照 `openBus` 后 `serveHttp`        | `MS-006-001.json` `expected`（同文案：`MS-006-002` … `006`）                          |
+| dest actual：`socket hang up`                                                                  | `MS-006-001.json` `actual`；artifact `run-91956233-…/stdout/healthy-path.log:1`       |
+| 禁止 bind-first；构造函数等到 `setupCompleted`                                                 | `MS-006-001.json` `workaround`                                                        |
+| NW-006 仍未核实项（本文关闭）                                                                  | `docs/dogfood-2026-08/next-work.md:23-31`                                             |
+| first-service-startup：`/healthz` 挂到 `setupCompleted`                                        | `projects/MS-006/ux/golike.json:17-31`                                                |
+| first-failure-and-diagnosis：Infinity retries 挡住 `startRole`                                 | `projects/MS-006/ux/golike.json:61-73`                                                |
+| dest `startRole`：`await openRecoveringBroker` 后才 `bindHttp`                                 | `implementations/go-like/src/main.ts:12-19`                                           |
+| dest connector = `newRecoveringRabbitMqBroker` + `connect(..., { recovery })`，无 `maxRetries` | `implementations/go-like/src/rabbit.ts:17-30`                                         |
+| dest lending-desk health 静态 200                                                              | `implementations/go-like/src/http.ts:52-59`                                           |
+| 战役断言源码顺序：`openRecoveringBroker` 在 `bindHttp` 前                                      | `MS-006.src/test/run-lane.test.mjs:156-157`                                           |
+| 对照 `openBus` 无 recovery                                                                     | `implementations/amqplib/src/bus.ts:13-21`                                            |
+| 对照 `bootRole`：`openBus` 后 `serveHttp`                                                      | `implementations/amqplib/src/boot.ts:10-19`                                           |
+| 对照 `/healthz` 静态 200                                                                       | `implementations/amqplib/src/listen.ts:41-43`                                         |
+| harness 60s、接受 200/503                                                                      | `scripts/lane-runtime.mjs:574-577`、`216-247`                                         |
+| `newRecoveringRabbitMqBroker` 等待 connector + `setupCompleted`                                | `packages/broker/rabbitmq/src/index.ts:665-668`、`828-852`                            |
+| `setupCompleted` 只在 `rebuild` 成功后置位                                                     | `index.ts:681`、`784-815`                                                             |
+| skip-setup 拒绝并 `discardConnection`                                                          | `index.ts:849-852`、`694-700`；`test/broker.test.ts:995-1008`                         |
+| `publish` disconnected fail-closed                                                             | `index.ts:904-913`                                                                    |
+| `subscribe` 无 generation 时仍接纳，setup 时 `attach`                                          | `index.ts:784-803`、`953-958`                                                         |
+| `waitForConnect` / Infinity / `_connect` / `runSetup`                                          | dest `amqplib/lib/recovery.js:8`、`75-98`、`131-133`、`256-306`、`386-388`、`453-456` |
+| recovery `connect` 只返回 `waitForConnect()`                                                   | dest `amqplib/channel_api.js:6-11`                                                    |
+| 禁止 HTTP bind-first（综述）                                                                   | `docs/dogfood-2026-08/ux-summary.md:28-34`                                            |
+| 不启动 dest、不改 packages（收获表）                                                           | `docs/dogfood-2026-08/next-work.md:3`                                                 |
+| NW-009 不得并入本票                                                                            | `docs/dogfood-2026-08/next-work.md:33-41`                                             |
+| 公共导出仅三个 runtime 名（实现时追加第四个）                                                  | `packages/broker/rabbitmq/test/public-api.test.ts:6-10`                               |

@@ -29,12 +29,12 @@
 
 `MS-006`、`MS-009`、`MS-011` 的失败 UX 与三条可对照或 dual-fail 的启动缺口对齐。战役明确禁止“先绑 HTTP 再做 recovering setup”的应用 workaround。
 
-| 项目 | 实现 | 现象 |
-| --- | --- | --- |
+| 项目   | 实现    | 现象                                                                                                                                    |
+| ------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | MS-006 | go-like | `startRole` 等待 `openRecoveringBroker` 才 `bindHttp`；lending-desk `/healthz` socket hang up。competitor `openBus` 后 `serveHttp` 通过 |
-| MS-009 | go-like | fault-worker `@go-like/server` 默认 `/healthz` 持续 500；ingest-gateway 自定义 handler 为 200 |
-| MS-011 | go-like | `waitForStore` 报 `file store did not become running`，HTTP 未听 |
-| MS-020 | go-like | transport 已听 TLS/h2，但 REST 黑盒调用被服务信封挡住 |
+| MS-009 | go-like | fault-worker `@go-like/server` 默认 `/healthz` 持续 500；ingest-gateway 自定义 handler 为 200                                           |
+| MS-011 | go-like | `waitForStore` 报 `file store did not become running`，HTTP 未听                                                                        |
+| MS-020 | go-like | transport 已听 TLS/h2，但 REST 黑盒调用被服务信封挡住                                                                                   |
 
 开发者能完成 `npm ci` 与 `tsc`，却在“第一个 `/healthz` 或第一记 REST POST”上停住。这是本轮最尖的 first-service-startup 摩擦。
 
@@ -76,16 +76,16 @@
 
 ## 按 checkpoint 的分布（含 verify 的 dest）
 
-| checkpoint | 主要信号 |
-| --- | --- |
-| installation-and-first-import | 冻结闭包 + nested `@types/node`；安装本身很少失败 |
-| first-service-startup | recovering broker/store、默认 `/healthz` 500、mTLS 已听但 REST 不到达 handler |
-| first-inter-service-call | MS-020 缺信封头；MS-013 网关 502；MS-007 scan 后异步 upsert |
-| first-real-infrastructure-integration | 必须走 Compose DNS / toxiproxy；Desktop 发布端口不可用 |
-| first-failure-and-diagnosis | 通过 dest 能从 stdout 诊断 400/409/413/499/504；失败 dest 往往停在 bootstrap |
-| recovery-from-the-failure | 通过 dest 能封住 postgres/nats/etcd/toxiproxy 故障；MS-016/017 在 compose kill+start 上双侧失败 |
-| graceful-shutdown | SIGTERM 残留与 marker；cleanup 在通过 dest 上最终清掉 compose/端口/volume |
-| full-docker-execution | docker-go-like 能跑完整产品路径（例如 MS-001），但依赖 in-network 而不是宿主机端口 |
+| checkpoint                            | 主要信号                                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| installation-and-first-import         | 冻结闭包 + nested `@types/node`；安装本身很少失败                                               |
+| first-service-startup                 | recovering broker/store、默认 `/healthz` 500、mTLS 已听但 REST 不到达 handler                   |
+| first-inter-service-call              | MS-020 缺信封头；MS-013 网关 502；MS-007 scan 后异步 upsert                                     |
+| first-real-infrastructure-integration | 必须走 Compose DNS / toxiproxy；Desktop 发布端口不可用                                          |
+| first-failure-and-diagnosis           | 通过 dest 能从 stdout 诊断 400/409/413/499/504；失败 dest 往往停在 bootstrap                    |
+| recovery-from-the-failure             | 通过 dest 能封住 postgres/nats/etcd/toxiproxy 故障；MS-016/017 在 compose kill+start 上双侧失败 |
+| graceful-shutdown                     | SIGTERM 残留与 marker；cleanup 在通过 dest 上最终清掉 compose/端口/volume                       |
+| full-docker-execution                 | docker-go-like 能跑完整产品路径（例如 MS-001），但依赖 in-network 而不是宿主机端口              |
 
 ## 明确没有当成 go-like 库问题的 UX
 

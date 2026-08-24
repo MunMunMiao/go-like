@@ -6,25 +6,25 @@
 
 ## 现在库在哪
 
-| 项 | 值 |
-| --- | --- |
-| 仓库 | `/Users/munmunmiao/Documents/web/likego`，远程 `origin` = `git@github.com:MunMunMiao/go-like.git` |
-| 分支 | `main` |
-| 对照回归时的生产者 | `43abe749cb9e05c56c99b07a3595dbdb8c2121a0` |
-| 已合入的库改动 | REST `httpRoute`、httpRoute 上 `ServiceError` 的 HTTP 载体状态、recovering RabbitMQ 先 admit、`newServer` 默认 `GET`/`HEAD` `/healthz` |
+| 项                 | 值                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 仓库               | `/Users/munmunmiao/Documents/web/likego`，远程 `origin` = `git@github.com:MunMunMiao/go-like.git`                                      |
+| 分支               | `main`                                                                                                                                 |
+| 对照回归时的生产者 | `43abe749cb9e05c56c99b07a3595dbdb8c2121a0`                                                                                             |
+| 已合入的库改动     | REST `httpRoute`、httpRoute 上 `ServiceError` 的 HTTP 载体状态、recovering RabbitMQ 先 admit、`newServer` 默认 `GET`/`HEAD` `/healthz` |
 
 下一轮 dest 的 `campaign.json` `producer.sha` 应对齐当时的 `git rev-parse HEAD`，不要默默退回 `cd15313d`。
 
 ## 40 个项目进度（人话）
 
-| 状态 | 项目 | 说明 |
-| --- | --- | --- |
-| 未启动，以后要跑 | `MS-019` `MS-021` `MS-023` `MS-024` `MS-026` `MS-028` `MS-029` `MS-030` `MS-031` `MS-032` `MS-034` `MS-035` `MS-036` `MS-038` `MS-040` | 无 dest。这是「跑完 40 个」的主清单。 |
-| 已对照通过（0 条产品缺陷） | 见 [inventory.json](inventory.json) 里 `assertionsPassed=true` 的 12 项 | 不必重开，除非库又改了相关面。 |
-| P0 已修并重新对照通过 | `MS-020` dest `fw-r252`；`MS-009` dest `fw-r253`；`MS-006` dest `fw-r254` | 旧失败 dest（`fw-r183` / `fw-r230` / `fw-r214`）保留，不要改写。 |
-| 双侧都失败，禁止当库缺陷 | `MS-011` `MS-013` `MS-016` `MS-017` `MS-018` | 要再打，必须新 dest 做出「只有 go-like 失败、对照通过」。 |
-| 仅对照失败 | `MS-010` | 不进 `@go-like/*` 队列。 |
-| first-wave，无 verify | `MS-022` `MS-033` `MS-037` `MS-039` | 无 findings。不要当库结论。 |
+| 状态                       | 项目                                                                                                                                   | 说明                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 未启动，以后要跑           | `MS-019` `MS-021` `MS-023` `MS-024` `MS-026` `MS-028` `MS-029` `MS-030` `MS-031` `MS-032` `MS-034` `MS-035` `MS-036` `MS-038` `MS-040` | 无 dest。这是「跑完 40 个」的主清单。                            |
+| 已对照通过（0 条产品缺陷） | 见 [inventory.json](inventory.json) 里 `assertionsPassed=true` 的 12 项                                                                | 不必重开，除非库又改了相关面。                                   |
+| P0 已修并重新对照通过      | `MS-020` dest `fw-r252`；`MS-009` dest `fw-r253`；`MS-006` dest `fw-r254`                                                              | 旧失败 dest（`fw-r183` / `fw-r230` / `fw-r214`）保留，不要改写。 |
+| 双侧都失败，禁止当库缺陷   | `MS-011` `MS-013` `MS-016` `MS-017` `MS-018`                                                                                           | 要再打，必须新 dest 做出「只有 go-like 失败、对照通过」。        |
+| 仅对照失败                 | `MS-010`                                                                                                                               | 不进 `@go-like/*` 队列。                                         |
+| first-wave，无 verify      | `MS-022` `MS-033` `MS-037` `MS-039`                                                                                                    | 无 findings。不要当库结论。                                      |
 
 详细判定见 [dest-learn-report.md](dest-learn-report.md) 与 [next-work.md](next-work.md)。
 
