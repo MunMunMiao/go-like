@@ -692,7 +692,7 @@ export function startRecoveringRabbitMqBroker(
   let retainedConnection: RecoveringChannelModel | null = null
   let provider: RecoveringRabbitMqBroker | null = null
   let stopping: Promise<void> | null = null
-  let rejectStopped: (error: Error) => void = () => {}
+  let rejectStopped: (error: Error) => void = consumeFailure
   const stoppedAt = new Promise<never>((_, reject) => {
     rejectStopped = reject
   })
