@@ -197,6 +197,58 @@ test("rejects a duplicated httpRoute method and path at construction", () => {
   ).toThrow("duplicated")
 })
 
+test("rejects malformed httpRoute construction values", () => {
+  expect(() => httpRoute("", "/v1/orders", "orders", "get")).toThrow(
+    "server httpRoute method must be an HTTP method token"
+  )
+  expect(() => httpRoute("POST", "", "orders", "get")).toThrow(
+    "server httpRoute path must be a non-empty string"
+  )
+  expect(() => httpRoute("POST", "/v1/orders?x=1", "orders", "get")).toThrow(
+    "server httpRoute path must not include query or fragment"
+  )
+  expect(() => httpRoute("POST", "/v1/orders", "orders", "get", 99)).toThrow(
+    "server httpRoute successStatus must be an HTTP status code"
+  )
+  expect(() =>
+    newServer(
+      transport(fixtureTransport(fixtureListener([], []))),
+      handler("machine-gateway", "command", commandHandler),
+      (options) => ({
+        address: options.address,
+        advertise: options.advertise,
+        transport: options.transport,
+        handlers: options.handlers,
+        middleware: options.middleware,
+        operationMiddleware: options.operationMiddleware,
+        listenOptions: options.listenOptions,
+        httpRoutes: [null as never]
+      })
+    )
+  ).toThrow("server httpRoute must be an object")
+})
+
+test("an unparseable Go-Like-Target is not a dest missing-header 500", async () => {
+  const received: Message[] = []
+  const response = await dispatch(
+    jsonMessage(
+      {
+        "Go-Like-Method": "GET",
+        "Go-Like-Target": "http://example.com:65536"
+      },
+      Object.freeze({})
+    ),
+    handler("machine-gateway", "command", (ctx, request) => {
+      received.push(request)
+      return commandHandler(ctx, request)
+    })
+  )
+
+  expect(received).toHaveLength(0)
+  expect(headerValue(response.header, HTTPCarrierStatusHeader)).toBe("404")
+  expect(Decoder.decode(response.body)).not.toContain(DestMissingServiceHeader)
+})
+
 test("POST /v1/machine-commands without Go-Like-Service reaches the registered handler", async () => {
   const received: Message[] = []
   const response = await dispatch(
