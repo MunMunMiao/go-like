@@ -21,7 +21,7 @@
 | 分支 | `main`（packed-refs；工作区 `.git/refs/heads` 为空） |
 | 等价命令 | `git -C /Users/munmunmiao/Documents/web/likego rev-parse HEAD` |
 
-本快照未重新打包、未启动 dest、未修改 LikeGo 源码。
+收获当时未改 `packages/`。其后 P0 已在 `a6d2667` / `43abe749` 落地；关闭 dest 与「以后如何跑完 40 个」见 [dest-learn-report.md](dest-learn-report.md) 与 [RESUME.md](RESUME.md)。
 
 ## 规模
 
@@ -45,6 +45,8 @@
 | [findings-index.json](findings-index.json) | 84 条 finding 行（JSON 数组） |
 | [findings-catalog.md](findings-catalog.md) | 按 `suspectedOwner` 再按 `package` 分组，并标注 dest 分类 |
 | [ux-summary.md](ux-summary.md) | 从 UX 行归纳的重复 DX 摩擦 |
-| [next-work.md](next-work.md) | 生产者 backlog：仅含有 dest 证据的项 |
+| [next-work.md](next-work.md) | 生产者 backlog：仅含有 dest 证据的项；文首标明 P0 已落地 |
+| [dest-learn-report.md](dest-learn-report.md) | 关闭 dest 学习结论：无新的可提升库缺口 |
+| [RESUME.md](RESUME.md) | 以后跑完 40 个项目的续跑说明 |
 
-阅读顺序：本文件 → `SOURCE.md` → `findings-catalog.md` 与 `ux-summary.md` → `next-work.md`。需要核对原始字段时再用两个 JSON。
+阅读顺序：本文件 → `RESUME.md` → `dest-learn-report.md` → `SOURCE.md` → `findings-catalog.md` 与 `ux-summary.md` → `next-work.md`。需要核对原始字段时再用两个 JSON。

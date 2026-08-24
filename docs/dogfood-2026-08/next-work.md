@@ -1,6 +1,8 @@
 # 生产者下一轮 backlog
 
-只列入**已有 dest 证据**的项。生产者 SHA 为 `cd15313d50e6804cfe34a7e7291cb65a861dec1c`。本表不授权修改 `packages/`、不启动 dest、不提交 git。
+只列入**已有 dest 证据**的项。收获快照冻结 SHA 为 `cd15313d50e6804cfe34a7e7291cb65a861dec1c`。本表不授权修改 `packages/`、不启动 dest、不提交 git。
+
+**状态（2026-08-24）：** P0 `NW-020` / `NW-006` / `NW-009` 已在 `a6d266718ac322fcb7cc4f5c87a3be46bfe53aff` 与 `43abe749cb9e05c56c99b07a3595dbdb8c2121a0` 落地。关闭 dest `fw-r252` / `fw-r253` / `fw-r254` 上 go-like 与 competitor 同一产品阶段均通过。详见 [dest-learn-report.md](dest-learn-report.md)。下文 P0 章节保留为历史授权记录，不再当作未完成库工作。docs-dx（冻结 lock 摊平、Compose DNS）不是库缺陷票。
 
 未列入：15 个未启动 ID（无 dest）；first-wave `MS-022` / `MS-033` / `MS-037` / `MS-039`（无 findings、无 verify）；12 个 `assertionsPassed=true` 的 dest（无 product finding）。通过 dest 的 DX 税见 [ux-summary.md](ux-summary.md)，不在此当作缺陷票。
 

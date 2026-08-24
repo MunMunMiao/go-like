@@ -13,6 +13,10 @@ const health = createHealthHandler(probes)
 
 如需实际检查，可在启动后执行 `curl -i http://127.0.0.1:3000/livez`；这条命令只适用于已经把 health Handler 挂到该地址的应用。
 
+`@go-like/server` 是另一条面。`newServer(...)` 在 Node HTTP 传输上默认对 `GET` / `HEAD` `/healthz` 回答 HTTP `200` 空 body，只表示 unary listener 接纳了这次请求，不是 `@go-like/health` 的 readiness registry，也不检查 broker、store 或对端证书。`httpRoute("GET", "/healthz", …)` 会覆盖该缺省。unary 上未匹配的 `/livez`、`/readyz` 仍是 `404`，除非应用自己挂了 `@go-like/web/health`。
+
+Docker Desktop 发布端口的 TCP connect 不能当成 `/healthz` 已就绪：docker-proxy 可能在进程 TLS / HTTP listen 之前就接受宿主 TCP。探活应等待 HTTP（或 TLS HTTP/2）响应；dest 习惯把 `200` 或 `503` 当作接纳，启动期断连则重试。不要靠「先绑 HTTP 再等 recovering setup」来掩盖这条竞态。
+
 指标和追踪都要求显式装配。`@go-like/prometheus` 暴露应用自己拥有的 `prom-client` Registry，不碰全局
 Registry。`@go-like/otel` 接管应用创建的 OpenTelemetry provider 生命周期，并为 unary Client、unary
 middleware、标准 Web Handler 和 Broker 提供显式 wrapper；它不会自行安装全局 provider、exporter、

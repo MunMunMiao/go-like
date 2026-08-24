@@ -54,7 +54,8 @@ middleware 与生命周期链，不增加第二套 Server。无信封 REST 用 `
 把精确 method+pathname 映射到同一 handler；省略 `successStatus` 时成功载体为 200。已带 `Go-Like-Service`
 的 unary 信封仍为 HTTP 200，不会被 pathname 改写。无信封且未命中精确 `httpRoute` 时，`GET` 与 `HEAD`
 `/healthz` 缺省回答 HTTP 200 空 body，不进入 unary handler；精确 `httpRoute("GET", "/healthz", …)`
-覆盖该缺省。`/livez`、`/readyz` 与其它未匹配路径仍为 404。
+覆盖该缺省。`/livez`、`/readyz` 与其它未匹配路径仍为 404。Docker 发布端口上的 TCP
+connect 不能代替这次 HTTP 探活：docker-proxy 可能在 listener 就绪前接受连接。
 
 operation 使用唯一的 `service/endpoint` 名称；两段 route token 必须只包含 U+0021–U+007E 可见 ASCII，
 且不得包含 `/`、`*`。注册和入站 routing header 都执行同一校验且不执行 trim。`middleware(...)`

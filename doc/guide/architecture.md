@@ -54,6 +54,14 @@ The arrows are composition dependencies, not global service lookups. A package c
 
 A resource may be borrowed at construction and transferred into a go-like lifecycle adapter only after successful admission. The adapter must document that transfer. A timeout while waiting for an owner does not automatically mean that the native object has stopped.
 
+## Listeners and Docker published ports
+
+Local process examples that bind `127.0.0.1` and then `curl` that address are still the right getting-started shape. Compose and Docker Desktop are a different topology.
+
+A published host port can accept TCP through docker-proxy before the container listener is serving HTTP or TLS. Redis, AMQP, etcd, and application HTTP that only work on the Compose network should be reached by service DNS on that network (often through a dest-owned proxy), not treated as a stable host `localhost` handshake. `Server.start(ctx)` still does not mean readiness; use `endpoint(ctx)`, an `afterStart` hook, or an HTTP probe that completed a request.
+
+`startRecoveringRabbitMqBroker` admits a Broker handle before connector setup finishes so the application can bind HTTP without a bind-first workaround. Publish stays fail-closed until a generation exists. That is admission, not a health endpoint: `@go-like/broker-rabbitmq` does not serve `/healthz`.
+
 ## Context scopes
 
 Core creates three important scopes:

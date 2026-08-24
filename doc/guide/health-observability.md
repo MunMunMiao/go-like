@@ -43,6 +43,14 @@ The default routes are `/livez` and `/readyz`. The handler accepts `GET` and `HE
 
 If you need one application router, delegate the health Handler from the framework route table. go-like does not mount the route into your application automatically.
 
+## Unary Server process check
+
+`@go-like/server` is a different surface from `@go-like/web/health`. A `newServer(...)` listener that uses Node HTTP transport answers `GET` and `HEAD` `/healthz` with HTTP `200` and an empty body by default. That check means the unary listener accepted the request; it is not a readiness registry and it does not inspect brokers, stores, or TLS peers.
+
+`httpRoute("GET", "/healthz", …)` replaces that default. Unmatched `/livez` and `/readyz` on the unary listener stay `404` unless the application mounts `@go-like/web/health` (or another Handler) on those paths.
+
+A TCP connect to a published Docker port is not proof that this `/healthz` is live. Docker Desktop can accept host TCP through docker-proxy before the process TLS or HTTP listener is ready. Probe the HTTP (or TLS HTTP/2) response; treat `200` or `503` as dest-style admission, and retry on disconnect during startup. Do not “fix” that race by binding HTTP before a recovering broker or store has admitted.
+
 ## Readiness is an admission policy
 
 A readiness probe should answer whether this process should receive traffic, not whether every dependency in the universe is reachable. Examples include:
