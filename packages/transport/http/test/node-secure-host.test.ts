@@ -12,7 +12,8 @@ import {
   clientAuth,
   newNodeHTTPHost,
   newNodeHTTPHostWithSecureFactory,
-  type NodeHTTPHostOption
+  type NodeHTTPHostOption,
+  type NodeSecureHTTPServerFactory
 } from "../src/node-host"
 import type { HTTPHostHandle, HTTPHostListenOptions, HTTPServeHandle } from "../src/types"
 
@@ -142,6 +143,81 @@ describe("Node secure HTTP host", () => {
       handle = null
     } finally {
       await cleanup(handle, session)
+    }
+  })
+
+  test("omits peer identity when getPeerCertificate throws", async () => {
+    const captured: Parameters<NodeSecureHTTPServerFactory>[1][] = []
+    let certificateThrows = 0
+    const host = newNodeHTTPHostWithSecureFactory(
+      function factory(options, listener) {
+        captured.push(listener)
+        return createSecureServer(options, listener)
+      },
+      clientAuth("require"),
+      allowHTTP1(false)
+    )
+    let handle: HTTPHostHandle | null = null
+    try {
+      handle = await host.bind(background(), "127.0.0.1:0", secureListen())
+      const observed: Array<string | undefined> = []
+      const served = handle.serve(background(), async function echo(input): Promise<Response> {
+        observed.push(input.peerIdentity)
+        return new Response("ok")
+      })
+      await served.ready()
+      const nativeListener = captured[0]
+      if (nativeListener === undefined) throw new Error("native listener was not captured")
+      const request = Object.assign(new EventEmitter(), {
+        method: "GET",
+        url: "/",
+        rawHeaders: [],
+        socket: {
+          authorized: true,
+          remoteAddress: "127.0.0.1",
+          remotePort: 1,
+          getPeerCertificate(): never {
+            certificateThrows += 1
+            throw new Error("peer certificate unavailable")
+          }
+        },
+        stream: {
+          session: {
+            socket: {
+              authorized: true,
+              getPeerCertificate(): { raw: Uint8Array } {
+                return { raw: new Uint8Array([1, 2, 3]) }
+              }
+            }
+          }
+        },
+        resume(): void {}
+      })
+      const response = new EventEmitter()
+      Object.assign(response, {
+        statusCode: 0,
+        headersSent: false,
+        writableFinished: true,
+        setHeader(): void {},
+        write(): boolean {
+          return true
+        },
+        destroy(): void {},
+        end(): void {
+          request.emit("close")
+          response.emit("finish")
+          response.emit("close")
+        }
+      })
+      nativeListener(request as never, response as never)
+      expect(certificateThrows).toBe(1)
+      expect(observed).toEqual([undefined])
+      await handle.close(background())
+      await served.done()
+      await handle.done()
+      handle = null
+    } finally {
+      await cleanup(handle, null)
     }
   })
 

@@ -354,6 +354,34 @@ test("GET /livez without a matching httpRoute is HTTP 404 not dest missing-heade
   }
 })
 
+test("GET with a non-empty Go-Like-Service envelope is a protocol 500", async () => {
+  const received: Message[] = []
+  const transport = newNodeHTTPTransport()
+  const server = newServer(
+    serverTransport(transport),
+    address("127.0.0.1:0"),
+    handler("machine-gateway", "command", (_ctx, request) => {
+      received.push(request)
+      return commandMessage(request)
+    })
+  )
+  const running = server.start(background())
+  try {
+    const endpoint = await server.endpoint(background())
+    const reply = await sendHTTP(new URL("/v1/machine-commands", endpoint).href, "GET", {
+      "Go-Like-Service": "machine-gateway",
+      "Go-Like-Endpoint": "command"
+    })
+
+    expect(received).toHaveLength(0)
+    expect(reply.status).toBe(500)
+    expect(reply.text).toBe("Internal Server Error")
+  } finally {
+    await server.stop(background())
+    await running
+  }
+})
+
 test("envelope POST with Go-Like-Service still HTTP 200", async () => {
   const transport = newNodeHTTPTransport()
   const server = newServer(
