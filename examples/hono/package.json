@@ -22,7 +22,7 @@
     "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
     "@go-like/web": "workspace:*",
-    "hono": "4.12.34"
+    "hono": "4.13.3"
   },
   "devDependencies": {
     "@types/node": "26.1.2"
