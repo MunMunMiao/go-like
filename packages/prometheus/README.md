@@ -56,12 +56,9 @@ Response 记为 `success`，请求取消优先记为 `canceled`。
 v1 适配器有意不封装 `collectDefaultMetrics()`。部分默认 collector 会创建驻留的原生 observer 或事件循环
 monitor，而上游辅助函数并未暴露清理 handle。若应用明确愿意拥有该进程级生命周期，可以直接调用官方函数。
 
-## 运行时矩阵
+## 运行时验证
 
-- Bun 1.3.14
-- Node.js 24.18.1 LTS
-- Node.js 26.x
-- prom-client 15.1.3
+运行时检查使用当前环境中可执行的工具，并记录实际观察值；版本号不构成执行或支持门禁。依赖版本继续由 package manifest 与 lockfile 管理。
 
 返回的处理器只依赖标准 Web API，可交给 `@go-like/web/node` 或任何接受 go-like `Handler` 的自实现 Server；
 该包不依赖 `@go-like/web/node`，也不拥有 listener 生命周期。

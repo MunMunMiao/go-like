@@ -60,7 +60,7 @@ Desde la raíz del repositorio:
 bun install --frozen-lockfile
 ```
 
-Los paquetes son dependencias del workspace en este checkout. El repositorio raíz registra Bun `1.x`, Node.js `26.x`, Deno sin requisito de versión fija, TypeScript `7.0.2` y k6 `2.1.0` como matriz de validación; cualquier versión de Bun 1.x o Node.js 26.x es válida, y Deno sigue siendo sondeado y probado sin que el repositorio imponga un pin de versión. La documentación actual de los paquetes dice que todavía no se han publicado en npm.
+Los paquetes son dependencias del workspace en este checkout. El repositorio no usa las versiones de runtimes o herramientas como requisito para ejecutar. Cada carril de verificación seleccionado comprueba que sus herramientas requeridas pueden ejecutarse y registra el entorno observado. El comportamiento y los resultados de los comandos, no los números de versión, determinan el resultado. La documentación actual de los paquetes dice que todavía no se han publicado en npm.
 
 Ejecuta el ejemplo baseline existente:
 

@@ -43,7 +43,7 @@ This page is the editorial claim ledger for the English source. It keeps impleme
 | C23 | Public Web streaming is not internal full-duplex RPC streaming                                                         | `source`         | README, Streaming guide, and current unary Client/Transport dispatcher                                                                                  |
 | C24 | gRPC, Protobuf, IDL generation, and generated RPC code are outside the current boundary                                | `source`         | Root README and capability comparison exclusions                                                                                                        |
 | C25 | Hono, Elysia, H3, and vanilla Fetch examples pass native Fetch handlers into a host                                    | `declared`       | Current examples and their tests; the exact result depends on a command run                                                                             |
-| C26 | Bun `1.x`, Node `26.x`, unrestricted Deno, TypeScript `7.0.2`, and k6 `2.1.0` are the declared validation requirements | `source`         | `e2e/runtime-versions.ts` and `doc/reference/verification.md`                                                                                           |
+| C26 | Selected verification lanes require their tools to execute but do not reject an environment by runtime or tool version | `source`         | `e2e/runtime-versions.ts`, `e2e/executor.ts`, and `doc/reference/verification.md`                                                                       |
 | C27 | The baseline audit reported typecheck, unit test, format check, and 66-entry import audit success                      | `unit-pass`      | Reported by the repository contract audit for candidate commit `9385dbf...`; this page does not claim that this documentation phase reran every command |
 
 ## Baseline result record
@@ -74,7 +74,7 @@ Before publishing a release-oriented statement, verify the claim at the level it
 - **API:** inspect the current manifest export and source entrypoint;
 - **type behavior:** run the focused package typecheck or public-type test;
 - **unit behavior:** run the relevant package or root unit command and record exit status;
-- **runtime behavior:** run the target Bun, Node, or Deno fixture at the declared version;
+- **runtime behavior:** run the target Bun, Node, or Deno fixture and record the observed environment;
 - **provider behavior:** run the Docker or real-service E2E scope and record cleanup;
 - **published consumer behavior:** pack and install the physical tarball through the published scope;
 - **documentation behavior:** run `bun run doc:build` and check generated routes;

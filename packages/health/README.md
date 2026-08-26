@@ -8,6 +8,16 @@
 空 liveness 快照返回 `ok: true`；空 readiness 快照 fail closed，返回 `ok: false`。readiness 只有在至少
 注册一个 probe 且全部 ready probe 都成功时才返回 `ok: true`。
 
+不需要 HTTP 时，应用可以直接检查 Registry：
+
+```ts
+const report = await probes.check(ctx, "ready")
+if (!report.ok) throw new Error("workload admission failed")
+```
+
+应用可把这个 report 交给自己的 CLI、supervisor adapter、测试或 management route；Health package 不创建 HTTP
+listener。
+
 内部服务确实需要在首次 Registry 发布前校验就绪状态时，使用 Core App 已有的 `beforeStart(...)` hook：
 
 ```ts

@@ -44,7 +44,6 @@ import {
 } from "./harness/result"
 import { E2eUsage, parseE2eArguments, selectExecutionPlan, type E2eRequest } from "./selection"
 import {
-  assertRequiredRuntimeVersions,
   probeRequiredRuntimeVersions,
   renderRuntimePreflight,
   requiredToolsForPlan,
@@ -1015,7 +1014,6 @@ export async function runE2eRequest(
       dependencies.runtimeProbe
     )
     write(`${renderRuntimePreflight(observations, selectedPreflight)}\n`)
-    assertRequiredRuntimeVersions(observations)
 
     for (const definition of selected) {
       signal?.throwIfAborted()

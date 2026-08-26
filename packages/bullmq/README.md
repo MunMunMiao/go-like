@@ -89,6 +89,9 @@ const jobs = newBullMqWorkerServer(
   outage 的普通 `error` event 不是 Server terminal；BullMQ 仍负责 reconnect。
 - 首次 `stop(ctx)` 启动唯一 owner shutdown：先调用 `pause(false)` 停止 admission 并等待 active jobs，再且只再
   调用一次 `close(true)`，最后等待官方 `closed` event。所有 stop 调用共享这条排空链。
+- Kubernetes readiness=false 不会自动 stop 或 pause Worker。需要摘流时，应用必须请求 go-like App/Server stop，
+  再由 adapter owner 调用已有的 native `pause(false)` / `close(true)` shutdown 链；不得从旁调用 native lifecycle
+  方法绕过该链。可选 management probe 只能报告这个 native 状态。
 - 调用方 stop Context 只允许当前调用方放弃等待，不会取消已经开始的 owner shutdown。
 - `bullMqWorkerShutdownTimeout(ms)` 默认 25 秒，接受 `0..2_147_483_647` 整数。官方
   `pause(false)` 与 `close(true)` 都不接受 `AbortSignal`，所以这里必须保留 provider timeout。到期后

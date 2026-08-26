@@ -17,7 +17,7 @@ The repository root is private and currently records package version `0.0.1`. Re
 bun install --frozen-lockfile
 ```
 
-The declared validation matrix is Bun `1.x`, Node.js `26.x`, Deno with no fixed version requirement, TypeScript `7.0.2`, and k6 `2.1.0`. Bun 1.x and Node.js 26.x are the supported validation ranges; Deno is still probed and tested, but the repository does not enforce a Deno version pin. Other Bun or Node.js major versions may still execute a source example, but they are not the repository's full validation environment.
+The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment. Command behavior and results, not version numbers, determine the outcome.
 
 After a future published release, the intended dependency shape for a small Node-hosted Web service is:
 
@@ -68,7 +68,7 @@ const app = newApp(
   server(webServer),
   stopTimeout(30_000),
   signal(),
-  afterStart(async function announceReady(ctx): Promise<void> {
+  afterStart(async function announceWebEndpoint(ctx): Promise<void> {
     await webServer.endpoint(ctx)
     process.stdout.write("GO_LIKE_EXAMPLE_READY=hello\n")
   })
@@ -76,6 +76,8 @@ const app = newApp(
 
 await app.run()
 ```
+
+`GO_LIKE_EXAMPLE_READY=hello` proves only that this Web endpoint has obtained its address. It does not mean a Store, broker, worker, or business policy is ready. For application admission policy and optional health routes, see [Health and observability](/guide/health-observability).
 
 Save this as `src/main.ts` in a workspace application and run it with:
 
@@ -201,4 +203,4 @@ The `start` scripts build the root packages first and then run the prepared appl
 - If the ready line never appears, inspect the service terminal for a build, bind, or `afterStart` error. Do not treat an open process as proof that the listener was admitted.
 - If the command reports `EADDRINUSE`, choose another port and use the same port in the `port(...)` option and the `curl` URL. Do not start a second copy on the occupied port.
 - If a copied app cannot resolve `@go-like/*`, run it from the repository root after `bun install --frozen-lockfile`; the current `0.0.1` workspace packages are not an npm installation.
-- If the runtime rejects the source syntax, compare the local Bun/Node/Deno versions with the declared matrix in [Verification](/reference/verification) before treating it as an API failure.
+- If a runtime rejects the source syntax, record the observed environment and run the corresponding scoped check before treating it as an API failure. A version difference alone is neither a failure explanation nor an exclusion.

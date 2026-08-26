@@ -75,3 +75,9 @@ Croner 也没有暴露被动终态 Promise 或事件。通过 `maxRuns`、`stopA
 原生 `stop()`，都无法可靠结算 go-like 运行期。因此，本包虽然是 v1 发布阻断适配器，但会如实把常驻终态
 可观测性声明为 `unobservable`。需要被动退出监督或回调排空的应用，应围绕自己的 Croner 策略实现更丰富的
 结构化 `Server`。
+
+## 工作负载就绪边界
+
+常驻 Croner Server 不实现 `Endpointer`。scheduler ready 只能表示 schedules 与所需 configuration 已被接纳；每次
+callback 的成功或失败仍是 job outcome，不是 readiness。部署到 Kubernetes 时，CronJob 应为每次调度创建 fresh
+process 和 fresh App 实例，并以该次执行的 exit status 表达结果。

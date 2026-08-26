@@ -58,7 +58,7 @@ A resource may be borrowed at construction and transferred into a go-like lifecy
 
 Local process examples that bind `127.0.0.1` and then `curl` that address are still the right getting-started shape. Compose and Docker Desktop are a different topology.
 
-A published host port can accept TCP through docker-proxy before the container listener is serving HTTP or TLS. Redis, AMQP, etcd, and application HTTP that only work on the Compose network should be reached by service DNS on that network (often through a dest-owned proxy), not treated as a stable host `localhost` handshake. `Server.start(ctx)` still does not mean readiness; use `endpoint(ctx)`, an `afterStart` hook, or an HTTP probe that completed a request.
+A published host port can accept TCP through docker-proxy before the container listener is serving HTTP or TLS. Redis, AMQP, etcd, and application HTTP that only work on the Compose network should be reached by service DNS on that network (often through a dest-owned proxy), not treated as a stable host `localhost` handshake. `Server.start(ctx)` still does not mean readiness. `Endpointer.endpoint(ctx)` proves an address that can be advertised or registered. `afterStart` proves only that Core reached that hook; it becomes an admission marker only when the hook itself waits for a resource-specific admission signal.
 
 `startRecoveringRabbitMqBroker` admits a Broker handle before connector setup finishes so the application can bind HTTP without a bind-first workaround. Publish stays fail-closed until a generation exists. That is admission, not a health endpoint: `@go-like/broker-rabbitmq` does not serve `/healthz`.
 
@@ -121,6 +121,8 @@ The startup path is:
 4. Register one immutable `ServiceInstance` when `registrar(...)` is configured.
 5. Run `afterStart` hooks sequentially.
 6. Continue until `App.stop()` is requested or a launched Server reports a terminal failure.
+
+`Endpointer.endpoint(ctx)` proves an address that can be advertised or registered. `afterStart` proves only that Core reached that hook; it becomes an admission marker only when the hook itself waits for a resource-specific admission signal.
 
 The stop path is:
 

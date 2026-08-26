@@ -18,7 +18,6 @@ import {
 } from "../e2e/executor"
 import { createProcessSupervisor, runCommand, type CommandResult } from "../e2e/harness/process"
 import { createTempDirectory, removeTempDirectory } from "../e2e/harness/temp"
-import { RequiredRuntimeVersions } from "../e2e/runtime-versions"
 
 const RepresentativeBunVersion = "1.3.14"
 const RepresentativeNodeVersion = "26.0.0"

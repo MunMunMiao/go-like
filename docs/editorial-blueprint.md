@@ -32,7 +32,7 @@ The synthesis uses these evidence labels:
 
 - Repository: `https://github.com/MunMunMiao/go-like`
 - Candidate tree: `9385dbf5b6a7d913be56a80ade359e1bf9be8675`
-- Root package: private, version `0.0.1`, Bun `1.3.14`
+- Root package: private, version `0.0.1`
 - Public inventory: 43 non-private `@go-like/*` package manifests and 23 public
   source subpaths. The generated `dist/package.json` metadata export is not a new
   package or source API.
@@ -45,10 +45,11 @@ The synthesis uses these evidence labels:
 - Not established by that audit: `build`, `doc:build`, `audit`, provider Docker E2E,
   cross-runtime execution, published tarball consumers, npm publication, hosted CI,
   production adoption, or the 60-minute soak.
-- The repository records Bun `1.x`, Node.js `26.x`, Deno with no fixed version
-  requirement, TypeScript `7.0.2`, and k6 `2.1.0` as its validation matrix. One research
-  probe saw local Node `26.5.0`, which is inside the declared Node range; that probe alone
-  still does not establish a full runtime claim.
+- The repository does not use runtime or tool versions as execution eligibility. Each selected
+  verification lane checks that its required tools can run and records the observed environment.
+  Command behavior and results, not version numbers, determine the outcome. One research probe
+  observed local Node `26.5.0`; that observation is evidence only and does not establish an
+  admission or support range.
 
 ## 1. Audience map and learning paths
 
@@ -458,7 +459,7 @@ extension has already been implemented.
 | Cache            | miss falls back to authority, hit avoids policy call, TTL expires, booking/cancel invalidates, cache failure does not become booking authority                    | `unit-pass`                              |
 | Health           | empty liveness passes, empty readiness fails closed, all readiness probes must pass, timeout and cancellation are visible, `/livez` and `/readyz` status codes    | `unit-pass`                              |
 | Lifecycle        | one App owns both Servers, start admission, signal path, explicit Client close, stop aggregation, port release, no second hidden App                              | `unit-pass` plus process E2E             |
-| Runtime          | required Node version, built Node entry, real Fetch request, SIGTERM, terminal Promise, no residual process                                                       | `declared` until the command is run      |
+| Runtime          | required tool execution, built Node entry, real Fetch request, SIGTERM, terminal Promise, no residual process                                                     | `declared` until the command is run      |
 | Documentation    | all code imports current paths, package inventory includes Struct, diagrams are `text` fences, internal links resolve                                             | `doc:build` and route/link checks        |
 
 Recommended project commands, to be run only after the extension is implemented:
@@ -877,7 +878,7 @@ manifest is not an execution result.
 | C-011 | `@go-like/struct` is a current public package used by typed Endpoint calls                                         | manifest, exports, Client/Server imports, struct tests   | `source`; package docs must be corrected                                |
 | C-012 | There are 43 public root packages and 23 public source subpaths                                                    | tracked source manifests and exports                     | `source`; release docs still say 42                                     |
 | C-013 | Selected portable entries use standard Web APIs across Bun, Node, and Deno lanes                                   | source and E2E definitions                               | `runtime-source` plus `declared`; execution must be rerun               |
-| C-014 | Node-specific subpaths add capabilities not guaranteed by standard Fetch                                           | `/node` source and runtime matrix                        | `source`; do not generalize to all runtimes                             |
+| C-014 | Node-specific subpaths add capabilities not guaranteed by standard Fetch                                           | `/node` source and runtime lanes                         | `source`; do not generalize to all runtimes                             |
 | C-015 | Config, Registry, Store, and Cache are separate contracts with different durability/liveness semantics             | source, guides, provider code                            | `source`; Config/Store/Cache specialist memo is missing and needs audit |
 | C-016 | Broker/Event preserves native delivery and settlement semantics                                                    | broker/event source, tests, provider docs                | `source`, `unit-pass`; Docker provider lanes pending                    |
 | C-017 | Croner, BullMQ, Pino, Winston, OTel, and Prometheus are lifecycle or instrumentation adapters                      | adapter source and package docs                          | `source`; native terminal behavior remains provider-specific            |
@@ -952,9 +953,9 @@ renamed internal go-like RPC streaming.
 7. **Runtime execution.** The authoritative audit did not run build, `doc:build`,
    Docker/provider E2E, runtime consumers, published tarballs, or soak. Keep all those
    claims open until exact commands complete.
-8. **Node range.** The required E2E Node is `26.x`; a research probe saw `26.5.0`,
-   which satisfies the Node range. Re-run the remaining matrix lanes before making a
-   full runtime claim.
+8. **Observed Node environment.** A research probe saw `26.5.0`; retain it as
+   historical evidence, but it is not an admission or support range. Re-run the remaining
+   runtime lanes before making a full runtime claim.
 9. **NestJS/Fastify integration.** No direct bridge or test exists. Treat them as
    migration audiences and comparison subjects, not supported go-like integrations.
 10. **Locale semantic drift.** RabbitMQ recovery, Kubernetes Config, full readiness

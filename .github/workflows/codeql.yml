@@ -15,7 +15,7 @@ permissions:
 jobs:
   analyze:
     name: JavaScript and TypeScript
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:

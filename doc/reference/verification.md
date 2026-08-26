@@ -7,6 +7,7 @@ go-like has several evidence lanes. A command can exist without having passed, a
 | Lane                | What it checks                                                                     | External services           | What a pass does not prove                                       |
 | ------------------- | ---------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------- |
 | Format              | Source and documentation formatting                                                | No                          | Runtime behavior or API compatibility                            |
+| Lint                | Oxlint static rules                                                                | No                          | Type correctness or runtime behavior                             |
 | Typecheck           | Root, E2E, package, and example TypeScript contracts                               | No                          | Build output, runtime semantics, provider behavior               |
 | Unit                | Deterministic root, package, and example tests                                     | No                          | Real network, Docker, published tarballs, cross-runtime behavior |
 | Build               | Package ESM and declaration output                                                 | No                          | Consumer resolution or runtime behavior                          |
@@ -25,6 +26,7 @@ From the repository root:
 ```sh
 bun install --frozen-lockfile
 bun run fmt:check
+bun run lint
 bun run typecheck
 bun run build
 bun run test:unit
@@ -32,7 +34,7 @@ bun run doc:build
 bun run audit
 ```
 
-The root scripts are defined in `package.json`. `bun run test:unit` runs root tests and the workspace unit scripts sequentially. `bun run build` builds package output before E2E scopes. `bun run doc:build` builds the English and localized VitePress site configured under `doc/`.
+The root scripts are defined in `package.json`. `bun run lint` checks Oxlint static rules; it does not typecheck or execute runtime behavior. `bun run test:unit` runs root tests and the workspace unit scripts sequentially. `bun run build` builds package output before E2E scopes. `bun run doc:build` builds the English and localized VitePress site configured under `doc/`.
 
 Coverage is separate:
 
@@ -83,20 +85,11 @@ bun run test:e2e:soak
 
 The default script requests 60 minutes. A short k6 or HTTP run is not a 60-minute stability claim.
 
-## Toolchain record
+## Toolchain observation policy
 
-The repository declares these versions in `e2e/runtime-versions.ts` and the verification docs:
+The repository does not declare runtime or tool versions as execution requirements. A selected lane checks that each required tool can execute, then records the observed environment. Missing tools, timeouts, abnormal termination, nonzero exit status, or failing consumers still fail the run; a version value or unfamiliar version-output format does not.
 
-| Tool       | Declared version |
-| ---------- | ---------------: |
-| Bun        |            `1.x` |
-| Node.js    |           `26.x` |
-| Deno       |     unrestricted |
-| TypeScript |          `7.0.2` |
-| k6         |          `2.1.0` |
-| VitePress  | `2.0.0-alpha.19` |
-
-Node.js `26.x` is the declared release lane; other major versions may be useful for diagnosis, but they are not part of that lane.
+Dependency versions, lockfiles, Action SHAs, and fixed test fixtures are reproducibility inputs rather than runtime eligibility.
 
 ## Baseline evidence for this documentation track
 
@@ -138,7 +131,7 @@ exit status:     0
 summary:         no whitespace errors in the working-tree diff
 ```
 
-Node.js 26.5.0 is inside the declared 26.x range. Provider, cross-runtime, published-consumer, hosted CI, and soak lanes remain unexecuted in this documentation phase.
+Node.js 26.5.0 is the environment observed by that documentation run. Provider, cross-runtime, published-consumer, hosted CI, and soak lanes remain unexecuted in this documentation phase; the observation does not define an admission or support range.
 
 ## Evidence record template
 

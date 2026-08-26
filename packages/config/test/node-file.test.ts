@@ -1516,15 +1516,18 @@ test("real filesystem observes ordinary writes without residual Node watcher own
     const source = fileSource(capability, path)
     const ordinary = await source.watch?.(background(), second.revision)
     if (ordinary === undefined) throw new Error("ordinary Node file source watcher is missing")
-    const changed = nextWithin(ordinary)
-    let value = 3
-    for (; value < 23; value += 1) {
-      await writeFile(path, `{"value":${value}}`)
-      if (await Promise.race([changed.then(() => true), Bun.sleep(10).then(() => false)])) break
+    try {
+      const changed = nextWithin(ordinary)
+      const notified = changed.then(() => true)
+      let value = 3
+      for (; ; value += 1) {
+        await writeFile(path, `{"value":${value}}`)
+        if (await Promise.race([notified, Bun.sleep(10).then(() => false)])) break
+      }
+      expect((await source.load(background())).value).toEqual({ value })
+    } finally {
+      await ordinary.stop(background())
     }
-    await changed
-    expect((await source.load(background())).value).toEqual({ value })
-    await ordinary.stop(background())
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

@@ -142,6 +142,14 @@ A Broker is not a job queue. Use the native model that matches the problem:
 
 Core stops sibling Servers concurrently. If a Croner schedule must stop before a BullMQ Worker or a Queue producer, compose that ordering explicitly rather than relying on `server(croner, worker)` declaration order.
 
+For workload admission, keep the model narrow:
+
+- resident workers are ready only when they can accept the next unit of work;
+- readiness becoming false does not replace App/Server stop: the adapter owner must stop and invoke its native pause, unsubscribe, drain, or close chain;
+- a one-shot Job or CronJob reports its result through its exit status.
+
+See the [workload admission matrix](/guide/health-observability#workload-admission-matrix) for the corresponding operational boundary.
+
 ## Ownership matrix
 
 | Native resource                               | Application owns                                         | go-like adapter owns after admission                                                            |

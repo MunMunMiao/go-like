@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto"
+import { closeSync } from "node:fs"
 import { mkdir, stat } from "node:fs/promises"
 import { constants as osConstants } from "node:os"
 import { resolve } from "node:path"
@@ -248,7 +249,26 @@ const PosixNonceSize = 32
 const PosixHeaderSize = 52
 const PosixMaximumBody = 1024 * 1024
 const PosixTransitionBudgetMs = 5_000
-const PosixControllerOnlyEnvironment = new Set(["GO_LIKE_E2E_CGROUP_PARENT"])
+const PosixControllerOnlyEnvironment = new Set([
+  "BUN_FEATURE_FLAG_NO_ORPHANS",
+  "GO_LIKE_E2E_CGROUP_PARENT"
+])
+
+function closeFileDescriptors(descriptors: readonly (number | null | undefined)[]): void {
+  const failures: unknown[] = []
+  for (const descriptor of descriptors) {
+    if (typeof descriptor !== "number") continue
+    try {
+      closeSync(descriptor)
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (failures.length === 1) throw failures[0]
+  if (failures.length > 1) {
+    throw new AggregateError(failures, "failed to close caller-owned subprocess descriptors")
+  }
+}
 
 export interface PosixControllerFrame {
   readonly type: number
@@ -671,16 +691,38 @@ async function smokePosixNativeHelper(binary: string, root: string): Promise<voi
     stdin: "pipe",
     stdout: "ignore",
     stderr: "pipe",
-    stdio: ["pipe", "ignore", "pipe", "pipe", "ignore", "ignore"]
+    stdio: ["pipe", "ignore", "pipe", "pipe", "pipe", "pipe"]
   })
+  const controllerStderrDone = new Response(controller.stderr).text()
   const protocolFd = controller.stdio[3]
-  if (protocolFd === null || protocolFd === undefined) {
+  const stdoutFd = controller.stdio[4]
+  const stderrFd = controller.stdio[5]
+  if (
+    protocolFd === null ||
+    protocolFd === undefined ||
+    stdoutFd === null ||
+    stdoutFd === undefined ||
+    stderrFd === null ||
+    stderrFd === undefined
+  ) {
     controller.kill("SIGKILL")
-    throw new Error("POSIX controller protocol fd3 was not created")
+    await Promise.allSettled([controller.exited, controllerStderrDone])
+    const failure = new Error("POSIX controller smoke extra stdio was not created")
+    const cleanupFailures: CleanupFailure[] = []
+    try {
+      closeFileDescriptors([protocolFd, stdoutFd, stderrFd])
+    } catch (error) {
+      cleanupFailures.push(cleanupFailure("POSIX controller smoke descriptor cleanup", error))
+    }
+    finalizeWithCleanup(failure, cleanupFailures, "POSIX controller smoke setup and cleanup failed")
+    throw failure
   }
   const protocol = Bun.file(protocolFd).stream().getReader()
+  const stdout = Bun.file(stdoutFd).stream().getReader()
+  const stderr = Bun.file(stderrFd).stream().getReader()
   const buffered = { value: new Uint8Array() }
   const writer = controller.stdin
+  let primary: unknown | null = null
   const readSmokeFrame = async (label: string): Promise<PosixControllerFrame> => {
     const settlement = await settleWithin(
       readPosixControllerFrame(protocol, buffered),
@@ -723,11 +765,33 @@ async function smokePosixNativeHelper(binary: string, root: string): Promise<voi
     if (exitCode !== 0) {
       throw new Error(`POSIX controller protocol smoke exited ${exitCode}`)
     }
+  } catch (error) {
+    if (controller.exitCode === null) controller.kill("SIGKILL")
+    const [exitCode, controllerStderr] = await Promise.all([
+      controller.exited.catch(() => null),
+      controllerStderrDone.catch(() => "")
+    ])
+    const stderrSummary = errorSummary(controllerStderr)
+    const failure = new Error(
+      `${errorSummary(error)}; controller exited ${exitCode ?? "unknown"}${stderrSummary.length === 0 ? "" : `: ${stderrSummary}`}`
+    )
+    primary = failure
+    throw failure
   } finally {
     await Promise.resolve(writer.end()).catch(() => {})
-    await protocol.cancel().catch(() => {})
+    await Promise.allSettled([protocol.cancel(), stdout.cancel(), stderr.cancel()])
     if (controller.exitCode === null) controller.kill("SIGKILL")
     await controller.exited.catch(() => {})
+    await controllerStderrDone.catch(() => {})
+    const cleanupFailures: CleanupFailure[] = []
+    try {
+      closeFileDescriptors([protocolFd, stdoutFd, stderrFd])
+    } catch (error) {
+      cleanupFailures.push(cleanupFailure("POSIX controller smoke descriptor cleanup", error))
+    }
+    if (cleanupFailures.length > 0) {
+      finalizeWithCleanup(primary, cleanupFailures, "POSIX controller smoke and cleanup failed")
+    }
   }
 }
 
@@ -1061,7 +1125,15 @@ async function runPosixControlledCommand(
   ) {
     controller.kill("SIGKILL")
     await Promise.allSettled([controller.exited, controllerStderrDone])
-    throw new Error("native POSIX controller extra stdio was not created")
+    const failure = new Error("native POSIX controller extra stdio was not created")
+    const cleanupFailures: CleanupFailure[] = []
+    try {
+      closeFileDescriptors([protocolFd, stdoutFd, stderrFd])
+    } catch (error) {
+      cleanupFailures.push(cleanupFailure("native POSIX descriptor cleanup", error))
+    }
+    finalizeWithCleanup(failure, cleanupFailures, "native POSIX setup and cleanup failed")
+    throw failure
   }
   const inbox = new PosixFrameInbox(Bun.file(protocolFd).stream().getReader())
   const writer = controller.stdin
@@ -1165,6 +1237,7 @@ async function runPosixControlledCommand(
   )
   void stdoutDone.catch((error) => requestTerminate("supervisor-error", error))
   void stderrDone.catch((error) => requestTerminate("supervisor-error", error))
+  let primary: unknown | null = null
   try {
     const ready = await waitForTransition(0x8001, 0n, "CONTROLLER_READY")
     if (ready.payload.byteLength !== 24) throw new Error("CONTROLLER_READY payload is invalid")
@@ -1355,6 +1428,9 @@ async function runPosixControlledCommand(
       containment,
       residual
     })
+  } catch (error) {
+    primary = error
+    throw error
   } finally {
     if (timeoutHandle !== null) clearTimeout(timeoutHandle)
     definition.signal?.removeEventListener("abort", onAbort)
@@ -1368,6 +1444,15 @@ async function runPosixControlledCommand(
     await controller.exited.catch(() => {})
     await inbox.cancel().catch(() => {})
     await Promise.allSettled([controllerStderrDone, stdoutDone, stderrDone])
+    const cleanupFailures: CleanupFailure[] = []
+    try {
+      closeFileDescriptors([protocolFd, stdoutFd, stderrFd])
+    } catch (error) {
+      cleanupFailures.push(cleanupFailure("native POSIX descriptor cleanup", error))
+    }
+    if (cleanupFailures.length > 0) {
+      finalizeWithCleanup(primary, cleanupFailures, "native POSIX execution and cleanup failed")
+    }
   }
 }
 

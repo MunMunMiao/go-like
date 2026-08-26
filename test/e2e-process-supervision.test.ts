@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
-import { mkdtemp, rm } from "node:fs/promises"
+import { closeSync } from "node:fs"
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -15,7 +16,6 @@ import {
   type ProcessPreflightResult,
   type ProcessSupervisor
 } from "../e2e/harness/process"
-import { RequiredRuntimeVersions } from "../e2e/runtime-versions"
 
 const Root = resolve(import.meta.dir, "..")
 const RepresentativeBunVersion = "1.3.14"
@@ -27,6 +27,11 @@ async function nativeSupervisor(): Promise<ProcessSupervisor> {
   const supervisor = await createProcessSupervisor("managed", Root)
   await supervisor.preflight()
   return supervisor
+}
+
+async function processFileDescriptorCount(): Promise<number> {
+  const directory = process.platform === "linux" ? "/proc/self/fd" : "/dev/fd"
+  return (await readdir(directory)).length
 }
 
 interface PosixFinalizedEvidence {
@@ -104,21 +109,28 @@ async function nativePosixTerminationEvidence(
     stdin: "pipe",
     stdout: "ignore",
     stderr: "pipe",
-    stdio: ["pipe", "ignore", "pipe", "pipe", "pipe", "ignore"]
+    stdio: ["pipe", "ignore", "pipe", "pipe", "pipe", "pipe"]
   })
   const protocolFd = controller.stdio[3]
   const targetStdoutFd = controller.stdio[4]
+  const targetStderrFd = controller.stdio[5]
   if (
     protocolFd === null ||
     protocolFd === undefined ||
     targetStdoutFd === null ||
-    targetStdoutFd === undefined
+    targetStdoutFd === undefined ||
+    targetStderrFd === null ||
+    targetStderrFd === undefined
   ) {
     controller.kill("SIGKILL")
+    for (const descriptor of [protocolFd, targetStdoutFd, targetStderrFd]) {
+      if (typeof descriptor === "number") closeSync(descriptor)
+    }
     throw new Error("POSIX test controller protocol/output fd was not created")
   }
   const reader = Bun.file(protocolFd).stream().getReader()
   const targetStdout = Bun.file(targetStdoutFd).stream().getReader()
+  const targetStderrDone = new Response(Bun.file(targetStderrFd).stream()).arrayBuffer()
   const buffered: { value: Uint8Array<ArrayBufferLike> } = { value: new Uint8Array() }
   const writer = controller.stdin
   let nonce: Uint8Array<ArrayBufferLike> = new Uint8Array(32)
@@ -171,6 +183,10 @@ async function nativePosixTerminationEvidence(
     await Promise.allSettled([reader.cancel(), targetStdout.cancel()])
     if (controller.exitCode === null) controller.kill("SIGKILL")
     await controller.exited.catch(() => {})
+    await targetStderrDone.catch(() => {})
+    for (const descriptor of [protocolFd, targetStdoutFd, targetStderrFd]) {
+      closeSync(descriptor)
+    }
   }
 }
 
@@ -427,18 +443,20 @@ test("native POSIX supervisor rejects controller-only target environment overrid
   }
 }, 10_000)
 
-test("native POSIX supervisor strips controller-only ambient environment from targets", async () => {
+test("native POSIX supervisor strips supervisor-only ambient environment from targets", async () => {
   if (process.platform === "win32") return
-  const original = process.env.GO_LIKE_E2E_CGROUP_PARENT
+  const originalCgroupParent = process.env.GO_LIKE_E2E_CGROUP_PARENT
+  const originalNoOrphans = process.env.BUN_FEATURE_FLAG_NO_ORPHANS
   const supervisor = await nativeSupervisor()
   try {
     process.env.GO_LIKE_E2E_CGROUP_PARENT = "/synthetic/delegated/parent"
+    process.env.BUN_FEATURE_FLAG_NO_ORPHANS = "1"
     const result = await supervisor.run(Root, {
       cwd: ".",
       command: [
         process.execPath,
         "-e",
-        "console.log(process.env.GO_LIKE_E2E_CGROUP_PARENT ?? 'controller-only-absent')"
+        "console.log(JSON.stringify({ cgroupParent: process.env.GO_LIKE_E2E_CGROUP_PARENT ?? null, noOrphans: process.env.BUN_FEATURE_FLAG_NO_ORPHANS ?? null }))"
       ],
       timeoutMs: 2_000
     })
@@ -447,10 +465,12 @@ test("native POSIX supervisor strips controller-only ambient environment from ta
       termination: "exit",
       residual: "zero-observed"
     })
-    expect(result.stdout.trim()).toBe("controller-only-absent")
+    expect(JSON.parse(result.stdout)).toEqual({ cgroupParent: null, noOrphans: null })
   } finally {
-    if (original === undefined) delete process.env.GO_LIKE_E2E_CGROUP_PARENT
-    else process.env.GO_LIKE_E2E_CGROUP_PARENT = original
+    if (originalCgroupParent === undefined) delete process.env.GO_LIKE_E2E_CGROUP_PARENT
+    else process.env.GO_LIKE_E2E_CGROUP_PARENT = originalCgroupParent
+    if (originalNoOrphans === undefined) delete process.env.BUN_FEATURE_FLAG_NO_ORPHANS
+    else process.env.BUN_FEATURE_FLAG_NO_ORPHANS = originalNoOrphans
     await supervisor.close()
   }
 }, 10_000)
@@ -497,6 +517,52 @@ test("native POSIX supervisor bounds a helper that never sends CONTROLLER_READY"
   } finally {
     await supervisor.close()
   }
+}, 10_000)
+
+test("native POSIX preflight reports controller stderr when smoke startup fails", async () => {
+  if (process.platform === "win32") return
+  const root = await mkdtemp(join(tmpdir(), "go-like-native-smoke-error-"))
+  const nativeDirectory = join(root, "e2e/harness/native")
+  const artifactDirectory = join(root, ".artifacts/e2e-native")
+  const binary = join(artifactDirectory, "go-like-e2e-posix-controller")
+  await Promise.all([
+    mkdir(nativeDirectory, { recursive: true }),
+    mkdir(artifactDirectory, { recursive: true })
+  ])
+  await Promise.all([
+    writeFile(join(nativeDirectory, "go-like_e2e_posix_controller.c"), "fixture\n"),
+    writeFile(join(nativeDirectory, "go-like_e2e_posix_protocol.h"), "fixture\n")
+  ])
+  await writeFile(binary, "#!/bin/sh\nprintf smoke-startup-canary >&2\nexit 69\n", {
+    mode: 0o700
+  })
+  const supervisor = await createProcessSupervisor("managed", root)
+  try {
+    await expect(supervisor.preflight()).rejects.toThrow("smoke-startup-canary")
+  } finally {
+    await supervisor.close()
+    await rm(root, { recursive: true, force: true })
+  }
+}, 10_000)
+
+test("native POSIX supervisor closes caller-owned extra stdio descriptors", async () => {
+  if (process.platform === "win32") return
+  const before = await processFileDescriptorCount()
+  const supervisor = await nativeSupervisor()
+  try {
+    for (let index = 0; index < 3; index += 1) {
+      const result = await supervisor.run(Root, {
+        cwd: ".",
+        command: [process.execPath, "-e", "process.exit(0)"],
+        timeoutMs: 2_000
+      })
+      expect(result).toMatchObject({ exitCode: 0, residual: "zero-observed" })
+    }
+  } finally {
+    await supervisor.close()
+  }
+  await Bun.sleep(20)
+  expect(await processFileDescriptorCount()).toBeLessThanOrEqual(before + 2)
 }, 10_000)
 
 test("synthetic supervisor preserves termination policy definitions", async () => {

@@ -27,19 +27,14 @@ async function notifyWith(
   write: (attempt: number) => Promise<void>
 ): Promise<number> {
   const changed = nextWithin(watcher)
-  let value = 0
-  for (; value < 20; value += 1) {
-    await write(value)
+  const notified = changed.then(() => true)
+  for (let attempt = 0; ; attempt += 1) {
+    await write(attempt)
     if (
-      await Promise.race([
-        changed.then(() => true),
-        new Promise((resolve) => setTimeout(() => resolve(false), 10))
-      ])
+      await Promise.race([notified, new Promise((resolve) => setTimeout(() => resolve(false), 10))])
     )
-      break
+      return attempt
   }
-  await changed
-  return value
 }
 
 const directory = await mkdtemp(join(tmpdir(), "go-like-config-node-runtime-"))

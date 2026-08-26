@@ -1,6 +1,6 @@
 import type { RequiredTool, SuiteDefinition } from "../../definitions"
 import { runE2eRequest } from "../../executor"
-import type { CommandResult } from "../../harness/process"
+import { runCommand, type CommandResult, type ProcessSupervisor } from "../../harness/process"
 
 const ProbeTools = Object.freeze(["node", "deno", "typescript"] as const)
 
@@ -46,8 +46,23 @@ const definition: SuiteDefinition = Object.freeze({
   dockerOwnership: "none"
 })
 
+const supervisor: ProcessSupervisor = Object.freeze({
+  mode: "managed",
+  async preflight() {
+    return Object.freeze({
+      processMode: "managed",
+      strategy: "runtime-managed",
+      containment: "not-claimed",
+      cgroupV2: "n/a"
+    })
+  },
+  run: runCommand,
+  async close() {}
+})
+
 await runE2eRequest(root, { kind: "scope", scope: "suites", processMode: "managed" }, undefined, {
   definitions: [definition],
+  createSupervisor: async () => supervisor,
   executeDefinition: async () => {
     await Bun.write(marker, "consumer started")
     return successfulResult()

@@ -43,13 +43,15 @@ The default routes are `/livez` and `/readyz`. The handler accepts `GET` and `HE
 
 If you need one application router, delegate the health Handler from the framework route table. go-like does not mount the route into your application automatically.
 
+`ProbeRegistry.check(...)` can be called directly by an application with no HTTP surface. `/livez` and `/readyz` are projected only when the application explicitly uses `@go-like/web/health`; they are not automatic business routes or a management service.
+
 ## Unary Server process check
 
 `@go-like/server` is a different surface from `@go-like/web/health`. A `newServer(...)` listener that uses Node HTTP transport answers `GET` and `HEAD` `/healthz` with HTTP `200` and an empty body by default. That check means the unary listener accepted the request; it is not a readiness registry and it does not inspect brokers, stores, or TLS peers.
 
 `httpRoute("GET", "/healthz", …)` replaces that default. Unmatched `/livez` and `/readyz` on the unary listener stay `404` unless the application mounts `@go-like/web/health` (or another Handler) on those paths.
 
-A TCP connect to a published Docker port is not proof that this `/healthz` is live. Docker Desktop can accept host TCP through docker-proxy before the process TLS or HTTP listener is ready. Probe the HTTP (or TLS HTTP/2) response; treat `200` or `503` as dest-style admission, and retry on disconnect during startup. Do not “fix” that race by binding HTTP before a recovering broker or store has admitted.
+A TCP connect to a published Docker port is not proof that this `/healthz` is live. Docker Desktop can accept host TCP through docker-proxy before the process TLS or HTTP listener is ready. Probe the HTTP (or TLS HTTP/2) response and retry on disconnect during startup. An HTTP response, including `503`, proves that the management endpoint is responding; it does not prove business admission. A separate management listener, or a health route on the application listener, may bind early and report `/livez` as `200` while `/readyz` remains `503` until required work-plane resources have admitted. When health and business routes share a listener, business routes must still fail closed before readiness.
 
 ## Readiness is an admission policy
 
@@ -63,6 +65,29 @@ A readiness probe should answer whether this process should receive traffic, not
 Do not make liveness depend on a remote database unless your deployment policy truly treats that database as process liveness. Do not make readiness a permanent success flag when the service has not loaded its required configuration.
 
 The request Context passed into a probe is authoritative. A slow probe should observe cancellation and return a useful error. A timeout means the probe did not establish readiness within its budget; it is not proof that the dependency is dead.
+
+## Signals are distinct facts
+
+| Signal                     | Question answered                                               | go-like expression                                                             | Does not prove                                                    |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Address discovery          | Where can another service call it?                              | Explicit `endpoint(...)` or a network Server's `Endpointer.endpoint(ctx)`      | Process health, dependency health, or successful work             |
+| Process liveness           | Should a supervisor consider the process still making progress? | `ProbeRegistry.check(ctx, "live")`, with optional HTTP projection              | Business traffic or queue work can be admitted                    |
+| Work admission / readiness | Is this instance willing to accept the next unit of work?       | Application-defined ready probes; protocol management owns actual draining     | Running work succeeds or remote dependencies stay healthy forever |
+| Work outcome               | Did one request, message, or job complete?                      | Handler or processor result, ack/nack, exit code, or Job condition             | Long-lived process health or admission of the next unit           |
+| Progress / telemetry       | Has a resident process recently shown activity or failure?      | Metrics, logs, traces, application heartbeat, or an optional platform watchdog | A discoverable address or a business-completion promise           |
+
+`/livez` and `/readyz` are HTTP expressions of process liveness and work admission, not a new business data plane. Early health routes do not admit business routes.
+
+## Workload admission matrix
+
+| Workload                           | Admission evidence                                                                                                            | Health expression                                                                       | Stop accepting new work                                                                                                                                   | Completion expression                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| HTTP/internal unary service        | The listener has bound, its advertised address can be obtained, and dependencies required by application policy are satisfied | It may install `/livez` and `/readyz`; a Service can use readiness for traffic draining | Listener/registrar stop and deregistration                                                                                                                | Request result                                          |
+| Resident BullMQ/NATS/Broker worker | A native Worker is ready and running, or its subscription has admitted                                                        | `ProbeRegistry.check(...)` can be called directly; management HTTP is optional          | The application requests App/Server stop; the adapter then invokes the native pause/unsubscribe/drain/close it owns. Readiness alone does not drain work. | Processor/handler result and native settlement          |
+| Resident Croner scheduler          | Paused jobs have been validated and resumed, with future schedules remaining                                                  | Readiness can mean only that the scheduler and required configuration have admitted     | The application requests App/Server stop and the adapter prevents future schedules; do not invent callback draining                                       | Each callback's result, logs, and metrics               |
+| Kubernetes Job/CronJob             | A new process starts one explicit unit of work                                                                                | Long-lived readiness is usually unnecessary; a bounded execution diagnostic is optional | Controller, deadline, signal, and process exit                                                                                                            | Exit code, Job `Complete`/`Failed`, retry, and deadline |
+
+Kubernetes readiness affects Service routing only; it does not pause a broker consumer. A Job or CronJob expresses completion through its exit code and Job condition, not a long-lived readiness state.
 
 ## Prometheus
 

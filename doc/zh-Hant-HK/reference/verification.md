@@ -7,6 +7,7 @@ go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過�
 | Lane                | 會檢查                                                                 | 通常需唔需要外部服務 | 通過後仍然唔代表                                      |
 | ------------------- | ---------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- |
 | Format              | 原始碼同文件格式                                                       | 唔需要               | runtime 行為或 API 相容性                             |
+| Lint                | Oxlint 靜態規則                                                        | 唔需要               | 類型正確性或 runtime 行為                             |
 | Typecheck           | root、E2E、package 同 example 的 TypeScript 契約                       | 唔需要               | build output、runtime 語意或 provider 行為            |
 | Unit                | 確定性 root、package 同 example 測試                                   | 唔需要               | 真實網絡、Docker、published tarball 或跨 runtime 行為 |
 | Build               | package ESM 同 declaration output                                      | 唔需要               | consumer resolution 或 runtime 行為                   |
@@ -25,12 +26,15 @@ go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過�
 ```sh
 bun install --frozen-lockfile
 bun run fmt:check
+bun run lint
 bun run typecheck
 bun run build
 bun run test:unit
 bun run doc:build
 bun run audit
 ```
+
+`bun run lint` 只會檢查 Oxlint 靜態規則，唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
 
 Coverage 係獨立報告：
 
@@ -51,7 +55,7 @@ bun run test:e2e:soak
 
 公開 scope script 會先 build；直接執行 `bun e2e/run.ts ...` 或 workspace E2E command 就未必會先 build，所以 run record 要寫清楚前置條件。Provider E2E 需要指定 Docker service 同清理；soak script 預設要求 60 分鐘，短時間 k6 或 HTTP 測試唔可以當成 60 分鐘穩定性證明。
 
-目前 checkout 宣告嘅工具版本、完整 evidence lane、歷史 baseline 同文件 run record，請參考[英文 Verification](/reference/verification)。本地 runtime patch 版本唔同，只可以作診斷用途，唔代表完整 release matrix 已經通過。
+Repository 唔會將 runtime 或工具版本當成執行資格。每個被選中嘅驗證 lane 只會檢查所需工具能否運行，並記錄實際環境；工具缺失、逾時、異常終止、非零退出狀態或 consumer 失敗仍會令驗證失敗，版本值或未見過嘅版本輸出格式本身唔會。Dependency 版本、lockfile、Action SHA 同固定測試 fixture 係重現結果嘅輸入，而唔係 runtime 執行資格。完整 evidence lane、歷史 baseline 同文件 run record，請參考[英文 Verification](/reference/verification)。
 
 ## 記錄結果時要講到幾盡
 

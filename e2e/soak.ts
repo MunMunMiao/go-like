@@ -45,7 +45,6 @@ export type { SoakEvaluation, SoakResult, SoakSample } from "./soak-evaluator"
 
 export const K6Image =
   "grafana/k6:2.1.0@sha256:65c920dc067d5e2e00befbf982af6ad6ad0117034e8b1c65817c7975c52d4669"
-export const K6Version = "2.1.0"
 export const K6Workload = "/scripts/k6-http.ts"
 const Decoder = new TextDecoder()
 const Root = resolve(import.meta.dir, "..")
@@ -223,26 +222,28 @@ export function checked(
   return result
 }
 
-async function commandOutput(command: readonly string[], signal: AbortSignal): Promise<string> {
+async function commandOutput(
+  command: readonly string[],
+  signal: AbortSignal,
+  runner: typeof runCommand = runCommand
+): Promise<string> {
   return checked(
-    await runCommand(Root, { command, cwd: ".", signal, timeoutMs: 30_000 }),
+    await runner(Root, { command, cwd: ".", signal, timeoutMs: 30_000 }),
     command[0] ?? "command"
-  ).stdout.trim()
+  ).stdout
 }
 
-async function version(command: readonly string[], signal: AbortSignal): Promise<string> {
-  return (await commandOutput(command, signal)).replace(/^v/u, "")
+async function version(
+  command: readonly string[],
+  signal: AbortSignal,
+  runner: typeof runCommand = runCommand
+): Promise<string> {
+  return observeK6Version(await commandOutput(command, signal, runner))
 }
 
-export function parseK6Version(output: string): string {
-  const match = /^k6 v([0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/u.exec(output.trim())
-  if (match?.[1] === undefined) {
-    throw new Error(`cannot parse k6 version: ${boundedTail(redactText(output), 1_000)}`)
-  }
-  if (match[1] !== K6Version) {
-    throw new Error(`expected k6 ${K6Version}, received ${match[1]}`)
-  }
-  return match[1]
+export function observeK6Version(output: string): string {
+  const firstLine = output.trim().split(/\r?\n/u, 1)[0]?.trim() ?? ""
+  return firstLine.length === 0 ? "unreported" : boundedTail(redactText(firstLine), 1_000)
 }
 
 export function k6VersionCommand(owner: string): readonly string[] {
@@ -305,14 +306,18 @@ export async function preflightK6(
     }),
     "k6 version"
   ).stdout
-  return parseK6Version(output)
+  return observeK6Version(output)
 }
 
-async function environment(owner: string, signal: AbortSignal): Promise<SoakResult["environment"]> {
-  const k6Version = await preflightK6(owner, signal)
+export async function observeSoakEnvironment(
+  owner: string,
+  signal: AbortSignal,
+  runner: typeof runCommand = runCommand
+): Promise<SoakResult["environment"]> {
+  const k6Version = await preflightK6(owner, signal, runner)
   const [dockerVersion, nodeVersion] = await Promise.all([
-    version(["docker", "version", "--format", "{{.Server.Version}}"], signal),
-    version(["node", "--version"], signal)
+    version(["docker", "version", "--format", "{{.Server.Version}}"], signal, runner),
+    version(["node", "--version"], signal, runner)
   ])
   return Object.freeze({
     arch: process.arch,
@@ -694,7 +699,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     stageRoot = await createTempSubdirectory(stageDirectory, ["results"])
     await verifyTempDirectory(stageDirectory)
     const summaryPath = join(stageRoot, "k6-summary.json")
-    const runtimeEnvironment = await environment(dockerOwner, interrupted.signal)
+    const runtimeEnvironment = await observeSoakEnvironment(dockerOwner, interrupted.signal)
     web = await startWebHost()
     const endpoint = localURL(web.endpoint)
     const preflight = await fetch(endpoint)

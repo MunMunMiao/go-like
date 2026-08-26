@@ -4,7 +4,6 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.14",
   "workspaces": [
     "packages/*",
     "packages/broker/memory",
@@ -32,9 +31,11 @@
   "scripts": {
     "changeset": "changeset",
     "version:packages": "changeset version && bun update --filter '*'",
-    "release": "bun run fmt:check && bun run typecheck && bun run build && bun run test:unit && changeset publish",
+    "release": "bun run fmt:check && bun run lint && bun run typecheck && bun run build && bun run test:unit && changeset publish",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
     "doc:dev": "vitepress dev doc",
     "doc:build": "vitepress build doc",
     "doc:preview": "vitepress preview doc",
@@ -59,6 +60,7 @@
     "@types/bun": "1.3.14",
     "@types/k6": "2.0.1",
     "oxfmt": "0.61.0",
+    "oxlint": "1.80.0",
     "tsdown": "0.22.14",
     "tsx": "4.23.5",
     "typescript": "7.0.2",

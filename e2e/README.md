@@ -44,7 +44,7 @@ Specialized scenario 的 container/network/volume create 必须通过共享 `Own
 
 只有 Web 的 package-owned built-dist synthetic bridge suite 进入默认 suites/all。`hono-node`、`h3-node` 与 `elysia-node` 是显式可选的原生 Fetch Handler 兼容性测试，不对应 go-like 框架桥接包；其中 `h3-node` 通过私有 H3 example 的精确版本跟踪 npm `latest`。Framework vendor dependency staging 使用 invocation-scoped secure temp，不写入仓库内 `e2e/node_modules`。
 
-## Registered runtimes 与版本
+## Registered runtimes 与工具观察
 
 runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启动前验证：
 
@@ -53,21 +53,13 @@ runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启
 - `scripts.test:e2e:runtimes` 是非空字符串；
 - 实际执行固定 argv `bun run test:e2e:runtimes`，不解析或执行 manifest 中的 script 文本。
 
-当前验证要求：
-
-- Bun `1.x`
-- Node.js `26.x`
-- Deno: unrestricted version
-- TypeScript `7.0.2`
-- k6 image 内部版本 `2.1.0`
-
-runner 只探测当前选择计划需要的工具；版本不匹配时在任何 suite/provider/runtime/example/published consumer 启动前失败。Docker 当前只做可用性和 server version 探测，不在 PR2 固定 daemon 版本。
+当前选择计划所需的工具必须成功执行，runner 会记录实际输出；任何版本值都不决定准入。runner 只探测当前选择计划需要的工具；Docker 当前只做可用性和 server version 探测，不在 PR2 固定 daemon 版本。
 
 ## Published、k6 与 soak
 
-Published lane 动态发现实际 non-private publishable packages，生成并安装真实 npm tarball。Root authoring config 只检查 committed fixture 的语法与控制流，不是 package contract；staged checks 才从安装后的 `node_modules` 验证 DTS 与 package-name resolution。Node 使用 TypeScript `7.0.2` NodeNext 实际 emit 后在 clean environment 执行，Bun 使用 `--no-install` 防止隐藏依赖，Deno 先 `check` 再以 `--no-prompt` 和最小权限运行。
+Published lane 动态发现实际 non-private publishable packages，生成并安装真实 npm tarball。Root authoring config 只检查 committed fixture 的语法与控制流，不是 package contract；staged checks 才从安装后的 `node_modules` 验证 DTS 与 package-name resolution。Node 使用 committed TypeScript 的 NodeNext 实际 emit 后在 clean environment 执行，Bun 使用 `--no-install` 防止隐藏依赖，Deno 先 `check` 再以 `--no-prompt` 和最小权限运行。
 
-k6 workload 是独立 typecheck、未 bundle 的 committed TypeScript，并由固定 digest 的 k6 `2.1.0` image 直接执行。10 秒运行只证明 short lifecycle、result marker 与 cleanup path；只有真实测满至少 60 分钟的单独运行才能支持 long-duration claim。k6/soak 不属于默认有限时长 `test:e2e`。
+k6 workload 是独立 typecheck、未 bundle 的 committed TypeScript，并由固定 digest 的 k6 `2.1.0` image 直接执行；该 image 是可复现的 soak fixture，不是支持范围。10 秒运行只证明 short lifecycle、result marker 与 cleanup path；只有真实测满至少 60 分钟的单独运行才能支持 long-duration claim。k6/soak 不属于默认有限时长 `test:e2e`。
 
 ## Runtime 与宿主机边界
 
@@ -77,7 +69,7 @@ go-like 的产品平台支持由所选 JavaScript runtime 对相应标准 Web AP
 
 ## 所有权与 CI 边界
 
-场景脚本继续持有业务、协议、readiness、权限和恢复断言；root 只负责 selection、version preflight、timeout/abort、Docker suite owner backstop、cleanup 和当前运行 summary。Docker suite 使用 exact `io.go-like.e2e.owner` 清理容器、网络和 volume；观察到 owned leak 即使被代清理也仍判失败。
+场景脚本继续持有业务、协议、readiness、权限和恢复断言；root 只负责 selection、required-tool preflight、timeout/abort、Docker suite owner backstop、cleanup 和当前运行 summary。Docker suite 使用 exact `io.go-like.e2e.owner` 清理容器、网络和 volume；观察到 owned leak 即使被代清理也仍判失败。
 
 Committed E2E TypeScript 的 owner 为：root tests 使用 `tsconfig.test.json`，ordinary root E2E 使用 `e2e/tsconfig.json`，k6 使用 `e2e/load/tsconfig.json`，published fixture authoring 使用独立 `tsconfig.authoring.json`，package 与 example E2E 使用 owning workspace 的 `tsconfig.test.json`、必要 `tsconfig.e2e.json` 或 example `tsconfig.json`。常规检查均为 `noEmit`；published C8 的 staged NodeNext config 仍必须实际 emit。该归属由配置与贡献审查维护，不增加全仓 source scanner。
 

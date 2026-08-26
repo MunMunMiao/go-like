@@ -42,7 +42,7 @@ stop()
   Context 内 cleanup 的注册顺序。这使嵌套 deadline timer 与 Go 一样先停止子 timer，再停止父 timer。
 - 生产代码仅依赖标准 ECMAScript 和 Web API，不依赖 Bun、Node.js 或 Deno 全局对象。
 
-运行时测试覆盖 Bun `1.3.14`、Node `24.18.1` / `26.x` 与 Deno；Deno 测试不受仓库固定版本要求限制。标准 Web API 无法要求一个已被冻结
+运行时测试由仓库当前选择的验证 lane 按需执行；实际工具版本只作为本次运行的 evidence 记录，不构成支持门禁。标准 Web API 无法要求一个已被冻结
 或挂起的 Document、Worker 或 isolate 在暂停期间执行 timer，因此这类宿主的 deadline 唤醒只能服从其调度；
 这不是 `Context` 可以伪装消除的差异。
 

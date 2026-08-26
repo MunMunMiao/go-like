@@ -433,6 +433,7 @@ test("Node client releases an unshared stalled TLS handshake after caller cancel
   const server = createTCPServer(function hold(socket): void {
     connections += 1
     socket.on("error", function expected(): void {})
+    socket.resume()
     if (connections === 1) admitFirst?.(socket)
     else admitSecond?.(socket)
   })

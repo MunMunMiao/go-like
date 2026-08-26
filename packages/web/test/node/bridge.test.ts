@@ -743,7 +743,7 @@ test("uses lazy request streams and preserves TRACE after direct body consumptio
 
       const traced = await request(port, "/trace-body", { method: "TRACE" })
       expect(traced.status).toBe(200)
-      expect(traced.body).toBe("")
+      expect(JSON.parse(traced.body)).toEqual({ body: true, method: "TRACE", text: "" })
       expect(traced.headers["content-length"]).toBe("40")
     }
   )
@@ -1116,11 +1116,13 @@ test("covers raw URL forms, method normalization, and host validation", async ()
   )
 })
 
-test("rejects unsupported direct-read methods and invalid JSON", async () => {
+test("maps invalid JSON and native method rejection to safe HTTP errors", async () => {
+  let unsupportedReached = false
   await withBridge(
     async (request) => {
       const path = new URL(request.url).pathname
       if (path === "/json") return Response.json(await request.json())
+      unsupportedReached = true
       return new Response(await request.text())
     },
     async (port) => {
@@ -1132,7 +1134,8 @@ test("rejects unsupported direct-read methods and invalid JSON", async () => {
       expect(invalidJson.status).toBe(500)
 
       const unsupported = await request(port, "/unsupported", { method: "TRACK" })
-      expect(unsupported.status).toBe(200)
+      expect(unsupported.status).toBe(400)
+      expect(unsupportedReached).toBe(false)
     }
   )
 })

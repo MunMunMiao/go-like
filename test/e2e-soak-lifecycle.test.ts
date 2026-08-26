@@ -10,11 +10,11 @@ import {
   collectSoakCleanupFailures,
   K6Image,
   k6RunCommand,
-  K6Version,
   k6VersionCommand,
   K6Workload,
   loadMetrics,
-  parseK6Version,
+  observeK6Version,
+  observeSoakEnvironment,
   preflightK6,
   type SoakCleanupActions
 } from "../e2e/soak"
@@ -76,20 +76,50 @@ test("k6 uses the fixed image and direct TypeScript workload argv", () => {
   ])
 })
 
-test("k6 version preflight is exact and rejects drift before another command", async () => {
-  expect(parseK6Version("k6 v2.1.0 (commit/example, go1.26.4, linux/arm64)\n")).toBe(K6Version)
-  expect(() => parseK6Version("k6 v2.1.1")).toThrow("expected k6 2.1.0")
-  expect(() => parseK6Version("prefix k6 v2.1.0")).toThrow("cannot parse k6 version")
+test("k6 preflight records arbitrary version output without rejecting drift", async () => {
+  expect(observeK6Version("k6 v999.1.2 (custom build)\n")).toBe("k6 v999.1.2 (custom build)")
+  expect(observeK6Version("")).toBe("unreported")
 
   const commands: string[][] = []
   const runner: typeof runCommand = async (_root, definition) => {
     commands.push([...definition.command])
-    return commandResult("k6 v9.9.9\n")
+    return commandResult("k6 future-channel\n")
   }
-  await expect(preflightK6("owner", new AbortController().signal, runner)).rejects.toThrow(
-    "expected k6 2.1.0"
+
+  await expect(preflightK6("owner", new AbortController().signal, runner)).resolves.toBe(
+    "k6 future-channel"
   )
   expect(commands).toEqual([[...k6VersionCommand("owner")]])
+})
+
+test("k6 version preflight remains fail-closed through checked", async () => {
+  const runner: typeof runCommand = async () =>
+    commandResult("k6 preflight failure", { exitCode: 17 })
+
+  await expect(preflightK6("owner", new AbortController().signal, runner)).rejects.toThrow(
+    "k6 version failed: termination=exit exit=17: k6 preflight failure"
+  )
+})
+
+test("soak environment observations share one normalizer", async () => {
+  let nodeOutput = ""
+  const runner: typeof runCommand = async (_root, definition) => {
+    if (definition.command[0] === "node") return commandResult(nodeOutput)
+    if (definition.command[1] === "version") {
+      return commandResult("Docker token=soak-docker-secret\nignored")
+    }
+    return commandResult("k6 future-channel\nignored")
+  }
+
+  const initial = await observeSoakEnvironment("owner", new AbortController().signal, runner)
+  expect(initial.k6Version).toBe("k6 future-channel")
+  expect(initial.dockerVersion).toBe("Docker token=<redacted>")
+  expect(initial.nodeVersion).toBe("unreported")
+
+  nodeOutput = "vfuture-node\nignored"
+  const prefixed = await observeSoakEnvironment("owner", new AbortController().signal, runner)
+  expect(prefixed.nodeVersion).toBe("vfuture-node")
+  expect(observeK6Version("x".repeat(1_001))).toBe("x".repeat(1_000))
 })
 
 test("k6 command failures are bounded, redacted, and include process cleanup", () => {

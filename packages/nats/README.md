@@ -186,8 +186,7 @@ for await (const message of messages) {
 
 ## 运行时与上游声明边界
 
-固定官方 `@nats-io/transport-node@3.4.0` 与 `@nats-io/jetstream@3.4.0`，并在 Bun 1.3.14、Node.js 24.18.1
-和 Node.js 26.x 测试运行。
+固定官方 `@nats-io/transport-node@3.4.0` 与 `@nats-io/jetstream@3.4.0`；固定官方 NATS dependencies 由仓库选择的 runtime lanes 执行验证；实际工具版本只作为 run evidence 记录，不形成支持范围。
 
 包内构建与测试设置 `skipLibCheck: true`；根配置仍为 `false`。TypeScript 7.0.2 检查固定版本
 `@nats-io/nats-core` 时会命中 `MsgImpl.headers` / `Msg.headers` 与 `NatsConnectionImpl.info` /
