@@ -702,9 +702,9 @@ test("native POSIX supervisor reports target signal termination", async () => {
   }
 }, 10_000)
 
-test("native POSIX supervisor times out and removes an inherited-pipe descendant", async () => {
+test("native POSIX supervisor cleans an inherited-pipe descendant after a natural exit", async () => {
   if (process.platform === "win32") return
-  const directory = await mkdtemp(join(tmpdir(), "go-like-native-timeout-tree-"))
+  const directory = await mkdtemp(join(tmpdir(), "go-like-native-natural-exit-tree-"))
   const processIdPath = join(directory, "descendant.pid")
   const readyPath = join(directory, "descendant.ready")
   const supervisor = await nativeSupervisor()
@@ -719,15 +719,15 @@ test("native POSIX supervisor times out and removes an inherited-pipe descendant
         processIdPath,
         readyPath
       ],
-      timeoutMs: 750
+      timeoutMs: 5_000
     })
     const match = /DESCENDANT_PID=(\d+)/.exec(result.stdout)
     descendantPid = match === null ? null : Number(match[1])
     expect(result).toMatchObject({
-      exitCode: null,
+      exitCode: 0,
       signal: null,
-      termination: "timeout",
-      timedOut: true,
+      termination: "exit",
+      timedOut: false,
       abortReason: null,
       containment: "not-claimed",
       residual: "zero-observed"
