@@ -389,12 +389,12 @@ test("materializes standard Request metadata and preserves clone semantics", asy
 
 test("materializes GET state without consuming a request body", async () => {
   await withBridge(
-    (request) =>
+    async (request) =>
       Response.json({
+        text: await request.text(),
         bodyIsNull: request.body === null,
         bodyUsed: request.bodyUsed,
-        signalAborted: request.signal.aborted,
-        text: "" as string
+        signalAborted: request.signal.aborted
       }),
     async (port) => {
       const response = await request(port, "/get-state")

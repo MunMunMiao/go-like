@@ -38,7 +38,7 @@ mock.module(examplesUrl, () => ({
   }) => {
     const options: ExamplesRunOptions = Object.freeze({
       timeoutMs: mode === "timeout" ? 1_000 : 5_000,
-      gracePeriodMs: 100,
+      gracePeriodMs: mode === "timeout" ? 1_000 : 100,
       hardTerminationReserveMs: 7_000,
       dockerCleanupTimeoutMs: 1_000,
       pollIntervalMs: 5,

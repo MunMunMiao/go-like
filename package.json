@@ -31,7 +31,8 @@
   "scripts": {
     "changeset": "changeset",
     "version:packages": "changeset version && bun update --filter '*'",
-    "release": "bun run fmt:check && bun run lint && bun run typecheck && bun run build && bun run test:unit && changeset publish",
+    "verify": "bun run fmt:check && bun run lint && bun run typecheck && bun run build && bun run test:unit && bun run test:unit:coverage",
+    "release": "bun run verify && changeset publish",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint .",
