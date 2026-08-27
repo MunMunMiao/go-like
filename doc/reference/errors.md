@@ -13,6 +13,10 @@ if (error === canceled || error === deadlineExceeded) {
   // Inspect error.errors in order
 } else if (typeof error === "object" && error !== null && "code" in error) {
   // Match one documented GO_LIKE_* code
+} else if (error instanceof TypeError || error instanceof RangeError) {
+  // Programmer error: propagate and fix the caller
+} else if (error instanceof Error) {
+  // Native or upstream error: follow provider/runtime policy
 }
 ```
 
@@ -21,6 +25,8 @@ Import `canceled` and `deadlineExceeded` from `@go-like/context` and `isServiceE
 Do not branch on `error.message`. Messages are allowed to change and may contain provider text. Do not use `instanceof` for structural provider errors: different realms, package copies, and frozen object construction make class identity the wrong contract. Match a documented `code` and validate any fields your policy consumes.
 
 `ServiceError.code` is application-owned and is not part of the `GO_LIKE_*` catalog. Recognize it only with `isServiceError(error)` before interpreting its `code`, `status`, or `metadata`.
+
+After the structural-code branch, propagate `TypeError` and `RangeError` and fix the caller; never auto-retry them or match their messages. For any other native or upstream `Error`, preserve its identity for local, redacted diagnostics and let the provider or runtime's documented policy decide whether retry is permitted.
 
 ## Retry and reconcile
 
