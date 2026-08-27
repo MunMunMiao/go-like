@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/example-example-task-docker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "bun scenario.ts registration-only"
+  }
+}

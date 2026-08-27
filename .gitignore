@@ -1,0 +1,13 @@
+.worktrees/
+.superpowers/
+node_modules/
+coverage/
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+.idea/
+.artifacts/
+doc/.vitepress/cache/
+doc/.vitepress/dist/
+.grok

@@ -1,0 +1,36 @@
+name: go-like-enterprise-platform-runtime
+
+services:
+  consul:
+    image: hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2
+    command: ["agent", "-dev", "-client=0.0.0.0", "-log-level=warn"]
+    ports:
+      - "127.0.0.1:58500:8500"
+    tmpfs:
+      - /consul/data:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  vault:
+    image: hashicorp/vault:2.0.3@sha256:a296a888b118615dc01d5f1a6846e6d4a7277946caaed5b447008fff5fe06b54
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200"]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: go-like-enterprise-dev
+    ports:
+      - "127.0.0.1:58200:8200"
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "127.0.0.1:54318:4318"
+    volumes:
+      - ../../packages/otel/test/e2e/collector.yaml:/etc/otelcol-contrib/config.yaml:ro

@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": false,
+    "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../broker" },
+    { "path": "../client" },
+    { "path": "../context" },
+    { "path": "../server" },
+    { "path": "../struct" },
+    { "path": "../transport" },
+    { "path": "../web" }
+  ]
+}

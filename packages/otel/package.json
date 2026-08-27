@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/otel",
+  "version": "0.0.1",
+  "description": "Lifecycle adaptation and explicit go-like instrumentation for application-configured OpenTelemetry providers.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false && tsc -p tsconfig.e2e.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun test/e2e/docker-e2e.ts && bun test/e2e/instrumentation-docker.ts",
+    "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts"
+  },
+  "dependencies": {
+    "@go-like/broker": "0.0.1",
+    "@go-like/client": "0.0.1",
+    "@go-like/context": "0.0.1",
+    "@go-like/core": "0.0.1",
+    "@go-like/metadata": "0.0.1",
+    "@go-like/server": "0.0.1",
+    "@go-like/struct": "0.0.1",
+    "@go-like/transport": "0.0.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-metrics": "2.10.0",
+    "@opentelemetry/sdk-trace": "2.10.0"
+  },
+  "devDependencies": {
+    "@go-like/registry": "workspace:*",
+    "@go-like/transport-http": "workspace:*",
+    "@opentelemetry/context-async-hooks": "2.10.0",
+    "@opentelemetry/core": "2.10.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/resources": "2.10.0",
+    "@types/node": "26.4.0"
+  },
+  "license": "MIT"
+}

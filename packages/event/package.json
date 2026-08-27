@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/event",
+  "version": "0.0.1",
+  "description": "Minimal typed codec projection over go-like Broker.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@go-like/broker": "0.0.1",
+    "@go-like/context": "0.0.1"
+  },
+  "license": "MIT"
+}

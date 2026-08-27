@@ -1,0 +1,79 @@
+# 驗證
+
+go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過；一條 lane 變綠，亦唔代表所有 provider、runtime、example 或 published package 都正常。記錄時應保留 candidate tree、工具版本、完整命令、退出狀態、數量同清理結果。
+
+## Evidence lanes
+
+| Lane                | 會檢查                                                                 | 通常需唔需要外部服務 | 通過後仍然唔代表                                      |
+| ------------------- | ---------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- |
+| Format              | 原始碼同文件格式                                                       | 唔需要               | runtime 行為或 API 相容性                             |
+| Lint                | Oxlint 靜態規則                                                        | 唔需要               | 類型正確性或 runtime 行為                             |
+| Typecheck           | root、E2E、package 同 example 的 TypeScript 契約                       | 唔需要               | build output、runtime 語意或 provider 行為            |
+| Unit                | 確定性 root、package 同 example 測試                                   | 唔需要               | 真實網絡、Docker、published tarball 或跨 runtime 行為 |
+| Build               | package ESM 同 declaration output                                      | 唔需要               | consumer resolution 或 runtime 行為                   |
+| Runtime E2E         | 已宣告嘅 Bun、Node.js 同 Deno fixture                                  | 通常唔需要           | 所有 provider 或所有 package 都支援每個 runtime       |
+| Provider E2E        | 真實 Consul、etcd、Kubernetes、ZooKeeper、Redis、RabbitMQ、NATS 等服務 | 需要                 | production 可用性或 hosted CI 結果                    |
+| Example E2E         | example process、request、readiness、停止同清理                        | 視乎 example         | 每個 example 喺獨立安裝中都正常                       |
+| Published           | 實際打包嘅 tarball 被 Node、Bun、Deno fixture 消費                     | 通常唔需要           | 已經發布到 npm 或有外部使用者採用                     |
+| Soak                | 長時間 HTTP 或 service 行為                                            | 通常唔需要           | 短測試或所有 provider 行為                            |
+| Documentation build | VitePress route 同 Markdown build                                      | 唔需要               | 瀏覽器 layout 或本地化語意 parity                     |
+| Audit               | dependency vulnerability report                                        | 唔需要               | application security design 或 authorization 完整性   |
+
+## 常用命令
+
+喺 repository root 執行：
+
+```sh
+bun install --frozen-lockfile
+bun run verify
+bun run test:parallel
+bun run test:stability
+```
+
+`bun run verify` 係 repository 嘅標準門禁，會順序執行 `fmt:check`、`lint:check`、`typecheck`、`build` 同 `test:unit:coverage`；coverage 階段會執行一次 root 同 workspace 嘅 coverage script，並強制校驗 coverage。`examples/payments-ledger` 係唯一超出單元測試範圍嘅例外：佢仲會執行真實 PostgreSQL/NATS integration scenario，所以需要 Docker。只有收窄失敗範圍時先單獨執行其中一個階段；單一階段通過唔可以取代完整門禁。`bun run fmt` 會修正格式。`bun run lint` 會套用安全嘅 Oxlint 修正、重新格式化，並喺仲有 warning 時失敗。門禁使用唔會修改檔案嘅 `fmt:check` 同 `lint:check`，而 `lint:check` 同樣要求零 warning。呢啲命令唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
+
+`test:parallel` 用兩個隔離嘅 Bun worker 執行一次相同單元測試範圍，專門檢查檔案級並行安全。`test:stability` 會隨機排列各段測試，將每個測試檔案重複兩次，輸出可以重現次序嘅 seed，而且唔會 retry。兩者都係獨立檢查，唔屬於 canonical gate，亦唔可以取代 `verify`；`test:stability` 係搵次序依賴同偶發失敗，唔同於驗證 60 分鐘運行行為嘅 `test:e2e:soak`。
+
+`doc:build` 同 `audit` 仍然係獨立 evidence lane：
+
+```sh
+bun run doc:build
+bun run audit
+```
+
+E2E 唔屬於 canonical gate，可以按需要喺本地按 scope 執行：
+
+```sh
+bun run test:e2e:runtimes
+bun run test:e2e:providers
+bun run test:e2e:examples
+bun run test:e2e:published
+bun run test:e2e
+bun run test:e2e:soak
+```
+
+公開 scope script 會先 build；直接執行 `bun e2e/run.ts ...` 或 workspace E2E command 就未必會先 build，所以 run record 要寫清楚前置條件。Provider E2E 需要指定 Docker service 同清理；soak script 預設要求 60 分鐘，短時間 k6 或 HTTP 測試唔可以當成 60 分鐘穩定性證明。
+
+Repository 唔會將 runtime 或工具版本當成執行資格。每個被選中嘅驗證 lane 只會檢查所需工具能否運行，並記錄實際環境；工具缺失、逾時、異常終止、非零退出狀態或 consumer 失敗仍會令驗證失敗，版本值或未見過嘅版本輸出格式本身唔會。Dependency 版本、lockfile、Action SHA 同固定測試 fixture 係重現結果嘅輸入，而唔係 runtime 執行資格。完整 evidence lane、歷史 baseline 同文件 run record，請參考[英文 Verification](/reference/verification)。
+
+## 記錄結果時要講到幾盡
+
+每次驗證至少記錄：
+
+```text
+candidate tree:  <commit SHA 或明確的 dirty-tree 描述>
+environment:     <OS、container/host、process mode>
+Bun:             <版本或未使用>
+Node.js:         <版本或未使用>
+Deno:            <版本或未使用>
+command:         <完整命令>
+started:         <開始時間>
+finished:        <完成時間>
+exit status:     <整數>
+summary:         <測試數量、package 數量或 route 數量>
+Docker residual: <none，或者列出仍然存在的 container>
+process/socket residual: <none，或者列出觀察結果>
+notes:           <已知限制同跳過嘅 scope>
+```
+
+`doc:build` 通過只可以話「VitePress 成功建立已設定嘅文件 route」；唔可以延伸成瀏覽器 layout、翻譯質素、runtime 行為、provider E2E、npm publication 或 production adoption 都已經通過。完整嘅 claim 邊界請看[英文 Claims](/reference/claims)。

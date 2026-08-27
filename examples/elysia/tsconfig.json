@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Elysia 1.4.29 declarations do not yet satisfy TypeScript 7 exact-optional checking.
+    "skipLibCheck": true,
+    "types": ["bun", "node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

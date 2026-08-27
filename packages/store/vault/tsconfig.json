@@ -1,0 +1,21 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": false,
+    "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo",
+    "paths": {
+      "@go-like/context": ["../../context/src/index.ts"],
+      "@go-like/core": ["../../core/src/index.ts"],
+      "@go-like/core/lifecycle": ["../../core/src/lifecycle.ts"],
+      "@go-like/store": ["../src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../../context" }, { "path": "../../core" }, { "path": ".." }]
+}

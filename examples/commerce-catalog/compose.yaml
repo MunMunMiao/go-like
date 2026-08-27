@@ -1,0 +1,26 @@
+name: go-like-commerce-catalog
+
+services:
+  consul:
+    image: hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2
+    command: ["agent", "-dev", "-client=0.0.0.0", "-log-level=warn"]
+    ports:
+      - "127.0.0.1:18500:8500"
+    tmpfs:
+      - /consul/data:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

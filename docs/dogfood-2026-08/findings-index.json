@@ -1,0 +1,1682 @@
+[
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40611/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-91956233-ce91-4ffa-8e54-0d3c1c66d725/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-91956233-ce91-4ffa-8e54-0d3c1c66d725/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-001",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40611/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-35057e0a-0dbe-4bb3-9782-c05b6b2359ff/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-35057e0a-0dbe-4bb3-9782-c05b6b2359ff/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-002",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40611/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-23c6a5b5-f096-47ae-bba0-2dbaaa93c890/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-23c6a5b5-f096-47ae-bba0-2dbaaa93c890/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-003",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40601/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-6ebd4884-a533-49b4-95fb-aeecf770329d/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-6ebd4884-a533-49b4-95fb-aeecf770329d/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-004",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40601/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-46268daf-b870-4f17-9de8-da88434bedcb/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-46268daf-b870-4f17-9de8-da88434bedcb/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-005",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40601/healthz: socket hang up",
+    "dest": "fw-r214",
+    "evidencePaths": [
+      "projects/MS-006/artifacts/run-ccdb9b91-c0bb-4963-b6d8-d15ea35c0c66/stdout/healthy-path.log",
+      "projects/MS-006/artifacts/run-ccdb9b91-c0bb-4963-b6d8-d15ea35c0c66/stderr/healthy-path.log"
+    ],
+    "expected": "After ensureSchema, RecoveringRabbitMqBroker completes initial setup on a healthy in-network RabbitMQ so startRole can bind HTTP and GET /healthz returns 200 or 503 within the 60s bootstrap window. Competitor openBus then serveHttp succeeds on the same Compose topology.",
+    "id": "MS-006-006",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/broker-rabbitmq",
+    "phase": "healthy-path",
+    "project": "MS-006",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-07",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40901/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-ce64498f-5285-4d53-a8db-c269df7ebd4d/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-ce64498f-5285-4d53-a8db-c269df7ebd4d/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-001",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40901/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-f46acc2f-8744-4636-9ecd-5cc54d42daeb/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-f46acc2f-8744-4636-9ecd-5cc54d42daeb/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-002",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40901/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-cb85b977-df34-4414-908e-27c7e36d0c52/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-cb85b977-df34-4414-908e-27c7e36d0c52/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-003",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40911/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-f3381fc0-ae61-46e7-babb-7a40bc596d15/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-f3381fc0-ae61-46e7-babb-7a40bc596d15/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-004",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40911/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-6d61fa70-3fd1-4527-bdf0-0c670a6bc119/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-6d61fa70-3fd1-4527-bdf0-0c670a6bc119/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-005",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:40911/healthz: 500",
+    "dest": "fw-r230",
+    "evidencePaths": [
+      "projects/MS-009/artifacts/run-3083968d-8750-483e-8830-b81533e43623/stdout/healthy-path.log",
+      "projects/MS-009/artifacts/run-3083968d-8750-483e-8830-b81533e43623/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on the go-like fault-worker @go-like/server HTTP listener returns 200 or 503 within the 60s bootstrap window. Competitor native HTTP /healthz returns 200 on the same Compose topology.",
+    "id": "MS-009-006",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/server",
+    "phase": "healthy-path",
+    "project": "MS-009",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-10",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-258edc92-f590-4297-9c11-fd5af9fef9b3/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-258edc92-f590-4297-9c11-fd5af9fef9b3/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-02cfab1c-0fdb-4331-bdd9-fac38b522165/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-02cfab1c-0fdb-4331-bdd9-fac38b522165/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-9951cc9e-8606-4f03-997b-e659b25365f4/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-9951cc9e-8606-4f03-997b-e659b25365f4/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-6794cd1d-af1e-47a6-938f-54320d2822c3/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-6794cd1d-af1e-47a6-938f-54320d2822c3/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-b9a414ba-5ce2-4cdb-a8b1-2ddd9f6a9a0f/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-b9a414ba-5ce2-4cdb-a8b1-2ddd9f6a9a0f/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "socket hang up",
+    "dest": "fw-r231",
+    "evidencePaths": [
+      "projects/MS-010/artifacts/run-fe82a0c2-b86a-4c9b-a1a1-b39ab7627ab3/stdout/fault-matrix.log",
+      "projects/MS-010/artifacts/run-fe82a0c2-b86a-4c9b-a1a1-b39ab7627ab3/stderr/fault-matrix.log"
+    ],
+    "expected": "Competitor fault-matrix completes graceful-stop through cleanup against the same Compose topology where go-like six slots EXIT 0.",
+    "id": "MS-010-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@redis/client",
+    "phase": "fault-matrix",
+    "project": "MS-010",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-11",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-9005743e-cf5d-4687-986c-27283fc5445c/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-9005743e-cf5d-4687-986c-27283fc5445c/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-094db4e9-3965-435b-a256-c7598e5f7df1/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-094db4e9-3965-435b-a256-c7598e5f7df1/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-3cd51957-a79c-4b54-b068-ad66030c88da/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-3cd51957-a79c-4b54-b068-ad66030c88da/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-51c1722f-fb7f-4969-ae4a-1d79b27a0d3c/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-51c1722f-fb7f-4969-ae4a-1d79b27a0d3c/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-fa616cc8-f1d0-492e-b38b-33b45a22a257/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-fa616cc8-f1d0-492e-b38b-33b45a22a257/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "recovery scan missed crash-lease job",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-0b33c990-cdbf-4ec8-8970-0615226a112b/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-0b33c990-cdbf-4ec8-8970-0615226a112b/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/recovery/scan returns the crash-lease job as recovered after executor run.",
+    "id": "MS-011-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "node:fs/promises",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41100/healthz: connect ECONNREFUSED 127.0.0.1:41100; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-1179bd9e-d6f2-4ece-8657-c68b015625e0/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-1179bd9e-d6f2-4ece-8657-c68b015625e0/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-007",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41100/healthz: connect ECONNREFUSED 127.0.0.1:41100; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-1dcfc457-b996-4430-a07a-e0e5828a903b/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-1dcfc457-b996-4430-a07a-e0e5828a903b/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-008",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41100/healthz: connect ECONNREFUSED 127.0.0.1:41100; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-4c8ef0d5-620b-479b-9185-3ae98cd644bd/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-4c8ef0d5-620b-479b-9185-3ae98cd644bd/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-009",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41110/healthz: connect ECONNREFUSED 127.0.0.1:41110; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-f1c7a3b6-c4ea-43bb-8d6c-559d3ea4c7e4/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-f1c7a3b6-c4ea-43bb-8d6c-559d3ea4c7e4/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-010",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41110/healthz: connect ECONNREFUSED 127.0.0.1:41110; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-ad8471f2-216a-48c2-a762-e7c52184ba6d/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-ad8471f2-216a-48c2-a762-e7c52184ba6d/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-011",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41110/healthz: connect ECONNREFUSED 127.0.0.1:41110; job-ingest log: Error: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Object.start (file:///app/dist/src/http.js:47:17)\n\n--- job-ingest.log ---\nError: file store did not become running\n    at waitForStore (file:///app/dist/src/jobs.js:17:11)\n    at async file:///app/dist/src/main.js:23:9\n    at async Ob",
+    "dest": "fw-r234",
+    "evidencePaths": [
+      "projects/MS-011/artifacts/run-7694ab5b-29df-46ee-96ab-61eb6eb4dc28/stdout/healthy-path.log",
+      "projects/MS-011/artifacts/run-7694ab5b-29df-46ee-96ab-61eb6eb4dc28/stderr/healthy-path.log"
+    ],
+    "expected": "job-ingest @go-like/store-file host becomes readable so GET /healthz can listen within the 60s bootstrap window.",
+    "id": "MS-011-012",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/store-file",
+    "phase": "healthy-path",
+    "project": "MS-011",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-12",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41320/healthz: connect ECONNREFUSED 127.0.0.1:41320",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-1366d80d-535a-4cb9-8fcc-46ded54b2a3b/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-1366d80d-535a-4cb9-8fcc-46ded54b2a3b/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41320/healthz: connect ECONNREFUSED 127.0.0.1:41320",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-4dda9173-bc5d-4a0e-9ccc-a4a47d0a1454/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-4dda9173-bc5d-4a0e-9ccc-a4a47d0a1454/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41320/healthz: connect ECONNREFUSED 127.0.0.1:41320",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-1d7c665a-745e-4206-b802-ed88aab041b5/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-1d7c665a-745e-4206-b802-ed88aab041b5/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41330/healthz: connect ECONNREFUSED 127.0.0.1:41330",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-aa1ba177-5e10-4c54-b9a2-28ea29ba04ea/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-aa1ba177-5e10-4c54-b9a2-28ea29ba04ea/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41330/healthz: connect ECONNREFUSED 127.0.0.1:41330",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-c104e234-f1ee-4ce0-abee-fc2d78ba4912/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-c104e234-f1ee-4ce0-abee-fc2d78ba4912/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41330/healthz: connect ECONNREFUSED 127.0.0.1:41330",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-7ce05248-575c-47da-a662-d522971a4dcb/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-7ce05248-575c-47da-a662-d522971a4dcb/stderr/healthy-path.log"
+    ],
+    "expected": "recon-gateway GET /healthz returns 200 on the published gateway port within the 60s bootstrap window after channel-matcher and settlement-ledger are up.",
+    "id": "MS-013-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@nestjs/core",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-340a4eec-7c41-4e2c-a225-47faa57345a4/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-340a4eec-7c41-4e2c-a225-47faa57345a4/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-007",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-5abcb803-89ff-4b79-ac1d-e369fb1b1fdb/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-5abcb803-89ff-4b79-ac1d-e369fb1b1fdb/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-008",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-2a652a6c-f9c9-4b45-b5a8-5afd278847ff/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-2a652a6c-f9c9-4b45-b5a8-5afd278847ff/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-009",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-49095bfb-8025-4dc4-b2d1-833d876a9151/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-49095bfb-8025-4dc4-b2d1-833d876a9151/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-010",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-d36fc7c9-324e-4fc2-8635-2f6026a4eee9/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-d36fc7c9-324e-4fc2-8635-2f6026a4eee9/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-011",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "healthy expected 200, got 502",
+    "dest": "fw-r239",
+    "evidencePaths": [
+      "projects/MS-013/artifacts/run-ddf6a0a9-4fc4-403a-8213-21db81035405/stdout/healthy-path.log",
+      "projects/MS-013/artifacts/run-ddf6a0a9-4fc4-403a-8213-21db81035405/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/reconciliations returns 200 for fixtures/healthy-1001.json after recon-gateway GET /healthz is up.",
+    "id": "MS-013-012",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "recon-gateway",
+    "phase": "healthy-path",
+    "project": "MS-013",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-14",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41620/livez: connect ECONNREFUSED 127.0.0.1:41620",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-d1ced07a-d388-4f22-aeab-34cdc037ea2c/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-d1ced07a-d388-4f22-aeab-34cdc037ea2c/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41620/livez: connect ECONNREFUSED 127.0.0.1:41620",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-e71201ad-e41c-4e48-b848-7712389b3071/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-e71201ad-e41c-4e48-b848-7712389b3071/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41620/livez: connect ECONNREFUSED 127.0.0.1:41620",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-abd72b88-c287-4685-948e-53dcb5ec04d5/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-abd72b88-c287-4685-948e-53dcb5ec04d5/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41630/livez: connect ECONNREFUSED 127.0.0.1:41630",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-947c4463-f094-4292-a70c-135c27595b5d/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-947c4463-f094-4292-a70c-135c27595b5d/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41630/livez: connect ECONNREFUSED 127.0.0.1:41630",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-51e665b8-79e6-4682-900c-64c7948e8f56/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-51e665b8-79e6-4682-900c-64c7948e8f56/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41630/livez: connect ECONNREFUSED 127.0.0.1:41630",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-70912a73-2ec0-4a5e-875b-ee9797c8d538/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-70912a73-2ec0-4a5e-875b-ee9797c8d538/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@hono/node-server",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41600/livez: connect ECONNREFUSED 127.0.0.1:41600",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-ccafea51-0ac6-4717-81ec-378efe3ff9dc/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-ccafea51-0ac6-4717-81ec-378efe3ff9dc/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-007",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41600/livez: connect ECONNREFUSED 127.0.0.1:41600",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-04c44607-0854-43b9-8a71-44c918838cb1/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-04c44607-0854-43b9-8a71-44c918838cb1/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-008",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41600/livez: connect ECONNREFUSED 127.0.0.1:41600",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-493026fd-1143-4a99-98c0-78031cfe06e4/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-493026fd-1143-4a99-98c0-78031cfe06e4/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-009",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41610/livez: connect ECONNREFUSED 127.0.0.1:41610",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-29b79c18-979b-47d7-83af-30947348c55a/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-29b79c18-979b-47d7-83af-30947348c55a/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-010",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41610/livez: connect ECONNREFUSED 127.0.0.1:41610",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-ffdd5e52-f49b-454f-9e60-c0e3f26e9521/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-ffdd5e52-f49b-454f-9e60-c0e3f26e9521/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-011",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41610/livez: connect ECONNREFUSED 127.0.0.1:41610",
+    "dest": "fw-r244",
+    "evidencePaths": [
+      "projects/MS-016/artifacts/run-31d1ff19-6946-43be-8fa7-7943cf11e6d5/stdout/fault-matrix.log",
+      "projects/MS-016/artifacts/run-31d1ff19-6946-43be-8fa7-7943cf11e6d5/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start of intake/runtime, GET /livez returns 200 on the published role port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-016-012",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-016",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-17",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41720 did not recover: timed out waiting for http://127.0.0.1:41720/livez: connect ECONNREFUSED 127.0.0.1:41720",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-d7039690-9b3e-4b31-bdde-6762a8d8ba55/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-d7039690-9b3e-4b31-bdde-6762a8d8ba55/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41720 did not recover: timed out waiting for http://127.0.0.1:41720/livez: connect ECONNREFUSED 127.0.0.1:41720",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-823eb5a8-d79b-4902-afd3-3eccdf2d9308/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-823eb5a8-d79b-4902-afd3-3eccdf2d9308/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41720 did not recover: timed out waiting for http://127.0.0.1:41720/livez: connect ECONNREFUSED 127.0.0.1:41720",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-19e698c6-26c8-487b-8709-f8b4dfe8b5e9/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-19e698c6-26c8-487b-8709-f8b4dfe8b5e9/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41730 did not recover: timed out waiting for http://127.0.0.1:41730/livez: connect ECONNREFUSED 127.0.0.1:41730",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-1e1cae44-ad88-4245-b68b-f377f108c123/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-1e1cae44-ad88-4245-b68b-f377f108c123/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41730 did not recover: timed out waiting for http://127.0.0.1:41730/livez: connect ECONNREFUSED 127.0.0.1:41730",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-9a39851a-2207-43a6-9c3c-694b7072d134/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-9a39851a-2207-43a6-9c3c-694b7072d134/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41730 did not recover: timed out waiting for http://127.0.0.1:41730/livez: connect ECONNREFUSED 127.0.0.1:41730",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-131750e9-6ed1-4451-a487-cf676f1dcbfd/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-131750e9-6ed1-4451-a487-cf676f1dcbfd/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "hono",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "application port 41700 did not recover: timed out waiting for http://127.0.0.1:41700/livez: connect ECONNREFUSED 127.0.0.1:41700",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-c93b55ce-3a70-45f4-a341-238c2447db9f/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-c93b55ce-3a70-45f4-a341-238c2447db9f/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-007",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41700 did not recover: timed out waiting for http://127.0.0.1:41700/livez: connect ECONNREFUSED 127.0.0.1:41700",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-f05d44ac-5fcb-4fad-ab8c-2205dbe3f7b3/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-f05d44ac-5fcb-4fad-ab8c-2205dbe3f7b3/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-008",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41700 did not recover: timed out waiting for http://127.0.0.1:41700/livez: connect ECONNREFUSED 127.0.0.1:41700",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-9e944128-4283-4432-8d59-40d5f6949a6a/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-9e944128-4283-4432-8d59-40d5f6949a6a/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-009",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41710 did not recover: timed out waiting for http://127.0.0.1:41710/livez: connect ECONNREFUSED 127.0.0.1:41710",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-b6c043fd-7b60-409a-b646-f0b4ca854b42/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-b6c043fd-7b60-409a-b646-f0b4ca854b42/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-010",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41710 did not recover: timed out waiting for http://127.0.0.1:41710/livez: connect ECONNREFUSED 127.0.0.1:41710",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-1c6f642b-dc9c-473d-a296-c65f1b405cac/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-1c6f642b-dc9c-473d-a296-c65f1b405cac/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-011",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "application port 41710 did not recover: timed out waiting for http://127.0.0.1:41710/livez: connect ECONNREFUSED 127.0.0.1:41710",
+    "dest": "fw-r245",
+    "evidencePaths": [
+      "projects/MS-017/artifacts/run-a89058b7-4c45-4774-9d78-30f82b2d9050/stdout/fault-matrix.log",
+      "projects/MS-017/artifacts/run-a89058b7-4c45-4774-9d78-30f82b2d9050/stderr/fault-matrix.log"
+    ],
+    "expected": "After compose kill + compose start, GET /livez returns 200 on the published application port within 60s. Healthy-path already passed on this run.",
+    "id": "MS-017-012",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "fault-matrix",
+    "project": "MS-017",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-18",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41820/healthz: connect ECONNREFUSED 127.0.0.1:41820",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-eeb64298-3732-447d-8326-450d361a5ba3/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-eeb64298-3732-447d-8326-450d361a5ba3/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41820 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-001",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41820/healthz: connect ECONNREFUSED 127.0.0.1:41820",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-154f0639-dd5c-4cde-9bd4-09bb556fc445/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-154f0639-dd5c-4cde-9bd4-09bb556fc445/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41820 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-002",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41820/healthz: connect ECONNREFUSED 127.0.0.1:41820",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-41c2bc85-a66d-452e-abe8-93baad7538bd/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-41c2bc85-a66d-452e-abe8-93baad7538bd/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41820 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-003",
+    "kind": "lifecycle",
+    "lane": "local-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41830/healthz: connect ECONNREFUSED 127.0.0.1:41830",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-be3c37a3-c626-460e-9a38-dbb8ee6b0d84/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-be3c37a3-c626-460e-9a38-dbb8ee6b0d84/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41830 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-004",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41830/healthz: connect ECONNREFUSED 127.0.0.1:41830",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-bd680cea-af50-4250-937d-5b5d0f2c24ea/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-bd680cea-af50-4250-937d-5b5d0f2c24ea/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41830 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-005",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41830/healthz: connect ECONNREFUSED 127.0.0.1:41830",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-fa3273c1-8566-4e74-8129-244bdd85f8b4/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-fa3273c1-8566-4e74-8129-244bdd85f8b4/stderr/healthy-path.log"
+    ],
+    "expected": "GET /healthz on replica-a published port 41830 returns 200 or 503 within 60s after compose start.",
+    "id": "MS-018-006",
+    "kind": "lifecycle",
+    "lane": "docker-competitor",
+    "package": "@kubernetes/client-node",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "competitor"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41802/healthz: connect ECONNREFUSED 127.0.0.1:41802",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-e0b6cfc1-bea6-43cc-83d7-3209fef115fc/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-e0b6cfc1-bea6-43cc-83d7-3209fef115fc/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41800 replica-b=41801 controller=41802 ledger=41803.",
+    "id": "MS-018-007",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41802/healthz: connect ECONNREFUSED 127.0.0.1:41802",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-f5304966-b0d3-4548-aebb-9837ee7d6b8d/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-f5304966-b0d3-4548-aebb-9837ee7d6b8d/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41800 replica-b=41801 controller=41802 ledger=41803.",
+    "id": "MS-018-008",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41803/healthz: connect ECONNREFUSED 127.0.0.1:41803",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-3fca8dc1-c4b5-4bc4-88af-3ca25104272c/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-3fca8dc1-c4b5-4bc4-88af-3ca25104272c/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41800 replica-b=41801 controller=41802 ledger=41803.",
+    "id": "MS-018-009",
+    "kind": "lifecycle",
+    "lane": "local-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41812/healthz: connect ECONNREFUSED 127.0.0.1:41812",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-f0abf590-90e1-4a5c-a395-7021ed6b96b6/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-f0abf590-90e1-4a5c-a395-7021ed6b96b6/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41810 replica-b=41811 controller=41812 ledger=41813.",
+    "id": "MS-018-010",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41812/healthz: connect ECONNREFUSED 127.0.0.1:41812",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-befb3ce8-748e-4d30-81fb-4be0e8b30237/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-befb3ce8-748e-4d30-81fb-4be0e8b30237/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41810 replica-b=41811 controller=41812 ledger=41813.",
+    "id": "MS-018-011",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "timed out waiting for http://127.0.0.1:41812/healthz: connect ECONNREFUSED 127.0.0.1:41812",
+    "dest": "fw-r247",
+    "evidencePaths": [
+      "projects/MS-018/artifacts/run-672f7e53-c007-4560-8ca1-19b2c8f2ce75/stdout/healthy-path.log",
+      "projects/MS-018/artifacts/run-672f7e53-c007-4560-8ca1-19b2c8f2ce75/stderr/healthy-path.log"
+    ],
+    "expected": "After k3s is healthy, sequential APP_ROLES bind GET /healthz 200 or 503 on published ports within 60s each. replica-a=41810 replica-b=41811 controller=41812 ledger=41813.",
+    "id": "MS-018-012",
+    "kind": "lifecycle",
+    "lane": "docker-go-like",
+    "package": "@go-like/web",
+    "phase": "healthy-path",
+    "project": "MS-018",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-19",
+    "severity": "high",
+    "status": "reproduced",
+    "suspectedOwner": "application"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-2307bcef-cad3-494d-9558-703a4f187b6c/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-2307bcef-cad3-494d-9558-703a4f187b6c/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-001",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-a208fedb-2fa1-4a8d-9666-c36ba8c45f5c/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-a208fedb-2fa1-4a8d-9666-c36ba8c45f5c/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-002",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-8107a2d2-193b-468f-8b35-0ee64dfee011/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-8107a2d2-193b-468f-8b35-0ee64dfee011/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-003",
+    "kind": "missing-capability",
+    "lane": "local-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-6d61436e-1a0b-4091-8add-ab1ac118db5b/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-6d61436e-1a0b-4091-8add-ab1ac118db5b/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-004",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-c7e54a44-05ce-498d-87db-dcda84b9b470/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-c7e54a44-05ce-498d-87db-dcda84b9b470/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-005",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  },
+  {
+    "actual": "HTTP 200 carrier with body {\"code\":\"invalid_request\",\"message\":\"missing Go-Like-Service header\",\"status\":400,\"metadata\":{}}; ALPN h2 and TLS 1.3 were negotiated",
+    "dest": "fw-r183",
+    "evidencePaths": [
+      "projects/MS-020/artifacts/run-3c813974-3e70-4a8e-9734-6fb8fd3ee2ed/stdout/healthy-path.log",
+      "projects/MS-020/artifacts/run-3c813974-3e70-4a8e-9734-6fb8fd3ee2ed/stderr/healthy-path.log"
+    ],
+    "expected": "POST /v1/machine-commands over required-mTLS HTTP/2 returns HTTP 201 and the frozen success body, including peerIdentity spiffe://ms020/machine/alpha",
+    "id": "MS-020-006",
+    "kind": "missing-capability",
+    "lane": "docker-go-like",
+    "package": "@go-like/transport-http",
+    "phase": "healthy-path",
+    "project": "MS-020",
+    "reproducibility": "once",
+    "reviewerRoleId": "DEV-01",
+    "severity": "blocker",
+    "status": "reproduced",
+    "suspectedOwner": "go-like"
+  }
+]
