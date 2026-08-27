@@ -13,10 +13,8 @@ if (error === canceled || error === deadlineExceeded) {
   // Inspect error.errors in order
 } else if (typeof error === "object" && error !== null && "code" in error) {
   // Match one documented GO_LIKE_* code
-} else if (error instanceof TypeError || error instanceof RangeError) {
-  // Programmer error: propagate and fix the caller
-} else if (error instanceof Error) {
-  // Native or upstream error: follow provider/runtime policy
+} else {
+  // Classify by documented origin, or propagate unchanged
 }
 ```
 
@@ -26,7 +24,7 @@ Do not branch on `error.message`. Messages are allowed to change and may contain
 
 `ServiceError.code` is application-owned and is not part of the `GO_LIKE_*` catalog. Recognize it only with `isServiceError(error)` before interpreting its `code`, `status`, or `metadata`.
 
-After the structural-code branch, propagate `TypeError` and `RangeError` and fix the caller; never auto-retry them or match their messages. For any other native or upstream `Error`, preserve its identity for local, redacted diagnostics and let the provider or runtime's documented policy decide whether retry is permitted.
+`TypeError` and `RangeError` are common programmer-error examples, not the complete class. Classify application and invariant failures from their documented origin or boundary. Propagate an unclassified failure unchanged, without automatic retry, conversion, or message matching. Treat an `Error` as native or upstream only when it is known to come from a documented native or provider boundary; preserve its identity for local, redacted diagnostics and let that provider or runtime's policy decide whether retry is permitted.
 
 ## Retry and reconcile
 
