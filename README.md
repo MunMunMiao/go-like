@@ -349,8 +349,8 @@ bun run test:e2e:soak
 CI 只执行安装、格式检查、类型检查、构建和单元测试；不会用托管 CI 冒充依赖 Docker、跨运行时或长时间运行的
 E2E。`audit` 与 VitePress 的 `doc:build` 是独立工程命令，不属于测试类型。
 
-公共包从 `0.0.1` 起步，并由 Changesets 管理版本。`bun run release` 在发布前执行格式、类型、构建和单元测试，
-随后使用 Changesets 发布；npm trusted publishing 与 provenance 由 Release workflow 保留。
+公共包当前均为 `0.0.1`，尚未发布到 npm。仓库当前不提供自动版本或 npm 发布流程；首次公开发布应作为独立变更
+选择并验证与实际发布策略匹配的版本和发布机制。
 
 ## 架构文档
 

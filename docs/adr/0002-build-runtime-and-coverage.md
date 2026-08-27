@@ -34,8 +34,7 @@ workspace 源码解析、发布包构建和真实服务验证是不同职责，�
 8. CI 运行安装、`fmt:check`、`typecheck`、`build`、unit tests 和 workspace coverage 门禁。Docker、跨运行时、
    example 进程和 soak 是否纳入托管 CI 仍由具体 workflow 的环境能力决定；不把未执行的 E2E 宣称为 coverage。
 9. `oxfmt` 是唯一格式化工具。`fmt`、`typecheck`、`build`、`audit` 和 `doc:build` 是工程命令，不命名为测试。
-10. 公共包从 `0.0.1` 起步，由 Changesets 管理版本。`release` 在发布前重新执行格式检查、类型检查、构建与
-    单元测试，再调用 Changesets；npm trusted publishing 与 provenance 由 Release workflow 承接。
+10. 公共包当前均为 `0.0.1`。版本管理与 npm 发布不属于当前仓库自动化边界；首次公开发布需要独立设计、实现和验证。
 
 ## 后果
 
