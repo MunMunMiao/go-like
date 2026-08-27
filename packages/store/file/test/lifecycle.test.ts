@@ -159,11 +159,15 @@ test("startup rollback preserves admitted and malformed resource cleanup failure
 
   const nonErrorHost = {
     async acquire() {
-      throw "non-error acquire failure"
+      throw marker
     }
   }
+  const marker = Object.freeze({ operation: "acquire" })
   const nonErrorStore = Reflect.apply(newFileStore, undefined, [nonErrorHost, "controlled"])
-  await expect(nonErrorStore.start(background())).rejects.toMatchObject({
+  const failure = await nonErrorStore.start(background()).catch((value: unknown) => value)
+  if (!(failure instanceof Error)) throw new Error("expected startup Error")
+  expect(failure).toMatchObject({
     message: "File Store startup failed"
   })
+  expect(failure.cause).toBe(marker)
 })

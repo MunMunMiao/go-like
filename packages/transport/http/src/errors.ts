@@ -76,7 +76,7 @@ export function readerCancellation(
 
 /** Normalizes one unknown rejection exactly once at an ownership boundary. */
 export function normalizeHTTPError(value: unknown, message: string): Error {
-  return isError(value) ? value : new Error(message)
+  return isError(value) ? value : new Error(message, { cause: value })
 }
 
 /** Validates and detaches one standard Web Streams byte read result. */

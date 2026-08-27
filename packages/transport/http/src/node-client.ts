@@ -100,7 +100,7 @@ function isError(value: unknown): value is Error {
 
 /** Preserves native Error identity and normalizes hostile synchronous throws. */
 function nativeError(value: unknown, message: string): Error {
-  return isError(value) ? value : new Error(message)
+  return isError(value) ? value : new Error(message, { cause: value })
 }
 
 /** Best-effort destroys one owned native resource without replacing a primary failure. */

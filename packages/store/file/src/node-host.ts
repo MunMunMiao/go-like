@@ -75,7 +75,7 @@ function hasCode(value: unknown, code: string): boolean {
 
 /** Converts one untrusted native rejection without exposing it through string coercion. */
 function normalizeError(value: unknown, message: string): Error {
-  return value instanceof Error ? value : Object.freeze(new Error(message))
+  return value instanceof Error ? value : Object.freeze(new Error(message, { cause: value }))
 }
 
 /** Returns one primary failure or one ordered immutable cleanup aggregate. */

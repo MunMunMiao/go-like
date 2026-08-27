@@ -549,6 +549,27 @@ test("Node HTTP/1 preserves a cross-realm native failure", async () => {
   expect(socketState.destroyed).toBeTrue()
 })
 
+test("Node HTTP/1 wraps a non-Error admission failure and destroys its socket", async () => {
+  const marker = Object.freeze({ phase: "openRequest" })
+  const socketState = { destroyed: false }
+  const socket = fakeTLSSocket(socketState)
+  const result = executeNodeHTTP1(
+    new Request("https://localhost/internal/call", { method: "POST" }),
+    new Uint8Array(),
+    applyHTTPDialOptions([]),
+    socket,
+    function openRequest(): never {
+      throw marker
+    }
+  )
+
+  const failure = await rejection(result)
+  if (!(failure instanceof Error)) throw new Error("expected HTTP/1 Error")
+  expect(failure).toMatchObject({ message: "Node HTTP/1 request failed" })
+  expect(failure.cause).toBe(marker)
+  expect(socketState.destroyed).toBeTrue()
+})
+
 test("Node HTTP/1 returns null bodies for forbidden statuses and closes every owner", async () => {
   for (const status of [204, 205, 304]) {
     const socketState = { destroyed: false }

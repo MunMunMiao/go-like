@@ -488,7 +488,10 @@ test("status errors support null and exact-limit bodies without false truncation
   const bounded = await newHTTPStatusError(new Response(exact, { status: 500 }))
   expect(bounded.body).toHaveLength(65_536)
   expect(bounded.bodyTruncated).toBe(false)
-  expect(normalizeHTTPError("not-an-error", "normalized").message).toBe("normalized")
+  const marker = Object.freeze({ phase: "executor" })
+  const failure = normalizeHTTPError(marker, "normalized")
+  expect(failure).toMatchObject({ message: "normalized" })
+  expect(failure.cause).toBe(marker)
 })
 
 test("non-200 status bodies reject non-Uint8Array chunks with the original Error cause", async () => {

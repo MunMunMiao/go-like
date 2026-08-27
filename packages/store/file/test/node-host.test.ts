@@ -204,21 +204,27 @@ test("Node host aggregates injected write and file-close failures and still rele
 
 test("Node host normalizes non-Error write failures and serial queue continues", async () => {
   const lock = injectedFile()
+  const marker = Object.freeze({ operation: "write" })
   let writes = 0
   const io = injectedIO(async function openFile(path): Promise<NodeFileStoreFile> {
     if (path.endsWith(LockName)) return lock
     writes += 1
     if (writes === 1) {
       return injectedFile(undefined, async function syncFailed(): Promise<void> {
-        throw "non-error sync failure"
+        throw marker
       })
     }
     return injectedFile()
   })
   const handle = await newNodeFileStoreHostWithIO(io).acquire(background(), "controlled")
-  await expect(handle.write(background(), "first", new Uint8Array([1]))).rejects.toMatchObject({
+  const failure = await handle
+    .write(background(), "first", new Uint8Array([1]))
+    .catch((value: unknown) => value)
+  if (!(failure instanceof Error)) throw new Error("expected write Error")
+  expect(failure).toMatchObject({
     message: "Node File Store write failed"
   })
+  expect(failure.cause).toBe(marker)
   await handle.write(background(), "second", new Uint8Array([2]))
   await handle.close(background())
 })

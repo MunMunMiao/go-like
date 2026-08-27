@@ -133,7 +133,7 @@ function checkContext(ctx: Context): void {
 
 /** Normalizes one untrusted host rejection without stringifying it. */
 function normalizeError(value: unknown, message: string): Error {
-  return value instanceof Error ? value : Object.freeze(new Error(message))
+  return value instanceof Error ? value : Object.freeze(new Error(message, { cause: value }))
 }
 
 /** Returns one primary error or an immutable ordered aggregate with cleanup failures. */

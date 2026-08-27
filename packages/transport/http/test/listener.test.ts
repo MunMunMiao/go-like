@@ -524,7 +524,7 @@ test("pre-canceled dial preserves its custom Context cause", async () => {
 test("handler failures and missing send return secret-safe 500 responses", async () => {
   const fixture = hostFixture()
   const secret = "credential-secret-value"
-  const handlerFailure = new Error(secret)
+  const handlerFailure = Object.freeze({ secret })
   let loggedCause: unknown = null
   const transport = newHTTPTransport()
   transport.init(
@@ -558,7 +558,9 @@ test("handler failures and missing send return secret-safe 500 responses", async
   )
   expect(response.status).toBe(500)
   expect(await response.text()).not.toContain(secret)
-  expect(loggedCause).toBe(handlerFailure)
+  if (!(loggedCause instanceof Error)) throw new Error("expected logged wrapper Error")
+  expect(loggedCause).toMatchObject({ message: "HTTP transport handler rejected" })
+  expect(loggedCause.cause).toBe(handlerFailure)
   await listener.close(background())
   await accept
 
