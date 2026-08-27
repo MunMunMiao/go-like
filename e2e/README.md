@@ -80,6 +80,4 @@ Committed E2E TypeScript 的 owner 为：root tests 使用 `tsconfig.test.json`�
 - 新增 example 时提供非空 `test:e2e` wrapper；specialized Docker scenario 继续使用 shared ownership/ACK API；
 - 在具备 prerequisite 的真实环境运行对应 scoped 或 full E2E，并只记录实际平台与模式的 claim。
 
-Hosted Verify/Release 不运行真实 E2E。托管 CI 只执行 frozen install、格式检查、类型检查、构建和 unit；CI green 不是 full E2E green。真实 provider、runtime、examples、published 与 soak 必须在具备对应 runtime 和 Docker 的环境执行。
-
-Release 只由实际适用的格式、类型、构建、unit、runtime consumer 和 E2E 结果决定。宿主机 containment 实验不阻塞产品实现状态或 release。
+Hosted Verify 不运行真实 E2E。托管 CI 先执行 frozen install，再运行标准门禁 `bun run verify`，依次完成格式、lint、typecheck、build、unit 和覆盖率强制校验；CI green 不是 full E2E green。真实 provider、runtime、examples、published 与 soak 必须在具备对应 runtime 和 Docker 的环境执行。

@@ -25,24 +25,19 @@ go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過�
 
 ```sh
 bun install --frozen-lockfile
-bun run fmt:check
-bun run lint
-bun run typecheck
-bun run build
-bun run test:unit
+bun run verify
+```
+
+`bun run verify` 係 repository 嘅標準門禁，會順序執行 `fmt:check`、`lint`、`typecheck`、`build`、`test:unit` 同 `test:unit:coverage`，並強制校驗 coverage。只有收窄失敗範圍時先單獨執行其中一個階段；單一階段通過唔可以取代完整門禁。`bun run lint` 只會檢查 Oxlint 靜態規則，唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
+
+`doc:build` 同 `audit` 仍然係獨立 evidence lane：
+
+```sh
 bun run doc:build
 bun run audit
 ```
 
-`bun run lint` 只會檢查 Oxlint 靜態規則，唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
-
-Coverage 係獨立報告：
-
-```sh
-bun run test:unit:coverage
-```
-
-E2E 可以按 scope 收窄：
+E2E 唔屬於 canonical gate，可以按需要喺本地按 scope 執行：
 
 ```sh
 bun run test:e2e:runtimes

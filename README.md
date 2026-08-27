@@ -328,26 +328,27 @@ SIGTERM 接入同一个 `app.run()` 生命周期；portable Core 不读取进程
 每个发布包在自身目录由 `tsdown` 生成 ESM、DTS、包级 README/LICENSE 和最小 `dist/package.json`；工作区依赖
 保持 external，不生成 min bundle。根 `build` 使用 Bun workspace 顺序调用各发布包的 `build`。
 
+仓库的标准门禁是 `bun run verify`，它依次执行 `fmt:check`、`lint`、`typecheck`、`build`、
+`test:unit` 和 `test:unit:coverage`；最后一阶段还会执行 `coverage:verify`，强制校验覆盖率契约。
+
 测试只分两类：
 
-- `test:unit`：不依赖外部服务的确定性单元测试；`test:unit:coverage` 仅用于查看覆盖率。
+- `test:unit`：不依赖外部服务的确定性单元测试；`test:unit:coverage` 是 canonical gate 的覆盖率校验阶段。
 - `test:e2e`：本地构建后运行真实 provider、跨运行时、可执行 example 与发布包安装验证；需要 Docker 的场景
   会启动真实服务。`test:e2e:soak` 是独立的长时间稳定性检查。
 
 ```sh
 bun install --frozen-lockfile
-bun run fmt:check
-bun run typecheck
-bun run build
-bun run test:unit
+bun run verify
 
 # 本地按需执行，不进入 CI
 bun run test:e2e
 bun run test:e2e:soak
 ```
 
-CI 只执行安装、格式检查、类型检查、构建和单元测试；不会用托管 CI 冒充依赖 Docker、跨运行时或长时间运行的
-E2E。`audit` 与 VitePress 的 `doc:build` 是独立工程命令，不属于测试类型。
+只有缩小门禁失败范围时才单独运行其中某个阶段；单个阶段通过不能替代完整 `bun run verify`。Hosted Verify 在
+frozen install 后执行同一个标准门禁，包含格式、lint、类型、构建、unit 和覆盖率强制校验；不会用托管
+CI 冒充依赖 Docker、跨运行时或长时间运行的 E2E。`audit` 与 VitePress 的 `doc:build` 是独立工程命令，不属于测试类型。
 
 公共包当前均为 `0.0.1`，尚未发布到 npm。仓库当前不提供自动版本或 npm 发布流程；首次公开发布应作为独立变更
 选择并验证与实际发布策略匹配的版本和发布机制。

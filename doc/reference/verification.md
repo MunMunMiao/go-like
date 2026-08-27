@@ -25,22 +25,32 @@ From the repository root:
 
 ```sh
 bun install --frozen-lockfile
+bun run verify
+```
+
+`bun run verify` is the canonical repository gate. It runs `fmt:check`, `lint`, `typecheck`, `build`, `test:unit`, and `test:unit:coverage` in that order. The coverage stage finishes with `coverage:verify`, so coverage enforcement is part of the gate.
+
+Run an individual stage only to narrow a failure; passing one stage does not replace the canonical gate:
+
+```sh
 bun run fmt:check
 bun run lint
 bun run typecheck
 bun run build
 bun run test:unit
+bun run test:unit:coverage
+```
+
+The root scripts are defined in `package.json`. `bun run lint` checks Oxlint static rules; it does not typecheck or execute runtime behavior. `bun run test:unit` runs root tests and the workspace unit scripts sequentially. `bun run build` builds package output before E2E scopes.
+
+Documentation build and audit remain separate evidence lanes:
+
+```sh
 bun run doc:build
 bun run audit
 ```
 
-The root scripts are defined in `package.json`. `bun run lint` checks Oxlint static rules; it does not typecheck or execute runtime behavior. `bun run test:unit` runs root tests and the workspace unit scripts sequentially. `bun run build` builds package output before E2E scopes. `bun run doc:build` builds the English and localized VitePress site configured under `doc/`.
-
-Coverage is separate:
-
-```sh
-bun run test:unit:coverage
-```
+`bun run doc:build` builds the English and localized VitePress site configured under `doc/`.
 
 The package and example scoped commands are useful when narrowing a failure:
 
