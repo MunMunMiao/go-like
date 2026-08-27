@@ -28,7 +28,7 @@
     "@go-like/cache": "0.0.1",
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
-    "@redis/client": "6.2.0"
+    "@redis/client": "6.2.1"
   },
   "devDependencies": {
     "@types/node": "26.1.2"
