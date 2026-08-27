@@ -58,6 +58,7 @@ interface SiteLocale {
 }
 
 interface SiteConfig {
+  readonly base: string
   readonly title: string
   readonly description: string
   readonly head: [string, Record<string, string>][]
@@ -87,6 +88,8 @@ interface SiteConfig {
   readonly mpa?: boolean
   readonly ignoreDeadLinks?: boolean
 }
+
+const base = "/go-like/"
 
 /** Creates one locale-aware absolute documentation route. */
 function route(prefix: string, path: string): string {
@@ -403,9 +406,10 @@ const TaiwanChinese: Labels = {
 }
 
 const config: SiteConfig = {
+  base,
   title: "go-like",
   description: "Go-style microservice building blocks for TypeScript backends",
-  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` }]],
   cleanUrls: true,
   lastUpdated: true,
   vite: { cacheDir: "../.artifacts/vitepress-cache" },
