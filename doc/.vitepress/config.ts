@@ -131,7 +131,8 @@ function theme(
     referenceItems.push(
       { text: "Providers", link: route(prefix, "reference/providers") },
       { text: "Claims and evidence", link: route(prefix, "reference/claims") },
-      { text: "Terminology", link: route(prefix, "reference/terminology") }
+      { text: "Terminology", link: route(prefix, "reference/terminology") },
+      { text: "Errors", link: route(prefix, "reference/errors") }
     )
   }
 

@@ -173,4 +173,6 @@ Keep these distinctions visible in tests and runbooks:
 - a native broker's retry, redelivery, DLQ, and acknowledgement rules are not converted into a common go-like retry loop;
 - a Core App stop result aggregates adapter failures but does not invent a terminal result that the native provider did not expose.
 
+See [Error handling](/reference/errors) for lifecycle codes, aggregate traversal, and retry boundaries.
+
 See [Architecture](/guide/architecture) for the caller-wait versus owner-terminal distinction and [Health and observability](/guide/health-observability) for bounded operational signals.

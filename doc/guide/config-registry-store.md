@@ -11,6 +11,8 @@ Configuration, service reachability, records, and acceleration all involve data,
 
 Do not replace one with another just because all four have a `get`-like operation. Their failure, consistency, and ownership promises are intentionally different.
 
+See [Error handling](/reference/errors) before matching provider codes or replaying failed mutations.
+
 ## Config
 
 The core Config API is built around explicit sources and immutable publications:

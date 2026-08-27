@@ -252,6 +252,8 @@ Keep the error layers distinct:
 
 A `ServiceError` is not automatically an HTTP 4xx/5xx response. Conversely, an HTTP 503/504 carrier failure can affect selector feedback. The Client owns this classification; applications should not reduce every error to a status code.
 
+See [Error handling](/reference/errors) for the stable matching order, code catalog, and retry boundaries.
+
 ## Retry is replay authorization
 
 Calls make one attempt by default. `withRetry(...)` requires an explicit authorization, a positive total `maxAttempts`, and a caller-supplied `shouldRetry` predicate:
