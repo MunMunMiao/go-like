@@ -44,7 +44,7 @@
     "@opentelemetry/context-async-hooks": "2.10.0",
     "@opentelemetry/core": "2.10.0",
     "@opentelemetry/exporter-metrics-otlp-http": "0.221.0",
-    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
     "@opentelemetry/resources": "2.10.0",
     "@types/node": "26.4.0"
   },
