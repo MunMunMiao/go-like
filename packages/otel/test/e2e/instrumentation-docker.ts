@@ -2,6 +2,7 @@ import {
   newClient,
   withDiscovery,
   withSelector,
+  withService,
   withTransport,
   type CallRequest,
   type Client
@@ -10,13 +11,7 @@ import { background, type Context } from "@go-like/context"
 import type { Server as LifecycleServer } from "@go-like/core"
 import { traceClient, traceUnaryMiddleware, traceWebHandler } from "@go-like/otel"
 import { newRandomSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
-import {
-  address as serverAddress,
-  handler,
-  middleware,
-  newServer,
-  transport
-} from "@go-like/server"
+import { address as serverAddress, middleware, newServer, transport } from "@go-like/server"
 import type { Message } from "@go-like/transport"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
@@ -232,9 +227,9 @@ try {
   httpServer = newServer(
     transport(newNodeHTTPTransport()),
     serverAddress("127.0.0.1:0"),
-    handler(serviceName, endpointName, endpointHandler),
     middleware(traceUnaryMiddleware(tracer))
   )
+  httpServer.registerHandler(serviceName, endpointName, endpointHandler)
   const boundHTTPEndpoint = await httpServer.endpoint(background())
   httpRunning = httpServer.start(background())
   const instance: ServiceInstance = {
@@ -274,6 +269,7 @@ try {
   const activeClient = traceClient(
     newClient(
       withDiscovery(discovery),
+      withService(serviceName),
       withSelector(newRandomSelector(() => 0)),
       withTransport(newHTTPTransport())
     ),

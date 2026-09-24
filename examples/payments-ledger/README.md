@@ -23,7 +23,7 @@ JetStream。go-like 管理请求 Context 与标准 Handler 边界；SQL、NATS �
 交给 `@go-like/core`。App
 成功接纳后由 Core 调用 Server 的 `start(ctx)`，并在停止时调用 `stop(ctx)`；停止会取消当前 publisher
 Context、清除 poll timer，并等待已接纳 attempt 收敛。Core 会并发请求停止 Web、publisher 与依赖资源；
-需要依赖顺序时，由相应 Server 在自己的 `stop(ctx)` 内负责。
+当前入口没有协调 Web/publisher 先于 NATS/SQL 关闭；生产接入须显式落实这个依赖顺序，不能从 Core 的并发 stop 推导有序排空。
 
 ## 直接运行
 
@@ -52,7 +52,8 @@ docker compose -f examples/payments-ledger/compose.yaml down -v
 | 下游事件消费者 | 订阅 JetStream 账本事件；按稳定 `eventId` 幂等处理，并在需要时回查 PostgreSQL。         |
 | 平台运维人员   | 管理 PostgreSQL、NATS、凭据、备份、容量、告警、镜像升级和灾难恢复。                     |
 
-租户身份必须来自经过认证的服务端上下文，不接受请求 body 自报的租户。示例不采集或保存卡号、CVV、银行凭据等
+生产租户身份必须来自经过认证的服务端上下文，不接受请求 body 自报的租户。当前 `main.ts` 为本地演示读取
+`X-Tenant-Id`，缺省为 `tenant_acme`，不包含身份认证；上线前必须替换该 resolver。示例不采集或保存卡号、CVV、银行凭据等
 支付工具敏感数据。
 
 ## 业务目标与接口边界
@@ -104,7 +105,7 @@ Idempotency-Key: <租户内唯一、1..128 字节的可见 ASCII 字符串>
 
 | 表                    | 最小职责                                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `ledger_account`      | 保存租户、货币和账户状态；posting 只能引用同租户、同货币的有效账户。                                         |
+| `ledger_account`      | 保存租户与货币；posting 只能引用同租户、同货币的已存在账户，本例无账户状态字段。                             |
 | `idempotency_request` | 以 `(tenant_id, idempotency_key)` 唯一；保存规范化 `request_payload`、HTTP status/body 和 `transaction_id`。 |
 | `ledger_transaction`  | 一次业务 journal 的不可变头信息，包括租户、货币、reference 和时间。                                          |
 | `ledger_posting`      | 保存 `transaction_id`、`account_id` 和有符号 `amount_minor`；借方为负、贷方为正。                            |
@@ -112,17 +113,16 @@ Idempotency-Key: <租户内唯一、1..128 字节的可见 ASCII 字符串>
 
 数据库迁移必须提供延迟到事务提交时检查的约束触发器，确认每个 transaction 至少有两条 posting，且同一货币的
 `amount_minor` 总和为零。外键、`NOT NULL`、`CHECK`、唯一键和账户租户/货币校验也必须由数据库落实；仅在
-TypeScript 中计算一次总和不构成金融不变量。账本表拒绝业务 `UPDATE`/`DELETE`，纠错通过引用原交易的新冲正
-transaction 完成。可变的发布状态只存在于 outbox，不回写历史分录。
+TypeScript 中计算一次总和不构成金融不变量。账本表拒绝业务 `UPDATE`/`DELETE`，生产纠错应通过可追溯的冲正 transaction 完成；本例尚无冲正接口或原交易关联字段。可变的发布状态只存在于 outbox，不回写历史分录。
 
 ### 入账事务
 
 1. HTTP 层读取可信租户和 `Idempotency-Key`，解析标准 JSON，再执行字段与业务校验。
-2. 开启 PostgreSQL transaction，尝试插入 `idempotency_request`。唯一键解决并发竞争，不使用进程内锁。
+2. 开启 PostgreSQL transaction，尝试插入包含预生成响应的 `idempotency_request`。唯一键解决并发竞争，不使用进程内锁；延迟外键在提交时检查 journal。
 3. 若键已存在，则在同一 transaction 中读取其规范化 `jsonb` 请求：相同则返回已保存响应，不同则返回
    `409`。
 4. 对首次请求创建 `ledger_transaction`，写入一负一正两条 posting，并让数据库约束在提交前复核平衡关系。
-5. 在同一 transaction 中写入完整、已校验的 `outbox_event`，再把最终 status/body 写回幂等行。
+5. 在同一 transaction 中写入完整的 `outbox_event`；响应已经保存在第 2 步的幂等行中，随同整个事务一起提交。
 6. 提交成功后才向调用方返回成功。任一步失败都回滚幂等行、账本和 outbox，不能留下“半笔交易”。
 
 把规范化请求直接存为 `jsonb` 并比较相等即可，不额外设计一套易出错的 canonical JSON hash。幂等行与业务记录
@@ -130,12 +130,12 @@ transaction 完成。可变的发布状态只存在于 outbox，不回写历史�
 
 ### Outbox 发布
 
-1. Publisher 用一个短 PostgreSQL transaction，通过 `FOR UPDATE SKIP LOCKED` 领取到期且未发布的小批记录，
+1. Publisher 用一个短 PostgreSQL transaction，通过 `FOR UPDATE SKIP LOCKED` 领取至多一条到期且未发布的记录，
    写入有期限的 owner lease 后立即提交。
 2. 数据库 transaction 结束后，使用官方 `@nats-io/jetstream` client 发布到
    `payments.ledger.v1.posted`，并以 `event_id` 作为 JetStream `msgID`。
-3. 只有取得官方 `PubAck` 后，才在新的短 transaction 中写 `published_at`。发布失败时保留记录，使用有上限的
-   backoff 更新下次尝试时间；进程死亡后由过期 lease 回收。
+3. 只有取得官方 `PubAck` 后，才在新的短 transaction 中写 `published_at`。发布失败时保留记录，使用固定 100ms 延迟
+   更新下次尝试时间；进程死亡后由过期 lease 回收。
 4. `PubAck` 成功后、`published_at` 写入前崩溃会导致重复发布。稳定 `eventId` 和 JetStream 去重窗口可以降低
    重复，但不能构成无限期 exactly-once；所有消费者仍必须持久化去重。
 
@@ -156,7 +156,10 @@ PostgreSQL transaction 绝不跨越 NATS 网络调用。JetStream 是通知和�
 go-like 当前没有 SQL/ORM 抽象。实现应直接选择一个支持参数化查询、连接池和 scoped transaction 的 PostgreSQL
 driver，并固定其版本；不要为了本示例先造通用 database package。
 
-## 生产不变量
+## 生产不变量与接入要求
+
+以下同时列出已实现的数据库不变量和生产接入要求。当前示例未实现认证、冲正、自动处理 commit 结果不明、
+停机依赖顺序或积压告警；这些要求不能视为已完成的功能。
 
 1. PostgreSQL 中已提交的 journal/posting 是唯一金融事实；JetStream、日志、缓存和 go-like Store 都不是。
 2. 每个 transaction 在数据库提交点至少有两条 posting，且按货币求和严格为零。
@@ -178,7 +181,7 @@ driver，并固定其版本；不要为了本示例先造通用 database package
 | 同一键并发提交相同 body         | PostgreSQL 唯一键串行化结果；只存在一个 transaction、平衡 posting 集和 outbox event，其余请求重放已保存响应。  |
 | 同一键提交不同 body             | 返回 `409`，不新增或修改账本。                                                                                 |
 | schema/业务校验失败             | 在开启数据库 transaction 前返回 `400`；不得写入幂等、账本或 outbox。                                           |
-| 数据库约束、连接或 commit 失败  | 返回失败且不报告入账成功；commit 结果不明时按幂等键 fresh readback。                                           |
+| 数据库约束、连接或 commit 失败  | 返回失败且不报告入账成功；当前没有自动 fresh readback，结果不明时调用方须携带同一幂等键重试以读取已提交结果。  |
 | 写 posting 后进程崩溃           | PostgreSQL 原子回滚，或整笔 transaction 与 outbox 一起可见；不存在部分可见状态。                               |
 | commit 后、publisher 领取前崩溃 | 未发布 outbox 留在 PostgreSQL，重启后继续领取。                                                                |
 | NATS 断线或无 `PubAck`          | 不写 `published_at`；释放或等待 lease 过期后按 backoff 重试，账本 API 的已提交事实不回滚。                     |
@@ -191,17 +194,19 @@ driver，并固定其版本；不要为了本示例先造通用 database package
 
 本地集成环境只需要两个真实服务，并都使用 named volume 验证重启持久性：
 
-| 服务           | 镜像与启动要求                                                                                                                                                       | 版本策略                                                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| PostgreSQL     | `docker.io/library/postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a`；独立用户、TCP readiness、named volume 和显式 migration。  | 运行时 fresh readback 为 PostgreSQL `18.4 (Debian 18.4-1.pgdg13+1)`；升级必须同时更新 tag、multi-arch digest、版本断言和持久化测试。 |
-| NATS JetStream | `docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66`，启动参数至少包含 `-js -sd /data` 并挂载持久 volume。 | E2E 回读为 NATS Server `2.14.4`；NATS JS packages 固定为 `3.4.0`。升级时同时更新 tag、digest、版本断言和重连/JetStream E2E。         |
+| 服务           | 镜像与启动要求                                                                                                                                                       | 版本策略                                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL     | `docker.io/library/postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a`；独立用户、TCP readiness、named volume 和显式 migration。  | E2E 通过 `SELECT version()` 断言包含 `18.4`；升级必须同时更新 tag、multi-arch digest、版本断言和持久化测试。                     |
+| NATS JetStream | `docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66`，启动参数至少包含 `-js -sd /data` 并挂载持久 volume。 | E2E 回读并断言 NATS Server `2.14.4`；NATS JS packages 固定为 `3.4.0`。升级时同时更新 tag、digest、版本断言和重连/JetStream E2E。 |
 
 实现验收必须从运行中的容器回读 `SELECT version()`、`nats-server --version` 和 Docker image ID，不能只相信 tag。
 开发凭据只用于隔离的本地网络；生产凭据通过部署环境注入，不写入 README、Compose 或日志。
 
 ## 验证
 
-运行以下命令；本示例不生成 `dist`：
+运行以下命令；本示例直接依赖 Bun `SQL`，不生成 `dist`。`test:unit` 是本地确定性测试；
+`test:unit:coverage` 还会调用 `test/integration/coverage.test.ts` 中的真实 PostgreSQL/NATS Docker 场景，需要 Docker，
+因此根目录 `bun run verify` 的 workspace coverage 阶段也包含该外部依赖：
 
 ```bash
 bun run --cwd examples/payments-ledger typecheck
@@ -224,4 +229,4 @@ outbox；posting 总和为 `0`；不平衡 transaction 在 commit 时返回 SQLS
 - 不提供通用会计平台、ORM、数据库迁移框架或新的 go-like SQL package。
 - 不承诺 PostgreSQL 与 NATS 的分布式 exactly-once transaction，也不把 JetStream 当账本备份。
 - 不为第一版增加 Redis、Kafka、CDC、事件溯源框架或全局事件顺序。
-- 不在应用启动时自动执行生产 migration；生产 schema 变更由独立部署步骤负责。
+- `main.ts` 会在本地空库自动执行示例 migration 并创建演示账户；它不是生产迁移工具，生产 schema 变更应由独立部署步骤负责。

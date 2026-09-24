@@ -17,9 +17,11 @@
 - `src/worker.ts`：实现 go-like `Server` 的审批 Worker。
 - `src/service.ts`：组合 Handler，并向入口暴露实现 go-like `Server` 的审批 Worker。
 - `src/http.ts`：许可受理与查询的标准 Fetch 路由。
-- `src/main.ts`：唯一 App 组装根，由 Core 按依赖顺序管理 Worker 和 HTTP Server。
+- `src/main.ts`：唯一 App 组装根，由 Core 管理 Worker 和 HTTP Server，并发请求停止两者。
 
 ## go-like 能力
+
+审批通过显式调用 `worker.processNext(ctx)` 推进一步，测试会调用该方法；当前 `main.ts` 没有定时触发它，因此直接运行后提交的申请保持 `pending`。
 
 本例实际由 `@go-like/core` 启动和排空自定义结构式 Server。测试证明 Worker 在生命周期外拒绝处理、运行时完成审批，并在 `stop(ctx)` 后结束 `start(ctx)` 的运行期 Promise。
 

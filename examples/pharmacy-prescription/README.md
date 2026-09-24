@@ -15,8 +15,10 @@
 - `DELETE /v1/prescriptions/{prescriptionId}`
 
 本示例验证库存失败边界和状态流转，不声明已接入药房库存系统或分布式事务。
-库存扣减以 `requestId` 作为 gateway 幂等键：即使远端已经提交扣减但响应丢失，重试也不会重复扣减。
-库存不足等业务失败不重试，只有 `PHARMACY_INVENTORY_TRANSIENT` 才进入最多三次的重试边界。
+库存扣减以 `requestId` 作为 gateway 幂等键。单元测试用内存 gateway 模拟“扣减已提交但响应丢失”，
+并通过 `newRetryingPharmacyInventory` 验证重试不会重复扣减；库存不足不重试，只有
+`PHARMACY_INVENTORY_TRANSIENT` 才进入默认最多三次的重试边界。当前 `main.ts` 直接使用内存库存，未装配重试包装器或远程库存调用。
+库存扣减与处方状态写入也没有原子事务或补偿，不能据此承诺并发发药与取消时的跨步骤一致性。
 
 ## 直接运行
 

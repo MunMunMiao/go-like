@@ -1,5 +1,8 @@
 # Framework Evidence Remediation Design
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 **Date:** 2026-08-26
 
 **Status:** Approved in conversation; implementation is evidence-gated.

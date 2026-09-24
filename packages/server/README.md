@@ -10,13 +10,13 @@ import { newTokenBucketLimiter } from "@go-like/resilience"
 import {
   address,
   advertise,
-  handler,
   httpRoute,
   middleware,
   newServer,
   rateLimitMiddleware,
   transport,
-  use
+  use,
+  type HandlerRegistrar
 } from "@go-like/server"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
@@ -30,26 +30,29 @@ const rpc = newServer(
   transport(newNodeHTTPTransport()),
   address("0.0.0.0:9000"),
   advertise("catalog.internal"),
-  handler("catalog", "get", async (_ctx, request) => request),
   httpRoute("GET", "/v1/catalog", "catalog", "get"),
   middleware(tracing),
   use("catalog/*", metrics, rateLimitMiddleware(catalogLimiter), authorizeCatalogRead)
 )
+registerCatalogServiceHandler(rpc, catalogService)
 
 const app = newApp(signal(), server(rpc))
 await app.run()
 ```
 
-共享类型化 contract 时，直接使用 `handler(contract, fn)`；Server 会在 Message 边界完成请求校验与响应编码：
+应用自己的 service glue 只依赖 `HandlerRegistrar`，并保留 class-backed implementation 的 `this` receiver：
 
 ```ts
-const rpc = newServer(
-  transport(newNodeHTTPTransport()),
-  handler(quoteEndpoint, async (_ctx, request) => calculateQuote(request))
-)
+export function registerCatalogServiceHandler(
+  server: HandlerRegistrar,
+  handler: CatalogServiceHandler
+): void {
+  server.registerHandler("catalog", "get", (ctx, request) => handler.get(ctx, request))
+}
 ```
 
-原始 `handler(service, endpoint, fn)` 继续用于 bytes/message 级 handler。两种形式进入同一条 route、
+共享类型化 contract 或一次性测试也可直接使用 `server.registerHandler(contract, handler)`；raw bytes/message
+handler 使用 `server.registerHandler(service, endpoint, handler)`。两种形式进入同一条 route、
 middleware 与生命周期链，不增加第二套 Server。无信封 REST 用 `httpRoute(method, path, service, endpoint, successStatus?)`
 把精确 method+pathname 映射到同一 handler；省略 `successStatus` 时成功载体为 200。已带 `Go-Like-Service`
 的 unary 信封仍为 HTTP 200，不会被 pathname 改写。无信封且未命中精确 `httpRoute` 时，`GET` 与 `HEAD`
@@ -69,9 +72,13 @@ middleware 可屏蔽较宽前缀。直接 `use()` 会在声明时校验，自定
 `rateLimitMiddleware(limiter)` 的一个 middleware 实例共享一个 limiter。需要 operation 隔离时，为不同
 `use(...)` 传入独立 limiter；未知 route 在 middleware 之前被拒绝，不会消耗 token。
 
-`handler` 注册精确的 service 与 endpoint。`Server.start(ctx)` 持续运行至 listener 停止；
+`newServer()` 允许暂时没有 handler；第一次 `endpoint()` 或 `start()` 会同步 seal 注册表。空注册、重复注册、
+不存在的 `httpRoute` target 和 seal 后注册都会在 listener I/O 前失败。`Server.start(ctx)` 持续运行至 listener 停止；
 `Server.stop(ctx)` 负责优雅关闭，超时由 App 的 `stopTimeout(...)` 统一控制。底层 Listener 由 Server 使用独立
 Context 关闭，每个 stop Context 只限制该调用者的等待，不会取消或污染共享关闭。`endpoint(ctx)` 与
 `start(ctx)` 共享同一次真实 bind，供 Core App 自动构造 Registry `ServiceInstance`，不会为注册再开一个
 listener。`address(...)` 只配置 bind；`advertise(...)` 配置注册端点或 host，host-only 值会沿用实际绑定端口。
 wildcard bind 必须显式提供可达的 advertise 值；容器、NAT、Ingress 与端口映射不会被猜测。
+
+Server 的 `protocol()` 来自选定 Transport 的 `kind()`。同一个 Core App 生成的 Registry instance 只能包含
+一种非空 protocol；HTTP/internal unary 与标准 gRPC 应分别使用 `orders-http`、`orders-grpc` 等 service identity。

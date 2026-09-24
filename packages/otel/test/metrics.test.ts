@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-import { withAddress, type CallOption, type CallRequest } from "@go-like/client"
+import type { CallOption, CallRequest } from "@go-like/client"
 import { background, withCancelCause, type Context } from "@go-like/context"
 import { struct } from "@go-like/struct"
 import { endpoint as serviceEndpoint, type Message } from "@go-like/transport"
@@ -118,15 +118,14 @@ test("records Client and unary Server outcomes through the official metrics SDK"
   })
   const wrapped = measureClient(typedSubject.client, metrics)
   const typed = serviceEndpoint("catalog", "Typed", requestStruct, responseStruct)
-  expect(await wrapped.call(background(), typed, { id: 7 }, withAddress("loopback"))).toEqual({
+  expect(await wrapped.call(background(), typed, { id: 7 })).toEqual({
     total: 8
   })
   await expect(
     wrapped.call(
       background(),
       serviceEndpoint("catalog", "TypedFail", requestStruct, responseStruct),
-      { id: 7 },
-      withAddress("loopback")
+      { id: 7 }
     )
   ).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_PROTOCOL",
@@ -225,8 +224,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
     client.call(
       background(),
       serviceEndpoint("catalog", "Missing", requestStruct, responseStruct),
-      { id: 1 },
-      withAddress("loopback")
+      { id: 1 }
     )
   ).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_PROTOCOL",
@@ -236,8 +234,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
     client.call(
       background(),
       serviceEndpoint("catalog", "Duplicate", requestStruct, responseStruct),
-      { id: 1 },
-      withAddress("loopback")
+      { id: 1 }
     )
   ).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_PROTOCOL",
@@ -247,8 +244,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
     client.call(
       background(),
       serviceEndpoint("catalog", "Malformed", requestStruct, responseStruct),
-      { id: 1 },
-      withAddress("loopback")
+      { id: 1 }
     )
   ).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_PROTOCOL",
@@ -256,12 +252,9 @@ test("preserves typed Client Struct and protocol failures", async () => {
     cause: { name: "TypeError" }
   })
   await expect(
-    client.call(
-      background(),
-      serviceEndpoint("catalog", "Decode", requestStruct, responseStruct),
-      { id: 1 },
-      withAddress("loopback")
-    )
+    client.call(background(), serviceEndpoint("catalog", "Decode", requestStruct, responseStruct), {
+      id: 1
+    })
   ).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_PROTOCOL",
     message: "client typed response is invalid",

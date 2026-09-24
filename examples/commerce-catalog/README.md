@@ -77,16 +77,16 @@ Pricing 调用显式声明为幂等，并配置最多三次有界重试。默认
 
 ## go-like 能力
 
-| 能力         | 使用方式                                                               |
-| ------------ | ---------------------------------------------------------------------- |
-| 应用生命周期 | `newApp(..., server(...))`、`app.run()`、`app.stop()`                  |
-| 服务端       | `newServer(transport(...), address(...), handler(...))`                |
-| 客户端       | `newClient(withDiscovery(...), withSelector(...), withTransport(...))` |
-| 注册发现     | Core App 的 `registrar`、Consul Registry                               |
-| 内部传输     | `@go-like/transport-http` client 与 Node server transport              |
-| 对外 Web     | Hono Handler 由 `@go-like/web/node` 承载                               |
-| 缓存         | Redis Cache 作为 App Server 管理连接生命周期                           |
-| 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式业务校验                       |
+| 能力         | 使用方式                                                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 应用生命周期 | `newApp(..., server(...))`、`app.run()`、`app.stop()`                                                                       |
+| 服务端       | `newServer(transport(...), address(...))`，再调用 `registerPricingHandler(server, handler)`                                 |
+| 客户端       | `newClient(withDiscovery(...), withService(...), withSelector(...), withTransport(...))`，再调用 `newPricingClient(client)` |
+| 注册发现     | Core App 的 `registrar`、Consul Registry                                                                                    |
+| 内部传输     | `@go-like/transport-http` client 与 Node server transport                                                                   |
+| 对外 Web     | Hono Handler 由 `@go-like/web/node` 承载                                                                                    |
+| 缓存         | Redis Cache 作为 App Server 管理连接生命周期                                                                                |
+| 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式业务校验                                                                            |
 
 示例只使用 go-like 公开的 App、Server、Client、Registry 与 functional options。
 

@@ -19,3 +19,7 @@ go-like дополняет фреймворк приложения, а не за
 ## Что здесь значит «в стиле Go»
 
 `Context` идёт первым аргументом операций, которые могут блокироваться; владелец ресурса виден явно, а остановка имеет наблюдаемый конечный результат. Это не перенос регистра имён Go и не имитация goroutine или channel: TypeScript сохраняет обычные exports, а специфичная семантика провайдера остаётся в его нативных объектах.
+
+`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от unary Transport SPI.
+
+[Ограничения отмены и завершения](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

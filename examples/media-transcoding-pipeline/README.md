@@ -16,7 +16,7 @@
 - `src/transcode-worker.ts`：实现 go-like `Server` 的进程内转码 Worker。
 - `src/service.ts`：组合任务提交操作与 Fetch Handler，并向入口暴露 Worker Server。
 - `src/http.ts`：转码任务的标准 Fetch 路由。
-- `src/main.ts`：唯一 App 组装根，由 Core 按依赖顺序管理 Worker 和 HTTP Server。
+- `src/main.ts`：唯一 App 组装根，由 Core 管理 Worker 和 HTTP Server，并发请求停止两者。
 
 ## 业务不变量
 

@@ -74,7 +74,7 @@ export interface Socket {
 export interface Client extends Socket {}
 
 /** Handles one accepted Socket with a Context derived from the accept operation. */
-export type AcceptHandler = (ctx: Context, socket: Socket) => void | PromiseLike<void>
+export type AcceptHandler = (ctx: Context, socket: Socket) => void | Promise<void>
 
 /** Owns one bound transport endpoint and one one-shot accept loop. */
 export interface Listener {

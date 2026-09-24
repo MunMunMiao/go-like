@@ -13,9 +13,12 @@ interface ServiceInstance {
 }
 ```
 
-项目不支持 Protobuf/IDL，因此不再暴露 go-micro 的 `Service/Node/Endpoint/Value` 描述树，也不使用
+Registry 不承载 Protobuf/IDL 描述树，因此不暴露 go-micro 的 `Service/Node/Endpoint/Value` 描述树，也不使用
 `RegistrationHandle`、`done()` 或额外的 registration Server。App 通过 Registrar 的 `register` /
 `deregister` 直接持有注册生命周期。
+
+Protobuf RPC 由独立的 `@go-like/protoc-gen-like` 与 `@go-like/transport-grpc-buf` 提供；其 managed Client
+复用这里的 Discovery 与 Selector，不改变 `ServiceInstance` 模型。
 
 ## Registry
 

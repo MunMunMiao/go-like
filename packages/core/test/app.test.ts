@@ -224,6 +224,9 @@ test("registers one Kratos-style ServiceInstance around the Server lifecycle", a
   const done = deferred<void>()
   const instances: ServiceInstance[] = []
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint() {
       events.push("endpoint")
       return "http://127.0.0.1:43210"
@@ -290,6 +293,208 @@ test("registers one Kratos-style ServiceInstance around the Server lifecycle", a
   ])
 })
 
+test("rejects mixed Endpointer protocols before Registrar registration", async () => {
+  let endpointCalls = 0
+  let registrations = 0
+  const registry: Registrar = {
+    async register() {
+      registrations += 1
+      throw new Error("unexpected Registrar.register")
+    },
+    async deregister() {}
+  }
+  const http: Server & Endpointer = {
+    protocol: () => "http",
+    endpoint() {
+      endpointCalls += 1
+      return "http://127.0.0.1:43210"
+    },
+    async start() {},
+    async stop() {}
+  }
+  const grpc: Server & Endpointer = {
+    protocol: () => "grpc",
+    endpoint() {
+      endpointCalls += 1
+      return "http://127.0.0.1:43211"
+    },
+    async start() {},
+    async stop() {}
+  }
+
+  const app = newApp(name("orders"), registrar(registry), server(http, grpc))
+
+  await expect(app.run()).rejects.toThrow("app Endpointer protocols must match: http, grpc")
+  expect(endpointCalls).toBe(0)
+  expect(registrations).toBe(0)
+})
+
+test("publishes same-protocol Endpointers and preserves protocol receivers", async () => {
+  const registered = deferred<ServiceInstance>()
+  const registry: Registrar = {
+    async register(_ctx, instance) {
+      registered.resolve(instance)
+    },
+    async deregister() {}
+  }
+  const first: Server & Endpointer & { readonly wire: string; protocolCalls: number } = {
+    wire: "http",
+    protocolCalls: 0,
+    protocol() {
+      this.protocolCalls += 1
+      return this.wire
+    },
+    endpoint: () => "http://127.0.0.1:43210",
+    async start() {},
+    async stop() {}
+  }
+  const second: Server & Endpointer & { readonly wire: string; protocolCalls: number } = {
+    wire: "http",
+    protocolCalls: 0,
+    protocol() {
+      this.protocolCalls += 1
+      return this.wire
+    },
+    endpoint: () => "http://127.0.0.1:43211",
+    async start() {},
+    async stop() {}
+  }
+  const app = newApp(name("orders"), registrar(registry), server(first, second))
+  const running = app.run()
+
+  const instance = await registered.promise
+  expect(instance.endpoints).toEqual(["http://127.0.0.1:43210/", "http://127.0.0.1:43211/"])
+  expect(first.protocolCalls).toBe(1)
+  expect(second.protocolCalls).toBe(1)
+  await app.stop()
+  await running
+})
+
+test("rejects missing, empty, and non-string Endpointer protocols before Registrar registration", async () => {
+  for (const [label, subject, message] of [
+    [
+      "missing",
+      {
+        endpoint: () => "http://127.0.0.1:43210",
+        async start() {},
+        async stop() {}
+      } as Server & { endpoint(): string },
+      "app Endpointer must implement protocol"
+    ],
+    [
+      "empty",
+      {
+        protocol: () => "",
+        endpoint: () => "http://127.0.0.1:43210",
+        async start() {},
+        async stop() {}
+      } as Server & Endpointer,
+      "app Endpointer protocol must be a non-empty string"
+    ],
+    [
+      "non-string",
+      {
+        protocol: () => 1,
+        endpoint: () => "http://127.0.0.1:43210",
+        async start() {},
+        async stop() {}
+      } as Server & { protocol(): number; endpoint(): string },
+      "app Endpointer protocol must be a non-empty string"
+    ]
+  ] as const) {
+    let registrations = 0
+    const registry: Registrar = {
+      async register() {
+        registrations += 1
+        throw new Error(`unexpected ${label} Registrar.register`)
+      },
+      async deregister() {}
+    }
+    const app = newApp(name("orders"), registrar(registry), server(subject))
+
+    await expect(app.run()).rejects.toThrow(message)
+    expect(registrations).toBe(0)
+  }
+})
+
+test("preflights mixed Endpointers even with an explicit App endpoint", async () => {
+  let endpointCalls = 0
+  let registrations = 0
+  const registry: Registrar = {
+    async register() {
+      registrations += 1
+      throw new Error("unexpected Registrar.register")
+    },
+    async deregister() {}
+  }
+  const http: Server & Endpointer = {
+    protocol: () => "http",
+    endpoint() {
+      endpointCalls += 1
+      return "http://127.0.0.1:43210"
+    },
+    async start() {},
+    async stop() {}
+  }
+  const grpc: Server & Endpointer = {
+    protocol: () => "grpc",
+    endpoint() {
+      endpointCalls += 1
+      return "http://127.0.0.1:43211"
+    },
+    async start() {},
+    async stop() {}
+  }
+  const app = newApp(
+    name("orders"),
+    endpoint("https://published.example"),
+    registrar(registry),
+    server(http, grpc)
+  )
+
+  await expect(app.run()).rejects.toThrow("app Endpointer protocols must match: http, grpc")
+  expect(endpointCalls).toBe(0)
+  expect(registrations).toBe(0)
+})
+
+test("registers an explicit App endpoint after same-protocol preflight", async () => {
+  let endpointCalls = 0
+  let protocolCalls = 0
+  const registered = deferred<ServiceInstance>()
+  const registry: Registrar = {
+    async register(_ctx, instance) {
+      registered.resolve(instance)
+    },
+    async deregister() {}
+  }
+  const subjects: readonly (Server & Endpointer)[] = [43210, 43211].map((portNumber) => ({
+    protocol() {
+      protocolCalls += 1
+      return "http"
+    },
+    endpoint() {
+      endpointCalls += 1
+      return `http://127.0.0.1:${portNumber}`
+    },
+    async start() {},
+    async stop() {}
+  }))
+  const app = newApp(
+    name("orders"),
+    endpoint("https://published.example"),
+    registrar(registry),
+    server(...subjects)
+  )
+  const running = app.run()
+
+  const instance = await registered.promise
+  expect(instance.endpoints).toEqual(["https://published.example/"])
+  expect(protocolCalls).toBe(2)
+  expect(endpointCalls).toBe(0)
+  await app.stop()
+  await running
+})
+
 test("finishes beforeStart before preparing registrar endpoints", async () => {
   const entered = deferred<void>()
   const release = deferred<void>()
@@ -297,6 +502,9 @@ test("finishes beforeStart before preparing registrar endpoints", async () => {
   const registered = deferred<void>()
   const events: string[] = []
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint() {
       events.push("endpoint")
       return "http://127.0.0.1:43210"
@@ -581,6 +789,9 @@ test("stop during endpoint preparation drains the launched resource before resol
   let starts = 0
   let stops = 0
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint() {
       entered.resolve()
       await release.promise
@@ -617,6 +828,9 @@ test("treats app-owned startup cancellation as a clean shutdown", async () => {
   const endpointEntered = deferred<void>()
   let stops = 0
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint(ctx) {
       endpointEntered.resolve()
       const signal = ctx.done()
@@ -851,6 +1065,9 @@ test("server failure interrupts blocking startup before endpoint registration", 
   const timeout = new Error("server failure did not interrupt startup")
   const events: string[] = []
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint() {
       events.push("endpoint")
       return "http://127.0.0.1:43210"
@@ -942,6 +1159,9 @@ test("startTimeout bounds endpoint preparation that never settles", async () => 
     async deregister() {}
   }
   const subject: Server & Endpointer = {
+    protocol() {
+      return "http"
+    },
     async endpoint() {
       endpointEntered.resolve()
       await endpointBlocked.promise

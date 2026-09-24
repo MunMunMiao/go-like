@@ -5,7 +5,7 @@ go-like مجموعة من لبنات البناء الصغيرة والصريح�
 go-like مكملة عمداً لإطار التطبيق. يظل إطارك مالكاً للمسارات وmiddleware وسياسة الطلب وWeb Streams وترقيات WebSocket وتركيب الاعتماديات وسلوك العمل. ويظل مزوّدك مالكاً لاتصاله الأصلي ونموذج الإقرار أو retry أو lease أو البروتوكول. توفر go-like عقوداً ضيقة وملكية واضحة لدورة الحياة حيث تكون هذه الحدود مفيدة.
 
 > [!IMPORTANT]
-> هذا checkout مساحة عمل خاصة بالإصدار `0.0.1`. تقول وثائق المستودع إن حزم `@go-like/*` لم تُنشر بعد إلى npm. تستخدم الأمثلة حزم workspace، ولذلك يُقصد تشغيلها من checkout ما لم يُؤكَّد إصدار منشور بصورة مستقلة.
+> يستخدم هذا checkout حزم `workspace:*` بالإصدار `0.0.1`. لا يثبت رقم manifest توفر الحزم على npm؛ تحقّق من النشر بصورة مستقلة قبل التثبيت خارج workspace.
 
 > [!NOTE]
 > شجرة `doc/` الإنجليزية هي المصدر المرجعي لمسار التوثيق هذا. مصدر الحزمة وmanifests والاختبارات المركّزة هي مرجع API. وجود اختبار أو script لـ E2E في المستودع يعني تغطية معلنة؛ ولا يعني نتيجة ناجحة إلى أن يُنفّذ الأمر وتُسجّل حالة خروجه فعلياً.
@@ -23,7 +23,7 @@ go-like مكملة عمداً لإطار التطبيق. يظل إطارك ما�
 ## اختر مساراً للمبتدئ أو الخبير
 
 - **المبتدئ:** [البدء](/ar-Arab/guide/getting-started) ثم [مشروع العيادة](/ar-Arab/guide/zero-to-one). لا تنتقل إلى provider خارجي قبل تشغيل Handler وفهم إشارة `GO_LIKE_EXAMPLE_READY`.
-- **مهندس TypeScript أو Go خبير:** [البنية](/ar-Arab/guide/architecture) ثم [استدعاءات الخدمات](/ar-Arab/guide/service-call) و[مرجع المزوّدات](/ar-Arab/reference/providers). ركّز على ownership وterminal state، ولا تفترض gRPC أو Protobuf.
+- لا يشمل ذلك gRPC القياسي داخل المتصفح، أو تدفق طلبات Fetch ثنائي الاتجاه، أو health/reflection القياسيين، أو مصادقة عامة، أو Event Store/replay، أو ORM، أو تنسيق العناقيد.
 - **مستخدم إطار:** [المقارنة](/ar-Arab/guide/comparison) ثم [الترحيل](/ar-Arab/guide/migration) لإبقاء router الأصلي وإضافة الحد الأدنى.
 
 ## النموذج الذهني
@@ -59,8 +59,8 @@ Internal unary call
 
 لا يدّعي حد المنتج الحالي ما يأتي:
 
-- gRPC أو Protobuf أو ملفات IDL أو عملاء RPC مولّدين أو server stubs مولّدة؛
-- API داخلياً لـ RPC ثنائي الاتجاه الكامل، أو بروتوكول half-close، أو نموذج إطارات، أو عقد backpressure؛
+- لا يشمل ذلك gRPC القياسي داخل المتصفح، أو تدفق طلبات Fetch ثنائي الاتجاه، أو health/reflection القياسيين، أو مصادقة عامة، أو Event Store/replay، أو ORM، أو تنسيق العناقيد.
+- Fetch request-streaming/bidi; gRPC قياسي بالأنماط الأربعة عبر `/native`.
 - موجّهاً خارجياً أو DSL لـ middleware خاصاً بإطار؛
 - حاوية dependency injection عامة أو service locator؛
 - JWT أو OAuth أو OIDC أو claims أو ACL أو تفويض التطبيق تلقائياً؛
@@ -73,7 +73,7 @@ Internal unary call
 
 ## الجرد العام
 
-تحتوي manifests المصدر الحالية على **43 حزمة `@go-like/*` غير خاصة**، وكلها بالإصدار `0.0.1` في هذا checkout، إضافة إلى **23 مسار source عاماً**. وتدخل `@go-like/struct` في هذا الجرد العام، وهي عقد وقت التشغيل الذي تستخدمه استدعاءات `Endpoint` typed. ولا تعد exports metadata من `dist/package.json` حزم إضافية أو APIs مصدرية.
+تحتوي manifests المصدر الحالية على **45 حزمة `@go-like/*` غير خاصة**، وكلها بالإصدار `0.0.1` في هذا checkout، إضافة إلى **25 مسار source عاماً**. وتدخل `@go-like/struct` في هذا الجرد العام، وهي عقد وقت التشغيل الذي تستخدمه استدعاءات `Endpoint` typed. ولا تعد exports metadata من `dist/package.json` حزم إضافية أو APIs مصدرية.
 
 استخدم [مرجع الحزم](/ar-Arab/reference/packages) لاختيار عقد أو مزوّد، ثم [مرجع المزوّدات](/ar-Arab/reference/providers) لمقارنة backend ودلالات بيئة التشغيل. يسجّل [الترحيل والتبنّي](/ar-Arab/guide/migration) مسارات التبنّي العملية ويذكّر بما لا يثبته المستودع.
 
@@ -94,3 +94,7 @@ Internal unary call
 - [الصحة وقابلية الرصد](/ar-Arab/guide/health-observability): أضف readiness والمقاييس والتتبّع والسجلات من دون تثبيت بنية عامة خفية.
 - [المقارنة](/ar-Arab/guide/comparison) و[الترحيل](/ar-Arab/guide/migration): قارن الملكية مع أطر الطرف الثالث وتبنَّ go-like تدريجياً.
 - [الحزم](/ar-Arab/reference/packages) و[المزوّدات](/ar-Arab/reference/providers) و[التحقق](/ar-Arab/reference/verification): استخدم المسار المرجعي عندما تكون API أو حدود الدليل مهمة.
+
+يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
+
+[قيود الإلغاء والإيقاف](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

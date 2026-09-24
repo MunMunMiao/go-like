@@ -66,30 +66,29 @@ framework route table
 
 如果你熟悉 Go 或 Kratos，迁移时应该迁移概念，而不是照抄拼写：
 
-| Go 概念           | go-like 概念                                                                                                       | 重要差异                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` 返回的是 `AbortSignal` 或 null，不是 Go channel            |
-| Server lifecycle  | Core 结构式 `Server`                                                                                               | `start(ctx)` 可能长期不返回，它不等于 readiness                     |
-| App runner        | `newApp`、`App.run`、`App.stop`                                                                                    | `App.stop()` 没有调用方 Context，并返回一个共享 Promise             |
-| RPC client        | `@go-like/client`                                                                                                  | 内部调用是 unary `Message`；retry 默认关闭                          |
-| Transport         | `@go-like/transport`                                                                                               | Provider 和 Message headers 都是 TypeScript/Web 契约                |
-| Registry          | `@go-like/registry`                                                                                                | Watcher 返回完整替换后的 snapshot                                   |
-| Selector          | `newRoundRobinSelector`、`newRandomSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | feedback 是同步的，并且取决于具体策略                               |
-| Protobuf/IDL      | go-like 没有对应能力                                                                                               | `Endpoint` + `Struct` 是 runtime validation，不是生成式 schema 代码 |
-| gRPC stream       | go-like 当前没有对应能力                                                                                           | 对外 Web streaming 与内部 unary transport 是两回事                  |
+| Go 概念           | go-like 概念                                                                                                       | 重要差异                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` 返回的是 `AbortSignal` 或 null，不是 Go channel |
+| Server lifecycle  | Core 结构式 `Server`                                                                                               | `start(ctx)` 可能长期不返回，它不等于 readiness          |
+| App runner        | `newApp`、`App.run`、`App.stop`                                                                                    | `App.stop()` 没有调用方 Context，并返回一个共享 Promise  |
+| RPC client        | `@go-like/client`                                                                                                  | 内部调用是 unary `Message`；retry 默认关闭               |
+| Transport         | `@go-like/transport`                                                                                               | Provider 和 Message headers 都是 TypeScript/Web 契约     |
+| Registry          | `@go-like/registry`                                                                                                | Watcher 返回完整替换后的 snapshot                        |
+| Selector          | `newRoundRobinSelector`、`newRandomSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | feedback 是同步的，并且取决于具体策略                    |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | 基于 Protobuf-ES 的 Context-first 生成代码               |
+| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | `/native` 提供标准 gRPC 四种调用形态                     |
 
 一个适合渐进迁移的第一步，是用 Memory Transport 做一次直连地址的 typed call：
 
 ```ts
+// Composition excerpt: quote and pricingQuoteHandler are application-owned.
+// Admit this server through App before calling; close client during shutdown.
 const transport = newMemoryTransport()
-const server = newServer(
-  serverTransport(transport),
-  address("memory://pricing"),
-  handler(pricingEndpoint, pricingHandler)
-)
-const client = newClient(withTransport(transport))
+const server = newServer(serverTransport(transport), address("memory://pricing"))
+server.registerHandler(quote, pricingQuoteHandler)
 
-const result = await client.call(ctx, pricingEndpoint, request, withAddress("memory://pricing"))
+const client = newClient(withTransport(transport), withAddress("memory://pricing"))
+const result = await client.call(ctx, quote, request)
 ```
 
 先把这条边界测通，再引入 Discovery、真正的 Registry provider 或 HTTP transport。这样替换的是目的地和所有权接线，领域契约仍然保持稳定。
@@ -163,4 +162,8 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 ## 当前支持边界
 
-仓库目前有 vanilla Fetch、Hono、Elysia、H3、Memory Transport、typed internal calls、health、brokers、workers 和 observability adapter 的直接示例。它没有证明 NestJS 或 Fastify 的自动 bridge、gRPC/Protobuf/IDL 兼容性、全双工内部 stream、通用认证或部署编排能力。这些都需要单独的 adapter、测试和产品承诺。
+`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于 unary Transport SPI 的调用路径。
+
+这不包含浏览器标准 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用认证、Event Store/replay、ORM 或集群编排。
+
+[取消与停机的已知限制](/reference/claims#stream-cancellation-limits)：Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

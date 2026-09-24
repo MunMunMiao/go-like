@@ -52,15 +52,57 @@ const listener = await transport.listen(ctx, "127.0.0.1:9443")
 `Go-Like-Peer-Identity`；`allowHTTP1(false)` 只允许 HTTP/2。
 默认值分别是 `"none"` 和 `true`。这些是 Node transport construction options，不会公开内部 Host SPI。
 
-内部微服务 Server 由 `@go-like/server` 组合：
+高层 Client 在构造时选择单地址、多地址或 Discovery；三种模式都使用同一个 Registry `Selector`。服务胶水
+接收名为 `client` 的通用 `@go-like/client` owner。单地址直连：
 
 ```ts
-const rpc = newServer(
-  transport(newNodeHTTPTransport()),
-  address("127.0.0.1:9000"),
-  handler("catalog", "get", getCatalog)
-)
+import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newHTTPTransport } from "@go-like/transport-http"
+
+const client = newClient(withTransport(newHTTPTransport()), withAddress("https://orders.internal"))
+const orders = newOrderServiceClient(client)
 ```
+
+多地址直连只扩展同一个构造 option：
+
+```ts
+import { newClient, withAddress, withSelector, withTransport } from "@go-like/client"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newHTTPTransport } from "@go-like/transport-http"
+
+const client = newClient(
+  withTransport(newHTTPTransport()),
+  withAddress("https://orders-a.internal", "https://orders-b.internal"),
+  withSelector(newRoundRobinSelector())
+)
+const orders = newOrderServiceClient(client)
+```
+
+服务发现使用独立的 `orders-http` Registry identity：
+
+```ts
+import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { newHTTPTransport } from "@go-like/transport-http"
+
+const client = newClient(
+  withTransport(newHTTPTransport()),
+  withService("orders-http"),
+  withDiscovery(discovery),
+  withSelector(newRoundRobinSelector())
+)
+const orders = newOrderServiceClient(client)
+```
+
+内部微服务 Server 由 `@go-like/server` 组合，并在启动前注册 service handler：
+
+```ts
+const rpc = newServer(transport(newNodeHTTPTransport()), address("127.0.0.1:9000"))
+registerCatalogServiceHandler(rpc, catalogService)
+```
+
+HTTP 与 `@go-like/transport-grpc-buf/native` 共享 `newClient(...) -> newXClient(client)`、
+`newServer(...) -> registerXHandler(server, handler)` 的装配顺序，但保持各自的 wire Client 与 registrar ABI。
 
 根入口 `newHTTPTransport(...)` 使用标准 Fetch 完成 dial，适用于 Bun、Node 与 Deno。Node 子路径同时提供
 真实 listener 与原生 HTTPS client：按 ALPN 优先使用 HTTP/2、回退 HTTP/1.1，并支持 CA 校验和 mTLS

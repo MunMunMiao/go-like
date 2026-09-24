@@ -7,7 +7,7 @@
 
 - 根入口：`Transport`、`Client`、`Listener`、`Socket`、`Message`、`TransportInfo`、通用
   `Handler` / `Middleware`、公共 options、调用侧结构化服务错误与 Context accessors。
-- `@go-like/transport/headers`：18 个固定 header 常量。项目自有 header 统一使用 `Go-Like-` 前缀，标准
+- `@go-like/transport/headers`：18 个固定 header 名称和一个 `prefix` 常量。项目自有 header 统一使用 `Go-Like-` 前缀，标准
   `Content-Type` 保持原名。
 - `@go-like/transport/json`：仅使用标准 Web API 与 `@go-like/struct` 的可移植 JSON body 边界。
 - `@go-like/transport/provider`：provider 实现需要的 Message 防御快照、metadata / ServiceError wire codec
@@ -89,7 +89,8 @@ provider 子路径提供四个无 class、可结构识别、冻结且保留 `cau
 | `UnsupportedTransportCapabilityError` | `GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY` |
 | `TransportProtocolError`              | `GO_LIKE_TRANSPORT_PROTOCOL`               |
 
-Context 取消继续使用 `@go-like/context` 的 `canceled` 或 `deadlineExceeded`，不包装为 transport 错误。
+Context 取消保留调用方的 `cause(ctx)`；未指定自定义 cause 时为 `canceled` 或 `deadlineExceeded`，
+不包装为 transport 错误。
 
 ## TransportInfo Context
 
@@ -108,5 +109,5 @@ request/reply headers 在每次读取时通过 `@go-like/metadata` 生成新的�
 
 ## 边界
 
-该包只定义内部同步通信 SPI，不提供外部 Web handler、router、middleware、健康页、Registry 自动发现或默认
+该包只定义内部同步通信 SPI 与通用 `chain` 组合器，不提供外部 Web handler、router、业务 middleware、健康页、Registry 自动发现或默认
 HTTP implementation。应用在 composition root 显式选择 `@go-like/transport-http` 或自行实现结构式 Transport。

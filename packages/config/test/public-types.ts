@@ -132,6 +132,16 @@ const terminal: ConfigTerminalErrorHandler = async (_error) => {}
 const terminalOption: ConfigOption = onTerminalError(terminal)
 const placeholders: ConfigResolver = placeholderResolver()
 const resolverOption: ConfigOption = configResolver(placeholders)
+const syncResolver: ConfigResolver = (_ctx, config) => config
+const nativePromiseResolver: ConfigResolver = (_ctx, config) => Promise.resolve(config)
+const syncTerminal: ConfigTerminalErrorHandler = () => {}
+const nativePromiseTerminal: ConfigTerminalErrorHandler = () => Promise.resolve()
+declare const thenOnlyConfig: Pick<Promise<ConfigObject>, "then">
+declare const thenOnlyVoid: Pick<Promise<void>, "then">
+// @ts-expect-error A then-only value is not a native Promise.
+const thenOnlyResolver: ConfigResolver = () => thenOnlyConfig
+// @ts-expect-error A then-only value is not a native Promise.
+const thenOnlyTerminal: ConfigTerminalErrorHandler = () => thenOnlyVoid
 const scalar: ConfigScalar = "value"
 const value: ConfigValue = { scalar }
 declare const notFound: ConfigNotFoundError
@@ -157,6 +167,12 @@ void [
   terminalOption,
   placeholders,
   resolverOption,
+  syncResolver,
+  nativePromiseResolver,
+  syncTerminal,
+  nativePromiseTerminal,
+  thenOnlyResolver,
+  thenOnlyTerminal,
   value,
   alreadyLoaded,
   notFound,

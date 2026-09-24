@@ -8,6 +8,7 @@ This page is the editorial claim ledger for the English source. It keeps impleme
 | ----------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `source`          | Current source, manifest, export, or package README confirms the contract         | “go-like exposes...” or “The provider implements...”                                        |
 | `unit-pass`       | The repository contract audit reported a command passed on the baseline checkout  | Include command, scope, candidate commit, and counts; do not generalize to E2E              |
+| `runtime-pass`    | A named runtime or physical-package command completed and its result was recorded | Name the runtime versions, command scope, and unsupported extrapolations                    |
 | `declared`        | A test, fixture, workflow, or example exists                                      | “The repository contains...” or “The lane is declared...”                                   |
 | `runtime-source`  | A portable or runtime-specific source boundary is visible                         | Say “portable by source design” or name the explicit subpath; do not claim all-runtime pass |
 | `pinned-external` | A release, commit, or official reference is recorded for a third-party comparison | Name the version/commit and verification boundary                                           |
@@ -24,11 +25,11 @@ This page is the editorial claim ledger for the English source. It keeps impleme
 | C04 | `Server.start()` is not a readiness Promise                                                                            | `source`         | Core source comment and focused lifecycle test name                                                                                                     |
 | C05 | Core invokes sibling Server stops concurrently                                                                         | `source`         | `executeStop` in `packages/core/src/app.ts`; ordered cleanup must be composed explicitly                                                                |
 | C06 | `stopTimeout` bounds a cleanup wait and does not prove native terminal state                                           | `source`         | Core wait boundary and provider adapter terminal contracts                                                                                              |
-| C07 | `@go-like/web` uses the standard one-argument Fetch Handler                                                            | `source`         | `packages/web/src/context.ts`; Handler is `(Request) => Response                                                                                        | Promise<Response>` |
+| C07 | `@go-like/web` uses the standard one-argument Fetch Handler                                                            | `source`         | `packages/web/src/context.ts`; Handler is `(Request) => Response \| Promise<Response>`                                                                  |
 | C08 | `@go-like/server` is an internal unary `Message` server, not an external Fetch server                                  | `source`         | `packages/server/src/index.ts` Handler type and dispatcher                                                                                              |
 | C09 | `@go-like/struct` is a current public package                                                                          | `source`         | Manifest, root exports, `/codec`, `/runtime`, Client/Server imports, and tests; older package lists are stale                                           |
 | C10 | Memory Transport is process-local and instance-private                                                                 | `source`         | `@go-like/transport-memory` README and provider implementation                                                                                          |
-| C11 | Typed Endpoint binds Struct validation to JSON over the existing Message boundary                                      | `source`         | `endpoint`, `handler(contract, fn)`, `encodeJsonBody`, `decodeJsonBody`                                                                                 |
+| C11 | Typed Endpoint binds Struct validation to JSON over the existing Message boundary                                      | `source`         | `endpoint`, `server.registerHandler(endpoint, handler)`, `encodeJsonBody`, `decodeJsonBody`                                                             |
 | C12 | A service operation and a transport address are different identities                                                   | `source`         | `Client.CallRequest` fields versus `ServiceInstance.endpoints` and `withAddress`                                                                        |
 | C13 | Client calls make one attempt by default                                                                               | `source`         | Client default call options and explicit `withRetry` path                                                                                               |
 | C14 | Retry requires explicit replay authorization, positive total attempts, and a predicate                                 | `source`         | `RetryOptions` and `withRetry` validation                                                                                                               |
@@ -41,7 +42,7 @@ This page is the editorial claim ledger for the English source. It keeps impleme
 | C21 | Broker/Event preserves native delivery and does not publish universal settlement methods                               | `source`         | `BrokerEvent.native`, `eventBroker`, and portable Broker SPI                                                                                            |
 | C22 | BullMQ, Croner, NATS, Pino, Winston, OTel, and Prometheus packages are adapters or wrappers                            | `source`         | Package source and public export surfaces retain native objects/providers                                                                               |
 | C23 | Public Web streaming is not internal full-duplex RPC streaming                                                         | `source`         | README, Streaming guide, and current unary Client/Transport dispatcher                                                                                  |
-| C24 | gRPC, Protobuf, IDL generation, and generated RPC code are outside the current boundary                                | `source`         | Root README and capability comparison exclusions                                                                                                        |
+| C24 | Generated RPC uses exact ctx-first glue; portable Fetch covers two cardinalities and managed standard gRPC covers four | `runtime-pass`   | Task 8 physical packages: Node 26.7.0, Bun 1.4.0, Deno 2.9.5; no browser standard-gRPC or future-version claim                                          |
 | C25 | Hono, Elysia, H3, and vanilla Fetch examples pass native Fetch handlers into a host                                    | `declared`       | Current examples and their tests; the exact result depends on a command run                                                                             |
 | C26 | Selected verification lanes require their tools to execute but do not reject an environment by runtime or tool version | `source`         | `e2e/runtime-versions.ts`, `e2e/executor.ts`, and `doc/reference/verification.md`                                                                       |
 | C27 | The baseline audit reported typecheck, unit test, format check, and 66-entry import audit success                      | `unit-pass`      | Reported by the repository contract audit for candidate commit `9385dbf...`; this page does not claim that this documentation phase reran every command |
@@ -60,6 +61,25 @@ counts:   2,736 unit tests, 1,514 formatted files, 66 source export entries impo
 ```
 
 The same evidence explicitly leaves these items unestablished: `build`, `doc:build`, `audit`, Docker/provider E2E, cross-runtime execution, published-tarball consumers, npm registry state, hosted CI, production adoption, and the 60-minute soak.
+
+The later Task 8 RPC report separately establishes a physically staged published-consumer matrix for
+`@go-like/transport-grpc-buf`: portable Fetch unary/server-streaming and managed standard-gRPC four-cardinality calls at
+Node 26.7.0, Bun 1.4.0, and Deno 2.9.5. That scoped result does not close the unrelated baseline gaps above.
+
+## Native gRPC drain status
+
+The expanded native regression runs an admitted unary request alongside a slowly consumed server stream while stopping the server. Node 26.9.0 and Bun 1.4.2 pass; Deno 2.9.5 and 2.9.7 fail with `Premature close`. The failure also reproduces using only `node:http2`, without LikeGo or Connect. Four-cardinality interoperability and TLS success do not establish graceful drain under this workload.
+
+The physical published-consumer matrix keeps this regression mandatory and currently fails on Deno. No safe managed-owner workaround has been verified; delaying close, sending GOAWAY, or waiting for server-side stream completion did not resolve the tested failure. Deno native production shutdown reliability remains unestablished. Automatic stream replay and fixed sleeps are not substitutes for the missing guarantee.
+
+## Stream cancellation limits
+
+These are observed upstream/runtime limitations, not completed go-like fixes. The earlier four-cardinality result does not cover them. The [Deno drain result](#native-grpc-drain-status) remains a separate shutdown failure.
+
+- **Connect 2.1.2:** after a client reads one response message, pauses iteration, and externally cancels and returns the iterator, the original deadline timer can remain active until its deadline. This was reproduced using only official Connect and `node:http2` under Node and Bun, without go-like. Handler completion and closing the managed client/server do not establish timer cleanup. The current upstream `setupSignal()` releases the deadline in `abort()` and `done()`, but not when its linked controller is aborted externally. No upstream patch or dependency upgrade is claimed here.
+- **Bun 1.4.2 Fetch:** when a server sends the first chunk and then remains silent, canceling the reader and aborting the request did not produce server response/socket closure during the bounded observation. This also reproduced with plain `node:http` plus global Fetch, without go-like or Connect, against both Node and Bun servers; Node clients closed both. This limits long-lived Fetch stream cancellation claims, including portable Connect/gRPC-Web. It does not establish a managed native gRPC defect.
+
+These results are scoped to the tested versions and workloads. Normal response consumption, transport interoperability, TLS admission, and full cancellation/resource cleanup are separate checks. No automatic stream replay is provided.
 
 ## Comparison evidence
 

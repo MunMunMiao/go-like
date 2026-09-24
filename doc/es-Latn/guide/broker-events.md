@@ -4,7 +4,7 @@
 
 `@go-like/event` añade una capa tipada opcional. Al publicar codifica bytes independientes y, al recibir, espera hasta que la aplicación llama a `decode()` para validar el esquema. Si falla el decode, el `Msg` de NATS o `JsMsg` de JetStream sigue intacto y la aplicación puede decidir cómo liquidarlo.
 
-`Broker.subscribe(ctx, topic, handler)` devuelve un `Subscriber` del proveedor con `unsubscribe(ctx)`. `newBrokerServer(...)` adapta un `Broker` al contrato Core `Server`: `start(ctx)` representa toda la ejecución y `stop(ctx)` solicita la parada. go-like se encarga de detener la suscripción aceptada, pero nunca posee la conexión, el stream ni el durable consumer. Si se cancela el arranque, revierte una suscripción creada pero aún no aceptada.
+`newBrokerServer(...)` posee una sola suscripción. El propietario debe llamar a `stop(ctx)`; si la admisión sigue pendiente, el adaptador la espera y después llama a `unsubscribe`. Cancelar el Context por sí solo no demuestra que un recurso tardío se haya liberado.
 
 Elige Broker cuando necesitas entrega de eventos y fan-out. Si lo que manda es el modelo de jobs, retry, backoff, token y Worker de BullMQ, usa `@go-like/bullmq`. No son lo mismo y una API honesta no debería fingir que sí.
 

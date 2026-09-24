@@ -1,5 +1,19 @@
 {
   "name": "go-like-published-consumer",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "proto:generate": "buf generate"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.14.0",
+    "@connectrpc/connect": "2.1.2",
+    "@go-like/context": "0.0.1",
+    "@go-like/transport-grpc-buf": "0.0.1"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.72.0",
+    "@bufbuild/protoc-gen-es": "2.14.0",
+    "@go-like/protoc-gen-like": "0.0.1"
+  }
 }

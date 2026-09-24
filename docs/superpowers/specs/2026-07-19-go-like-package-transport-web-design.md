@@ -297,7 +297,7 @@ export interface Client extends Socket {}
 export type AcceptHandler = (
   ctx: Context,
   socket: Socket,
-) => void | PromiseLike<void>;
+) => void | Promise<void>;
 
 export interface Listener {
   addr(): string;
@@ -959,7 +959,7 @@ export interface Registrar {
 
 export type ServiceSource =
   | Service
-  | ((ctx: Context) => Service | PromiseLike<Service>);
+  | ((ctx: Context) => Service | Promise<Service>);
 
 export interface RegistrationServer extends Server<RegistrationHandle> {}
 
@@ -1096,7 +1096,7 @@ export interface ServiceInstanceResolver {
     ctx: Context,
     service: Service,
     node: Node,
-  ): ServiceInstance | PromiseLike<ServiceInstance>;
+  ): ServiceInstance | Promise<ServiceInstance>;
 }
 
 export function discovery(

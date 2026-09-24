@@ -1,12 +1,14 @@
+import type { CallOption, CallRequest, Client } from "@go-like/client"
 import { describe, expect, test } from "bun:test"
 
 import { newConfig, objectSource, schema, source as configSource } from "@go-like/config"
 import { background, type Context } from "@go-like/context"
 import { newProbeRegistry } from "@go-like/health"
+import type { Handler, HandlerRegistrar } from "@go-like/server"
 import { createHealthHandler } from "@go-like/web/health"
 
 import { runtimeConfigSchema } from "../../src/config"
-import { newEchoHandler } from "../../src/echo"
+import { newEchoClient, newEchoHandler, registerEchoHandler } from "../../src/echo"
 import { newManagementHandler } from "../../src/management"
 import { registerRuntimeProbes } from "../../src/probes"
 
@@ -68,6 +70,51 @@ test("echo handler rejects calls before configuration is available", () => {
   ).toThrow(/runtime configuration is not ready/)
 })
 
+test("registers the Echo handler on its exact service endpoint", () => {
+  const handler: Handler = (_ctx, request) => request
+  let registration: readonly unknown[] = Object.freeze([])
+  const server: HandlerRegistrar = {
+    registerHandler(...args: readonly unknown[]): void {
+      registration = args
+    }
+  }
+
+  registerEchoHandler(server, handler)
+
+  expect(registration).toEqual(["platform.echo", "Ping", handler])
+})
+
+test("creates a typed Echo client that preserves calls and errors", async () => {
+  const ctx = background()
+  const option: CallOption = (options) => options
+  const failure = new Error("Echo unavailable")
+  let rejected = false
+  let observed: readonly unknown[] = Object.freeze([])
+  const client = Object.freeze({
+    async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
+      observed = [ctxValue, request, ...options]
+      if (rejected) throw failure
+      return {
+        header: Object.freeze({}),
+        body: new TextEncoder().encode("pong:7")
+      }
+    },
+    async close(): Promise<void> {}
+  }) as unknown as Client
+  const { ping } = newEchoClient(client)
+
+  expect(await ping(ctx, option)).toBe("pong:7")
+  expect(observed[0]).toBe(ctx)
+  expect(observed[1]).toEqual({
+    service: "platform.echo",
+    endpoint: "Ping",
+    message: { header: {}, body: new Uint8Array() }
+  })
+  expect(observed.slice(2)).toEqual([option])
+  rejected = true
+  await expect(ping(ctx)).rejects.toBe(failure)
+})
+
 test("management routes metrics and preserves health status", async () => {
   let ready = true
   const probes = newProbeRegistry()
@@ -76,11 +123,8 @@ test("management routes metrics and preserves health status", async () => {
     createHealthHandler(probes),
     async () => new Response("metric 1\n"),
     {
-      async call() {
-        return { header: {}, body: new TextEncoder().encode("pong:1") }
-      },
-      async close() {
-        return
+      async ping() {
+        return "pong:1"
       }
     }
   )
@@ -93,11 +137,8 @@ test("management routes metrics and preserves health status", async () => {
     createHealthHandler(probes),
     async () => new Response("metric 1\n"),
     {
-      async call() {
+      async ping() {
         throw new Error("internal call failed")
-      },
-      async close() {
-        return
       }
     }
   )(new Request("http://localhost/call"))
@@ -114,12 +155,9 @@ test("management propagates request cancellation to the internal service call", 
     async () => new Response(null, { status: 404 }),
     async () => new Response("metric 1\n"),
     {
-      async call(ctx: Context) {
+      async ping(ctx: Context) {
         observed = ctx.done()
-        return { header: {}, body: new TextEncoder().encode("pong:1") }
-      },
-      async close() {
-        return
+        return "pong:1"
       }
     }
   )

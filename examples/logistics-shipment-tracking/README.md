@@ -29,4 +29,4 @@ curl -sS http://127.0.0.1:3000/v1/tracking-events \
   -d '{"eventId":"event-1","shipmentId":"shipment-1","status":"created","occurredAt":1784736000000}'
 ```
 
-前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM`，Core 会依次停止 HTTP Server 与投影缓存。
+前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM`，Core 会停止 HTTP Server；进程内投影缓存随应用内存释放。

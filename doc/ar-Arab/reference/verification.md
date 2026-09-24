@@ -2,7 +2,7 @@
 
 يستخدم go-like عدة evidence lanes، ولا ينبغي اختزال كل النتائج في نوعين فقط من الاختبارات. يشغّل `bun run test:unit` اختبارات وحدة حتمية لا تحتاج إلى خدمات خارجية. ويبني `bun run test:e2e` الحزم ثم يتحقق محلياً من المزوّدات الحقيقية وبيئات التشغيل المتعددة والأمثلة القابلة للتنفيذ واستهلاك حزم tarball المنشورة. تشغّل مجموعات Docker خدمات حقيقية وتحذف الموارد التي تنشئها.
 
-يجب تسجيل Format وLint وTypecheck وBuild وRuntime E2E وProvider E2E وExample E2E وPublished وSoak وDocumentation build وAudit كلٌّ على حدة. أمر التحقق الأساسي للمستودع هو `bun run verify`؛ فهو يشغّل بالترتيب `fmt:check` و`lint:check` و`typecheck` و`build` ثم `test:unit:coverage`. تشغّل مرحلة التغطية كل script تغطية للجذر وworkspaces مرة واحدة، وتفرض التحقق الإلزامي من التغطية. `examples/payments-ledger` هو الاستثناء الوحيد خارج نطاق اختبارات الوحدة: فهو يشغّل أيضاً سيناريو التكامل الحقيقي مع PostgreSQL وNATS، ولذلك يحتاج إلى Docker. توجد lanes الأدلة الكاملة وbaseline التاريخي وrun record الوثائق في [صفحة Verification الإنجليزية canonical](/reference/verification).
+يجب تسجيل Format وLint وTypecheck وBuild وRuntime E2E وProvider E2E وExample E2E وPublished وSoak وDocumentation build وAudit كلٌّ على حدة. أمر التحقق الأساسي للمستودع هو `bun run verify`؛ فهو يشغّل بالترتيب `test:protobuf`, `fmt:check` و`lint:check` و`typecheck` و`build` ثم `test:unit:coverage`. تشغّل مرحلة التغطية كل script تغطية للجذر وworkspaces مرة واحدة، وتفرض التحقق الإلزامي من التغطية. `examples/payments-ledger` هو الاستثناء الوحيد خارج نطاق اختبارات الوحدة: فهو يشغّل أيضاً سيناريو التكامل الحقيقي مع PostgreSQL وNATS، ولذلك يحتاج إلى Docker. توجد lanes الأدلة الكاملة وbaseline التاريخي وrun record الوثائق في [صفحة Verification الإنجليزية canonical](/reference/verification).
 
 ```sh
 bun run verify

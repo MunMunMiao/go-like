@@ -27,4 +27,4 @@ App.stop()
   -> 等 terminal result -> 一個結果
 ```
 
-`Server.start(ctx)` 唔等於 readiness。要睇 admission，用 `endpoint(ctx)` 或 `afterStart` hook。Core 亦唔保證 sibling Server 會按反向次序停止；如果次序重要，就將相關資源組合入同一個 `Server` 或明確 hook。
+`Server.start(ctx)` 或 `afterStart` 本身唔代表 readiness。要喺 hook 入面等 `endpoint(ctx)` 或資源本身嘅接納訊號，再宣布就緒。Core 會並行停止 sibling Server；需要嚴格次序嘅資源應放喺同一個 owner。

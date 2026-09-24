@@ -24,7 +24,7 @@ function stopWithoutReplacingWinner(stop: StopFunc): boolean {
 }
 
 /** Waits for an operation while allowing only the caller Context to abandon its own wait. */
-export function waitForContext<T>(ctx: Context, operation: PromiseLike<T>): Promise<T> {
+export function waitForContext<T>(ctx: Context, operation: Promise<T>): Promise<T> {
   const operationPromise = Promise.resolve(operation)
   return new Promise<T>((resolve, reject) => {
     let initialError: Error | null

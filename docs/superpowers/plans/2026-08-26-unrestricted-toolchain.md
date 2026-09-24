@@ -1,5 +1,8 @@
 # go-like Unrestricted Toolchain Implementation Plan
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove runtime and toolchain version eligibility gates while retaining tool availability checks, observed-environment evidence, reproducible dependencies, and fixed test fixtures.

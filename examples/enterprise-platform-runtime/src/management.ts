@@ -1,13 +1,12 @@
-import type { Client } from "@go-like/client"
 import { contextHandler, type Handler } from "@go-like/web"
 
-import { echoEndpointName, echoServiceName } from "./echo"
+import type { EchoClient } from "./echo"
 
 /** Creates the management-plane Handler for health, metrics, and one internal service call. */
 export function newManagementHandler(
   health: Handler,
   metrics: Handler,
-  client: Client,
+  client: EchoClient,
   onCallError: (error: unknown) => void = () => {}
 ): Handler {
   if (typeof onCallError !== "function") throw new TypeError("onCallError must be a function")
@@ -17,12 +16,7 @@ export function newManagementHandler(
     if (path === "/metrics") return await metrics(request)
     if (path !== "/call") return await health(request)
     try {
-      const response = await client.call(ctx, {
-        service: echoServiceName,
-        endpoint: echoEndpointName,
-        message: Object.freeze({ header: Object.freeze({}), body: new Uint8Array() })
-      })
-      return Response.json({ response: new TextDecoder().decode(response.body) })
+      return Response.json({ response: await client.ping(ctx) })
     } catch (error) {
       onCallError(error)
       return Response.json({ code: "internal_call_failed" }, { status: 503 })

@@ -1,7 +1,7 @@
 export type E2eScope = "suites" | "providers" | "runtimes" | "examples" | "published"
 export type E2eScopeSelection = E2eScope | "all"
 export type SuiteTag = "registered" | "provider" | "runtime" | "example" | "published"
-export type RequiredTool = "bun" | "node" | "deno" | "typescript" | "docker"
+export type RequiredTool = "bun" | "node" | "deno" | "typescript" | "openssl" | "docker"
 export type DockerOwnership = "none" | "suite" | "children-with-invocation-backstop"
 
 export interface SuiteDefinition {
@@ -113,13 +113,9 @@ function runtime(id: string, cwd: string, requiredTools: readonly RequiredTool[]
 }
 
 const Definitions: readonly SuiteDefinition[] = Object.freeze([
-  suite(
-    "runner-process",
-    ".",
-    ["bun", "test", "--isolate", "--no-orphans", "e2e/runner-process.test.ts"],
-    30_000,
-    ["bun"]
-  ),
+  suite("runner-process", ".", ["bun", "test", "--isolate", "e2e/runner-process.test.ts"], 30_000, [
+    "bun"
+  ]),
   suite("store-file-process", ".", ["bun", "e2e/scripts/store-file-process.ts"], 60_000, ["bun"]),
   compatibilitySuite(
     "vanilla-node",
@@ -217,6 +213,7 @@ const Definitions: readonly SuiteDefinition[] = Object.freeze([
   runtime("runtime-context", "packages/context", ["bun", "node", "deno"]),
   runtime("runtime-core", "packages/core", ["bun", "node", "deno"]),
   runtime("runtime-croner", "packages/croner", ["bun", "node", "deno"]),
+  runtime("runtime-grpc-buf", "packages/transport/grpc-buf", ["bun", "node", "deno"]),
   runtime("runtime-health", "packages/health", ["bun", "node", "deno"]),
   runtime("runtime-metadata", "packages/metadata", ["bun", "node", "deno"]),
   runtime("runtime-otel", "packages/otel", ["bun", "node"]),
@@ -254,7 +251,7 @@ const Definitions: readonly SuiteDefinition[] = Object.freeze([
     cwd: ".",
     command: ["bun", "e2e/published.ts"],
     timeoutMs: PublishedTimeoutMs,
-    requiredTools: ["bun", "node", "deno", "typescript"],
+    requiredTools: ["bun", "node", "deno", "typescript", "openssl"],
     requiresDocker: false,
     dockerOwnership: "none"
   })

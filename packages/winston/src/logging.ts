@@ -131,7 +131,7 @@ function isResponsePromise(value: Response | Promise<Response>): value is Promis
 }
 
 /** Distinguishes an asynchronous broker handler without replacing synchronous completion. */
-function isPromiseLike(value: void | PromiseLike<void>): value is PromiseLike<void> {
+function isHandlerPromise(value: void | Promise<void>): value is Promise<void> {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) return false
   return "then" in value && typeof value.then === "function"
 }
@@ -364,7 +364,7 @@ export function logBroker<PublishOptions, PublishResult, SubscribeOptions, Nativ
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
       options?: SubscribeOptions
     ): Promise<Subscriber> {
       if (typeof handler !== "function") throw new TypeError("broker handler must be a function")
@@ -373,11 +373,11 @@ export function logBroker<PublishOptions, PublishResult, SubscribeOptions, Nativ
       function loggedHandler(
         eventContext: Context,
         event: BrokerEvent<NativeEvent>
-      ): void | PromiseLike<void> {
+      ): void | Promise<void> {
         const startedAt = performance.now()
         try {
           const result = handler(eventContext, event)
-          if (isPromiseLike(result)) {
+          if (isHandlerPromise(result)) {
             return Promise.resolve(result).then(
               () => {
                 writeCompletion(

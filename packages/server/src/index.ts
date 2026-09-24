@@ -8,6 +8,7 @@ import {
   endpoint as endpointContract,
   isServiceError,
   serviceError,
+  type AcceptHandler,
   type Endpoint,
   type ListenOption,
   type Listener,
@@ -35,13 +36,13 @@ const DefaultAddress = "127.0.0.1:0"
 const HTTPCarrierStatusHeader = "Go-Like-HTTP-Status"
 
 /** Handles one internal unary request. */
-export type Handler = (ctx: Context, request: Message) => Message | PromiseLike<Message>
+export type Handler = (ctx: Context, request: Message) => Message | Promise<Message>
 
 /** Handles one typed internal unary request. */
 export type TypedHandler<Request extends Struct, Response extends Struct> = (
   ctx: Context,
   request: Infer<Request>
-) => Infer<Response> | PromiseLike<Infer<Response>>
+) => Infer<Response> | Promise<Infer<Response>>
 
 /** Wraps one internal unary handler. */
 export type Middleware = (next: Handler) => Handler
@@ -60,7 +61,6 @@ export interface ServerOptions {
   readonly address: string
   readonly advertise: string | null
   readonly transport: Transport | null
-  readonly handlers: ReadonlyMap<string, ReadonlyMap<string, Handler>>
   readonly middleware: readonly Middleware[]
   readonly operationMiddleware: ReadonlyMap<string, readonly Middleware[]>
   readonly listenOptions: readonly ListenOption[]
@@ -70,8 +70,21 @@ export interface ServerOptions {
 /** Applies one Go-style server option. */
 export type ServerOption = (options: ServerOptions) => ServerOptions
 
+/** Registers raw or typed handlers before the Server lifecycle begins. */
+export interface HandlerRegistrar {
+  registerHandler<Request extends Struct, Response extends Struct>(
+    endpoint: Endpoint<Request, Response>,
+    handler: TypedHandler<Request, Response>
+  ): void
+
+  registerHandler(service: string, endpoint: string, handler: Handler): void
+}
+
 /** Runs one internal transport listener under the application lifecycle. */
-export interface Server extends LifecycleServer, Endpointer {
+export interface Server extends LifecycleServer, Endpointer, HandlerRegistrar {
+  /** Returns the selected Transport protocol discriminator. */
+  protocol(): string
+
   /** Returns the actual endpoint after the transport bind completes. */
   endpoint(ctx: Context): Promise<string>
 
@@ -254,15 +267,6 @@ function snapshotHttpRoutes(value: unknown): readonly HTTPRoute[] {
 
 /** Returns a defensive immutable server option snapshot. */
 function snapshotOptions(value: ServerOptions): ServerOptions {
-  const handlers = new Map<string, ReadonlyMap<string, Handler>>()
-  for (const [service, endpoints] of value.handlers) {
-    const serviceName = routeToken(service, "service")
-    const endpointHandlers = new Map<string, Handler>()
-    for (const [endpoint, handle] of endpoints) {
-      endpointHandlers.set(routeToken(endpoint, "endpoint"), handlerValue(handle))
-    }
-    handlers.set(serviceName, endpointHandlers)
-  }
   const middlewareValues: Middleware[] = []
   for (const wrapper of value.middleware) middlewareValues.push(middlewareValue(wrapper))
   const operationMiddleware = new Map<string, readonly Middleware[]>()
@@ -280,7 +284,6 @@ function snapshotOptions(value: ServerOptions): ServerOptions {
     address: text(value.address, "address"),
     advertise: value.advertise === null ? null : advertiseValue(value.advertise),
     transport: transportValue(value.transport),
-    handlers,
     middleware: Object.freeze(middlewareValues),
     operationMiddleware,
     listenOptions: Object.freeze(listenValues),
@@ -294,7 +297,6 @@ function defaultOptions(): ServerOptions {
     address: DefaultAddress,
     advertise: null,
     transport: null,
-    handlers: new Map(),
     middleware: Object.freeze([]),
     operationMiddleware: new Map(),
     listenOptions: Object.freeze([]),
@@ -323,7 +325,6 @@ export function transport(value: Transport): ServerOption {
       address: options.address,
       advertise: options.advertise,
       transport: selected,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
@@ -342,7 +343,6 @@ export function address(value: string): ServerOption {
       address: selected,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
@@ -365,7 +365,6 @@ export function advertise(value: string): ServerOption {
       address: options.address,
       advertise: selected,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
@@ -431,66 +430,6 @@ function typedHandler<Request extends Struct, Response extends Struct>(
   return handle
 }
 
-/** Registers one typed endpoint contract. */
-export function handler<Request extends Struct, Response extends Struct>(
-  contract: Endpoint<Request, Response>,
-  value: TypedHandler<Request, Response>
-): ServerOption
-
-/** Registers one raw service endpoint. */
-export function handler(service: string, endpoint: string, value: Handler): ServerOption
-
-/** Registers one typed contract or raw service endpoint. */
-export function handler<Request extends Struct, Response extends Struct>(
-  serviceOrContract: string | Endpoint<Request, Response>,
-  endpointOrHandler: string | TypedHandler<Request, Response>,
-  value?: Handler
-): ServerOption {
-  let serviceName: string
-  let endpointName: string
-  let selected: Handler
-  if (typeof serviceOrContract === "string") {
-    serviceName = routeToken(serviceOrContract, "service")
-    endpointName = routeToken(endpointOrHandler, "endpoint")
-    if (typeof value !== "function") throw new TypeError("server handler must be a function")
-    selected = handlerValue(value)
-  } else {
-    if (typeof endpointOrHandler !== "function") {
-      throw new TypeError("server typed handler must be a function")
-    }
-    const contract = endpointContract(
-      serviceOrContract.service,
-      serviceOrContract.endpoint,
-      serviceOrContract.request,
-      serviceOrContract.response
-    )
-    serviceName = contract.service
-    endpointName = contract.endpoint
-    selected = typedHandler(contract, endpointOrHandler)
-  }
-  /** Adds the validated service endpoint handler. */
-  function applyHandler(options: ServerOptions): ServerOptions {
-    const endpoints = new Map(options.handlers.get(serviceName))
-    if (endpoints.has(endpointName)) {
-      throw new TypeError(`server handler is duplicated: ${serviceName}/${endpointName}`)
-    }
-    endpoints.set(endpointName, selected)
-    const handlers = new Map(options.handlers)
-    handlers.set(serviceName, endpoints)
-    return snapshotOptions({
-      address: options.address,
-      advertise: options.advertise,
-      transport: options.transport,
-      handlers,
-      middleware: options.middleware,
-      operationMiddleware: options.operationMiddleware,
-      listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
-    })
-  }
-  return applyHandler
-}
-
 /** Appends global unary middleware in declaration order. */
 export function middleware(
   ...values: readonly Middleware[] /* go-like-typed-rest: preserves ordered middleware. */
@@ -503,7 +442,6 @@ export function middleware(
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: Object.freeze(options.middleware.concat(selected)),
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
@@ -560,7 +498,6 @@ export function use(
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware,
       listenOptions: options.listenOptions,
@@ -585,7 +522,6 @@ export function listenOption(
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: Object.freeze(options.listenOptions.concat(selected)),
@@ -618,7 +554,6 @@ export function httpRoute(
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
@@ -861,7 +796,11 @@ export function newServer(
     options = snapshotOptions(option(options))
   }
   const selectedTransport = requiredTransport(options.transport)
-  if (options.handlers.size === 0) throw new TypeError("server requires at least one handler")
+  const registrations = new Map<string, Map<string, Handler>>()
+  let sealed = false
+  let sealedDispatcher: AcceptHandler | null = null
+  let sealFailed = false
+  let sealFailure: unknown
 
   let listener: Listener | null = null
   let binding: Promise<Listener> | null = null
@@ -871,6 +810,94 @@ export function newServer(
   let actualAddress = options.address
   let started = false
   let stopping = false
+
+  /** Registers one typed endpoint contract. */
+  function registerHandler<Request extends Struct, Response extends Struct>(
+    contract: Endpoint<Request, Response>,
+    value: TypedHandler<Request, Response>
+  ): void
+
+  /** Registers one raw service endpoint. */
+  function registerHandler(service: string, endpoint: string, value: Handler): void
+
+  /** Validates and stores one typed or raw handler while registration remains open. */
+  function registerHandler<Request extends Struct, Response extends Struct>(
+    serviceOrContract: string | Endpoint<Request, Response>,
+    endpointOrHandler: string | TypedHandler<Request, Response>,
+    value?: Handler
+  ): void {
+    if (sealed) throw new TypeError("server registration is sealed")
+    let serviceName: string
+    let endpointName: string
+    let selected: Handler
+    if (typeof serviceOrContract === "string") {
+      serviceName = routeToken(serviceOrContract, "service")
+      endpointName = routeToken(endpointOrHandler, "endpoint")
+      if (typeof value !== "function") throw new TypeError("server handler must be a function")
+      selected = handlerValue(value)
+    } else {
+      if (typeof endpointOrHandler !== "function") {
+        throw new TypeError("server typed handler must be a function")
+      }
+      const contract = endpointContract(
+        serviceOrContract.service,
+        serviceOrContract.endpoint,
+        serviceOrContract.request,
+        serviceOrContract.response
+      )
+      serviceName = contract.service
+      endpointName = contract.endpoint
+      selected = typedHandler(contract, endpointOrHandler)
+    }
+    let endpoints = registrations.get(serviceName)
+    if (endpoints?.has(endpointName) === true) {
+      throw new TypeError(`server handler is duplicated: ${serviceName}/${endpointName}`)
+    }
+    if (endpoints === undefined) {
+      endpoints = new Map()
+      registrations.set(serviceName, endpoints)
+    }
+    endpoints.set(endpointName, selected)
+  }
+
+  /** Returns the selected Transport protocol discriminator. */
+  function protocol(): string {
+    const kind = typeof selectedTransport.kind === "function" ? selectedTransport.kind() : null
+    if (typeof kind !== "string" || kind.length === 0) {
+      throw new TypeError("server transport kind must be a non-empty string")
+    }
+    return kind
+  }
+
+  /** Validates registration and composes exactly one terminal dispatcher or failure. */
+  function seal(): AcceptHandler {
+    if (sealedDispatcher !== null) return sealedDispatcher
+    if (sealFailed) throw sealFailure
+    sealed = true
+    try {
+      if (registrations.size === 0) {
+        throw new TypeError("server requires at least one registered handler")
+      }
+      for (const route of options.httpRoutes) {
+        if (registrations.get(route.service)?.has(route.endpoint) !== true) {
+          throw new TypeError(
+            `server httpRoute target is not registered: ${route.service}/${route.endpoint}`
+          )
+        }
+      }
+      sealedDispatcher = dispatcher(
+        registrations,
+        options.middleware,
+        options.operationMiddleware,
+        options.httpRoutes
+      )
+      return sealedDispatcher
+    } catch (error) {
+      sealFailed = true
+      sealFailure = error
+      throw error
+    }
+  }
 
   /** Binds the transport once so endpoint discovery and start share the same listener. */
   async function bind(ctx: Context): Promise<Listener> {
@@ -898,12 +925,9 @@ export function newServer(
 
   /** Converts the actual listener address to one absolute transport endpoint. */
   function boundEndpoint(): URL {
+    const kind = protocol()
     const absolute = absoluteEndpoint(actualAddress)
     if (absolute !== null) return absolute
-    const kind = selectedTransport.kind?.()
-    if (typeof kind !== "string" || kind.length === 0) {
-      throw new TypeError("server transport kind is required for an authority address")
-    }
     const transportOptions = selectedTransport.options()
     const scheme =
       kind === "http" && (transportOptions.secure || transportOptions.tlsConfig !== null)
@@ -944,12 +968,14 @@ export function newServer(
 
   /** Binds once and resolves the actual service endpoint. */
   async function endpoint(ctx: Context): Promise<string> {
+    seal()
     await bind(ctx)
     return advertisedEndpoint()
   }
 
   /** Starts the listener and blocks until it terminates. */
   async function start(ctx: Context): Promise<void> {
+    const dispatch = seal()
     if (started) throw new Error("server may only be started once")
     started = true
     let accepted: Listener
@@ -968,15 +994,7 @@ export function newServer(
       return
     }
     try {
-      await accepted.accept(
-        ctx,
-        dispatcher(
-          options.handlers,
-          options.middleware,
-          options.operationMiddleware,
-          options.httpRoutes
-        )
-      )
+      await accepted.accept(ctx, dispatch)
     } finally {
       listener = null
     }
@@ -1013,6 +1031,8 @@ export function newServer(
   return Object.freeze({
     start,
     stop,
+    registerHandler,
+    protocol,
     endpoint,
     /** Returns the immutable construction snapshot. */
     options(): ServerOptions {

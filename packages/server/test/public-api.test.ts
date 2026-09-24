@@ -6,7 +6,6 @@ test("exports exactly the go-style internal server runtime surface", () => {
   expect(Object.keys(Server)).toEqual([
     "address",
     "advertise",
-    "handler",
     "httpRoute",
     "listenOption",
     "middleware",

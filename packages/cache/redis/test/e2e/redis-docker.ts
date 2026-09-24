@@ -261,7 +261,7 @@ async function runConformance(create: CacheFactory): Promise<number> {
     },
     async useCache(
       cache: Cache & Server,
-      run: (cache: Cache & Server) => PromiseLike<void>
+      run: (cache: Cache & Server) => Promise<void>
     ): Promise<void> {
       const startedCaches: StartedCache[] = []
       const active = await start(cache, startedCaches)

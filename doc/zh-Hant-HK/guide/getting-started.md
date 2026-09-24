@@ -3,7 +3,7 @@
 服務用到咩先裝咩。一個普通 HTTP 服務通常會有 `@go-like/context`、`@go-like/core`、`@go-like/web`，再揀一個可以匯出原生 Fetch Handler 嘅 Web 框架。內部服務呼叫需要 `@go-like/client`、`@go-like/transport` 同一個具體 transport provider，例如測試用嘅 `@go-like/transport-memory` 或網絡用嘅 `@go-like/transport-http`；註冊中心、設定來源同儲存後端全部由應用明確揀，唔會暗中塞入預設組合。
 
 > [!IMPORTANT]
-> 目前 repo checkout 透過 `workspace:*` 連結 manifest 版本為 `0.0.1` 嘅 `@go-like/*` 套件；呢個版本仲未發布到 npm。下面嘅 `bun add` 係發布後嘅用法。要驗證同執行目前源碼，請喺 repo 根目錄運行：
+> 呢個 checkout 使用版本 `0.0.1` 嘅 `workspace:*` 套件。Manifest 版本唔能夠證明 npm 可用；喺 workspace 外安裝之前，要獨立核實發布狀態。
 >
 > ```sh
 > bun install --frozen-lockfile

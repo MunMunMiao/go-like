@@ -508,7 +508,7 @@ describe("Pino Broker request logging", () => {
       async unsubscribe(): Promise<void> {}
     }
     let admitted:
-      | ((ctx: Context, event: BrokerEvent<Readonly<{ id: number }>>) => void | PromiseLike<void>)
+      | ((ctx: Context, event: BrokerEvent<Readonly<{ id: number }>>) => void | Promise<void>)
       | null = null
     let subscribeOptions: Readonly<{ queue: string }> | undefined
     const native: Broker<

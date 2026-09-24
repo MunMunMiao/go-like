@@ -1,7 +1,8 @@
 # go-like Struct Package Implementation Plan
 
-状态：已废弃。`@go-like/struct` 已在首发前删除；应用直接使用标准 Web API 与自己选择的 Standard Schema
-实现，`@go-like/event` 只保留最小实例级 `Codec<T>` 契约。下文仅作为历史实施记录。
+状态：历史计划，不能用作当前 API 说明。当前工作区已包含 `@go-like/struct`，其公共契约见
+[Struct README](../../../packages/struct/README.md)；早期删除该包的决策已被后续实现取代。
+`@go-like/event` 仍使用独立的实例级 `Codec<T>` 契约，下文保留原实施记录。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -65,7 +65,7 @@ function deferred<T>(): Deferred<T> {
   }
 }
 
-async function settlesWithin(operation: PromiseLike<unknown>, timeoutMs: number): Promise<boolean> {
+async function settlesWithin(operation: Promise<unknown>, timeoutMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | null = null
   const timeout = new Promise<boolean>((resolve) => {
     timer = setTimeout(() => resolve(false), timeoutMs)
@@ -87,7 +87,7 @@ type CapturedTestOutcome<T> =
   | Readonly<{ rejected: false; value: T }>
   | Readonly<{ rejected: true; value: unknown }>
 
-async function captureTestOutcome<T>(operation: PromiseLike<T>): Promise<CapturedTestOutcome<T>> {
+async function captureTestOutcome<T>(operation: Promise<T>): Promise<CapturedTestOutcome<T>> {
   try {
     return Object.freeze({ rejected: false, value: await operation })
   } catch (failure) {
@@ -100,7 +100,7 @@ function checkContext(ctx: Context): void {
   if (failure !== null) throw failure
 }
 
-function waitForContext<T>(ctx: Context, operation: PromiseLike<T>): Promise<T> {
+function waitForContext<T>(ctx: Context, operation: Promise<T>): Promise<T> {
   checkContext(ctx)
   const signal = ctx.done()
   if (signal === null) return Promise.resolve(operation)
@@ -484,7 +484,7 @@ function rejectAfterCancelOrRelease<T>(
 
 function rejectCanceledAfterAction<T>(
   ctx: Context,
-  action: () => void | PromiseLike<void>,
+  action: () => void | Promise<void>,
   release: Deferred<void>
 ): Promise<T> {
   const releaseFailure = new Error("started ownership mutation released")

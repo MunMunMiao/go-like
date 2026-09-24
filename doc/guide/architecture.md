@@ -213,12 +213,9 @@ A composition root should make ownership visible:
 
 ```ts
 const transport = newMemoryTransport()
-const policyServer = newServer(
-  serverTransport(transport),
-  address("memory://policy"),
-  handler(policyEndpoint, policyHandler)
-)
-const policyClient = newClient(withTransport(transport))
+const policyServer = newServer(serverTransport(transport), address("memory://policy"))
+policyServer.registerHandler(policyEndpoint, policyHandler)
+const policyClient = newClient(withTransport(transport), withAddress("memory://policy"))
 const webServer = newNodeServer(webHandler, port(3000))
 
 const app = newApp(

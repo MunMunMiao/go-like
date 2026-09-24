@@ -37,7 +37,7 @@ export interface Broker<PublishOptions, PublishResult, SubscribeOptions, NativeE
   subscribe(
     ctx: Context,
     topic: string,
-    handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+    handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
     options?: SubscribeOptions
   ): Promise<Subscriber>
 
@@ -80,12 +80,12 @@ export function newBrokerServer<Event, Options>(
     subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: Event) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: Event) => void | Promise<void>,
       options?: Options
     ): Promise<Subscriber>
   },
   topic: string,
-  handler: (ctx: Context, event: Event) => void | PromiseLike<void>,
+  handler: (ctx: Context, event: Event) => void | Promise<void>,
   options?: Options
 ): Server {
   if (broker === null || typeof broker !== "object") {

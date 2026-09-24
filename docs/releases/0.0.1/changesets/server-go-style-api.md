@@ -2,6 +2,9 @@
 "@go-like/server": minor
 ---
 
+历史 API 记录：构造期 `handler(...)` 后来已被启动前 `server.registerHandler(...)` 或
+`registerXHandler(server, handler)` 取代，当前用法见 [Server README](../../../../packages/server/README.md)。
+
 以 `newServer(transport(), address(), handler(service, endpoint, fn), middleware(), listenOption())`
 取代服务声明、Fetch 与自动注册复合
 DSL。实际绑定端点统一通过 Core `Endpointer.endpoint(ctx)` 读取，不再增加 Server 专属 `address()`。

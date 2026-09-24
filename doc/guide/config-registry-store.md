@@ -6,7 +6,7 @@ Configuration, service reachability, records, and acceleration all involve data,
 | -------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
 | Config   | What configuration snapshot should this process use?        | Immutable merged source snapshots, validation, reload, last-good value   | Process or deployment          |
 | Registry | Which service instances can be reached now?                 | Registration, complete discovery snapshots, watchers, filters, selectors | Ephemeral control plane        |
-| Store    | Which durable record exists at this key and revision?       | Read/write/delete/list, revision, CAS, TTL, cursor                       | Business or operational state  |
+| Store    | Which record exists at this key and revision?               | Read/write/delete/list, revision, CAS, TTL, cursor                       | Business or operational state  |
 | Cache    | Can this disposable value accelerate an authoritative path? | Context-first get/put/delete, optional TTL                               | Disposable and reconstructible |
 
 Do not replace one with another just because all four have a `get`-like operation. Their failure, consistency, and ownership promises are intentionally different.
@@ -119,11 +119,19 @@ The App registers after starting and preparing endpoints, then deregisters befor
 Filters and selectors are separate from Registry storage:
 
 ```ts
-import { newClient, withDiscovery, withFilter, withSelector, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withDiscovery,
+  withFilter,
+  withSelector,
+  withService,
+  withTransport
+} from "@go-like/client"
 import { filterLabel, filterVersion, newRoundRobinSelector } from "@go-like/registry"
 
 const client = newClient(
   withTransport(transport),
+  withService("pricing"),
   withDiscovery(discovery),
   withSelector(newRoundRobinSelector())
 )

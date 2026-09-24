@@ -9,7 +9,7 @@
 - **Адаптер жизненного цикла** — Server-wrapper вокруг нативного ресурса, созданного приложением.
 - **Доказательство** — вид опоры в репозитории: исходник/export, объявленные тесты или зафиксированный результат локальной команды. Это не превращает версию пакета в утверждение о публикации в npm или готовности к production.
 
-Текущий инвентарь исходников содержит 43 манифеста пакетов `@go-like/*`, не помеченных как `private`, и 23 публичных source subpath; все они имеют версию `0.0.1` в этой рабочей копии. 44 workspace `examples/*` — это приватные приложения, а не публичные пакеты.
+Текущий инвентарь исходников содержит 45 манифеста пакетов `@go-like/*`, не помеченных как `private`, и 25 публичных source subpath; все они имеют версию `0.0.1` в этой рабочей копии. 44 workspace `examples/*` — это приватные приложения, а не публичные пакеты.
 
 ## Выбор по задаче
 
@@ -39,17 +39,20 @@
 
 ## Web и внутренние вызовы
 
-| Пакет                          | Для чего использовать                                                      | Основной публичный API                                                                                                                                                                                       | За что не отвечает                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `@go-like/web`                 | Стандартный Web Handler и мост request Context                             | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                | Routes, WebSockets, SSE policy, listener, authentication                                   |
-| `@go-like/web/health`          | Маршруты health Handler                                                    | `createHealthHandler`                                                                                                                                                                                        | Регистрацию probes или mounting routes фреймворка                                          |
-| `@go-like/web/node`            | Node listener вокруг Fetch Handler                                         | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                   | TLS/HTTP2 внутреннего HTTP Transport; для этого используйте `@go-like/transport-http/node` |
-| `@go-like/client`              | Внутренние unary calls, discovery, selection, middleware, retries, pooling | `newClient`, `withTransport`, `withAddress`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Маршруты фреймворка, безопасность business replay, лимиты физических сокетов               |
-| `@go-like/server`              | Internal unary Message server и route dispatch                             | `newServer`, `transport`, `address`, `advertise`, `handler`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                                      | Внешние Fetch routes и protocol-specific business authorization                            |
-| `@go-like/transport`           | Transport SPI и граница Message                                            | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                     | Конкретный wire без выбранного provider; internal full-duplex promise отсутствует          |
-| `@go-like/transport-memory`    | Внутрипроцессный unary Transport                                           | `newMemoryTransport`                                                                                                                                                                                         | Межпроцессное поведение, persistence, network fallback, TLS                                |
-| `@go-like/transport-http`      | Внутренний HTTP Transport на базе Fetch                                    | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                            | Полный переносимый listener без внедрённого `HTTPHost`; native Node TLS controls           |
-| `@go-like/transport-http/node` | Нативный Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                           | Deno listener или автоматическую security policy                                           |
+| Пакет                                | Для чего использовать                                                      | Основной публичный API                                                                                                                                                                                                      | За что не отвечает                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `@go-like/web`                       | Стандартный Web Handler и мост request Context                             | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                               | Routes, WebSockets, SSE policy, listener, authentication                                   |
+| `@go-like/web/health`                | Маршруты health Handler                                                    | `createHealthHandler`                                                                                                                                                                                                       | Регистрацию probes или mounting routes фреймворка                                          |
+| `@go-like/web/node`                  | Node listener вокруг Fetch Handler                                         | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                                  | TLS/HTTP2 внутреннего HTTP Transport; для этого используйте `@go-like/transport-http/node` |
+| `@go-like/client`                    | Внутренние unary calls, discovery, selection, middleware, retries, pooling | `newClient`, `withTransport`, `withAddress`, `withService`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Маршруты фреймворка, безопасность business replay, лимиты физических сокетов               |
+| `@go-like/server`                    | Internal unary Message server и route dispatch                             | `newServer`, `transport`, `address`, `advertise`, `Server.registerHandler`, `httpRoute`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                         | Роутер фреймворка и авторизация приложения                                                 |
+| `@go-like/transport`                 | Transport SPI и граница Message                                            | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                                    | Конкретный wire без выбранного provider; internal full-duplex promise отсутствует          |
+| `@go-like/transport-memory`          | Внутрипроцессный unary Transport                                           | `newMemoryTransport`                                                                                                                                                                                                        | Межпроцессное поведение, persistence, network fallback, TLS                                |
+| `@go-like/transport-http`            | Внутренний HTTP Transport на базе Fetch                                    | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                                           | Полный переносимый listener без внедрённого `HTTPHost`; native Node TLS controls           |
+| `@go-like/transport-http/node`       | Нативный Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                                          | Deno listener или автоматическую security policy                                           |
+| `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                                   | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                                           | Код Context-first на основе Protobuf-ES                                                    |
+| `@go-like/transport-grpc-buf/native` | Стандартный gRPC: четыре вида вызовов через `/native`                      | `newClient`, `newServer`                                                                                                                                                                                                    | Discovery, Selector, TLS/mTLS                                                              |
+| `@go-like/protoc-gen-like`           | Генератор Node во время сборки                                             | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                                          | Protobuf-ES                                                                                |
 
 ## Пакеты Config
 
@@ -84,19 +87,19 @@ Registry описывает доступность, а не долговечны
 
 ## Пакеты Store и Cache
 
-| Пакет                      | Для чего использовать                  | Основная функция                                                                                                   | Граница                                                                                       |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `@go-like/store`           | Контракт record и options              | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`, `writeOptions`, `deleteOptions`, `listOptions` | Revisions, CAS, TTL, pagination; возможности зависят от провайдера                            |
-| `@go-like/store/provider`  | Helpers provider для write/delete/list | `writeOptions`, `deleteOptions`, `listOptions`, helpers snapshot и conflict                                        | Provider-facing; сам по себе не durable backend                                               |
-| `@go-like/store-memory`    | Локальные Store-тесты                  | `newMemoryStore`, `clock`                                                                                          | Нет durability после перезапуска и межпроцессного состояния                                   |
-| `@go-like/store-file`      | Локальный File Store                   | `newFileStore`                                                                                                     | Local state с одним владельцем; для Node host используйте `/node`                             |
-| `@go-like/store-file/node` | Node file capability                   | `newNodeFileStoreHost`                                                                                             | Явный Node subpath                                                                            |
-| `@go-like/store-consul`    | Consul KV Store                        | `newConsulStore`                                                                                                   | Consul sessions, сочетания TTL/CAS и uncertain mutation behavior                              |
-| `@go-like/store-etcd`      | etcd KV Store                          | `newEtcdStore`                                                                                                     | Gateway, lease, revision, compaction и uncertain mutation behavior                            |
-| `@go-like/store-vault`     | Vault KV v2 Store                      | `newVaultStore`                                                                                                    | Не обещает единообразную Store semantics TTL/CAS                                              |
-| `@go-like/cache`           | Контракт временных values/TTL          | `expiresIn`, `putOptions`                                                                                          | Нет CAS, revision, durability или authority                                                   |
-| `@go-like/cache-memory`    | Локальный process cache                | `newMemoryCache`, `clock`                                                                                          | Нет persistence; lazy expiry; подходит для тестов и локального ускорения                      |
-| `@go-like/cache-redis`     | Cache на базе Redis                    | `newRedisCache`                                                                                                    | Native Redis connection, обработка credentials в URL и runtime requirements остаются видимыми |
+| Пакет                      | Для чего использовать                  | Основная функция                                                            | Граница                                                                                       |
+| -------------------------- | -------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `@go-like/store`           | Контракт record и options              | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`          | Revisions, CAS, TTL, pagination; возможности зависят от провайдера                            |
+| `@go-like/store/provider`  | Helpers provider для write/delete/list | `writeOptions`, `deleteOptions`, `listOptions`, helpers snapshot и conflict | Provider-facing; сам по себе не durable backend                                               |
+| `@go-like/store-memory`    | Локальные Store-тесты                  | `newMemoryStore`, `clock`                                                   | Нет durability после перезапуска и межпроцессного состояния                                   |
+| `@go-like/store-file`      | Локальный File Store                   | `newFileStore`                                                              | Local state с одним владельцем; для Node host используйте `/node`                             |
+| `@go-like/store-file/node` | Node file capability                   | `newNodeFileStoreHost`                                                      | Явный Node subpath                                                                            |
+| `@go-like/store-consul`    | Consul KV Store                        | `newConsulStore`                                                            | Consul sessions, сочетания TTL/CAS и uncertain mutation behavior                              |
+| `@go-like/store-etcd`      | etcd KV Store                          | `newEtcdStore`                                                              | Gateway, lease, revision, compaction и uncertain mutation behavior                            |
+| `@go-like/store-vault`     | Vault KV v2 Store                      | `newVaultStore`                                                             | Не обещает единообразную Store semantics TTL/CAS                                              |
+| `@go-like/cache`           | Контракт временных values/TTL          | `expiresIn`                                                                 | Нет CAS, revision, durability или authority                                                   |
+| `@go-like/cache-memory`    | Локальный process cache                | `newMemoryCache`, `clock`                                                   | Нет persistence; lazy expiry; подходит для тестов и локального ускорения                      |
+| `@go-like/cache-redis`     | Cache на базе Redis                    | `newRedisCache`                                                             | Native Redis connection, обработка credentials в URL и runtime requirements остаются видимыми |
 
 ## Пакеты Broker, событий и рабочих процессов
 
@@ -125,35 +128,37 @@ Registry описывает доступность, а не долговечны
 
 ## Полный инвентарь публичных source subpath
 
-Ниже перечислены 23 явных source subpath, объявленных текущими package manifest. Сгенерированные пакеты могут добавить export `./package.json` только с metadata; это не дополнительный пакет и не source API.
+Ниже перечислены 25 явных source subpath, объявленных текущими package manifest. Сгенерированные пакеты могут добавить export `./package.json` только с metadata; это не дополнительный пакет и не source API.
 
-|   # | Subpath                          | Основные exports                                           | Для кого предназначен            |
-| --: | -------------------------------- | ---------------------------------------------------------- | -------------------------------- |
-|   1 | `@go-like/broker/provider`       | `registerSubscriberTerminal`, `subscriberTerminal`         | Авторы провайдеров               |
-|   2 | `@go-like/cache/provider`        | `putOptions`                                               | Авторы провайдеров               |
-|   3 | `@go-like/config/env`            | `envSource`                                                | Авторы приложений                |
-|   4 | `@go-like/config/file`           | `fileSource`, `jsonFileDecoder`                            | Авторы приложений                |
-|   5 | `@go-like/config/node`           | `newNodeFileCapability`                                    | Авторы Node runtime              |
-|   6 | `@go-like/config/yaml`           | `decodeYaml`                                               | Авторы приложений                |
-|   7 | `@go-like/core/lifecycle`        | `waitForContext`                                           | Авторы lifecycle/provider        |
-|   8 | `@go-like/core/node`             | `signal`                                                   | Интеграция процесса Node/Bun     |
-|   9 | `@go-like/nats/broker`           | `newNatsCoreBroker`                                        | Приложения NATS Core             |
-|  10 | `@go-like/nats/jetstream`        | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | Приложения JetStream             |
-|  11 | `@go-like/nats/jetstream/broker` | `newNatsJetStreamBroker`                                   | Приложения JetStream Broker      |
-|  12 | `@go-like/registry/provider`     | provider options и snapshot helpers                        | Авторы провайдеров               |
-|  13 | `@go-like/registry-mdns/node`    | `newNodeMDNSHost`                                          | Приложения mDNS Node             |
-|  14 | `@go-like/store/provider`        | write/delete/list options и snapshots                      | Авторы провайдеров               |
-|  15 | `@go-like/store-file/node`       | `newNodeFileStoreHost`                                     | Приложения File Store Node       |
-|  16 | `@go-like/struct/codec`          | `encodeJson`, `decodeJson`                                 | Авторы типизированных контрактов |
-|  17 | `@go-like/struct/runtime`        | introspection и parsing helpers                            | Авторы runtime/provider          |
-|  18 | `@go-like/transport/headers`     | константы `Go-Like-*` headers                              | Авторы Transport-провайдеров     |
-|  19 | `@go-like/transport/json`        | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | Авторы typed/raw Transport       |
-|  20 | `@go-like/transport/provider`    | Message, metadata, ServiceError codecs и errors            | Авторы провайдеров               |
-|  21 | `@go-like/transport-http/node`   | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | Приложения HTTP Node             |
-|  22 | `@go-like/web/health`            | `createHealthHandler`                                      | Web-приложения                   |
-|  23 | `@go-like/web/node`              | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | Приложения Web host Node         |
+|   # | Subpath                              | Основные exports                                           | Для кого предназначен            |
+| --: | ------------------------------------ | ---------------------------------------------------------- | -------------------------------- |
+|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`         | Авторы провайдеров               |
+|   2 | `@go-like/cache/provider`            | `putOptions`                                               | Авторы провайдеров               |
+|   3 | `@go-like/config/env`                | `envSource`                                                | Авторы приложений                |
+|   4 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                            | Авторы приложений                |
+|   5 | `@go-like/config/node`               | `newNodeFileCapability`                                    | Авторы Node runtime              |
+|   6 | `@go-like/config/yaml`               | `decodeYaml`                                               | Авторы приложений                |
+|   7 | `@go-like/core/lifecycle`            | `waitForContext`                                           | Авторы lifecycle/provider        |
+|   8 | `@go-like/core/node`                 | `signal`                                                   | Интеграция процесса Node/Bun     |
+|   9 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                        | Приложения NATS Core             |
+|  10 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | Приложения JetStream             |
+|  11 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                   | Приложения JetStream Broker      |
+|  12 | `@go-like/registry/provider`         | provider options и snapshot helpers                        | Авторы провайдеров               |
+|  13 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                          | Приложения mDNS Node             |
+|  14 | `@go-like/store/provider`            | write/delete/list options и snapshots                      | Авторы провайдеров               |
+|  15 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                     | Приложения File Store Node       |
+|  16 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                 | Авторы типизированных контрактов |
+|  17 | `@go-like/struct/runtime`            | introspection и parsing helpers                            | Авторы runtime/provider          |
+|  18 | `@go-like/transport/headers`         | константы `Go-Like-*` headers                              | Авторы Transport-провайдеров     |
+|  19 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | Авторы typed/raw Transport       |
+|  20 | `@go-like/transport/provider`        | Message, metadata, ServiceError codecs и errors            | Авторы провайдеров               |
+|  21 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | Приложения HTTP Node             |
+|  22 | `@go-like/web/health`                | `createHealthHandler`                                      | Web-приложения                   |
+|  23 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | Приложения Web host Node         |
+|  24 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                | Авторы приложений                |
+|  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                   | Авторы приложений                |
 
-В текущей TypeScript-конфигурации есть устаревшие path mappings для `@go-like/otel/testing` и `@go-like/web/node/testing`, но это не текущие exports package manifest. Не документируйте их как публичные entrypoint, пока репозиторий не согласует эти mappings.
+`@go-like/otel/testing` и `@go-like/web/node/testing` не являются path mappings TypeScript или текущими exports package manifest. Не документируйте их как публичные entrypoint.
 
 ## Матрица выбора runtime
 
@@ -171,9 +176,9 @@ Registry описывает доступность, а не долговечны
 
 - Используйте `contextHandler` на Web-границе, когда нужен Context, а не собственный request bag фреймворка.
 - Используйте `newApp` и `server(...)`, когда один процесс принимает более одного ресурса или нужно явно обозначить владение signal и shutdown.
-- Используйте типизированные `endpoint(...)` и `handler(contract, fn)`, когда обе стороны должны совместно использовать runtime Struct validation. Используйте raw `handler(service, endpoint, fn)`, когда приложение владеет другим byte contract.
-- Сначала используйте `withAddress(...)`, а затем Discovery. Так проще тестировать, и identity назначения остаётся явной.
-- Используйте `withDiscovery(...)`, `withSelector(...)`, `withFilter(...)` и `withBlock()` только тогда, когда сервису действительно нужно добавляемое ими поведение control plane.
+- Используйте типизированный `server.registerHandler(endpoint, handler)`, когда обе стороны должны совместно использовать runtime Struct validation. Используйте raw `server.registerHandler(service, endpoint, handler)`, когда приложение владеет другим byte contract.
+- Для прямой маршрутизации задавайте `withAddress(...addresses)` при создании клиента. Для Discovery используйте вместе `withService(...)` и `withDiscovery(...)`; не объединяйте прямые адреса с Discovery. Оба источника используют один Selector.
+- Используйте `withSelector(...)`, `withFilter(...)` и `withBlock()` только тогда, когда сервису действительно нужно добавляемое ими поведение control plane.
 - Используйте `withRetry(...)` только после того, как записаны authorization повтора, максимальное общее число попыток, predicate ошибки и бизнес-идемпотентность.
 - Используйте `newMemoryStore` для детерминированных тестов, а не для заявления о durability.
 - Используйте `newMemoryCache` для временного ускорения, а не как источник истины для записей о приёме или платежах.
@@ -182,4 +187,8 @@ Registry описывает доступность, а не долговечны
 
 ## Явные исключения
 
-Ни один пакет из текущего публичного инвентаря не следует описывать как владеющий gRPC, Protobuf, генерацией кода IDL, сгенерированными RPC-клиентами, внутренними full-duplex streams, Event Store/history/replay, универсальной authentication/authorization, ORM-поведением, глобальным service locator или cluster orchestration. Провайдер или приложение могут использовать отдельную библиотеку для одной из этих задач, но это будет за пределами текущего контракта go-like.
+`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от unary Transport SPI.
+
+Это не включает стандартный gRPC в браузере, request-streaming/bidi через Fetch, официальные health/reflection, универсальную аутентификацию, Event Store/replay, ORM или оркестрацию кластера.
+
+[Ограничения отмены и завершения](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

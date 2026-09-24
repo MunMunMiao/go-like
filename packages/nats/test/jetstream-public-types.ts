@@ -14,6 +14,12 @@ import {
 declare const messages: ConsumerMessages
 
 const factory: NatsJetStreamMessagesFactory = async () => messages
+const synchronousFactory: NatsJetStreamMessagesFactory = () => messages
+const nativePromise = Promise.resolve(messages)
+const thenOnly: Pick<Promise<ConsumerMessages>, "then"> = {
+  // oxlint-disable-next-line unicorn/no-thenable -- The type fixture must isolate Promise.then.
+  then: nativePromise.then.bind(nativePromise)
+}
 const directSource: NatsJetStreamMessagesSource = messages
 const factorySource: NatsJetStreamMessagesSource = factory
 const directServer: Server = newNatsJetStreamServer(directSource)
@@ -34,6 +40,11 @@ void stopping
 void alreadyStarted
 void unexpectedExit
 void closeTimeout
+void synchronousFactory
+
+// @ts-expect-error JetStream factories reject then-only objects that are not native Promises.
+const thenOnlyFactory: NatsJetStreamMessagesFactory = () => thenOnly
+void thenOnlyFactory
 
 // @ts-expect-error Lifecycle-only factories do not receive a go-like Context.
 const contextFactory: NatsJetStreamMessagesFactory = (_ctx) => messages

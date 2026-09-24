@@ -34,7 +34,7 @@ export interface EventBroker<
   subscribe(
     ctx: Context,
     topic: string,
-    handler: (ctx: Context, event: EventMessage<T, Native>) => void | PromiseLike<void>,
+    handler: (ctx: Context, event: EventMessage<T, Native>) => void | Promise<void>,
     options?: SubscribeOptions
   ): Promise<Subscriber>
 }
@@ -147,12 +147,12 @@ export function eventBroker<T, PublishOptions, PublishResult, SubscribeOptions, 
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: EventMessage<T, Native>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: EventMessage<T, Native>) => void | Promise<void>,
       options?: SubscribeOptions
     ): Promise<Subscriber> {
       if (typeof handler !== "function") throw new TypeError("event handler must be callable")
       /** Preserves Context and native identity while delaying codec work until decode(). */
-      function receive(deliveryCtx: Context, event: BrokerEvent<Native>): void | PromiseLike<void> {
+      function receive(deliveryCtx: Context, event: BrokerEvent<Native>): void | Promise<void> {
         return handler(deliveryCtx, decodedMessage(capturedCodec, event))
       }
       return options === undefined

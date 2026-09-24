@@ -1,7 +1,7 @@
 import process from "node:process"
 
 import { newRedisCache } from "@go-like/cache-redis"
-import { newClient, withDiscovery, withSelector, withTransport } from "@go-like/client"
+import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
 import {
   afterStart,
   id,
@@ -17,18 +17,13 @@ import { background } from "@go-like/context"
 import { signal } from "@go-like/core/node"
 import { newRoundRobinSelector } from "@go-like/registry"
 import { newConsulRegistry } from "@go-like/registry-consul"
-import {
-  address,
-  handler as serviceHandler,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import { newCatalogHandler } from "./http"
-import { newPricingHandler } from "./pricing"
+import { newPricingClient, newPricingHandler, registerPricingHandler } from "./pricing"
 
 const host = process.env.HOST ?? "127.0.0.1"
 const portNumber = Number(process.env.PORT ?? "3000")
@@ -56,14 +51,13 @@ const cache = newRedisCache({
 })
 const client = newClient(
   withDiscovery(registry),
+  withService("pricing"),
   withSelector(newRoundRobinSelector()),
   withTransport(newHTTPTransport())
 )
-const pricingServer = newServer(
-  serverTransport(newNodeHTTPTransport()),
-  address("127.0.0.1:0"),
-  serviceHandler("pricing", "Pricing.Get", newPricingHandler())
-)
+const pricing = newPricingClient(client)
+const pricingServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
+registerPricingHandler(pricingServer, newPricingHandler())
 const pricingApp = newApp(
   signal(),
   id(instanceId),
@@ -75,7 +69,7 @@ const pricingApp = newApp(
   server(pricingServer)
 )
 
-const handler = newCatalogHandler({ cache, client })
+const handler = newCatalogHandler({ cache, client: pricing })
 const origin = `http://${host}:${portNumber}`
 const catalogServer = newNodeServer(handler, hostname(host), port(portNumber))
 const catalogApp = newApp(

@@ -1,6 +1,6 @@
 # الحزم
 
-يحافظ go-like على أسماء حزم عامة مسطّحة، حتى عندما تُجمع مجلدات المصدر بحسب مجال القدرة. تضم المجموعة الأساسية `@go-like/context` و`@go-like/core` و`@go-like/client` و`@go-like/server` و`@go-like/transport` و`@go-like/metadata` و`@go-like/web` و`@go-like/config` و`@go-like/registry` و`@go-like/cache` و`@go-like/store` و`@go-like/broker` و`@go-like/event` و`@go-like/health` و`@go-like/resilience`.
+يحافظ go-like على أسماء حزم عامة مسطّحة، حتى عندما تُجمع مجلدات المصدر بحسب مجال القدرة. تضم المجموعة الأساسية `@go-like/context` و`@go-like/core` و`@go-like/client` و`@go-like/server` و`@go-like/transport` و`@go-like/metadata`, `@go-like/struct` و`@go-like/web` و`@go-like/config` و`@go-like/registry` و`@go-like/cache` و`@go-like/store` و`@go-like/broker` و`@go-like/event` و`@go-like/health` و`@go-like/resilience`.
 
 يمكن للاتصالات داخل العملية والاختبارات استخدام `@go-like/transport-memory`. يستخدم HTTP الداخلي `@go-like/transport-http`؛ ويوفّر المسار `@go-like/transport-http/node` تنفيذي Node للدالتين `dial` و`listen`، بما في ذلك TLS/mTLS من نوع PEM في جهة الخادم وHTTP/2 عبر ALPN. تسلّم أطر Web معالجات Fetch الأصلية مباشرة إلى `@go-like/web`، ولا تنشر go-like حزم جسر خاصة بكل إطار. وتشمل محوّلات دورة حياة بيئات التشغيل والمكتبات `@go-like/croner` و`@go-like/bullmq` و`@go-like/nats` و`@go-like/pino` و`@go-like/winston`. أما محوّلات قابلية الرصد فهي `@go-like/prometheus` و`@go-like/otel`.
 
@@ -9,3 +9,7 @@
 مزود Kubernetes للإعداد هو `@go-like/config-kubernetes`، ومزودا Broker هما `@go-like/broker-memory` و`@go-like/broker-rabbitmq`.
 
 استورد أصغر حزمة تملك العقد الذي تحتاج إليه. توجد مضيفات بيئة التشغيل، مثل listeners الخاصة بـ Node، في مسارات runtime واضحة. لا يستخدم أي اسم حزمة مجلداً عاماً باسم `adapters`، وتبدأ أسماء headers العامة بالبادئة `Go-Like-`.
+
+يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
+
+[قيود الإلغاء والإيقاف](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

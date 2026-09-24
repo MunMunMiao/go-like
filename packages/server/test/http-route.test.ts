@@ -13,11 +13,11 @@ import type {
 import { decodeServiceError } from "@go-like/transport/provider"
 
 import {
-  handler,
   httpRoute,
   newServer,
   transport,
   type Handler,
+  type Server,
   type ServerOption
 } from "../src/index"
 
@@ -144,13 +144,18 @@ function fixtureTransport(listener: Listener): Transport {
 }
 
 /** Dispatches one request through a real server accept loop. */
-async function dispatch(request: Message, ...options: readonly ServerOption[]): Promise<Message> {
+async function dispatch(
+  request: Message,
+  register: (server: Server) => void,
+  ...options: readonly ServerOption[]
+): Promise<Message> {
   const sent: Message[] = []
   const accepting = Promise.withResolvers<void>()
   const server = newServer(
     transport(fixtureTransport(fixtureListener(sent, [request], accepting.resolve))),
     ...options
   )
+  register(server)
   const running = server.start(background())
   await accepting.promise
   await server.stop(background())
@@ -163,10 +168,10 @@ async function dispatch(request: Message, ...options: readonly ServerOption[]): 
 test("snapshots httpRoute entries including an omitted successStatus default of 200", () => {
   const server = newServer(
     transport(fixtureTransport(fixtureListener([], []))),
-    handler("machine-gateway", "command", commandHandler),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201),
     httpRoute("POST", "/v1/machine-status", "machine-gateway", "command")
   )
+  server.registerHandler("machine-gateway", "command", commandHandler)
   const routes = server.options().httpRoutes
   expect(routes).toEqual([
     Object.freeze({
@@ -190,7 +195,6 @@ test("rejects a duplicated httpRoute method and path at construction", () => {
   expect(() =>
     newServer(
       transport(fixtureTransport(fixtureListener([], []))),
-      handler("machine-gateway", "command", commandHandler),
       httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201),
       httpRoute("post", "/v1/machine-commands", "machine-gateway", "command", 200)
     )
@@ -211,21 +215,38 @@ test("rejects malformed httpRoute construction values", () => {
     "server httpRoute successStatus must be an HTTP status code"
   )
   expect(() =>
-    newServer(
-      transport(fixtureTransport(fixtureListener([], []))),
-      handler("machine-gateway", "command", commandHandler),
-      (options) => ({
-        address: options.address,
-        advertise: options.advertise,
-        transport: options.transport,
-        handlers: options.handlers,
-        middleware: options.middleware,
-        operationMiddleware: options.operationMiddleware,
-        listenOptions: options.listenOptions,
-        httpRoutes: [null as never]
-      })
-    )
+    newServer(transport(fixtureTransport(fixtureListener([], []))), (options) => ({
+      address: options.address,
+      advertise: options.advertise,
+      transport: options.transport,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      listenOptions: options.listenOptions,
+      httpRoutes: [null as never]
+    }))
   ).toThrow("server httpRoute must be an object")
+})
+
+test("rejects a missing httpRoute target before listen", async () => {
+  let listens = 0
+  const listener = fixtureListener([], [])
+  const base = fixtureTransport(listener)
+  const server = newServer(
+    transport({
+      ...base,
+      listen(ctx, address, ...options) {
+        listens += 1
+        return base.listen(ctx, address, ...options)
+      }
+    }),
+    httpRoute("POST", "/v1/orders", "orders", "get")
+  )
+  server.registerHandler("health", "check", commandHandler)
+
+  await expect(server.endpoint(background())).rejects.toThrow(
+    "server httpRoute target is not registered: orders/get"
+  )
+  expect(listens).toBe(0)
 })
 
 test("an unparseable Go-Like-Target is not a dest missing-header 500", async () => {
@@ -238,10 +259,11 @@ test("an unparseable Go-Like-Target is not a dest missing-header 500", async () 
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -260,10 +282,11 @@ test("POST /v1/machine-commands without Go-Like-Service reaches the registered h
       },
       Object.freeze({ command: "reboot" })
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
 
@@ -294,14 +317,16 @@ test("envelope POST with Go-Like-Service is not rewritten by a matching httpRout
       },
       Object.freeze({ command: "envelope" })
     ),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push("command")
-      return commandHandler(_ctx, request)
-    }),
-    handler("other-gateway", "other", (_ctx, request) => {
-      received.push("other")
-      return request
-    }),
+    (server) => {
+      server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+        received.push("command")
+        return commandHandler(_ctx, request)
+      })
+      server.registerHandler("other-gateway", "other", (_ctx, request) => {
+        received.push("other")
+        return request
+      })
+    },
     httpRoute("POST", "/v1/other", "other-gateway", "other", 201)
   )
 
@@ -318,9 +343,10 @@ test("httpRoute ServiceError uses HTTP carrier status not dest 200", async () =>
       },
       Object.freeze({ command: "reboot" })
     ),
-    handler("machine-gateway", "command", () => {
-      throw serviceError("invalid_argument", "invalid JSON", 400)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", () => {
+        throw serviceError("invalid_argument", "invalid JSON", 400)
+      }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
 
@@ -337,9 +363,10 @@ test("envelope ServiceError still decodes as unary carrier 200", async () => {
       },
       Object.freeze({ command: "reject" })
     ),
-    handler("machine-gateway", "command", () => {
-      throw serviceError("permission_denied", "machine command rejected", 403)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", () => {
+        throw serviceError("permission_denied", "machine command rejected", 403)
+      }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
 
@@ -359,10 +386,11 @@ test("POST with Go-Like-Method/Target and no matching httpRoute is HTTP 404 not 
       },
       Object.freeze({ command: "reboot" })
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -381,10 +409,11 @@ test("GET with a POST httpRoute on the same path is HTTP 405 not dest missing-he
       },
       Object.freeze({ command: "reboot" })
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
 
@@ -404,10 +433,11 @@ test("GET /healthz without Go-Like-Service is HTTP 200 not dest missing-header",
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -427,10 +457,11 @@ test("HEAD /healthz without Go-Like-Service is HTTP 200", async () => {
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -449,10 +480,11 @@ test("POST /healthz without a matching httpRoute is HTTP 404 not dest missing-he
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -472,10 +504,11 @@ test("GET /healthz with an exact httpRoute uses that handler successStatus", asy
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      }),
     httpRoute("GET", "/healthz", "machine-gateway", "command", 503)
   )
 
@@ -501,10 +534,11 @@ test("HEAD /healthz with only a GET httpRoute is HTTP 405", async () => {
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    }),
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      }),
     httpRoute("GET", "/healthz", "machine-gateway", "command", 201)
   )
 
@@ -518,7 +552,6 @@ test("httpRoute GET /healthz is not treated as a duplicated default probe", () =
   expect(() =>
     newServer(
       transport(fixtureTransport(fixtureListener([], []))),
-      handler("machine-gateway", "command", commandHandler),
       httpRoute("GET", "/healthz", "machine-gateway", "command")
     )
   ).not.toThrow()
@@ -534,10 +567,11 @@ test("GET /livez without a matching httpRoute is HTTP 404 not dest missing-heade
       },
       Object.freeze({})
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(0)
@@ -557,10 +591,11 @@ test("envelope POST with Go-Like-Service still uses HTTP 200", async () => {
       },
       Object.freeze({ command: "envelope" })
     ),
-    handler("machine-gateway", "command", (ctx, request) => {
-      received.push(request)
-      return commandHandler(ctx, request)
-    })
+    (server) =>
+      server.registerHandler("machine-gateway", "command", (ctx, request) => {
+        received.push(request)
+        return commandHandler(ctx, request)
+      })
   )
 
   expect(received).toHaveLength(1)

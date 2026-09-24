@@ -1,6 +1,8 @@
+import type { CallOption, Client } from "@go-like/client"
 import { background, withCancel } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
+import { transferQuoteEndpoint } from "../src/contract"
 import { newBankTransferHandler } from "../src/http"
 import {
   buildTransferQuote,
@@ -8,7 +10,7 @@ import {
   newQuoteTransfer,
   validateTransferQuote
 } from "../src/service"
-import { newBankTransferMicroservice } from "../src/transport"
+import { newBankTransferClient, newBankTransferMicroservice } from "../src/transport"
 
 function quoteTransfer() {
   return newQuoteTransfer(newMemoryTransferNetworkDirectory(["DE", "FR", "NL"]))
@@ -78,6 +80,42 @@ describe("bank transfer gateway", () => {
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({ rail: "sepa" })
+  })
+
+  test("creates a typed bank-transfer client that preserves calls and errors", async () => {
+    const ctx = background()
+    const command = Object.freeze({
+      requestId: "client-1",
+      sourceCountry: "DE",
+      beneficiaryCountry: "FR",
+      currency: "EUR",
+      amountMinor: 50_000,
+      beneficiaryBic: null
+    })
+    const quote = Object.freeze({
+      requestId: "client-1",
+      rail: "sepa" as const,
+      feeMinor: 35,
+      settlementBusinessDays: 1
+    })
+    const option: CallOption = (options) => options
+    const failure = new Error("bank transfer unavailable")
+    let rejected = false
+    let observed: readonly unknown[] = Object.freeze([])
+    const client = Object.freeze({
+      async call(...args: readonly unknown[]): Promise<unknown> {
+        observed = args
+        if (rejected) throw failure
+        return quote
+      },
+      async close(): Promise<void> {}
+    }) as unknown as Client
+    const { quote: callQuote } = newBankTransferClient(client)
+
+    expect(await callQuote(ctx, command, option)).toBe(quote)
+    expect(observed).toEqual([ctx, transferQuoteEndpoint, command, option])
+    rejected = true
+    await expect(callQuote(ctx, command)).rejects.toBe(failure)
   })
 
   test("routes an internal unary call through Client, Server, and Memory Transport", async () => {

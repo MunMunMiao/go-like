@@ -58,7 +58,7 @@ export type ConfigSchema<T extends ConfigValue> = StandardSchemaV1<ConfigObject,
 export type ConfigResolver = (
   ctx: Context,
   value: ConfigObject
-) => ConfigObject | PromiseLike<ConfigObject>
+) => ConfigObject | Promise<ConfigObject>
 
 /** Reads and validates one Kratos-style configuration value. */
 export interface Value {
@@ -78,7 +78,7 @@ export type Observer = (key: string, value: Value) => void
 export type ConfigReloadErrorHandler = (error: Error, current: ConfigValue | null) => void
 
 /** Observes the first unrecoverable background failure after initial readiness. */
-export type ConfigTerminalErrorHandler = (error: Error) => void | PromiseLike<void>
+export type ConfigTerminalErrorHandler = (error: Error) => void | Promise<void>
 
 declare const configOutput: unique symbol
 

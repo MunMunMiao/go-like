@@ -45,7 +45,7 @@ async function writeSnapshot(directory: string, payload: SnapshotPayload): Promi
 
 /** Starts one real File Store and asserts its secret-safe corruption category. */
 async function expectCorruption(
-  write: (directory: string) => PromiseLike<void>,
+  write: (directory: string) => Promise<void>,
   reason: string
 ): Promise<void> {
   await withTempDirectory(async (directory) => {

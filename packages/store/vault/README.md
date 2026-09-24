@@ -47,8 +47,9 @@ Vault 的普通 `DELETE data/{path}` 会删除请求到达时的最新版本；�
 - 不同 Store 实例可共享 Vault；普通 write 是 Vault 的 last-write-wins。
 - key 上限为 1,024 UTF-8 bytes，value 上限为 1 MiB，单页 limit 上限为 1,000。
 - LIST 不是 Vault 服务端快照。首个分页调用会完成一次 LIST+GET 全量采集，再把不可变结果放入本进程；
-  后续 cursor 不再访问 Vault。cursor 一次性使用，默认 60 秒过期，最多同时保留 64 个快照；完成或过期后
-  清理。cursor 不能跨进程、跨重启或跨 Store 实例使用。
+  后续 cursor 不再访问 Vault。cursor 一次性使用，默认 60 秒过期，最多同时保留 64 个快照；消费 cursor 时
+  移除原 token，创建后续 cursor 时惰性清理过期快照，不启动过期 timer。过期 token 会被拒绝。
+  cursor 不能跨进程、跨重启或跨 Store 实例使用。
 - 本包只读取自己 version 1 envelope；root 下的外部格式会作为协议错误 fail closed。
 
 ## 所有权与凭据

@@ -74,7 +74,7 @@ const schema = {
       return typeof value === "number" ? { value } : { issues: [{ message: "number required" }] }
     }
   }
-}
+} satisfies Parameters<typeof port.scan>[1]
 
 const current = await port.scan(background(), schema)
 config.watch("http.port", (key, value) => {

@@ -1,3 +1,4 @@
+import type { CallOption, CallRequest, Client } from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
@@ -5,7 +6,7 @@ import { describe, expect, test } from "bun:test"
 import { newTelecomProvisioningHandler } from "../src/http"
 import { newMemoryProvisioningRepository } from "../src/repository"
 import { newProvisionTelecomService, type ProvisionServiceCommand } from "../src/service"
-import { newTelecomProvisioningMicroservice } from "../src/transport"
+import { newTelecomProvisioningClient, newTelecomProvisioningMicroservice } from "../src/transport"
 
 describe("telecom service provisioning", () => {
   test("maps only admitted plans to fixed integer monthly fees", async () => {
@@ -160,6 +161,49 @@ describe("telecom service provisioning", () => {
       code: "provisioning_rejected",
       message: "provisioning dependency failed"
     })
+  })
+
+  test("creates a typed telecom client that preserves codec, options and errors", async () => {
+    const ctx = background()
+    const command: ProvisionServiceCommand = Object.freeze({
+      orderId: "client-order",
+      subscriberId: "subscriber-1",
+      simId: "sim-1",
+      plan: "mobile-premium"
+    })
+    const result = Object.freeze({
+      ...command,
+      monthlyFeeMinor: 5_900,
+      status: "active" as const
+    })
+    const option: CallOption = (options) => options
+    const failure = new Error("telecom service unavailable")
+    let rejected = false
+    let observed: readonly unknown[] = Object.freeze([])
+    const client = Object.freeze({
+      async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
+        observed = [ctxValue, request, ...options]
+        if (rejected) throw failure
+        return {
+          header: Object.freeze({ "Content-Type": "application/json" }),
+          body: new TextEncoder().encode(JSON.stringify(result))
+        }
+      },
+      async close(): Promise<void> {}
+    }) as unknown as Client
+    const { provision } = newTelecomProvisioningClient(client)
+
+    expect(await provision(ctx, command, option)).toEqual(result)
+    expect(observed[0]).toBe(ctx)
+    expect(observed[1]).toMatchObject({
+      service: "telecom-provisioning",
+      endpoint: "Provisioning.Activate"
+    })
+    const request = observed[1] as CallRequest
+    expect(JSON.parse(new TextDecoder().decode(request.message.body))).toEqual(command)
+    expect(observed.slice(2)).toEqual([option])
+    rejected = true
+    await expect(provision(ctx, command)).rejects.toBe(failure)
   })
 
   test("rejects invalid internal messages and service responses", async () => {

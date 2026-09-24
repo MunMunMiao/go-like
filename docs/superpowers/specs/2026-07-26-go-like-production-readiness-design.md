@@ -1,5 +1,8 @@
 # go-like 生产就绪加固设计
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 日期：2026-07-26
 
 状态：已批准执行
@@ -91,7 +94,7 @@ Node signal adapter 第一次收到信号时设置退出码、同步移除自身
 新增：
 
 ```ts
-export type ConfigTerminalErrorHandler = (error: Error) => void | PromiseLike<void>
+export type ConfigTerminalErrorHandler = (error: Error) => void | Promise<void>
 export function onTerminalError(handler: ConfigTerminalErrorHandler): ConfigOption
 ```
 
@@ -109,7 +112,7 @@ export function onTerminalError(handler: ConfigTerminalErrorHandler): ConfigOpti
 export type RegistrationErrorHandler = (
   error: Error,
   service: ServiceInstance
-) => void | PromiseLike<void>
+) => void | Promise<void>
 ```
 
 Consul、etcd、ZooKeeper 与 mDNS 每个 registration generation 在永久 heartbeat/session/socket failure 后：先将该

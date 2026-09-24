@@ -16,7 +16,7 @@ interface PreparedMessage {
 interface MemorySubscription {
   readonly topic: string
   readonly context: Context
-  readonly handler: (ctx: Context, event: BrokerEvent<null>) => void | PromiseLike<void>
+  readonly handler: (ctx: Context, event: BrokerEvent<null>) => void | Promise<void>
   accepting: boolean
   tail: Promise<void>
   drain: Promise<void> | null
@@ -193,7 +193,7 @@ export function newMemoryBroker(): MemoryBroker {
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<null>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<null>) => void | Promise<void>,
       options?: void
     ): Promise<Subscriber> {
       checkContext(ctx)

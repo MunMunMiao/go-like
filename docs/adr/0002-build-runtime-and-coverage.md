@@ -14,7 +14,8 @@ workspace 源码解析、发布包构建和真实服务验证是不同职责，�
 1. Bun 是包管理器、workspace 调度器、脚本运行器和单元测试运行器；提交 `bun.lock`，安装使用
    `bun install --frozen-lockfile`。
 2. 每个发布包从自身目录调用 `tsdown`。根 `bun run build` 只使用 Bun workspace 顺序调度包级 `build`，不在
-   根目录重新实现依赖图或构建器。
+   根目录重新实现依赖图或构建器。`protoc-gen-like` 另外构建 Node 22+ 的 CJS executable；这是构建期工具，
+   不是可移植运行时入口。
 3. `tsdown.config.ts` 从当前包的 `exports` 派生入口，输出 neutral ESM 与 DTS；workspace、peer、optional
    dependency 和 `node:` builtin 保持 external，不生成 min bundle。
 4. 构建产物包含公开 JS/DTS 入口、可达 chunk、包级 `README.md`、`LICENSE` 和最小
@@ -24,15 +25,18 @@ workspace 源码解析、发布包构建和真实服务验证是不同职责，�
 6. TypeScript 负责声明与类型检查。portable 入口只使用 ECMAScript 与标准 Web API；Node listener、进程信号、
    UDP、文件监听或第三方原生 SDK 放在显式 runtime 子路径或 provider 包。
 7. 测试只分为单元测试和 E2E：
-   - `test:unit` 运行不依赖外部服务的确定性测试；`test:unit:coverage` 只是在相同单元测试上输出
-     Bun 的 line/function coverage，不构成第三类测试。
+   - `test:unit` 运行不依赖外部服务的确定性测试；`test:unit:coverage` 输出 Bun 的 line/function coverage，
+     不构成第三类测试。当前 `payments-ledger` 的 coverage 脚本还执行真实 PostgreSQL/NATS Docker 场景，
+     因此根 coverage 与 `verify` 需要 Docker，不能笼统称为纯单元测试。
    - 每个 package/example workspace 的 `test:unit:coverage` 都要求已加载生产模块达到 100% line/function；
      该门禁不把未加载的入口文件伪装成已覆盖，也不把跨进程 E2E 当作 Bun LCOV。
    - `test:e2e` 在本地验证真实 provider、跨运行时、可执行 example 与发布 tarball consumer；
      `test:e2e:soak` 是独立的长时间 E2E。example 的 `src/main.ts`、装配和进程生命周期由真实
      `start:prepared`/E2E 执行证明，纯类型和声明代码由 typecheck/type tests 证明。
-8. CI 运行安装、`fmt:check`、`typecheck`、`build`、unit tests 和 workspace coverage 门禁。Docker、跨运行时、
-   example 进程和 soak 是否纳入托管 CI 仍由具体 workflow 的环境能力决定；不把未执行的 E2E 宣称为 coverage。
+8. CI 安装后执行 `bun run verify`，顺序为 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、
+   `build`、`test:unit:coverage`（含 workspace coverage 门禁）。`test:protobuf` 包含 Buf lint、生成、生成代码
+   类型检查与 RPC 集成测试。该执行链包含上面的 payments Docker 场景，但不调用完整 provider、runtime、
+   example、published 或 soak E2E lanes；不把 CI green 宣称为完整 E2E 通过。
 9. `oxfmt` 是唯一格式化工具。`fmt`、`typecheck`、`build`、`audit` 和 `doc:build` 是工程命令，不命名为测试。
 10. 公共包当前均为 `0.0.1`。版本管理与 npm 发布不属于当前仓库自动化边界；首次公开发布需要独立设计、实现和验证。
 

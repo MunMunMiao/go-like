@@ -1,6 +1,6 @@
 # Paquets
 
-Même si les sources sont rangées par capacité, les paquets publics go-like restent plats. Le noyau comprend `@go-like/context`, `@go-like/core`, `@go-like/client`, `@go-like/server`, `@go-like/transport`, `@go-like/metadata`, `@go-like/web`, `@go-like/config`, `@go-like/registry`, `@go-like/cache`, `@go-like/store`, `@go-like/broker`, `@go-like/event`, `@go-like/health` et `@go-like/resilience`.
+Même si les sources sont rangées par capacité, les paquets publics go-like restent plats. Le noyau comprend `@go-like/context`, `@go-like/core`, `@go-like/client`, `@go-like/server`, `@go-like/transport`, `@go-like/metadata`, `@go-like/struct`, `@go-like/web`, `@go-like/config`, `@go-like/registry`, `@go-like/cache`, `@go-like/store`, `@go-like/broker`, `@go-like/event`, `@go-like/health` et `@go-like/resilience`.
 
 Les appels internes au processus et les tests peuvent utiliser `@go-like/transport-memory`. Le HTTP interne passe par `@go-like/transport-http` ; le sous-chemin `@go-like/transport-http/node` fournit les implémentations Node de `dial` et `listen`, avec TLS/mTLS PEM côté serveur et HTTP/2 négocié par ALPN. Les frameworks Web transmettent directement leurs handlers Fetch natifs à `@go-like/web` ; go-like ne publie pas de paquets de pont propres à chaque framework. Les adaptateurs de cycle de vie incluent `@go-like/croner`, `@go-like/bullmq`, `@go-like/nats`, `@go-like/pino`, `@go-like/winston`; l’observabilité utilise `@go-like/prometheus` et `@go-like/otel`.
 
@@ -9,3 +9,7 @@ Les registres mDNS, Consul, etcd, Kubernetes et ZooKeeper sortent dans des paque
 Les noms exacts des fournisseurs Registry sont `@go-like/registry-mdns`, `@go-like/registry-consul`, `@go-like/registry-etcd`, `@go-like/registry-kubernetes` et `@go-like/registry-zookeeper`. Les fournisseurs Config manquants dans la description précédente sont `@go-like/config-consul`, `@go-like/config-etcd` et `@go-like/config-kubernetes` ; les fournisseurs Broker sont `@go-like/broker-memory` et `@go-like/broker-rabbitmq`.
 
 Importez depuis le plus petit paquet propriétaire du contrat. Les hosts de runtime comme Node ont des entrées explicites. Aucun grand tiroir public `adapters` ; les headers du projet utilisent toujours le préfixe `Go-Like-`.
+
+`@go-like/protoc-gen-like` génère le code Protobuf RPC avec `Context` en premier argument, sur Protobuf-ES. `@go-like/transport-grpc-buf` fournit unary et server-streaming Connect/gRPC-Web via Fetch ; `/native` ajoute gRPC standard avec les quatre cardinalités, dont client-streaming et bidi. Ce chemin est indépendant du Transport SPI unaire.
+
+[Limites d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

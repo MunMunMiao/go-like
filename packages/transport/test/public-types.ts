@@ -62,6 +62,8 @@ import {
   type UnsupportedTransportCapabilityError
 } from "../src/provider"
 
+type ThenOnly<T> = Pick<Promise<T>, "then">
+
 declare const ctx: Context
 declare const message: Message
 declare const options: Options
@@ -91,6 +93,12 @@ declare const protocolError: TransportProtocolError
 declare const serviceFailure: ServiceError
 declare const serviceEnvelope: ServiceErrorEnvelope
 declare const serviceWireKind: ServiceErrorWireKind
+declare const thenOnlyVoid: ThenOnly<void>
+
+const synchronousAcceptHandler: AcceptHandler = () => {}
+const asynchronousAcceptHandler: AcceptHandler = async () => {}
+// @ts-expect-error AcceptHandler accepts only void or a native Promise.
+const thenOnlyAcceptHandler: AcceptHandler = () => thenOnlyVoid
 
 const Request = struct.object({ id: struct.string() })
 const Response = struct.object({ total: struct.number() })
@@ -215,5 +223,8 @@ void [
   clientInfo,
   serverInfo,
   chain,
-  Headers
+  Headers,
+  synchronousAcceptHandler,
+  asynchronousAcceptHandler,
+  thenOnlyAcceptHandler
 ]

@@ -1,61 +1,61 @@
 # @go-like/client
 
-`@go-like/client` 是 go-like 的内部服务调用组合包。它按服务名读取 Discovery 快照并选择端点，再通过 Transport
-完成 unary `send`/`recv` 交换。
+`@go-like/client` 是 go-like 的内部服务调用组合包。它从构造时的直连地址或 Discovery 快照选择端点，再通过
+Transport 完成 unary `send`/`recv` 交换。
 
 ## unary Client
 
+地址属于长生命周期 Client 的构造配置，不是一次调用的临时 option。直连一个地址：
+
 ```ts
-import {
-  circuitBreakerMiddleware,
-  middleware,
-  newClient,
-  poolSize,
-  poolTtl,
-  use,
-  withAddress,
-  withBlock,
-  withDiscovery,
-  withFilter,
-  withRetry,
-  withTransport
-} from "@go-like/client"
-import { background } from "@go-like/context"
-import { filterLabel, filterVersion } from "@go-like/registry"
-import { exponentialBackoff } from "@go-like/resilience"
+import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newOrderServiceClient } from "./order-service.js"
 
 const client = newClient(
-  withDiscovery(serviceDiscovery),
+  withTransport(newHTTPTransport()),
+  withAddress("https://orders-a.internal")
+)
+const orders = newOrderServiceClient(client)
+const order = await orders.getOrder(ctx, { id: "order-1" })
+
+await client.close(ctx)
+```
+
+直连多个地址时，同一地址快照进入 Registry `Selector`；默认 selector 是 round robin：
+
+```ts
+import { newClient, withAddress, withSelector, withTransport } from "@go-like/client"
+import { newRoundRobinSelector } from "@go-like/registry"
+
+const client = newClient(
   withTransport(serviceTransport),
-  poolSize(100),
-  poolTtl(60_000),
-  middleware(
-    circuitBreakerMiddleware({
-      failureThreshold: 3,
-      resetTimeoutMs: 1_000
-    })
-  )
+  withAddress("https://orders-a.internal", "https://orders-b.internal"),
+  withSelector(newRoundRobinSelector())
 )
-const response = await client.call(background(), {
-  service: "orders",
-  endpoint: "Create",
-  message: { header: {}, body: new Uint8Array([1, 2, 3]) }
-})
+const orders = newOrderServiceClient(client)
+```
 
-const directClient = newClient(withTransport(serviceTransport))
-const direct = await directClient.call(
-  background(),
-  {
-    service: "orders",
-    endpoint: "Get",
-    message: { header: {}, body: new Uint8Array() }
-  },
-  withAddress("https://orders.internal/")
+服务发现只把多个地址的来源换成 resident watcher；选择算法仍是同一个：
+
+```ts
+import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
+import { newRoundRobinSelector } from "@go-like/registry"
+
+const client = newClient(
+  withTransport(serviceTransport),
+  withService("orders-http"),
+  withDiscovery(serviceDiscovery),
+  withSelector(newRoundRobinSelector())
 )
-await directClient.close(background())
+const orders = newOrderServiceClient(client)
+```
 
+`withFilter(...)` 与显式授权的 `withRetry(...)` 仍是 call option；它们不能覆盖构造时的地址来源：
+
+```ts
 const retried = await client.call(
-  background(),
+  ctx,
   {
     service: "orders",
     endpoint: "Get",
@@ -69,8 +69,6 @@ const retried = await client.call(
     backoff: exponentialBackoff({ initialDelayMs: 20, maxDelayMs: 100 })
   })
 )
-
-await client.close(background())
 ```
 
 同一个 Client 也可直接调用共享的类型化 contract；原始 `CallRequest` API 保持可用：
@@ -90,7 +88,9 @@ const quote = await client.call(background(), quoteEndpoint, {
 一次接纳。watcher 先于首次读取建立；首次 `next()` 只作为 barrier，随后用 fresh `getService()` reconcile，
 避免旧的 watcher 初始快照覆盖刚读取的状态。此后的每个完整 replacement snapshot 都是权威状态，包括空数组；
 空快照会覆盖旧节点并使调用以 `NoAvailableEndpointError` fail closed。watcher 终止后保留最后一个快照，并在
-1 秒退避后重建。调用方必须在不再使用 Client 时执行 `client.close(ctx)`；它会关闭常驻 transport owner、停止全部
+1 秒退避后重建。重建 watcher 后立即通过 fresh `getService()` 更新快照（包括空数组），避免在首次 `next()`
+等待期间继续使用已移除的节点；首次 `next()` 仍作为 barrier，随后再次 reconcile。调用方必须在不再使用 Client
+时执行 `client.close(ctx)`；它会关闭常驻 transport owner、停止全部
 watcher，随后任何调用都稳定失败。直接地址 Client 不创建 watcher，但仍使用同一个 `close(ctx)` 生命周期。
 
 默认空 discovery 快照会立即 fail closed。需要等待服务首次就绪时，可在构造中加入 `withBlock()`：
@@ -98,6 +98,7 @@ watcher，随后任何调用都稳定失败。直接地址 Client 不创建 watc
 ```ts
 const waitingClient = newClient(
   withBlock(),
+  withService("orders-http"),
   withDiscovery(serviceDiscovery),
   withTransport(serviceTransport)
 )
@@ -118,11 +119,14 @@ Client，没有空闲 owner 才执行 `dial`。同一 owner 不会被并发调�
 禁用 idle reuse。`poolTtl(milliseconds)` 设置空闲时间；`poolTtl(0)` 只禁用时间过期，仍受 size
 约束。这两个值不是 Transport 并发上限，也不声明底层协议可多路复用。
 
-配置 Discovery 后，Client 会为自身创建独立的 round-robin Selector；`withSelector(...)` 只用于覆盖默认选择策略。
-只使用直接地址的 Client 构造时仅需提供 Transport。`withAddress` 使用一个 transport-opaque 地址并完全绕过
-Discovery 与 Selector；没有 `withAddress` 的调用才要求 Client 配置 Discovery。`withFilter` 按声明顺序应用
+Client 会为自身创建独立的 round-robin Selector；`withSelector(...)` 只用于覆盖默认选择策略。直接地址与
+Discovery 快照都进入这个 Selector；区别只是直接模式不创建 watcher。`withAddress(...)` 和
+`withService(...)` / `withDiscovery(...)` 是互斥的构造来源。`withFilter` 按声明顺序应用
 `@go-like/registry` 的 `filterVersion`、`filterLabel` 或用户自定义 Filter，空结果稳定抛出
 `NoAvailableEndpointError`。这是 go-micro Selector Filter 的直接 TypeScript 表达，不额外引入 Client 专属过滤 DSL。
+
+round-robin 不会探测健康状态或自动摘除不可达节点；成员变化由 Discovery 的完整替换快照提供。显式 retry 会重新
+选择地址，但不保证新地址可达，也不能把连接失败等同于服务端没有执行请求。幂等和重复副作用控制仍是业务契约。
 
 默认调用严格执行一次。只有 `withRetry` 同时声明 `authorization`、最大尝试次数和失败判定后才允许重放；backoff
 复用 `@go-like/resilience` 的 Context-aware 实现。每次 attempt 从最新 watcher 快照重新选择，但重放的是调用开始时
@@ -158,6 +162,7 @@ header 投影中。编码保留键顺序与多值顺序，拒绝业务请求覆�
 
 ```ts
 const client = newClient(
+  withService("orders-http"),
   withDiscovery(serviceDiscovery),
   withTransport(serviceTransport),
   middleware(
@@ -198,7 +203,7 @@ completion callback 是严格同步的 `void` 契约。若 TypeScript 的 `void`
 每个已选择的 attempt 都通过 `SelectionOutcome` 报告真实交换阶段：`bytesSent` 在 `send` fulfillment 后为
 `true`，`bytesReceived` 在 `recv` fulfillment 后为 `true`；只有 response 通过 Message snapshot 后才附带
 规范化、不可变且与 provider header 独立的 `replyMetadata`。dial、send、recv、wire 解码和 typed validation
-失败不会伪造尚未完成的阶段；直连调用不产生 selection feedback。
+失败不会伪造尚未完成的阶段；直连与 Discovery 选择都产生同一份 selection feedback。
 
 成功取得 response 后，selection feedback 必须成功，连接也必须成功回到唯一空闲槽或在槽已满时完成关闭，调用才算
 完整成功。若业务交换已完成但任一后置步骤失败，Client 使用原生 `AggregateError` 报告

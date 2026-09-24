@@ -539,7 +539,7 @@ export function newFileStore(host: FileStoreHost, directory: string): FileStore 
   }
 
   /** Queues one admitted operation behind every earlier operation. */
-  function operate<T>(ctx: Context, operation: string, run: () => T | PromiseLike<T>): Promise<T> {
+  function operate<T>(ctx: Context, operation: string, run: () => T | Promise<T>): Promise<T> {
     if (state !== "running") return Promise.reject(newFileStoreStateError(operation, state))
     const task = operationTail.then(async () => {
       checkContext(ctx)

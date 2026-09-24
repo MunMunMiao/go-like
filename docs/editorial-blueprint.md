@@ -1,6 +1,6 @@
 # go-like Editorial Blueprint
 
-Status: synthesis deliverable for the documentation rewrite
+Status: historical synthesis for the documentation rewrite; not a current implementation inventory
 
 Audience: documentation maintainers, reviewers, translators, and example authors
 
@@ -8,6 +8,14 @@ This is an internal editorial plan. It is not a product claim, a release note, o
 replacement for the public documentation. The English `doc/` tree remains the
 normative documentation source; localized trees follow it only after API and evidence
 wording is stable.
+
+Scope correction (2026-09-23): the inventories, open gaps, and exclusions below describe the
+original synthesis. The current checkout has 45 public packages and 25 public subpaths,
+including `@go-like/struct`, `@go-like/protoc-gen-like`, and `@go-like/transport-grpc-buf`.
+Its generated clients and native gRPC streams supersede this plan's original RPC exclusions.
+Use the [package reference](../doc/reference/packages.md),
+[claim ledger](../doc/reference/claims.md), and package READMEs for current APIs and evidence;
+do not treat the old publication checklist as an instruction to remove implemented features.
 
 ## Editorial contract
 
@@ -939,9 +947,8 @@ renamed internal go-like RPC streaming.
    source, tests, provider capability differences, and real-service lanes before
    finalizing that chapter.
 2. **Package count drift.** `docs/releases/0.0.1.md` says 42 while source manifests say 43. Decide whether Struct was intentionally added, then correct every package list.
-3. **Stale aliases.** `tsconfig.base.json` maps `@go-like/otel/testing` and
-   `@go-like/web/node/testing` to missing files and neither is a current package export.
-   Do not document them; reconcile the aliases before publishing an entry-point catalog.
+3. **Testing entrypoints.** `@go-like/otel/testing` and `@go-like/web/node/testing` are
+   neither TypeScript path mappings nor package exports. Do not document them as public entrypoints.
 4. **Go comparison baseline conflict.** Resolve go-micro `3c39d17f...` versus the
    repository-recorded `9d306dcf...`; record tag, commit, source date, and checked URL.
 5. **Moving TypeScript framework baselines.** The ecosystem memo used current-looking

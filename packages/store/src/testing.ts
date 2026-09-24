@@ -28,9 +28,9 @@ export interface StoreConformanceSubject {
   /** Creates two synchronous clients for one isolated backend when sharedWriters is true. */
   readonly createSharedStores?: () => readonly [Store, Store]
   /** Prepares one provider that owns resources outside the Store contract. */
-  readonly prepareStore?: (ctx: Context, store: Store) => PromiseLike<void>
+  readonly prepareStore?: (ctx: Context, store: Store) => Promise<void>
   /** Releases resources prepared for one Store after cleanup. */
-  readonly releaseStore?: (ctx: Context, store: Store) => PromiseLike<void>
+  readonly releaseStore?: (ctx: Context, store: Store) => Promise<void>
   /** Bounds each operation and eventual convergence; defaults to 5,000 milliseconds. */
   readonly convergenceTimeoutMs?: number
   /** Selects one supported TTL used by expiry conformance. */
@@ -189,10 +189,7 @@ function normalizeError(value: unknown): Error {
 }
 
 /** Runs one operation under a portable conformance-owned Context deadline. */
-async function bounded<T>(
-  timeoutMs: number,
-  operation: (ctx: Context) => PromiseLike<T>
-): Promise<T> {
+async function bounded<T>(timeoutMs: number, operation: (ctx: Context) => Promise<T>): Promise<T> {
   const [ctx, cancel] = withTimeout(background(), timeoutMs)
   try {
     return await Promise.resolve().then(() => operation(ctx))
@@ -205,7 +202,7 @@ async function bounded<T>(
 async function withStore(
   subject: CapturedSubject,
   cleanupKeys: readonly string[],
-  run: (store: Store) => PromiseLike<void>
+  run: (store: Store) => Promise<void>
 ): Promise<void> {
   const store = freshStore(subject)
   if (subject.prepareStore !== undefined) {
@@ -251,7 +248,7 @@ async function withStore(
 }
 
 /** Asserts one stable framework-owned error code. */
-async function rejectsCode(operation: () => PromiseLike<unknown>, code: string): Promise<void> {
+async function rejectsCode(operation: () => Promise<unknown>, code: string): Promise<void> {
   let observed: unknown = null
   try {
     await operation()
@@ -263,7 +260,7 @@ async function rejectsCode(operation: () => PromiseLike<unknown>, code: string):
 }
 
 /** Asserts that a provider rejects an unsupported option before silently weakening it. */
-async function rejectsTypeError(operation: () => PromiseLike<unknown>): Promise<void> {
+async function rejectsTypeError(operation: () => Promise<unknown>): Promise<void> {
   let observed: unknown = null
   try {
     await operation()

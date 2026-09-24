@@ -3,6 +3,7 @@ import {
   withDiscovery,
   withFilter,
   withSelector,
+  withService,
   withTransport,
   type Client
 } from "@go-like/client"
@@ -31,12 +32,7 @@ import {
   type Watcher
 } from "@go-like/registry"
 import { newConsulRegistry, type ConsulFetch } from "@go-like/registry-consul"
-import {
-  address as serverAddress,
-  handler,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address as serverAddress, newServer, transport as serverTransport } from "@go-like/server"
 import {
   type Client as TransportClient,
   type DialOption,
@@ -291,6 +287,9 @@ function observedServer(
   events: string[]
 ): LifecycleServer & Endpointer {
   return Object.freeze({
+    protocol(): string {
+      return subject.protocol()
+    },
     async endpoint(ctx: Context): Promise<string> {
       const value = await subject.endpoint(ctx)
       events.push(`bind:${label}`)
@@ -336,29 +335,31 @@ function serviceServer(
   transport: Transport,
   state: NodeState
 ): LifecycleServer & Endpointer {
-  return newServer(
-    serverTransport(transport),
-    serverAddress("127.0.0.1:0"),
-    handler(ServiceName, OperationEndpoint, async function handle(): Promise<Message> {
-      state.activeHandlers += 1
-      state.calls[node] += 1
-      try {
-        return Object.freeze({
-          header: Object.freeze({ "Go-Like-Node": node }),
-          body: Encoder.encode(node)
-        })
-      } finally {
-        state.activeHandlers -= 1
-      }
-    }),
-    handler(ServiceName, DeregisterProbeEndpoint, async function probe(): Promise<Message> {
+  const server = newServer(serverTransport(transport), serverAddress("127.0.0.1:0"))
+  server.registerHandler(ServiceName, OperationEndpoint, async function handle(): Promise<Message> {
+    state.activeHandlers += 1
+    state.calls[node] += 1
+    try {
+      return Object.freeze({
+        header: Object.freeze({ "Go-Like-Node": node }),
+        body: Encoder.encode(node)
+      })
+    } finally {
+      state.activeHandlers -= 1
+    }
+  })
+  server.registerHandler(
+    ServiceName,
+    DeregisterProbeEndpoint,
+    async function probe(): Promise<Message> {
       state.deregisterProbes[node] += 1
       return Object.freeze({
         header: Object.freeze({ "Go-Like-Node": node }),
         body: Encoder.encode(node)
       })
-    })
+    }
   )
+  return server
 }
 
 /** Calls one still-registered endpoint through real Consul discovery and HTTP Transport. */
@@ -373,6 +374,7 @@ async function probeBeforeDeregister(
   ensure(instance.id === node, `deregister probe received unexpected instance ${instance.id}`)
   const probeClient = newClient(
     withDiscovery(registry),
+    withService(ServiceName),
     withSelector(newRoundRobinSelector()),
     withTransport(transport)
   )
@@ -654,7 +656,12 @@ try {
     selectionTracker,
     clientSnapshotObserved
   )
-  client = newClient(withDiscovery(registry), withSelector(selector), withTransport(transport))
+  client = newClient(
+    withDiscovery(registry),
+    withService(ServiceName),
+    withSelector(selector),
+    withTransport(transport)
+  )
   const roundRobin: string[] = []
   for (let index = 0; index < 4; index += 1) {
     const response = await client.call(background(), {

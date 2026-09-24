@@ -7,7 +7,7 @@
 
 - `src/service.ts`：任务与租约规则、递增 fencing token 的内存仓储及获取、完成用例。
 - `src/worker.ts`：把工人的租约所有权实现为结构式 go-like `Server`；
-  `start` 获取租约，Core 反向排空时由 `stop` 释放租约。
+  `start` 获取租约，Core 请求停止时由 `stop` 释放租约；Core 并发停止各 Server。
 - `src/http.ts`：标准 Web API 请求解析与响应映射。
 - `src/main.ts`：唯一可执行入口，组合租约 Worker、HTTP Server 与进程信号。
 

@@ -78,7 +78,7 @@ describe("NATS Broker internal boundaries", () => {
     expect(() => registerSubscriberTerminal(null as never, Promise.resolve())).toThrow("object")
     expect(() =>
       registerSubscriberTerminal({ topic: "events", unsubscribe: async () => {} }, null as never)
-    ).toThrow("PromiseLike")
+    ).toThrow(/^broker provider terminal must be a Promise$/)
   })
 
   test("normalizes a synchronous unsubscribe throw", async () => {

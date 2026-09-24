@@ -28,6 +28,7 @@ const ToolOrder: readonly RequiredTool[] = Object.freeze([
   "node",
   "deno",
   "typescript",
+  "openssl",
   "docker"
 ])
 
@@ -39,6 +40,7 @@ function commandFor(root: string, tool: Exclude<RequiredTool, "bun">): readonly 
   if (tool === "node") return ["node", "--version"]
   if (tool === "deno") return ["deno", "--version"]
   if (tool === "typescript") return [resolve(root, "node_modules/.bin/tsc"), "--version"]
+  if (tool === "openssl") return ["openssl", "version"]
   return ["docker", "version", "--format", "{{.Server.Version}}"]
 }
 

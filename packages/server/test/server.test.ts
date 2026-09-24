@@ -19,7 +19,6 @@ import { newMemoryTransport } from "@go-like/transport-memory"
 import {
   address,
   advertise,
-  handler,
   listenOption,
   middleware,
   newServer,
@@ -145,9 +144,9 @@ test("routes one unary exchange and blocks until stop", async () => {
   const server = newServer(
     transport(fixtureTransport(fixtureListener(sent))),
     address("127.0.0.1:0"),
-    handler("orders", "get", (_ctx, request) => request),
     middleware((next) => async (ctx, request) => next(ctx, request))
   )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
   const running = server.start(background())
   await Promise.resolve()
@@ -159,7 +158,7 @@ test("routes one unary exchange and blocks until stop", async () => {
   expect(sent[0]?.body).toEqual(new Uint8Array([1]))
 })
 
-test("adapts one typed endpoint at the Message boundary", async () => {
+test("constructs without handlers and serves a typed registration", async () => {
   const NumberValue = struct.number()
   const operation = endpoint("calculator", "increment", NumberValue, NumberValue)
   const sent: Message[] = []
@@ -198,8 +197,10 @@ test("adapts one typed endpoint at the Message boundary", async () => {
           accepting.resolve
         )
       )
-    ),
-    handler(operation, (_ctx, request) => (request === 9 ? ("invalid" as never) : request + 1))
+    )
+  )
+  server.registerHandler(operation, (_ctx, request) =>
+    request === 9 ? ("invalid" as never) : request + 1
   )
 
   const running = server.start(background())
@@ -230,11 +231,61 @@ test("adapts one typed endpoint at the Message boundary", async () => {
   })
 })
 
+test("preserves a class receiver through typed service registration glue", async () => {
+  const NumberValue = struct.number()
+  const operation = endpoint("calculator", "increment", NumberValue, NumberValue)
+  class Calculator {
+    constructor(private readonly amount: number) {}
+
+    increment(_ctx: Context, request: number): number {
+      return request + this.amount
+    }
+  }
+  const implementation = new Calculator(2)
+  const sent: Message[] = []
+  const accepting = Promise.withResolvers<void>()
+  const server = newServer(
+    transport(
+      fixtureTransport(
+        fixtureListener(
+          sent,
+          [
+            {
+              header: {
+                "Go-Like-Service": "calculator",
+                "Go-Like-Endpoint": "increment",
+                "Content-Type": "application/json"
+              },
+              body: new TextEncoder().encode("1")
+            }
+          ],
+          "127.0.0.1:43210",
+          accepting.resolve
+        )
+      )
+    )
+  )
+  server.registerHandler(operation, (ctx, request) => implementation.increment(ctx, request))
+
+  const running = server.start(background())
+  await accepting.promise
+  await server.stop(background())
+  await running
+
+  expect(sent).toEqual([
+    {
+      header: { "Content-Type": "application/json" },
+      body: new TextEncoder().encode("3")
+    }
+  ])
+})
+
 test("rejects malformed typed request metadata and handler values", async () => {
   const operation = endpoint("calculator", "increment", struct.literal(2), struct.number())
-  expect(() => Reflect.apply(handler, undefined, [operation, "invalid"])).toThrow(
-    "server typed handler must be a function"
-  )
+  const invalidServer = newServer(transport(fixtureTransport(fixtureListener([]))))
+  expect(() =>
+    Reflect.apply(invalidServer.registerHandler, invalidServer, [operation, "invalid"])
+  ).toThrow("server typed handler must be a function")
 
   const sent: Message[] = []
   const accepting = Promise.withResolvers<void>()
@@ -266,9 +317,9 @@ test("rejects malformed typed request metadata and handler values", async () => 
           accepting.resolve
         )
       )
-    ),
-    handler(operation, (_ctx, request) => request)
+    )
   )
+  server.registerHandler(operation, (_ctx, request) => request)
   const running = server.start(background())
   await accepting.promise
   await server.stop(background())
@@ -282,28 +333,202 @@ test("rejects malformed typed request metadata and handler values", async () => 
   }
 })
 
-test("shares one actual bind between Endpointer and start", async () => {
+test("rejects an empty endpoint seal before listen", async () => {
   let listens = 0
   const base = fixtureTransport(fixtureListener([]))
+  const server = newServer(
+    transport({
+      ...base,
+      listen(ctx, value, ...options) {
+        listens += 1
+        return base.listen(ctx, value, ...options)
+      }
+    })
+  )
+
+  const sealing = expect(server.endpoint(background())).rejects.toThrow(
+    "server requires at least one registered handler"
+  )
+  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
+    "server registration is sealed"
+  )
+  await sealing
+  expect(listens).toBe(0)
+})
+
+test("rejects an empty direct start before listen", async () => {
+  let listens = 0
+  const base = fixtureTransport(fixtureListener([]))
+  const server = newServer(
+    transport({
+      ...base,
+      listen(ctx, value, ...options) {
+        listens += 1
+        return base.listen(ctx, value, ...options)
+      }
+    })
+  )
+
+  await expect(server.start(background())).rejects.toThrow(
+    "server requires at least one registered handler"
+  )
+  expect(listens).toBe(0)
+})
+
+test("rejects typed and raw duplicate registrations synchronously", () => {
+  const NumberValue = struct.number()
+  const operation = endpoint("calculator", "increment", NumberValue, NumberValue)
+  const raw: Handler = (_ctx, request) => request
+
+  const typedFirst = newServer(transport(fixtureTransport(fixtureListener([]))))
+  typedFirst.registerHandler(operation, (_ctx, request) => request + 1)
+  expect(() => typedFirst.registerHandler("calculator", "increment", raw)).toThrow(
+    "server handler is duplicated: calculator/increment"
+  )
+
+  const rawFirst = newServer(transport(fixtureTransport(fixtureListener([]))))
+  rawFirst.registerHandler("calculator", "increment", raw)
+  expect(() => rawFirst.registerHandler(operation, (_ctx, request) => request + 1)).toThrow(
+    "server handler is duplicated: calculator/increment"
+  )
+})
+
+test("endpoint seals registration while its bind is pending", async () => {
+  const listener = fixtureListener([])
+  const deferred = Promise.withResolvers<Listener>()
+  const base = fixtureTransport(listener)
+  const server = newServer(
+    transport({
+      ...base,
+      listen: () => deferred.promise
+    })
+  )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
+
+  const pending = server.endpoint(background())
+  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
+    "server registration is sealed"
+  )
+  deferred.resolve(listener)
+  await expect(pending).resolves.toBe("http://127.0.0.1:43210/")
+  await server.stop(background())
+})
+
+test("start seals registration while its bind is pending", async () => {
+  const listener = fixtureListener([])
+  const deferred = Promise.withResolvers<Listener>()
+  const base = fixtureTransport(listener)
+  const server = newServer(
+    transport({
+      ...base,
+      listen: () => deferred.promise
+    })
+  )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
+
+  const running = server.start(background())
+  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
+    "server registration is sealed"
+  )
+  deferred.resolve(listener)
+  await Promise.resolve()
+  await server.stop(background())
+  await running
+})
+
+test("a failed bind leaves registration sealed", async () => {
+  const failure = new Error("bind failed")
+  const base = fixtureTransport(fixtureListener([]))
+  const server = newServer(
+    transport({
+      ...base,
+      listen: () => Promise.reject(failure)
+    })
+  )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
+
+  await expect(server.endpoint(background())).rejects.toBe(failure)
+  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
+    "server registration is sealed"
+  )
+})
+
+test("shares one composed dispatcher and bind between concurrent endpoint and start", async () => {
+  let listens = 0
+  let compositions = 0
+  const sent: Message[] = []
+  const accepting = Promise.withResolvers<void>()
+  const listener = fixtureListener(sent, undefined, "127.0.0.1:43210", accepting.resolve)
+  const deferred = Promise.withResolvers<Listener>()
+  const base = fixtureTransport(listener)
   const transportValue: Transport = {
     ...base,
-    listen(ctx, value, ...options) {
+    listen() {
       listens += 1
-      return base.listen(ctx, value, ...options)
+      return deferred.promise
     }
   }
   const server = newServer(
     transport(transportValue),
-    handler("orders", "get", (_ctx, request) => request)
+    middleware((next) => {
+      compositions += 1
+      return (ctx, request) => next(ctx, request)
+    })
   )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
-  expect(await server.endpoint(background())).toBe("http://127.0.0.1:43210/")
+  const advertised = server.endpoint(background())
   const running = server.start(background())
-  await Promise.resolve()
   expect(listens).toBe(1)
+  expect(compositions).toBe(1)
+  deferred.resolve(listener)
+  await expect(advertised).resolves.toBe("http://127.0.0.1:43210/")
+  await accepting.promise
   await server.stop(background())
   await running
+  expect(sent).toHaveLength(1)
+  expect(sent[0]?.body).toEqual(new Uint8Array([1]))
 })
+
+test.each([
+  ["undefined", undefined],
+  ["a frozen non-Error object", Object.freeze({ code: "middleware composition failed" })]
+] as const)(
+  "caches %s middleware composition failure across lifecycle calls",
+  async (_label, reason) => {
+    let compositions = 0
+    let listens = 0
+    const base = fixtureTransport(fixtureListener([]))
+    const server = newServer(
+      transport({
+        ...base,
+        listen(ctx, value, ...options) {
+          listens += 1
+          return base.listen(ctx, value, ...options)
+        }
+      }),
+      middleware(() => {
+        compositions += 1
+        throw reason
+      })
+    )
+    server.registerHandler("orders", "get", (_ctx, request) => request)
+
+    const endpointOutcome = Promise.allSettled([server.endpoint(background())])
+    expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
+      "server registration is sealed"
+    )
+    const startOutcome = Promise.allSettled([server.start(background())])
+    const [[endpointResult], [startResult]] = await Promise.all([endpointOutcome, startOutcome])
+    if (endpointResult.status !== "rejected" || startResult.status !== "rejected") {
+      throw new Error("endpoint and start must reject a cached composition failure")
+    }
+    expect(endpointResult.reason).toBe(reason)
+    expect(startResult.reason).toBe(reason)
+    expect(compositions).toBe(1)
+    expect(listens).toBe(0)
+  }
+)
 
 test("stop owns an in-flight bind and closes the late listener once without accepting", async () => {
   const deferred = Promise.withResolvers<Listener>()
@@ -332,10 +557,8 @@ test("stop owns an in-flight bind and closes the late listener once without acce
       return deferred.promise
     }
   }
-  const server = newServer(
-    transport(transportValue),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(transportValue))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
   const running = server.start(background())
   await Promise.resolve()
@@ -362,10 +585,8 @@ test("settles start cleanly when stop cancels a cancellation-aware bind", async 
       })
     }
   }
-  const server = newServer(
-    transport(transportValue),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(transportValue))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   const running = server.start(background())
   void running.catch(() => {})
   await bound.promise
@@ -384,9 +605,9 @@ test("preserves an external bind failure that races stop", async () => {
       listen(): Promise<Listener> {
         return deferred.promise
       }
-    }),
-    handler("orders", "get", (_ctx, request) => request)
+    })
   )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   const running = server.start(background())
   void running.catch(() => {})
   await Promise.resolve()
@@ -428,10 +649,8 @@ test("keeps a shared bind alive when one endpoint waiter cancels", async () => {
       })
     }
   }
-  const server = newServer(
-    transport(transportValue),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(transportValue))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   const [caller, cancel] = withCancelCause(background())
   const cancellation = new Error("endpoint waiter canceled")
   const endpoint = server.endpoint(caller)
@@ -468,10 +687,8 @@ test("starts one owner close when the first stop caller is already canceled", as
       await shutdown.promise
     }
   }
-  const server = newServer(
-    transport(fixtureTransport(listener)),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(fixtureTransport(listener)))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   await server.endpoint(background())
   const [caller, cancel] = withCancelCause(background())
   const reason = new Error("stop caller canceled")
@@ -517,10 +734,8 @@ test("closes once after start Context cancellation ends accept", async () => {
       await shutdown.promise
     }
   }
-  const server = newServer(
-    transport(fixtureTransport(listener)),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(fixtureTransport(listener)))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   const [startContext, cancelStart] = withCancelCause(background())
   const running = server.start(startContext)
   await accepting.promise
@@ -549,9 +764,9 @@ test("separates bind and advertise while preserving the actual bound port", asyn
   const server = newServer(
     transport(fixtureTransport(fixtureListener([], [], "0.0.0.0:43210"))),
     address("0.0.0.0:0"),
-    advertise("orders.internal"),
-    handler("orders", "get", (_ctx, request) => request)
+    advertise("orders.internal")
   )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
   expect(server.options().address).toBe("0.0.0.0:0")
   expect(server.options().advertise).toBe("orders.internal")
@@ -567,9 +782,9 @@ test("accepts an explicit advertise address or absolute endpoint", async () => {
   ] as const) {
     const server = newServer(
       transport(fixtureTransport(fixtureListener([], [], "0.0.0.0:43210"))),
-      advertise(selected),
-      handler("orders", "get", (_ctx, request) => request)
+      advertise(selected)
     )
+    server.registerHandler("orders", "get", (_ctx, request) => request)
     await expect(server.endpoint(background())).resolves.toBe(expected)
     await server.stop(background())
   }
@@ -577,19 +792,17 @@ test("accepts an explicit advertise address or absolute endpoint", async () => {
 
 test("requires an explicit usable advertise value for wildcard binds", async () => {
   for (const listenerAddress of ["0.0.0.0:43210", "[::]:43210"]) {
-    const server = newServer(
-      transport(fixtureTransport(fixtureListener([], [], listenerAddress))),
-      handler("orders", "get", (_ctx, request) => request)
-    )
+    const server = newServer(transport(fixtureTransport(fixtureListener([], [], listenerAddress))))
+    server.registerHandler("orders", "get", (_ctx, request) => request)
     await expect(server.endpoint(background())).rejects.toThrow("requires explicit advertise")
     await server.stop(background())
   }
 
   const server = newServer(
     transport(fixtureTransport(fixtureListener([], [], "127.0.0.1:43210"))),
-    advertise("0.0.0.0"),
-    handler("orders", "get", (_ctx, request) => request)
+    advertise("0.0.0.0")
   )
+  server.registerHandler("orders", "get", (_ctx, request) => request)
   await expect(server.endpoint(background())).rejects.toThrow(
     "advertise must not use a wildcard host"
   )
@@ -597,10 +810,8 @@ test("requires an explicit usable advertise value for wildcard binds", async () 
 })
 
 test("advertises a TLS-configured HTTP authority with its real HTTPS scheme", async () => {
-  const server = newServer(
-    transport(fixtureTransport(fixtureListener([]), "http", true)),
-    handler("orders", "get", (_ctx, request) => request)
-  )
+  const server = newServer(transport(fixtureTransport(fixtureListener([]), "http", true)))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
   await expect(server.endpoint(background())).resolves.toBe("https://127.0.0.1:43210/")
   await server.stop(background())
@@ -618,11 +829,8 @@ test("forwards listen options and exposes the construction snapshot", async () =
       return base.listen(ctx, value, ...options)
     }
   }
-  const server = newServer(
-    transport(transportValue),
-    handler("orders", "get", (_ctx, request) => request),
-    listenOption(option)
-  )
+  const server = newServer(transport(transportValue), listenOption(option))
+  server.registerHandler("orders", "get", (_ctx, request) => request)
 
   expect(server.options().listenOptions).toEqual([option])
   expect(server.string()).toBe("server")
@@ -644,18 +852,13 @@ test("keeps routing state isolated from returned option snapshots", async () => 
     transport(
       fixtureTransport(fixtureListener(sent, undefined, "127.0.0.1:43210", accepting.resolve))
     ),
-    handler("orders", "get", operation),
     use("orders/get", selectedMiddleware)
   )
+  server.registerHandler("orders", "get", operation)
 
   const exposed = server.options()
-  const exposedHandlers = exposed.handlers.get("orders")
-  if (exposedHandlers === undefined) throw new Error("server option snapshot omitted handlers")
-  Reflect.apply(Map.prototype.clear, exposedHandlers, [])
-  Reflect.apply(Map.prototype.clear, exposed.handlers, [])
   Reflect.apply(Map.prototype.clear, exposed.operationMiddleware, [])
 
-  expect(server.options().handlers.get("orders")?.get("get")).toBe(operation)
   expect(server.options().operationMiddleware.get("orders/get")).toEqual([selectedMiddleware])
   expect(Object.isFrozen(server.options().operationMiddleware.get("orders/get"))).toBe(true)
 
@@ -671,7 +874,7 @@ test("keeps routing state isolated from returned option snapshots", async () => 
 test("encodes routing and handler failures without leaking internal errors", async () => {
   const cases: readonly [
     request: Message,
-    operation: (_ctx: Context, request: Message) => Message | PromiseLike<Message>,
+    operation: (_ctx: Context, request: Message) => Message | Promise<Message>,
     code: string
   ][] = [
     [
@@ -759,9 +962,9 @@ test("encodes routing and handler failures without leaking internal errors", asy
     const server = newServer(
       transport(
         fixtureTransport(fixtureListener(sent, [request], "127.0.0.1:43210", accepting.resolve))
-      ),
-      handler("orders", "get", operation)
+      )
     )
+    server.registerHandler("orders", "get", operation)
     const running = server.start(background())
     await accepting.promise
     await server.stop(background())
@@ -772,13 +975,8 @@ test("encodes routing and handler failures without leaking internal errors", asy
   }
 })
 
-test("requires a transport and at least one handler", () => {
-  expect(() => newServer(handler("orders", "get", async (_ctx, request) => request))).toThrow(
-    "server transport is required"
-  )
-  expect(() => newServer(transport(fixtureTransport(fixtureListener([]))))).toThrow(
-    "server requires at least one handler"
-  )
+test("validates server construction and raw registrations", () => {
+  expect(() => newServer()).toThrow("server transport is required")
   expect(() => address("")).toThrow("server address must be a non-empty string")
   expect(() => advertise("")).toThrow("server advertise must be a non-empty string")
   for (const value of ["[::1", "orders.internal/path", "orders.internal?", "orders.internal#"]) {
@@ -795,12 +993,13 @@ test("requires a transport and at least one handler", () => {
       "server advertise endpoint must not contain credentials or a fragment"
     )
   }
-  expect(() => handler("", "get", async (_ctx, request) => request)).toThrow(
-    "server service must be a visible ASCII route token"
-  )
-  expect(() => handler("orders", "", async (_ctx, request) => request)).toThrow(
-    "server endpoint must be a visible ASCII route token"
-  )
+  const registrationServer = newServer(transport(fixtureTransport(fixtureListener([]))))
+  expect(() =>
+    registrationServer.registerHandler("", "get", async (_ctx, request) => request)
+  ).toThrow("server service must be a visible ASCII route token")
+  expect(() =>
+    registrationServer.registerHandler("orders", "", async (_ctx, request) => request)
+  ).toThrow("server endpoint must be a visible ASCII route token")
   for (const [service, endpoint] of [
     ["a/b", "c"],
     ["a", "b/c"],
@@ -818,51 +1017,66 @@ test("requires a transport and at least one handler", () => {
     ["a", "é"],
     ["a", "😀"]
   ] as const) {
-    expect(() => handler(service, endpoint, async (_ctx, request) => request)).toThrow(
-      "route token"
-    )
+    expect(() =>
+      registrationServer.registerHandler(service, endpoint, async (_ctx, request) => request)
+    ).toThrow("route token")
   }
   expect(() => transport({} as never)).toThrow("server transport must implement Transport")
   expect(() => listenOption(null as never)).toThrow("server listen option must be a function")
   expect(() =>
-    newServer(
-      transport(fixtureTransport(fixtureListener([]))),
-      handler("orders", "get", async (_ctx, request) => request),
-      (options) => ({
-        address: options.address,
-        advertise: options.advertise,
-        transport: options.transport,
-        handlers: options.handlers,
-        middleware: options.middleware,
-        operationMiddleware: options.operationMiddleware,
-        listenOptions: [null as never],
-        httpRoutes: options.httpRoutes
-      })
-    )
+    newServer(transport(fixtureTransport(fixtureListener([]))), (options) => ({
+      address: options.address,
+      advertise: options.advertise,
+      transport: options.transport,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      listenOptions: [null as never],
+      httpRoutes: options.httpRoutes
+    }))
   ).toThrow("server listen option must be a function")
 })
 
 test("rejects duplicate routes", () => {
   const operation = async (_ctx: Context, request: Message): Promise<Message> => request
-  expect(() =>
-    newServer(
-      transport(fixtureTransport(fixtureListener([]))),
-      handler("orders", "get", operation),
-      handler("orders", "get", operation)
-    )
-  ).toThrow("server handler is duplicated")
+  const server = newServer(transport(fixtureTransport(fixtureListener([]))))
+  server.registerHandler("orders", "get", operation)
+  expect(() => server.registerHandler("orders", "get", operation)).toThrow(
+    "server handler is duplicated"
+  )
 })
 
-test("keeps service and endpoint identities separate", () => {
-  const operation = async (_ctx: Context, request: Message): Promise<Message> => request
+test("keeps service and endpoint identities separate", async () => {
+  const sent: Message[] = []
+  const accepting = Promise.withResolvers<void>()
   const server = newServer(
-    transport(fixtureTransport(fixtureListener([]))),
-    handler("a.b", "c", operation),
-    handler("a", "b.c", operation)
+    transport(
+      fixtureTransport(
+        fixtureListener(
+          sent,
+          [
+            {
+              header: { "Go-Like-Service": "a.b", "Go-Like-Endpoint": "c" },
+              body: new Uint8Array()
+            },
+            {
+              header: { "Go-Like-Service": "a", "Go-Like-Endpoint": "b.c" },
+              body: new Uint8Array()
+            }
+          ],
+          "127.0.0.1:43210",
+          accepting.resolve
+        )
+      )
+    )
   )
+  server.registerHandler("a.b", "c", () => ({ header: {}, body: new Uint8Array([1]) }))
+  server.registerHandler("a", "b.c", () => ({ header: {}, body: new Uint8Array([2]) }))
 
-  expect(server.options().handlers.get("a.b")?.get("c")).toBe(operation)
-  expect(server.options().handlers.get("a")?.get("b.c")).toBe(operation)
+  const running = server.start(background())
+  await accepting.promise
+  await server.stop(background())
+  await running
+  expect(sent.map((message) => message.body)).toEqual([new Uint8Array([1]), new Uint8Array([2])])
 })
 
 test("selects one operation middleware sequence while global middleware stays outermost", async () => {
@@ -907,17 +1121,17 @@ test("selects one operation middleware sequence while global middleware stays ou
     use("*", recordingMiddleware("fallback", events)),
     use("orders/*", recordingMiddleware("orders-prefix", events)),
     middleware(recordingMiddleware("global-first", events)),
-    handler("orders", "get", terminal),
-    handler("orders", "getById", terminal),
-    handler("orders", "list", terminal),
-    handler("inventory", "list", terminal),
-    handler("blocked", "list", terminal),
     use("orders/get*", recordingMiddleware("get-prefix", events)),
     use("orders/get", staleExact),
     middleware(recordingMiddleware("global-second", events)),
     use("orders/get", exact, exactSecond),
     use("blocked/*")
   )
+  server.registerHandler("orders", "get", terminal)
+  server.registerHandler("orders", "getById", terminal)
+  server.registerHandler("orders", "list", terminal)
+  server.registerHandler("inventory", "list", terminal)
+  server.registerHandler("blocked", "list", terminal)
 
   expect(server.options().operationMiddleware.get("orders/get")).toEqual([exact, exactSecond])
   const running = server.start(background())
@@ -986,17 +1200,13 @@ test("validates operation middleware selectors and functions", () => {
 })
 
 test("validates operation middleware injected by custom ServerOption values", () => {
-  const base = [
-    transport(fixtureTransport(fixtureListener([]))),
-    handler("orders", "get", async (_ctx: Context, request: Message) => request)
-  ] as const
+  const base = [transport(fixtureTransport(fixtureListener([])))] as const
 
   expect(() =>
     newServer(...base, (options) => ({
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/*/get", Object.freeze([])]]),
       listenOptions: options.listenOptions,
@@ -1008,7 +1218,6 @@ test("validates operation middleware injected by custom ServerOption values", ()
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/", Object.freeze([])]]),
       listenOptions: options.listenOptions,
@@ -1020,7 +1229,6 @@ test("validates operation middleware injected by custom ServerOption values", ()
       address: options.address,
       advertise: options.advertise,
       transport: options.transport,
-      handlers: options.handlers,
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/get", Object.freeze([null as never])]]),
       listenOptions: options.listenOptions,
@@ -1080,26 +1288,26 @@ test("enforces operation buckets through the real memory transport wire", async 
   const server = newServer(
     transport(transportValue),
     address("memory://server-rate-limit"),
-    handler("orders", "a", (_ctx, request) => {
-      calls.push("orders/a")
-      return request
-    }),
-    handler("orders", "b", (_ctx, request) => {
-      calls.push("orders/b")
-      return request
-    }),
-    handler("orders", "unmatched", (_ctx, request) => {
-      calls.push("orders/unmatched")
-      return request
-    }),
-    handler("guard", "known", (_ctx, request) => {
-      calls.push("guard/known")
-      return request
-    }),
     use("orders/a", rateLimitMiddleware(newTokenBucketLimiter(limiterOptions))),
     use("orders/b", rateLimitMiddleware(newTokenBucketLimiter(limiterOptions))),
     use("guard/*", rateLimitMiddleware(newTokenBucketLimiter(limiterOptions)))
   )
+  server.registerHandler("orders", "a", (_ctx, request) => {
+    calls.push("orders/a")
+    return request
+  })
+  server.registerHandler("orders", "b", (_ctx, request) => {
+    calls.push("orders/b")
+    return request
+  })
+  server.registerHandler("orders", "unmatched", (_ctx, request) => {
+    calls.push("orders/unmatched")
+    return request
+  })
+  server.registerHandler("guard", "known", (_ctx, request) => {
+    calls.push("guard/known")
+    return request
+  })
   const endpoint = await server.endpoint(background())
   const running = server.start(background())
   await Promise.resolve()
@@ -1152,14 +1360,28 @@ test("enforces operation buckets through the real memory transport wire", async 
   }
 })
 
-test("rejects an authority address when the transport kind is empty", async () => {
-  const server = newServer(
-    transport(fixtureTransport(fixtureListener([]), "")),
-    handler("orders", "get", async (_ctx, request) => request)
-  )
+test("reports a non-empty transport protocol and rejects missing or empty kinds", async () => {
+  const listener = fixtureListener([], [], "http://127.0.0.1:43210")
+  const base = fixtureTransport(listener)
+  const missingKind: Transport = {
+    init: base.init,
+    options: base.options,
+    dial: base.dial,
+    listen: base.listen,
+    string: base.string
+  }
+  const valid = newServer(transport(base))
+  const missing = newServer(transport(missingKind))
+  const empty = newServer(transport(fixtureTransport(listener, "")))
 
-  await expect(server.endpoint(background())).rejects.toThrow(
-    "server transport kind is required for an authority address"
+  expect(valid.protocol()).toBe("http")
+  for (const server of [missing, empty]) {
+    expect(() => server.protocol()).toThrow("server transport kind must be a non-empty string")
+  }
+
+  empty.registerHandler("orders", "get", async (_ctx, request) => request)
+  await expect(empty.endpoint(background())).rejects.toThrow(
+    "server transport kind must be a non-empty string"
   )
-  await server.stop(background())
+  await empty.stop(background())
 })

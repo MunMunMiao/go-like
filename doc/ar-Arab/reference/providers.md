@@ -9,7 +9,7 @@
 - **محوّل دورة الحياة** يعني غلاف `Server` حول مورد أصلي أنشأه التطبيق.
 - **الدليل** يحدد نوع سند المستودع: مصدر/تصدير، أو اختبارات معلنة، أو نتيجة أمر محلي مُبلّغ عنها. ولا يحوّل إصدار الحزمة إلى ادعاء بالنشر على npm أو بالتوفر في الإنتاج.
 
-يحتوي جرد المصدر الحالي على 43 manifest لحزم `@go-like/*` غير خاصة، و23 مسار source عاماً، وكلها بالإصدار `0.0.1` في هذا checkout. أما مساحات العمل الـ44 ضمن `examples/*` فهي تطبيقات خاصة وليست حزم عامة.
+يحتوي جرد المصدر الحالي على 45 manifest لحزم `@go-like/*` غير خاصة، و25 مسار source عاماً، وكلها بالإصدار `0.0.1` في هذا checkout. أما مساحات العمل الـ44 ضمن `examples/*` فهي تطبيقات خاصة وليست حزم عامة.
 
 ## اختر حسب المهمة
 
@@ -39,17 +39,20 @@
 
 ## حزم Web والاستدعاء الداخلي
 
-| الحزمة                         | استخدمها من أجل                                                             | أهم API عامة                                                                                                                                                                                                 | ما لا تملكه                                                                     |
-| ------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `@go-like/web`                 | Web Handler القياسي وجسر Context للطلب                                      | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                | Routes وWebSockets وسياسة SSE وlistener والمصادقة                               |
-| `@go-like/web/health`          | مسارات Health Handler                                                       | `createHealthHandler`                                                                                                                                                                                        | تسجيل probes أو تركيب مسارات الإطار                                             |
-| `@go-like/web/node`            | Listener في Node حول Fetch Handler                                          | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                   | TLS/HTTP2 في HTTP Transport الداخلي؛ استخدم `@go-like/transport-http/node` لذلك |
-| `@go-like/client`              | استدعاءات داخلية أحادية وdiscovery وselection وmiddleware وretries وpooling | `newClient`, `withTransport`, `withAddress`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Routes الإطار وسلامة replay في العمل وحدود sockets الفعلية                      |
-| `@go-like/server`              | خادم Message داخلي أحادي وتوجيه routes                                      | `newServer`, `transport`, `address`, `advertise`, `handler`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                                      | Fetch routes الخارجية وتفويض العمل الخاص بالبروتوكول                            |
-| `@go-like/transport`           | Transport SPI وحدّ Message                                                  | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                     | سلك فعلي إن لم يُختَر مزوّد؛ ولا وعد بـ full-duplex داخلي                       |
-| `@go-like/transport-memory`    | Transport أحادي داخل العملية                                                | `newMemoryTransport`                                                                                                                                                                                         | سلوك بين العمليات أو persistence أو network fallback أو TLS                     |
-| `@go-like/transport-http`      | HTTP Transport داخلي مبني على Fetch                                         | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                            | Listener محمول كامل بلا `HTTPHost` محقون؛ ولا عناصر TLS أصلية في Node           |
-| `@go-like/transport-http/node` | HTTP Transport داخلي أصلي في Node                                           | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                           | Listener في Deno أو سياسة أمان تلقائية                                          |
+| الحزمة                               | استخدمها من أجل                                                             | أهم API عامة                                                                                                                                                                                                                | ما لا تملكه                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `@go-like/web`                       | Web Handler القياسي وجسر Context للطلب                                      | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                               | Routes وWebSockets وسياسة SSE وlistener والمصادقة                               |
+| `@go-like/web/health`                | مسارات Health Handler                                                       | `createHealthHandler`                                                                                                                                                                                                       | تسجيل probes أو تركيب مسارات الإطار                                             |
+| `@go-like/web/node`                  | Listener في Node حول Fetch Handler                                          | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                                  | TLS/HTTP2 في HTTP Transport الداخلي؛ استخدم `@go-like/transport-http/node` لذلك |
+| `@go-like/client`                    | استدعاءات داخلية أحادية وdiscovery وselection وmiddleware وretries وpooling | `newClient`, `withTransport`, `withAddress`, `withService`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Routes الإطار وسلامة replay في العمل وحدود sockets الفعلية                      |
+| `@go-like/server`                    | خادم Message داخلي أحادي وتوجيه routes                                      | `newServer`, `transport`, `address`, `advertise`, `Server.registerHandler`, `httpRoute`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                         | موجّه إطار العمل وتفويض التطبيق                                                 |
+| `@go-like/transport`                 | Transport SPI وحدّ Message                                                  | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                                    | سلك فعلي إن لم يُختَر مزوّد؛ ولا وعد بـ full-duplex داخلي                       |
+| `@go-like/transport-memory`          | Transport أحادي داخل العملية                                                | `newMemoryTransport`                                                                                                                                                                                                        | سلوك بين العمليات أو persistence أو network fallback أو TLS                     |
+| `@go-like/transport-http`            | HTTP Transport داخلي مبني على Fetch                                         | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                                           | Listener محمول كامل بلا `HTTPHost` محقون؛ ولا عناصر TLS أصلية في Node           |
+| `@go-like/transport-http/node`       | HTTP Transport داخلي أصلي في Node                                           | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                                          | Listener في Deno أو سياسة أمان تلقائية                                          |
+| `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                                    | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                                           | شيفرة Context-first فوق Protobuf-ES                                             |
+| `@go-like/transport-grpc-buf/native` | gRPC قياسي بالأنماط الأربعة عبر `/native`                                   | `newClient`, `newServer`                                                                                                                                                                                                    | Discovery, Selector, TLS/mTLS                                                   |
+| `@go-like/protoc-gen-like`           | مولّد Node وقت البناء                                                       | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                                          | Protobuf-ES                                                                     |
 
 ## حزم Config
 
@@ -84,19 +87,19 @@
 
 ## حزم Store وCache
 
-| الحزمة                     | استخدمها من أجل                   | الدالة الرئيسية                                                                                                    | الحدّ                                                                        |
-| -------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `@go-like/store`           | عقد السجل والخيارات               | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`, `writeOptions`, `deleteOptions`, `listOptions` | revisions وCAS وTTL وpagination؛ وتختلف قدرات المزوّد                        |
-| `@go-like/store/provider`  | مساعدات write/delete/list للمزوّد | `writeOptions`, `deleteOptions`, `listOptions`, ومساعدات snapshot وconflict                                        | موجّه للمزوّد؛ وليس backend دائماً بحد ذاته                                  |
-| `@go-like/store-memory`    | اختبارات Store داخل العملية       | `newMemoryStore`, `clock`                                                                                          | لا durability بعد restart ولا حالة بين العمليات                              |
-| `@go-like/store-file`      | Store محلي في ملف                 | `newFileStore`                                                                                                     | حالة محلية لمالك واحد؛ استخدم `/node` لمضيف Node                             |
-| `@go-like/store-file/node` | capability ملف في Node            | `newNodeFileStoreHost`                                                                                             | مسار فرعي صريح لـ Node                                                       |
-| `@go-like/store-consul`    | Store KV في Consul                | `newConsulStore`                                                                                                   | جلسات Consul وتركيبات TTL/CAS وسلوك mutation غير اليقيني                     |
-| `@go-like/store-etcd`      | Store KV في etcd                  | `newEtcdStore`                                                                                                     | Gateway وlease وrevision وcompaction وسلوك mutation غير اليقيني              |
-| `@go-like/store-vault`     | Store Vault KV v2                 | `newVaultStore`                                                                                                    | لا يَعِد بدلالات TTL/CAS موحدة لـ Store                                      |
-| `@go-like/cache`           | عقد قيم مؤقتة/TTL                 | `expiresIn`, `putOptions`                                                                                          | لا CAS ولا revision ولا durability ولا authority                             |
-| `@go-like/cache-memory`    | Cache داخل العملية                | `newMemoryCache`, `clock`                                                                                          | لا persistence؛ انتهاء كسول؛ مناسب للاختبارات والتسريع المحلي                |
-| `@go-like/cache-redis`     | Cache مبني على Redis              | `newRedisCache`                                                                                                    | اتصال Redis أصلي ومعالجة credentials في URL ومتطلبات بيئة التشغيل تبقى ظاهرة |
+| الحزمة                     | استخدمها من أجل                   | الدالة الرئيسية                                                             | الحدّ                                                                        |
+| -------------------------- | --------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `@go-like/store`           | عقد السجل والخيارات               | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`          | revisions وCAS وTTL وpagination؛ وتختلف قدرات المزوّد                        |
+| `@go-like/store/provider`  | مساعدات write/delete/list للمزوّد | `writeOptions`, `deleteOptions`, `listOptions`, ومساعدات snapshot وconflict | موجّه للمزوّد؛ وليس backend دائماً بحد ذاته                                  |
+| `@go-like/store-memory`    | اختبارات Store داخل العملية       | `newMemoryStore`, `clock`                                                   | لا durability بعد restart ولا حالة بين العمليات                              |
+| `@go-like/store-file`      | Store محلي في ملف                 | `newFileStore`                                                              | حالة محلية لمالك واحد؛ استخدم `/node` لمضيف Node                             |
+| `@go-like/store-file/node` | capability ملف في Node            | `newNodeFileStoreHost`                                                      | مسار فرعي صريح لـ Node                                                       |
+| `@go-like/store-consul`    | Store KV في Consul                | `newConsulStore`                                                            | جلسات Consul وتركيبات TTL/CAS وسلوك mutation غير اليقيني                     |
+| `@go-like/store-etcd`      | Store KV في etcd                  | `newEtcdStore`                                                              | Gateway وlease وrevision وcompaction وسلوك mutation غير اليقيني              |
+| `@go-like/store-vault`     | Store Vault KV v2                 | `newVaultStore`                                                             | لا يَعِد بدلالات TTL/CAS موحدة لـ Store                                      |
+| `@go-like/cache`           | عقد قيم مؤقتة/TTL                 | `expiresIn`                                                                 | لا CAS ولا revision ولا durability ولا authority                             |
+| `@go-like/cache-memory`    | Cache داخل العملية                | `newMemoryCache`, `clock`                                                   | لا persistence؛ انتهاء كسول؛ مناسب للاختبارات والتسريع المحلي                |
+| `@go-like/cache-redis`     | Cache مبني على Redis              | `newRedisCache`                                                             | اتصال Redis أصلي ومعالجة credentials في URL ومتطلبات بيئة التشغيل تبقى ظاهرة |
 
 ## حزم Broker وevent والعمل
 
@@ -125,35 +128,37 @@
 
 ## الجرد الكامل لمسارات المصدر العامة
 
-هذه هي مسارات المصدر العامة الـ23 الصريحة التي تعلنها manifests الحزم الحالية. قد تضيف الحزم المولّدة export باسم `./package.json` يحوي metadata فقط؛ وهذا ليس حزمة إضافية ولا API مصدر.
+هذه هي مسارات المصدر العامة الـ25 الصريحة التي تعلنها manifests الحزم الحالية. قد تضيف الحزم المولّدة export باسم `./package.json` يحوي metadata فقط؛ وهذا ليس حزمة إضافية ولا API مصدر.
 
-|   # | المسار الفرعي                    | أهم الصادرات                                               | الجمهور                       |
-| --: | -------------------------------- | ---------------------------------------------------------- | ----------------------------- |
-|   1 | `@go-like/broker/provider`       | `registerSubscriberTerminal`, `subscriberTerminal`         | مؤلفو المزوّدات               |
-|   2 | `@go-like/cache/provider`        | `putOptions`                                               | مؤلفو المزوّدات               |
-|   3 | `@go-like/config/env`            | `envSource`                                                | مؤلفو التطبيقات               |
-|   4 | `@go-like/config/file`           | `fileSource`, `jsonFileDecoder`                            | مؤلفو التطبيقات               |
-|   5 | `@go-like/config/node`           | `newNodeFileCapability`                                    | مؤلفو بيئة Node               |
-|   6 | `@go-like/config/yaml`           | `decodeYaml`                                               | مؤلفو التطبيقات               |
-|   7 | `@go-like/core/lifecycle`        | `waitForContext`                                           | مؤلفو دورة الحياة/المزوّدات   |
-|   8 | `@go-like/core/node`             | `signal`                                                   | تكامل عمليات Node/Bun         |
-|   9 | `@go-like/nats/broker`           | `newNatsCoreBroker`                                        | تطبيقات NATS Core             |
-|  10 | `@go-like/nats/jetstream`        | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | تطبيقات JetStream             |
-|  11 | `@go-like/nats/jetstream/broker` | `newNatsJetStreamBroker`                                   | تطبيقات Broker في JetStream   |
-|  12 | `@go-like/registry/provider`     | خيارات المزوّد ومساعدات snapshot                           | مؤلفو المزوّدات               |
-|  13 | `@go-like/registry-mdns/node`    | `newNodeMDNSHost`                                          | تطبيقات mDNS في Node          |
-|  14 | `@go-like/store/provider`        | خيارات write/delete/list وsnapshots                        | مؤلفو المزوّدات               |
-|  15 | `@go-like/store-file/node`       | `newNodeFileStoreHost`                                     | تطبيقات Store الملفية في Node |
-|  16 | `@go-like/struct/codec`          | `encodeJson`, `decodeJson`                                 | مؤلفو العقود typed            |
-|  17 | `@go-like/struct/runtime`        | مساعدات introspection وparsing                             | مؤلفو runtime/المزوّدات       |
-|  18 | `@go-like/transport/headers`     | ثوابت headers `Go-Like-*`                                  | مؤلفو Transport/المزوّدات     |
-|  19 | `@go-like/transport/json`        | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | مؤلفو Transport typed/raw     |
-|  20 | `@go-like/transport/provider`    | codecs وأخطاء Message وmetadata وServiceError              | مؤلفو المزوّدات               |
-|  21 | `@go-like/transport-http/node`   | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | تطبيقات HTTP في Node          |
-|  22 | `@go-like/web/health`            | `createHealthHandler`                                      | تطبيقات Web                   |
-|  23 | `@go-like/web/node`              | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | تطبيقات مضيف Web في Node      |
+|   # | المسار الفرعي                        | أهم الصادرات                                               | الجمهور                       |
+| --: | ------------------------------------ | ---------------------------------------------------------- | ----------------------------- |
+|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`         | مؤلفو المزوّدات               |
+|   2 | `@go-like/cache/provider`            | `putOptions`                                               | مؤلفو المزوّدات               |
+|   3 | `@go-like/config/env`                | `envSource`                                                | مؤلفو التطبيقات               |
+|   4 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                            | مؤلفو التطبيقات               |
+|   5 | `@go-like/config/node`               | `newNodeFileCapability`                                    | مؤلفو بيئة Node               |
+|   6 | `@go-like/config/yaml`               | `decodeYaml`                                               | مؤلفو التطبيقات               |
+|   7 | `@go-like/core/lifecycle`            | `waitForContext`                                           | مؤلفو دورة الحياة/المزوّدات   |
+|   8 | `@go-like/core/node`                 | `signal`                                                   | تكامل عمليات Node/Bun         |
+|   9 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                        | تطبيقات NATS Core             |
+|  10 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | تطبيقات JetStream             |
+|  11 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                   | تطبيقات Broker في JetStream   |
+|  12 | `@go-like/registry/provider`         | خيارات المزوّد ومساعدات snapshot                           | مؤلفو المزوّدات               |
+|  13 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                          | تطبيقات mDNS في Node          |
+|  14 | `@go-like/store/provider`            | خيارات write/delete/list وsnapshots                        | مؤلفو المزوّدات               |
+|  15 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                     | تطبيقات Store الملفية في Node |
+|  16 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                 | مؤلفو العقود typed            |
+|  17 | `@go-like/struct/runtime`            | مساعدات introspection وparsing                             | مؤلفو runtime/المزوّدات       |
+|  18 | `@go-like/transport/headers`         | ثوابت headers `Go-Like-*`                                  | مؤلفو Transport/المزوّدات     |
+|  19 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | مؤلفو Transport typed/raw     |
+|  20 | `@go-like/transport/provider`        | codecs وأخطاء Message وmetadata وServiceError              | مؤلفو المزوّدات               |
+|  21 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | تطبيقات HTTP في Node          |
+|  22 | `@go-like/web/health`                | `createHealthHandler`                                      | تطبيقات Web                   |
+|  23 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | تطبيقات مضيف Web في Node      |
+|  24 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                | مؤلفو التطبيقات               |
+|  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                   | مؤلفو التطبيقات               |
 
-تحتوي إعدادات TypeScript الحالية على path mappings قديمة لـ `@go-like/otel/testing` و`@go-like/web/node/testing`، لكنها ليست exports حالية في manifests الحزم. لا توثّقها كنقاط دخول عامة حتى يوحّد المستودع هذه mappings مع الواقع.
+لا تُعدّ `@go-like/otel/testing` و`@go-like/web/node/testing` path mappings في TypeScript ولا exports حالية في manifests الحزم. لا توثّقها كنقاط دخول عامة.
 
 ## مصفوفة قرار بيئة التشغيل
 
@@ -171,9 +176,9 @@
 
 - استخدم `contextHandler` عند حافة Web عندما تحتاج إلى Context، بدلاً من حقيبة طلب خاصة بالإطار.
 - استخدم `newApp` و`server(...)` عندما تضم العملية أكثر من مورد مقبول، أو عندما يجب أن تكون ملكية الإشارة والإيقاف صريحة.
-- استخدم `endpoint(...)` typed و`handler(contract, fn)` عندما ينبغي للطرفين مشاركة تحقق Struct وقت التشغيل. استخدم `handler(service, endpoint, fn)` الخام عندما يملك التطبيق عقد bytes مختلفاً.
-- استخدم `withAddress(...)` قبل Discovery. فهذا أسهل للاختبار ويجعل هوية الوجهة صريحة.
-- استخدم `withDiscovery(...)` و`withSelector(...)` و`withFilter(...)` و`withBlock()` فقط عندما تحتاج الخدمة إلى سلوك مستوى التحكم الذي تضيفه.
+- استخدم `server.registerHandler(endpoint, handler)` typed عندما ينبغي للطرفين مشاركة تحقق Struct وقت التشغيل. استخدم `server.registerHandler(service, endpoint, handler)` الخام عندما يملك التطبيق عقد bytes مختلفاً.
+- استخدم `withAddress(...addresses)` وقت إنشاء العميل للتوجيه المباشر. ولـ Discovery استخدم `withService(...)` و`withDiscovery(...)` معاً، ولا تجمع العناوين المباشرة مع Discovery. يستخدم المصدران Selector نفسه.
+- استخدم `withSelector(...)` و`withFilter(...)` و`withBlock()` فقط عندما تحتاج الخدمة إلى سلوك مستوى التحكم الذي تضيفه.
 - استخدم `withRetry(...)` بعد كتابة تفويض replay وعدد المحاولات الإجمالي الأقصى وpredicate الفشل وidempotency الخاصة بالعمل.
 - استخدم `newMemoryStore` للاختبارات الحتمية، لا لادعاء durability.
 - استخدم `newMemoryCache` للتسريع القابل للتخلص، لا بوصفه مرجع المواعيد أو المدفوعات.
@@ -182,4 +187,8 @@
 
 ## الاستبعادات الصريحة
 
-لا ينبغي توثيق أي حزمة في الجرد العام الحالي على أنها تملك gRPC أو Protobuf أو توليد شيفرة IDL أو عملاء RPC مولّدين أو تدفقات داخلية full-duplex أو Event Store/history/replay أو مصادقة/تفويضاً عاماً أو سلوك ORM أو service locator عاماً أو تنسيقاً للعناقيد. قد يستخدم مزوّد أو تطبيق مكتبة منفصلة لإحدى هذه المسؤوليات، لكن ذلك سيكون خارج عقد go-like الحالي.
+يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
+
+لا يشمل ذلك gRPC القياسي داخل المتصفح، أو تدفق طلبات Fetch ثنائي الاتجاه، أو health/reflection القياسيين، أو مصادقة عامة، أو Event Store/replay، أو ORM، أو تنسيق العناقيد.
+
+[قيود الإلغاء والإيقاف](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

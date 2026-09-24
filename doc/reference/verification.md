@@ -28,7 +28,7 @@ bun install --frozen-lockfile
 bun run verify
 ```
 
-`bun run verify` is the canonical repository gate. It runs `fmt:check`, `lint:check`, `typecheck`, `build`, and `test:unit:coverage` in that order. The coverage stage runs each root and workspace coverage script once and finishes with `coverage:verify`; the gate does not first repeat the unit scope without coverage. `examples/payments-ledger` is the one exception to unit-only scope: its coverage script also runs the real PostgreSQL/NATS integration scenario and therefore requires Docker.
+`bun run verify` is the canonical repository gate. It runs `test:protobuf`, `fmt:check`, `lint:check`, `typecheck`, `build`, and `test:unit:coverage` in that order. The coverage stage runs each root and workspace coverage script once and finishes with `coverage:verify`; the gate does not first repeat the unit scope without coverage. `examples/payments-ledger` is the one exception to unit-only scope: its coverage script also runs the real PostgreSQL/NATS integration scenario and therefore requires Docker.
 
 Use the mutating commands locally. `fmt` repairs formatting; `lint` applies safe Oxlint fixes, formats the result, and succeeds only with zero warnings:
 
@@ -40,6 +40,7 @@ bun run lint
 Run an individual stage only to narrow a failure; passing one stage does not replace the canonical gate:
 
 ```sh
+bun run test:protobuf
 bun run fmt:check
 bun run lint:check
 bun run typecheck
@@ -73,6 +74,8 @@ bun run --cwd examples/healthcare-appointments test:unit
 bun run --cwd examples/vanilla-web test:unit
 ```
 
+`test:protobuf` runs Buf lint/generation, checks the generated fixture types, and executes its RPC integration test. It generates fixture output and builds the generator; it is not a read-only format check. The canonical gate includes the payments-ledger Docker integration through coverage, but does not run the complete E2E scopes or the soak lanes.
+
 ## E2E scopes
 
 The public scripts build the root packages and then select a scope:
@@ -84,6 +87,7 @@ bun run test:e2e:examples
 bun run test:e2e:published
 bun run test:e2e
 bun run test:e2e:soak
+bun run test:e2e:grpc-soak
 ```
 
 The direct runner is also available after a build:

@@ -36,7 +36,7 @@ https://pricing.internal.example
 127.0.0.1:9000
 ```
 
-`endpoint(...)` creates the first kind of object. `withAddress(...)` supplies the second kind of value. A Registry `ServiceInstance` contains service identity and an `endpoints` array of opaque transport addresses. go-like does not infer a protocol or operation from a URL scheme.
+`endpoint(...)` creates the first kind of object. Construction-time `withAddress(...)` supplies the second kind of value. A Registry `ServiceInstance` contains service identity and an `endpoints` array of opaque transport addresses. go-like does not infer a protocol or operation from a URL scheme.
 
 ## Typed Memory Transport first
 
@@ -46,7 +46,7 @@ The typed form is useful when both sides agree on runtime `Struct` validation an
 import { newClient, withAddress, withTransport } from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
-import { address, handler, newServer, transport as serverTransport } from "@go-like/server"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
 import { struct } from "@go-like/struct"
 import { endpoint } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
@@ -62,21 +62,18 @@ const AddResponse = struct.object({
 const Add = endpoint("math", "Add", AddRequest, AddResponse)
 const transport = newMemoryTransport()
 
-const rpc = newServer(
-  serverTransport(transport),
-  address("memory://math"),
-  handler(Add, (_ctx, request) => ({
-    sum: request.left + request.right
-  }))
-)
+const rpc = newServer(serverTransport(transport), address("memory://math"))
+rpc.registerHandler(Add, (_ctx, request) => ({
+  sum: request.left + request.right
+}))
 
-const client = newClient(withTransport(transport))
+const client = newClient(withTransport(transport), withAddress("memory://math"))
 const app = newApp(name("math-example"), server(rpc))
 const running = app.run()
-const target = await rpc.endpoint(background())
+await rpc.endpoint(background())
 
 try {
-  const result = await client.call(background(), Add, { left: 2, right: 3 }, withAddress(target))
+  const result = await client.call(background(), Add, { left: 2, right: 3 })
   console.log(result.sum)
 } finally {
   await client.close(background())
@@ -88,8 +85,8 @@ try {
 In a real application, prefer one composition root that starts and stops the server. The important details are:
 
 - the Client and Server use the same `newMemoryTransport()` instance;
-- `handler(endpoint, fn)` is a typed internal unary handler, not a Fetch handler;
-- `client.call(ctx, endpoint, value, withAddress(...))` validates the request and response through the Endpoint's Structs;
+- `server.registerHandler(endpoint, fn)` registers a typed internal unary handler before start; it is not a Fetch handler;
+- `client.call(ctx, endpoint, value)` validates the request and response through the Endpoint's Structs, while the destination stays on the Client owner;
 - `client.close(ctx)` is explicit application cleanup;
 - Memory Transport is instance-private and process-local. It does not fall back to a network transport.
 
@@ -114,19 +111,15 @@ import { newClient, withAddress, withTransport } from "@go-like/client"
 import { background } from "@go-like/context"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-const client = newClient(withTransport(newMemoryTransport()))
-const reply = await client.call(
-  background(),
-  {
-    service: "orders",
-    endpoint: "Orders.Get",
-    message: {
-      header: { "content-type": "application/json" },
-      body: new TextEncoder().encode(JSON.stringify({ orderId: "order-1" }))
-    }
-  },
-  withAddress("memory://orders")
-)
+const client = newClient(withTransport(newMemoryTransport()), withAddress("memory://orders"))
+const reply = await client.call(background(), {
+  service: "orders",
+  endpoint: "Orders.Get",
+  message: {
+    header: { "content-type": "application/json" },
+    body: new TextEncoder().encode(JSON.stringify({ orderId: "order-1" }))
+  }
+})
 ```
 
 This raw example only describes the Client call shape. A server must be listening on the same Transport instance and address; raw calls do not create a handler automatically. Raw handlers also do not receive Struct validation unless the application adds it.
@@ -146,7 +139,7 @@ The helpers validate UTF-8, JSON syntax, and the supplied Struct. They do not de
 
 The Client snapshots the outbound Message before a call. An admitted attempt does the following:
 
-1. Use `withAddress(...)`, or ask Discovery for a complete snapshot.
+1. Read the construction-time direct-address snapshot, or ask Discovery for a complete snapshot.
 2. Apply `withFilter(...)` filters in declaration order.
 3. Ask the Selector for one opaque transport URL and a synchronous feedback callback.
 4. Reuse an idle logical Transport Client for that address, or call `Transport.dial(...)`.
@@ -193,7 +186,7 @@ interface Watcher {
 }
 ```
 
-The Client lazily creates one resident watcher per service name. It establishes the watcher before the initial read, uses a first snapshot barrier, then performs a fresh read so an older initial result cannot overwrite a newer snapshot. A later empty snapshot is authoritative: it replaces the previous endpoints and causes selection to fail closed. During transient watcher reconstruction, the resolver may retain the last complete snapshot while it rebuilds the watcher.
+The Client lazily creates one resident watcher per service name. It establishes the watcher before the initial read, uses a first snapshot barrier, then performs a fresh read so an older initial result cannot overwrite a newer snapshot. A later empty snapshot is authoritative: it replaces the previous endpoints and causes selection to fail closed. During transient watcher reconstruction, the resolver may retain the last complete snapshot during backoff. After reopening the watcher it performs an authoritative `getService` read before waiting for the first watcher result, so a missed removal can publish an empty snapshot even when `next()` waits for non-empty endpoints. It reconciles the first watcher result with another fresh read before accepting it.
 
 `withBlock()` changes initial readiness only. It waits for the first raw discovery snapshot containing at least one endpoint. It does not make later empty snapshots healthy and it does not apply call filters to the readiness decision.
 
@@ -299,7 +292,14 @@ Attempt 2: response received -> cleanup fails
 Client and Server both support a global middleware chain and operation-specific middleware. Operation matching is exact first, then the longest trailing-wildcard prefix, then the global chain. The first middleware declared in a sequence is the outermost layer.
 
 ```ts
-import { middleware, newClient, type ClientMiddleware, use, withTransport } from "@go-like/client"
+import {
+  middleware,
+  newClient,
+  type ClientMiddleware,
+  use,
+  withAddress,
+  withTransport
+} from "@go-like/client"
 
 const observe: ClientMiddleware =
   (next) =>
@@ -312,10 +312,16 @@ const observe: ClientMiddleware =
     }
   }
 
-const client = newClient(withTransport(transport), middleware(observe), use("orders/*", observe))
+const serviceAddress = "memory://orders"
+const client = newClient(
+  withTransport(transport),
+  withAddress(serviceAddress),
+  middleware(observe),
+  use("orders/*", observe)
+)
 ```
 
-The `transport` value is an application-owned `Transport` constructed earlier. Do not assume middleware adds validation, retries, or authorization automatically.
+The `transport` value is an application-owned `Transport` constructed earlier, and `serviceAddress` is its construction-time destination. Do not assume middleware adds validation, retries, or authorization automatically.
 
 ## Cleanup checklist
 

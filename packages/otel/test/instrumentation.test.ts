@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
-import { withAddress, type CallOption, type Client, type CallRequest } from "@go-like/client"
+import type { CallOption, Client, CallRequest } from "@go-like/client"
 import { background, withCancelCause, type Context as GoLikeContext } from "@go-like/context"
 import { newMetadata, newServerContext } from "@go-like/metadata"
 import { struct } from "@go-like/struct"
@@ -126,7 +126,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const nativeEvent = Object.freeze({ sequence: 42 })
     const captured: {
       delivery:
-        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
+        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | Promise<void>)
         | null
       publishedMessage: BrokerMessage | null
       deliveredEvent: BrokerEvent<NativeEvent> | null
@@ -367,19 +367,14 @@ describe("explicit OpenTelemetry instrumentation", () => {
     let result: unknown = null
     await tracer.startActiveSpan("typed-root", async (span) => {
       try {
-        result = await client.call(background(), contract, { id: 7 }, withAddress("loopback"))
+        result = await client.call(background(), contract, { id: 7 })
       } finally {
         span.end()
       }
     })
 
     await expect(
-      client.call(
-        background(),
-        typedEndpoint("catalog", "TypedFail", payload, payload),
-        { id: 8 },
-        withAddress("loopback")
-      )
+      client.call(background(), typedEndpoint("catalog", "TypedFail", payload, payload), { id: 8 })
     ).rejects.toMatchObject({
       code: "GO_LIKE_TRANSPORT_PROTOCOL",
       cause: { name: "StructError" }
@@ -788,7 +783,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const brokerFailure = new Error("publish failed")
     const captured: {
       delivery:
-        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>)
+        | ((ctx: GoLikeContext, event: BrokerEvent<NativeEvent>) => void | Promise<void>)
         | null
     } = { delivery: null }
     const rawBroker: Broker<void, void, void, NativeEvent> = {

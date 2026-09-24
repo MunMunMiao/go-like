@@ -15,12 +15,15 @@ generation 出现前以 `RabbitMQ recovering broker is disconnected` 拒绝；`s
 descriptor，并在首次成功 setup 时 attach。`ready(ctx)` 等待 connector 返回且 initial setup 完成，
 语义与 `newRecoveringRabbitMqBroker(ctx, connector)` 相同——后者就是
 `startRecoveringRabbitMqBroker(ctx, connector).ready(ctx)`。跳过 setup 的 connector 仍被拒绝，
-文案为 `RabbitMQ recovery connector must complete its initial setup`。`stop(ctx)` 可在从未
-`ready` 时拆掉后台 connector 与已接纳 generation。本包不提供 HTTP health 端点。
+文案为 `RabbitMQ recovery connector must complete its initial setup`。同步 handle 的 `stop(ctx)` 会使 Broker
+永久停止，并请求关闭私有 generation channel 与已经返回的 connection；connector 尚未完成时，它不会强制
+终止该 Promise，而是继续观察并关闭迟到返回的 connection。当前 discard 路径会隔离原生 close 失败，因此
+`stop(ctx)` 完成不证明全部原生资源已经成功关闭。本包不提供 HTTP health 端点。
 
 内部 channel 没有独立公共 stop 契约：setup/connector 失败时 provider 会回滚关闭；已接纳 generation 在
-上游断线或应用关闭其 `RecoveringChannelModel` 时由 amqplib connection 从属关闭。因此 provider 只独立停止
-consumer；应用拥有并负责关闭 connection。
+上游断线或应用关闭其 `RecoveringChannelModel` 时由 amqplib connection 从属关闭。异步 canonical 入口成功返回后，
+应用拥有并负责关闭 connection；使用同步入口并保留 handle 时，显式 `handle.stop(ctx)` 也会请求关闭该 connection。
+单个 Subscriber 的 `unsubscribe(ctx)` 只停止对应 consumer。
 
 `newConfirmRabbitMqBroker(channel)` 借用应用创建的原生 `ConfirmChannel`，提供与 canonical 入口相同的
 per-publish confirm 语义，同时保留 amqplib flow-control boolean。调用方 Context 只能提前结束自己的等待；
@@ -37,7 +40,8 @@ owner Context 终止或 handler 失败都会结束订阅，并通过既有 `newB
 仍由应用通过原生配置决定。
 
 `amqplib@2` 提供 opt-in connection recovery，但不会替应用重建 borrowed 入口传入的 channel。canonical
-入口直接复用官方 setup/backoff，不另造重连循环；connection 的创建与关闭始终由应用负责。
+入口直接复用官方 setup/backoff，不另造重连循环。connection 配置与创建由应用 connector 负责；关闭边界依上文
+异步 canonical、同步 handle 与 borrowed 入口的所有权约定处理。
 
 Publisher confirm 不提供 exactly-once；需要业务级去重的发布仍应使用幂等键或 outbox。
 

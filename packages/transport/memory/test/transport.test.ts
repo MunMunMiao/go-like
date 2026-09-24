@@ -50,7 +50,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 /** Returns a rejected Error without accepting a fulfilled operation. */
-async function rejected(work: PromiseLike<unknown>): Promise<Error> {
+async function rejected(work: Promise<unknown>): Promise<Error> {
   try {
     await work
   } catch (failure) {

@@ -60,7 +60,7 @@ From the repository root:
 bun install --frozen-lockfile
 ```
 
-The packages are workspace dependencies in this checkout. The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment. Command behavior and results, not version numbers, determine the outcome. The current package documentation says the packages are not yet published to npm.
+The packages are workspace dependencies in this checkout. The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment. Command behavior and results, not version numbers, determine the outcome. Manifest versions do not establish npm availability; verify publication separately before installing outside the workspace.
 
 Run the existing baseline example:
 
@@ -213,13 +213,7 @@ The route tokens are visible ASCII and cannot contain `/` or `*`. The `Endpoint`
 ```ts
 import { newClient, withAddress, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
-import {
-  address,
-  handler,
-  newServer,
-  transport as serverTransport,
-  type Server
-} from "@go-like/server"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
 import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
@@ -234,22 +228,19 @@ export interface AppointmentPolicy {
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport))
-  const server = newServer(
-    serverTransport(transport),
-    address(policyAddress),
-    handler(checkAppointment, (_ctx, request) => {
-      if (request.endsAt - request.startsAt > maximumDurationMs) {
-        throw new Error("appointment duration exceeds policy")
-      }
-      return { allowed: true }
-    })
-  )
+  const client = newClient(withTransport(transport), withAddress(policyAddress))
+  const server = newServer(serverTransport(transport), address(policyAddress))
+  server.registerHandler(checkAppointment, (_ctx, request) => {
+    if (request.endsAt - request.startsAt > maximumDurationMs) {
+      throw new Error("appointment duration exceeds policy")
+    }
+    return { allowed: true }
+  })
 
   return Object.freeze({
     server,
     async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request, withAddress(policyAddress))
+      return await client.call(ctx, checkAppointment, request)
     },
     close(ctx: Context): Promise<void> {
       return client.close(ctx)
@@ -296,6 +287,7 @@ Cache is useful for a read projection, not for booking authority. The Cache pack
 import type { Context } from "@go-like/context"
 import { expiresIn } from "@go-like/cache"
 import { newMemoryCache } from "@go-like/cache-memory"
+import type { AppointmentRepository } from "./service"
 
 interface Availability {
   readonly doctorId: string
@@ -394,7 +386,6 @@ import { afterStart, afterStop, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
 import { hostname, newNodeServer, port } from "@go-like/web/node"
 
-const policy = newAppointmentPolicy()
 const httpServer = newNodeServer(webHandler, hostname("127.0.0.1"), port(3000))
 const app = newApp(
   signal(),
@@ -410,7 +401,7 @@ const app = newApp(
 await app.run()
 ```
 
-The `afterStop` hook is one explicit ordering boundary for the policy Client. Core itself stops sibling Servers concurrently. If a more complex dependency order is required, compose the dependent resources into one Server or explicit hook rather than relying on declaration order.
+M4 reuses the `policy` and `webHandler` created in M3; do not create another policy instance. The `afterStop` hook is one explicit ordering boundary for the policy Client. Core itself stops sibling Servers concurrently. If a more complex dependency order is required, compose the dependent resources into one Server or explicit hook rather than relying on declaration order.
 
 `signal()` is the Node/Bun process adapter. The domain, typed contract, Memory Transport, and health modules can remain portable; the `@go-like/core/node` import is a deliberate runtime choice.
 
@@ -476,7 +467,7 @@ A doctor slot overlaps an active appointment, an appointment ID was reused with 
 
 ### A typed call reports invalid request or response body
 
-Check that the client and server use the same `Endpoint` Structs and that the request Content-Type is exactly `application/json`. `handler(contract, fn)` performs JSON and Struct validation at the Server boundary.
+Check that the client and server use the same `Endpoint` Structs and that the request Content-Type is exactly `application/json`. `server.registerHandler(contract, fn)` performs JSON and Struct validation at the Server boundary.
 
 ### Memory Client cannot reach the Server
 
@@ -484,7 +475,7 @@ Check that the client and server use the same `Endpoint` Structs and that the re
 
 ### `app.run()` appears to hang
 
-A long-lived `Server.start(ctx)` may remain pending for the service lifetime. That is expected. `app.run()` resolves after stop and terminal cleanup, not immediately after a listener is bound. Use `afterStart` or `server.endpoint(ctx)` for an admission signal.
+A long-lived `Server.start(ctx)` may remain pending for the service lifetime. That is expected. `app.run()` resolves after stop and terminal cleanup, not immediately after a listener is bound. Wait for `server.endpoint(ctx)` or another resource-specific admission signal inside `afterStart` before announcing readiness.
 
 ### No ready line or `EADDRINUSE`
 

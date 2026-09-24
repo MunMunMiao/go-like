@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { chmod } from "node:fs/promises"
 import { join, resolve } from "node:path"
 
-import type { RequiredTool, SuiteDefinition } from "../e2e/definitions"
+import { findSuiteDefinition, type RequiredTool, type SuiteDefinition } from "../e2e/definitions"
 import { runE2eRequest } from "../e2e/executor"
 import type {
   CommandDefinition,
@@ -69,6 +69,7 @@ function probeVersions(overrides: Partial<Record<string, string>> = {}): {
       const executable = definition.command[0] ?? ""
       if (executable === "node") return result(overrides.node ?? "node-observed")
       if (executable === "deno") return result(overrides.deno ?? "deno-observed")
+      if (executable === "openssl") return result(overrides.openssl ?? "openssl-observed")
       if (executable === "docker") return result(overrides.docker ?? "docker-observed")
       return result(overrides.typescript ?? "typescript-observed")
     }
@@ -107,12 +108,13 @@ async function writeVersionShim(path: string, body: string): Promise<void> {
 }
 
 async function expectPathObservationAccepted(
-  tool: Exclude<RequiredTool, "bun" | "docker">
+  tool: Exclude<RequiredTool, "bun" | "openssl" | "docker">
 ): Promise<void> {
   const expectedPreflight = {
-    node: "[e2e] PREFLIGHT bun=n/a node=future node channel deno=n/a typescript=n/a docker=n/a",
-    deno: "[e2e] PREFLIGHT bun=n/a node=n/a deno=custom deno build typescript=n/a docker=n/a",
-    typescript: "[e2e] PREFLIGHT bun=n/a node=n/a deno=n/a typescript=typescript nightly docker=n/a"
+    node: "[e2e] PREFLIGHT bun=n/a node=future node channel deno=n/a typescript=n/a openssl=n/a docker=n/a",
+    deno: "[e2e] PREFLIGHT bun=n/a node=n/a deno=custom deno build typescript=n/a openssl=n/a docker=n/a",
+    typescript:
+      "[e2e] PREFLIGHT bun=n/a node=n/a deno=n/a typescript=typescript nightly openssl=n/a docker=n/a"
   } as const
   const directory = await createTempDirectory(`go-like-${tool}-version-`)
   const marker = join(directory.path, "consumer-started")
@@ -172,26 +174,43 @@ test("tool union probes only explicit definition requirements in fixed order", a
   const runner: RuntimeProbeRunner = async (_root, definition) => {
     const executable = definition.command[0] ?? ""
     calls.push(executable)
-    return executable === "node" ? result("node-observed") : result("docker-observed")
+    if (executable === "node") return result("node-observed")
+    if (executable === "openssl") {
+      expect(definition.command).toEqual(["openssl", "version"])
+      return result("openssl-observed")
+    }
+    return result("docker-observed")
   }
   const tools = requiredToolsForPlan([
     selectedDefinition("docker-only", ["docker"]),
-    selectedDefinition("node-only", ["node"])
+    selectedDefinition("openssl-and-node", ["openssl", "node"])
   ])
-  expect(tools).toEqual(["node", "docker"])
+  expect(tools).toEqual(["node", "openssl", "docker"])
   const observations = await probeRequiredRuntimeVersions("/repo", tools, runner, dependencies)
-  expect(observations.map((observation) => observation.tool)).toEqual(["node", "docker"])
-  expect(calls).toEqual(["node", "docker"])
+  expect(observations.map((observation) => observation.tool)).toEqual(["node", "openssl", "docker"])
+  expect(calls).toEqual(["node", "openssl", "docker"])
+})
+
+test("only the published suite requires the observed OpenSSL prerequisite", () => {
+  expect(findSuiteDefinition("published")?.requiredTools).toEqual([
+    "bun",
+    "node",
+    "deno",
+    "typescript",
+    "openssl"
+  ])
+  expect(findSuiteDefinition("runtime-grpc-buf")?.requiredTools).toEqual(["bun", "node", "deno"])
 })
 
 test("successful tool probes record arbitrary output without an eligibility gate", async () => {
   const observations = await probeRequiredRuntimeVersions(
     "/repo",
-    ["bun", "node", "deno", "typescript", "docker"],
+    ["bun", "node", "deno", "typescript", "openssl", "docker"],
     async (_root, definition) => {
       const executable = definition.command[0] ?? ""
       if (executable === "node") return result("future-node channel")
       if (executable === "deno") return result("custom deno build\nextra detail")
+      if (executable === "openssl") return result("OpenSSL future-channel")
       if (executable === "docker") return result("")
       return result("typescript nightly")
     },
@@ -203,6 +222,7 @@ test("successful tool probes record arbitrary output without an eligibility gate
     { tool: "node", actual: "future-node channel" },
     { tool: "deno", actual: "custom deno build" },
     { tool: "typescript", actual: "typescript nightly" },
+    { tool: "openssl", actual: "OpenSSL future-channel" },
     { tool: "docker", actual: "unreported" }
   ])
 })

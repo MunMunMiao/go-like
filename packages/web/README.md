@@ -6,6 +6,10 @@
 `ContextHandlerOptions`。桥接层把 `Request.signal` 映射为私有的 `@go-like/context` Context，
 同时原样保留处理器自己的 `Response` 或失败结果。
 
+这个私有 Context 的生命周期截止于 handler 同步返回或其 Promise 结算；此时会取消 Context 并释放 listener/timer，
+不会等待 `Response.body` 被消费。流式 body 的生产与取消由应用和 HTTP host 管理，不能把该 Context 当作整个响应流的
+存活信号。`timeoutMs` 只取消 Context，不把不合作的 handler 自动改写为超时响应。
+
 根入口不提供路由、中间件、Server-Sent Events 辅助函数或 WebSocket 升级控制；这些职责由运行时和框架包拥有。
 
 公开入口按职责拆分：
@@ -50,3 +54,11 @@ probe 的私有错误不会进入响应；请求取消通过独立 Context 传�
 Hono、Elysia 与 H3 2.x 直接把原生 `app.fetch` 传给 `newNodeServer`，H3 1.x 使用官方
 `toWebHandler(app)`。框架继续拥有路由、中间件、流和错误策略；go-like 不发布框架专用桥接包，只管理
 listener 生命周期。
+
+## 已知运行时取消边界
+
+Bun 1.4.2 的 Fetch 客户端在读取首条响应后取消一个随后保持静默的真实 HTTP 流，可能未在 500ms 观察窗口内
+让远端 response/socket 关闭；Node 26.9.0 客户端在相同场景能够关闭。该现象对 Node 与 Bun 服务端都可复现，
+去掉 LikeGo 和 Connect 的纯 `node:http` + Fetch 对照仍相同，因此不归因于本包的 Node host。
+本地 reader cancel/abort 完成不证明远端 handler 已清理；需要远端完成证据的应用必须单独验收自己的 runtime
+和工作负载。此项只记录运行时限制，不添加库内 workaround。

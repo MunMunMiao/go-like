@@ -51,7 +51,7 @@ function subscriptionLifecycle(native: Subscription): NativeBrokerLifecycle {
       return native.drain()
     },
     /** Returns the official subscription terminal barrier. */
-    terminal(): PromiseLike<void | Error> {
+    terminal(): Promise<void | Error> {
       return native.closed
     },
     /** Forces only this native subscription to stop. */
@@ -94,7 +94,7 @@ export function newNatsCoreBroker(
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<Msg>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<Msg>) => void | Promise<void>,
       options?: NatsCoreBrokerSubscribeOptions
     ): Promise<Subscriber> {
       const failure = contextFailure(ctx)

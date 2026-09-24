@@ -17,3 +17,7 @@ go-like 係一套畀 TypeScript 後端用、帶 Go 風格嘅微服務建構元�
 ## 呢度所講嘅 Go 風格
 
 阻塞工作將 Context 放喺第一個參數，資源邊個持有要寫清楚，停止之後有穩定終態，小 interface 用結構類型滿足。唔係將 Go 命名、channel 或 goroutine 生搬去 TypeScript；TS export 保持自然，第三方套件獨有語意亦留返喺原生物件。
+
+`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於 unary Transport SPI。
+
+[取消同停機嘅已知限制](/reference/claims#stream-cancellation-limits)：Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

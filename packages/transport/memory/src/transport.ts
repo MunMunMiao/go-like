@@ -388,7 +388,7 @@ function newMemoryListener(address: string, releaseAddress: () => void): MemoryL
     )
     let running: Promise<void>
     running = Promise.resolve()
-      .then(function invokeHandler(): void | PromiseLike<void> {
+      .then(function invokeHandler(): void | Promise<void> {
         return handler(handlerContext, socket)
       })
       .then(

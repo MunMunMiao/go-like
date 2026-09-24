@@ -35,7 +35,7 @@ async function nextTurn(): Promise<void> {
 }
 
 /** Returns one publish rejection while requiring Error normalization. */
-async function rejected(operation: PromiseLike<void>): Promise<Error> {
+async function rejected(operation: Promise<void>): Promise<Error> {
   try {
     await operation
   } catch (value) {

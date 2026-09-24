@@ -7,3 +7,5 @@
 Provider 明確接收位址、憑證和宿主能力。可攜式 HTTP provider 使用傳入的單參數 Fetch，不讀 runtime 全域狀態。敏感 token 只放 header，公開錯誤不夾帶 token 或 response body。watch 遇到 etcd compaction 或 Kubernetes `410 Gone` 時，會先重新取得完整快照再接續。ZooKeeper watch 在一次性通知或 session 過期後也會重新掛載；如果取消發生在 `multi` 已提交之後，provider 會等待真實結果並依精確狀態回滾，結果仍然不明確時則關閉 session，再恢復先前已接納的註冊 owner。
 
 檔案 Store 適合少量本機狀態，不能當成多程序資料庫；Registry 資料描述短暫可達性，也不是業務永久紀錄。先守住這些界線，比提供一個什麼都像能做的 API 實際得多。
+
+持久性與 TTL/CAS 能力取決於 provider；`store-memory` 的資料會在程序結束時消失。

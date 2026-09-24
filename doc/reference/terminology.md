@@ -93,7 +93,7 @@ The localized trees should preserve:
 
 1. every package name, public function, type, route token, header, command, URL, version, and numeric limit exactly;
 2. the distinction between `Registry` and `Discovery`, `Store` and `Cache`, `Broker` and `Event`, and `provider` and `lifecycle adapter`;
-3. the negative boundary around gRPC, Protobuf, IDL, full-duplex RPC, global auth, and automatic instrumentation;
+3. the portable Protobuf/Connect Fetch boundary, the managed standard-gRPC `/native` boundary, and the exclusions for browser standard gRPC, Fetch request-streaming/bidi, global auth, and automatic instrumentation;
 4. the evidence label attached to claims;
 5. the difference between a source contract, a declared test, a passing command, and an unresolved evidence gap.
 

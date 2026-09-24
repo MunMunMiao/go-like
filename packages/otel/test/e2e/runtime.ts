@@ -50,7 +50,7 @@ if (web(new Request("https://runtime.example.test/web")) !== webResponse) {
   throw new Error("traced Web handler changed its synchronous response")
 }
 
-let delivery: ((ctx: Context) => PromiseLike<void> | void) | null = null
+let delivery: ((ctx: Context) => Promise<void> | void) | null = null
 const broker = traceBroker(
   {
     async publish(ctx) {

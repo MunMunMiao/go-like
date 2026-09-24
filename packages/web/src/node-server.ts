@@ -17,6 +17,9 @@ import {
 import { createAdaptorServer, type ServerType } from "./node-fetch-bridge"
 
 export interface NodeServer extends Server, Endpointer {
+  /** Returns the stable HTTP publication discriminator. */
+  protocol(): string
+
   /** Binds once and returns the actual HTTP endpoint used by App registration. */
   endpoint(ctx: Context): Promise<string>
 }
@@ -654,6 +657,10 @@ function managedServer(
   }
 
   return Object.freeze({
+    /** Returns the stable HTTP publication discriminator. */
+    protocol(): string {
+      return "http"
+    },
     /** Claims the one-shot server and starts native listen under the supplied Context. */
     start(ctx: Context): Promise<void> {
       if (runtime.startClaimed) {

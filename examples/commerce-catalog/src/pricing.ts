@@ -1,8 +1,8 @@
-import { withFilter, withRetry, type CallOption, type CallRequest } from "@go-like/client"
+import { withFilter, withRetry, type CallOption, type Client } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import { filterVersion } from "@go-like/registry"
 import { exponentialBackoff } from "@go-like/resilience"
-import type { Handler } from "@go-like/server"
+import type { Handler, HandlerRegistrar } from "@go-like/server"
 import type { Message } from "@go-like/transport"
 
 import {
@@ -17,10 +17,15 @@ const jsonMediaType = "application/json"
 const jsonEncoder = new TextEncoder()
 const jsonDecoder = new TextDecoder("utf-8", { fatal: true })
 
-/** Describes the raw unary Client capability used by the Pricing caller. */
+/** Describes the typed Pricing caller borrowed from one common Client owner. */
 export interface PricingClient {
-  /** Calls one internal Pricing operation. */
-  call(ctx: Context, request: CallRequest, ...options: readonly CallOption[]): Promise<Message>
+  /** Fetches one validated internal Pricing quote. */
+  fetchPrice(
+    ctx: Context,
+    productId: string,
+    currency: string,
+    ...options: readonly CallOption[]
+  ): Promise<PriceQuote | null>
 }
 
 /** Decodes and validates one Pricing request body. */
@@ -113,34 +118,44 @@ function requestMessage(productId: string, currency: string): Message {
   })
 }
 
-/** Calls Pricing with explicit idempotent retry authorization. */
-export async function fetchPrice(
-  ctx: Context,
-  client: PricingClient,
-  productId: string,
-  currency: string
-): Promise<PriceQuote | null> {
-  const response = await client.call(
-    ctx,
-    {
-      service: "pricing",
-      endpoint: "Pricing.Get",
-      message: requestMessage(productId, currency)
-    },
-    withFilter(filterVersion("v1")),
-    withRetry({
-      authorization: "idempotent",
-      maxAttempts: 3,
-      shouldRetry(_attemptContext, failure) {
-        return failure instanceof TypeError
-      },
-      backoff: exponentialBackoff({ initialDelayMs: 10, maxDelayMs: 50 })
-    })
-  )
-  return decodePrice(response.body, productId, currency)
+/** Creates the typed Pricing caller with its existing filter and retry policy. */
+export function newPricingClient(client: Client): PricingClient {
+  return Object.freeze({
+    async fetchPrice(
+      ctx: Context,
+      productId: string,
+      currency: string,
+      ...options: readonly CallOption[]
+    ): Promise<PriceQuote | null> {
+      const response = await client.call(
+        ctx,
+        {
+          service: "pricing",
+          endpoint: "Pricing.Get",
+          message: requestMessage(productId, currency)
+        },
+        withFilter(filterVersion("v1")),
+        withRetry({
+          authorization: "idempotent",
+          maxAttempts: 3,
+          shouldRetry(_attemptContext, failure) {
+            return failure instanceof TypeError
+          },
+          backoff: exponentialBackoff({ initialDelayMs: 10, maxDelayMs: 50 })
+        }),
+        ...options
+      )
+      return decodePrice(response.body, productId, currency)
+    }
+  })
 }
 
 export const pricingMediaType = jsonMediaType
+
+/** Registers the Pricing implementation on one Server owner. */
+export function registerPricingHandler(server: HandlerRegistrar, handler: Handler): void {
+  server.registerHandler("pricing", "Pricing.Get", handler)
+}
 
 /** Creates the Pricing.Get handler registered directly on a go-like Server. */
 export function newPricingHandler(onCall?: () => void): Handler {

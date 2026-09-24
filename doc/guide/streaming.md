@@ -1,14 +1,17 @@
 # Streaming
 
-go-like has two different streaming boundaries, and only one is an internal go-like transport contract:
+go-like has three distinct call and streaming boundaries:
 
 1. **Public Web streaming** uses the standard Fetch `Request`/`Response` body and Web Streams APIs.
-2. **Internal service calls** currently use one unary request `Message` and one unary response `Message`.
+2. **Message SPI service calls** use one unary request `Message` and one unary response `Message`.
+3. **Generated Protobuf RPC** uses `@go-like/transport-grpc-buf`: portable Fetch supports Connect/gRPC-Web unary and server-streaming; `/native` supports standard gRPC unary, server-streaming, client-streaming, and bidi. `@go-like/protoc-gen-like` generates ctx-first client and handler glue over upstream Protobuf-ES descriptors.
 
-The second boundary is deliberately not called an RPC stream. go-like does not currently publish an internal full-duplex stream SPI, frame protocol, half-close operation, backpressure contract, or stream retry rule.
+The second boundary is deliberately not called an RPC stream. `@go-like/transport` does not publish a full-duplex stream SPI, frame protocol, half-close operation, backpressure contract, or stream retry rule.
 
 > [!IMPORTANT]
-> A `ReadableStream`, SSE response, WebSocket upgrade, or long-lived Fetch response is Web streaming. It is not evidence that go-like supports internal bidirectional RPC streams.
+> A `ReadableStream`, SSE response, WebSocket upgrade, or long-lived Fetch response is Web streaming. It does not establish the separate generated RPC path or its cancellation guarantees.
+
+See the [observed cancellation and drain limits](/reference/claims#stream-cancellation-limits) for Connect 2.1.2, Bun 1.4.2 Fetch, and Deno native HTTP/2. Interoperability alone does not prove stream cleanup. Generated RPC does not add automatic retries or stream replay.
 
 ## Public Web streaming
 
@@ -74,7 +77,7 @@ Client.call(ctx, operation, input)
 | Cancellation  | `Request.signal`, handler Context, stream cancellation     | call Context through `send`/`recv` and owner cleanup           |
 | Retry         | Application decides whether a Web request can be replayed  | `withRetry` requires explicit authorization and total attempts |
 | Backpressure  | Web Streams/framework/runtime contract                     | No internal stream backpressure SPI is promised                |
-| Full duplex   | Possible through a framework or Web API                    | Deliberately outside the current go-like boundary              |
+| Full duplex   | Possible through a framework or Web API                    | Outside the unary Message SPI                                  |
 
 A Fetch body can be streamed while a request is in flight. That does not imply the transport can exchange arbitrary frames in both directions, nor that a retry can safely recreate the body. If an application builds an internal stream protocol, it owns that protocol and should not label it as go-like's current Transport contract.
 
@@ -104,6 +107,6 @@ async function buildStream(request: Request): Promise<ReadableStream<Uint8Array>
 
 The snippet illustrates the ownership decision; an application should add a real termination condition instead of producing an endless stream. Internal Client cleanup is separate: call `client.close(ctx)` when the logical Client is no longer used.
 
-## What would be required for an internal full-duplex API
+## Extending the Message SPI
 
-Adding an internal stream contract would be a new product boundary, not a rename. It would need a defined wire frame model, message ordering, backpressure, half-close semantics, terminal errors, cancellation propagation, provider capability negotiation, retry prohibition after partial exchange, and runtime-specific providers. Those decisions are intentionally not part of the current `0.0.1` documentation claim.
+Adding streams to `@go-like/transport` would change that SPI. The separate generated RPC path already uses upstream Connect/gRPC semantics. It would need a defined wire frame model, message ordering, backpressure, half-close semantics, terminal errors, cancellation propagation, provider capability negotiation, retry prohibition after partial exchange, and runtime-specific providers. Those guarantees must not be inferred for the unary Message SPI.

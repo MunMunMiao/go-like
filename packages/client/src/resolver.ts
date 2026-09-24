@@ -100,17 +100,17 @@ export function newDiscoveryResolver(discovery: Discovery): DiscoveryResolver {
     state: ServiceState,
     watcher: Watcher,
     name: string,
-    reconcileFirst: boolean
+    reopened: boolean
   ): Promise<void> {
     const next = watcher.next
     const stop = watcher.stop
     const active: ActiveWatcher = { receiver: watcher, stop, shutdown: null }
     state.watcher = active
     try {
-      if (reconcileFirst) {
-        await next.call(watcher, owner)
-        publishSnapshot(state, await getService.call(discovery, owner, name))
-      }
+      // A new watch can wait for non-empty state, so first refresh removals missed while disconnected.
+      if (reopened) publishSnapshot(state, await getService.call(discovery, owner, name))
+      await next.call(watcher, owner)
+      publishSnapshot(state, await getService.call(discovery, owner, name))
       while (true) publishSnapshot(state, await next.call(watcher, owner))
     } catch (primary) {
       const ownerError = owner.err()
@@ -142,10 +142,10 @@ export function newDiscoveryResolver(discovery: Discovery): DiscoveryResolver {
     return retry<void>(
       owner,
       async function watchService(): Promise<void> {
-        const reconcileFirst = admitted !== null
+        const reopened = admitted === null
         const watcher = admitted ?? (await watch.call(discovery, owner, name))
         admitted = null
-        await consume(state, watcher, name, reconcileFirst)
+        await consume(state, watcher, name, reopened)
       },
       {
         authorization: "caller-approved",

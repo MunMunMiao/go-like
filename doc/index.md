@@ -1,11 +1,11 @@
 # go-like
 
-go-like is a set of small, explicit TypeScript building blocks for backend services that run on Bun, Node.js, and Deno. It gives an application contracts for Context cancellation, application and resource lifecycle, standard Fetch handlers, internal unary service calls, discovery and selection, configuration, stores, caches, brokers, health, resilience, and optional logging and telemetry adapters.
+go-like is a set of small, explicit TypeScript building blocks for backend services that run on Bun, Node.js, and Deno. It gives an application contracts for Context cancellation, application and resource lifecycle, standard Fetch handlers, internal unary service calls, generated Protobuf RPC over Connect/gRPC-Web and managed standard gRPC, discovery and selection, configuration, stores, caches, brokers, health, resilience, and optional logging and telemetry adapters.
 
 go-like is deliberately complementary to an application framework. Your framework still owns routes, middleware, request policy, Web Streams, WebSocket upgrades, dependency composition, and business behavior. Your provider still owns its native connection, acknowledgement model, lease, retry, or protocol. go-like supplies narrow contracts and lifecycle ownership where those boundaries are useful.
 
 > [!IMPORTANT]
-> This checkout is a private `0.0.1` workspace. The repository documentation says the `@go-like/*` packages are not yet published to npm. The examples below use workspace packages and are intended to be run from a checkout unless a published release is independently confirmed.
+> This checkout is a private `0.0.1` workspace. A manifest version does not establish npm availability. The examples below use workspace packages and are intended to be run from a checkout unless a published release is independently confirmed.
 
 > [!NOTE]
 > The English `doc/` tree is the canonical source for this documentation track. Package source, manifests, and focused tests are the API authority. A test or E2E script that exists in the repository is declared coverage; it is not a passing result until a command has actually run and its exit status has been recorded.
@@ -60,12 +60,14 @@ Internal unary call
     -> response Message
 ```
 
+Generated RPC is a separate optional path: project-local `@go-like/protoc-gen-like` uses upstream Protobuf-ES descriptors/codecs to generate ctx-first `registerXHandler(server, handler)` and `newXClient(client)` glue. `@go-like/transport-grpc-buf` adapts upstream Connect and gRPC-Web handlers to a standard `Request`/`Response` Fetch handler, while its `/native` subpath owns a managed standard-gRPC Client and Server. These packages are not Transport SPI providers. Portable Fetch evidence covers unary and server-streaming only; `/native` covers all four cardinalities in the pinned Node 26.7.0, Bun 1.4.0, and Deno 2.9.5 physical-package matrix.
+
 ## What go-like intentionally does not own
 
 The current product boundary does not claim:
 
-- gRPC, Protobuf, IDL files, generated RPC clients, or generated server stubs;
-- an internal full-duplex RPC stream API, half-close protocol, frame model, or backpressure contract;
+- browser standard gRPC, official gRPC health/reflection, validation, canonical error-details mapping, Google gRPC runtime, Buf online services, or future runtime-version compatibility inferred from the pinned native matrix;
+- Fetch request-streaming or bidi, or a go-like-owned half-close protocol, frame model, or backpressure contract;
 - an external router or framework-specific middleware DSL;
 - a global dependency-injection container or service locator;
 - automatic JWT, OAuth, OIDC, claims, ACL, or application authorization;
@@ -78,7 +80,7 @@ Public Web streaming remains standard Fetch `Request`/`Response` and Web Streams
 
 ## Public inventory
 
-The current source manifests contain **43 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **23 public source subpaths**. `@go-like/struct` is part of that public inventory and is the runtime contract used by typed `Endpoint` calls. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
+The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **25 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
 
 Use the [package reference](/reference/packages) to choose a contract or provider, and the [provider reference](/reference/providers) to compare backend and runtime semantics. The [claims ledger](/reference/claims) records the evidence level behind public wording.
 
@@ -99,3 +101,5 @@ That report did **not** establish `build`, `doc:build`, Docker provider E2E, cro
 - [Health and observability](/guide/health-observability): add readiness, metrics, traces, and logs without silently installing global infrastructure.
 - [Comparison](/guide/comparison) and [Migration](/guide/migration): compare ownership with third-party frameworks and adopt go-like incrementally.
 - [Packages](/reference/packages), [Providers](/reference/providers), [Terminology](/reference/terminology), and [Verification](/reference/verification): use the reference track when the API or evidence boundary matters.
+
+For the tested Connect, Bun Fetch, and Deno cancellation/drain limitations, see the [claims ledger](/reference/claims#stream-cancellation-limits). Interoperability results do not establish production shutdown or stream cleanup.

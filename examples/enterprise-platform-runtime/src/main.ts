@@ -1,6 +1,6 @@
 import process from "node:process"
 
-import { newClient, withDiscovery, withSelector, withTransport } from "@go-like/client"
+import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
 import { newConfig, schema, source } from "@go-like/config"
 import { vaultSource } from "@go-like/config-vault"
 import { background, withoutCancel } from "@go-like/context"
@@ -25,13 +25,7 @@ import { newPinoServer } from "@go-like/pino"
 import { createPrometheusHandler } from "@go-like/prometheus"
 import { newRoundRobinSelector } from "@go-like/registry"
 import { newConsulRegistry } from "@go-like/registry-consul"
-import {
-  address,
-  handler as serviceHandler,
-  middleware,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address, middleware, newServer, transport as serverTransport } from "@go-like/server"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { createHealthHandler } from "@go-like/web/health"
@@ -48,7 +42,7 @@ import pino from "pino"
 import { Counter, Registry } from "prom-client"
 
 import { runtimeConfigSchema } from "./config"
-import { echoEndpointName, echoServiceName, newEchoHandler } from "./echo"
+import { echoServiceName, newEchoClient, newEchoHandler, registerEchoHandler } from "./echo"
 import { newManagementHandler } from "./management"
 import { registerRuntimeProbes } from "./probes"
 import { newPlatformRuntimeState } from "./runtime-state"
@@ -153,21 +147,21 @@ try {
   const echoServer = newServer(
     serverTransport(newNodeHTTPTransport()),
     address("127.0.0.1:0"),
-    serviceHandler(
-      echoServiceName,
-      echoEndpointName,
-      newEchoHandler(runtimeConfig, function recordCall(): void {
-        requests.inc({ result: "ok" })
-        callCounter.add(1, { result: "ok" })
-      })
-    ),
     middleware(traceUnaryMiddleware(tracer, propagator))
+  )
+  registerEchoHandler(
+    echoServer,
+    newEchoHandler(runtimeConfig, function recordCall(): void {
+      requests.inc({ result: "ok" })
+      callCounter.add(1, { result: "ok" })
+    })
   )
   // Only the unary service endpoint belongs in discovery; the management server stays private.
   const serviceEndpoint = await echoServer.endpoint(background())
-  const traced = traceClient(
+  const client = traceClient(
     newClient(
       withDiscovery(registry),
+      withService(echoServiceName),
       withSelector(newRoundRobinSelector()),
       withTransport(newHTTPTransport())
     ),
@@ -178,9 +172,14 @@ try {
   registerRuntimeProbes(probes, () => runtimeConfig.value("release").load() !== null)
   const health = createHealthHandler(probes)
   const metrics = createPrometheusHandler(prometheus)
-  const management = newManagementHandler(health, metrics, traced, function logCallError(error) {
-    logger.error({ error }, "internal call failed")
-  })
+  const management = newManagementHandler(
+    health,
+    metrics,
+    newEchoClient(client),
+    function logCallError(error) {
+      logger.error({ error }, "internal call failed")
+    }
+  )
   const origin = `http://${host}:${portNumber}`
   const managementServer = newNodeServer(management, hostname(host), port(portNumber))
   const app = newApp(
@@ -216,7 +215,7 @@ try {
   try {
     await app.run()
   } finally {
-    await traced.close(background())
+    await client.close(background())
   }
 } finally {
   context.disable()

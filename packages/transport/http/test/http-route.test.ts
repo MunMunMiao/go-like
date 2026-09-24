@@ -1,13 +1,7 @@
 import { expect, test } from "bun:test"
 
 import { background } from "@go-like/context"
-import {
-  address,
-  handler,
-  httpRoute,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address, httpRoute, newServer, transport as serverTransport } from "@go-like/server"
 import { serviceError, type Message } from "@go-like/transport"
 import { decodeServiceError } from "@go-like/transport/provider"
 
@@ -121,12 +115,12 @@ test("POST /v1/machine-commands without Go-Like-Service returns HTTP 201 from ht
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -158,9 +152,9 @@ test("envelope POST with Go-Like-Service still uses HTTP 200 when httpRoute woul
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => commandMessage(request)),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => commandMessage(request))
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -186,11 +180,11 @@ test("envelope ServiceError still uses HTTP carrier 200", async () => {
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
-    handler("machine-gateway", "command", () => {
-      throw serviceError("permission_denied", "machine command rejected", 403)
-    }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
+  server.registerHandler("machine-gateway", "command", () => {
+    throw serviceError("permission_denied", "machine command rejected", 403)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -217,14 +211,11 @@ test("envelope ServiceError still uses HTTP carrier 200", async () => {
 test("POST without envelope and without matching httpRoute is HTTP 404 not dest missing-header", async () => {
   const received: Message[] = []
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    })
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -251,12 +242,12 @@ test("GET on a POST httpRoute path is HTTP 405 not dest missing-header", async (
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    }),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -276,14 +267,11 @@ test("GET on a POST httpRoute path is HTTP 405 not dest missing-header", async (
 test("GET /healthz without Go-Like-Service is HTTP 200 not dest missing-header", async () => {
   const received: Message[] = []
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    })
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -303,14 +291,11 @@ test("GET /healthz without Go-Like-Service is HTTP 200 not dest missing-header",
 test("HEAD /healthz without Go-Like-Service is HTTP 200", async () => {
   const received: Message[] = []
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    })
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -330,14 +315,11 @@ test("HEAD /healthz without Go-Like-Service is HTTP 200", async () => {
 test("GET /livez without a matching httpRoute is HTTP 404 not dest missing-header", async () => {
   const received: Message[] = []
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    })
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -357,14 +339,11 @@ test("GET /livez without a matching httpRoute is HTTP 404 not dest missing-heade
 test("GET with a non-empty Go-Like-Service envelope is a protocol 500", async () => {
   const received: Message[] = []
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => {
-      received.push(request)
-      return commandMessage(request)
-    })
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
+    received.push(request)
+    return commandMessage(request)
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
@@ -384,11 +363,8 @@ test("GET with a non-empty Go-Like-Service envelope is a protocol 500", async ()
 
 test("envelope POST with Go-Like-Service still HTTP 200", async () => {
   const transport = newNodeHTTPTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address("127.0.0.1:0"),
-    handler("machine-gateway", "command", (_ctx, request) => commandMessage(request))
-  )
+  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
+  server.registerHandler("machine-gateway", "command", (_ctx, request) => commandMessage(request))
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())

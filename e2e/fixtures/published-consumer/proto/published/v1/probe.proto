@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package published.v1;
+
+service ProbeService {
+  rpc GetProbe(GetProbeRequest) returns (GetProbeResponse);
+}
+
+message GetProbeRequest {}
+
+message GetProbeResponse {}

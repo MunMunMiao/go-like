@@ -14,6 +14,12 @@ import {
 declare const subscription: Subscription
 
 const factory: NatsCoreSubscriptionFactory = async () => subscription
+const synchronousFactory: NatsCoreSubscriptionFactory = () => subscription
+const nativePromise = Promise.resolve(subscription)
+const thenOnly: Pick<Promise<Subscription>, "then"> = {
+  // oxlint-disable-next-line unicorn/no-thenable -- The type fixture must isolate Promise.then.
+  then: nativePromise.then.bind(nativePromise)
+}
 const directSource: NatsCoreSubscriptionSource = subscription
 const factorySource: NatsCoreSubscriptionSource = factory
 const directServer: Server = newNatsCoreServer(directSource)
@@ -31,6 +37,11 @@ void stopping
 void alreadyStarted
 void unexpectedExit
 void drainTimeout
+void synchronousFactory
+
+// @ts-expect-error Core factories reject then-only objects that are not native Promises.
+const thenOnlyFactory: NatsCoreSubscriptionFactory = () => thenOnly
+void thenOnlyFactory
 
 // @ts-expect-error Lifecycle-only factories do not receive a go-like Context.
 const contextFactory: NatsCoreSubscriptionFactory = (_ctx) => subscription

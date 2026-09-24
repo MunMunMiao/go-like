@@ -61,7 +61,7 @@ function gatewayRow(
 }
 
 /** Expects one provider protocol rejection from an async operation. */
-async function rejectsProtocol(operation: PromiseLike<unknown>): Promise<void> {
+async function rejectsProtocol(operation: Promise<unknown>): Promise<void> {
   await expect(operation).rejects.toMatchObject({ code: "GO_LIKE_ETCD_STORE_PROTOCOL" })
 }
 

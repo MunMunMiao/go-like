@@ -109,7 +109,7 @@ deadline 计时器的插入顺序。没有可信 force 的适配器不得把 tim
 - 根入口导出标准单参数 `Handler`，以及 `ContextHandler`、`ContextHandlerOptions`、`contextHandler`。
 - `Handler` 始终只有一个 `Request` 参数；Context 只能通过显式桥接进入。
 - `@go-like/web/health` 提供探针 HTTP Handler；`@go-like/web/node` 提供 Node listener lifecycle；
-  `@go-like/web/node/testing` 只提供 Node host 测试接缝。
+  Node host 测试接缝属于内部测试代码，不作为 `@go-like/web/node/testing` 公共入口。
 - Web 框架拥有 router、middleware 和 response mapping；go-like 不定义第二套路由 API。
 
 ### `@go-like/transport` 与 `@go-like/transport-http`

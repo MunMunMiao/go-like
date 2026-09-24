@@ -75,21 +75,20 @@ For a Go or Kratos reader, migrate concepts rather than spelling:
 | Transport         | `@go-like/transport`                                                                                               | Providers and Message headers are TypeScript/Web contracts             |
 | Registry          | `@go-like/registry`                                                                                                | Watchers return complete replacement snapshots                         |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Feedback is synchronous and policy-specific                            |
-| Protobuf/IDL      | no go-like equivalent                                                                                              | `Endpoint` + `Struct` is runtime validation, not generated schema code |
-| gRPC stream       | no current go-like equivalent                                                                                      | Public Web streaming is separate from internal unary transport         |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | Ctx-first glue over upstream Protobuf-ES codecs and service descriptor |
+| gRPC stream       | `@go-like/transport-grpc-buf`                                                                                      | Fetch proves unary/server-streaming; `/native` owns standard gRPC      |
 
 An incremental first move is a direct-address typed call over Memory Transport:
 
 ```ts
+// Composition excerpt: quote and pricingQuoteHandler are application-owned.
+// Admit this server through App before calling; close client during shutdown.
 const transport = newMemoryTransport()
-const server = newServer(
-  serverTransport(transport),
-  address("memory://pricing"),
-  handler(pricingEndpoint, pricingHandler)
-)
-const client = newClient(withTransport(transport))
+const server = newServer(serverTransport(transport), address("memory://pricing"))
+server.registerHandler(quote, pricingQuoteHandler)
 
-const result = await client.call(ctx, pricingEndpoint, request, withAddress("memory://pricing"))
+const client = newClient(withTransport(transport), withAddress("memory://pricing"))
+const result = await client.call(ctx, quote, request)
 ```
 
 Only after this boundary is tested should you introduce Discovery, a real Registry provider, or an HTTP transport. This preserves the domain contract while replacing the destination and ownership plumbing.
@@ -163,4 +162,6 @@ Before merging one boundary, verify:
 
 ## Current support boundary
 
-The repository contains direct examples for vanilla Fetch, Hono, Elysia, H3, Memory Transport, typed internal calls, health, brokers, workers, and observability adapters. It does not prove automatic bridges for NestJS or Fastify, gRPC/Protobuf/IDL compatibility, full-duplex internal streams, universal authentication, or deployment orchestration. Those would require separate adapters, tests, and product commitments.
+The repository contains direct examples for vanilla Fetch, Hono, Elysia, H3, Memory Transport, typed internal calls, generated Protobuf RPC glue, Connect/gRPC-Web unary and server-streaming, managed standard gRPC on the pinned Node/Bun/Deno matrix, health, brokers, workers, and observability adapters. It does not prove automatic bridges for NestJS or Fastify, browser standard gRPC, Fetch request-streaming/bidi, future runtime-version compatibility, universal authentication, or deployment orchestration. Those would require separate adapters, tests, and product commitments.
+
+For the tested Connect, Bun Fetch, and Deno cancellation/drain limitations, see the [claims ledger](/reference/claims#stream-cancellation-limits). Interoperability results do not establish production shutdown or stream cleanup.

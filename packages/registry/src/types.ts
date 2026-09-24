@@ -23,7 +23,7 @@ export interface ProviderLogger {
 export type RegistrationErrorHandler = (
   error: Error,
   service: ServiceInstance
-) => void | PromiseLike<void>
+) => void | Promise<void>
 
 /** Supplies shared implementation controls from one provider constructor. */
 export interface ProviderOptionInput {

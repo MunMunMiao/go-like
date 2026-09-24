@@ -5,7 +5,7 @@
 状态：公共 API 部分已被替代
 
 > 本文是历史实施设计，其中 Handle、ResidentClient、Fetch Transport、ServiceDeclaration、自动注册
-> 组合器与 `@go-like/struct` 不再是当前公共契约。当前上游对齐基线见
+> 组合器不再是当前公共契约。当前已经包含独立的 `@go-like/struct` 和 Buf/gRPC 实现，不能沿用下文早期排除项。当前上游对齐基线见
 > [`../../developer-experience-alignment.md`](../../developer-experience-alignment.md)。
 
 ## 1. 决策范围
@@ -231,7 +231,7 @@ identity option 覆盖前者。身份只用于 diagnostics，不读取 hostname�
 增加四个显式 option：
 
 ```ts
-export type AppHook = (ctx: Context) => void | PromiseLike<void>
+export type AppHook = (ctx: Context) => void | Promise<void>
 
 export function beforeStart(hook: AppHook): AppOption
 export function afterStart(hook: AppHook): AppOption
@@ -272,7 +272,7 @@ export interface UnaryEndpoint {
   readonly request: Value | null
   readonly response: Value | null
   readonly metadata: Readonly<Record<string, string>>
-  readonly handle: (ctx: Context, request: Message) => Message | PromiseLike<Message>
+  readonly handle: (ctx: Context, request: Message) => Message | Promise<Message>
 }
 
 export interface FetchEndpoint {
@@ -280,7 +280,7 @@ export interface FetchEndpoint {
   readonly request: Value | null
   readonly response: Value | null
   readonly metadata: Readonly<Record<string, string>>
-  readonly handle: (ctx: Context, request: Request) => Response | PromiseLike<Response>
+  readonly handle: (ctx: Context, request: Request) => Response | Promise<Response>
 }
 
 export interface NodeDeclaration {
@@ -308,7 +308,7 @@ export type AdvertiseAddressResolver<E> = (
   ctx: Context,
   boundAddress: string,
   declaration: ServiceDeclaration<E>
-) => string | readonly string[] | PromiseLike<string | readonly string[]>
+) => string | readonly string[] | Promise<string | readonly string[]>
 
 export interface RegisteredServiceOptions<E> {
   readonly advertise: AdvertiseAddressResolver<E>
@@ -535,7 +535,7 @@ typed helper 接受 `@go-like/struct` 的 `Codec<T>`，只负责 body encode/dec
 export type TransportFetchHandler = (
   ctx: Context,
   request: Request
-) => Response | PromiseLike<Response>
+) => Response | Promise<Response>
 
 export interface FetchTransport {
   fetch(ctx: Context, request: Request): Promise<Response>
@@ -913,7 +913,7 @@ export interface Broker<
   subscribe(
     ctx: Context,
     topic: string,
-    handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+    handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
     options?: SubscribeOptions
   ): Promise<BrokerSubscription>
   string(): string
@@ -927,7 +927,7 @@ export function subscription<
 >(
   broker: Broker<PublishOptions, PublishResult, SubscribeOptions, NativeEvent>,
   topic: string,
-  handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+  handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
   options?: SubscribeOptions
 ): Server<BrokerSubscription>
 ```
@@ -957,7 +957,7 @@ export interface EventSubscriber<T, Options, Native> {
   subscribe(
     ctx: Context,
     topic: string,
-    handler: (ctx: Context, event: EventMessage<T, Native>) => void | PromiseLike<void>,
+    handler: (ctx: Context, event: EventMessage<T, Native>) => void | Promise<void>,
     options?: Options
   ): Promise<BrokerSubscription>
 }
@@ -980,7 +980,7 @@ export function eventBroker<
 export function eventSubscription<T, Options, Native>(
   subscriber: EventSubscriber<T, Options, Native>,
   topic: string,
-  handler: (ctx: Context, event: EventMessage<T, Native>) => void | PromiseLike<void>,
+  handler: (ctx: Context, event: EventMessage<T, Native>) => void | Promise<void>,
   options?: Options
 ): Server<BrokerSubscription>
 ```

@@ -4,7 +4,7 @@
 
 `@go-like/event` 是可選的 typed codec 層。發布時先編碼成獨立 bytes，收到訊息後直到應用呼叫 `decode()` 才做 schema 解析。即使解析失敗，原生 NATS `Msg` 或 JetStream `JsMsg` 仍然保留，應用可以自行決定要怎麼 settlement。
 
-`Broker.subscribe(ctx, topic, handler)` 會回傳帶有 `unsubscribe(ctx)` 的 provider `Subscriber`。`newBrokerServer(...)` 將 `Broker` 接入 Core `Server` 契約：`start(ctx)` 代表完整執行期，`stop(ctx)` 要求停止。go-like 負責停止已接納的 subscription，但從不擁有 connection、stream 或 durable consumer；啟動取消會回滾已建立但尚未接納的 subscription。
+`newBrokerServer(...)` 只擁有一個訂閱。owner 必須呼叫 `stop(ctx)`；若接納尚未完成，adapter 會等訂閱回傳後再呼叫 `unsubscribe`。僅取消 Context 不能證明晚到資源已釋放。
 
 需要事件投遞和 fan-out 時選 Broker；如果真正需要的是 BullMQ 的 job、retry、backoff、token 和 Worker 行為，就使用 `@go-like/bullmq`。兩種模型不同，沒必要為了表面一致而把差別遮起來。
 

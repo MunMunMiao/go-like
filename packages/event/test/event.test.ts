@@ -79,7 +79,7 @@ describe("typed Event Broker", () => {
     const native = Object.freeze({ delivery: "native-js-msg" })
     const subscription = nativeSubscription("events")
     const capture: {
-      handler: ((ctx: Context, event: BrokerEvent<Native>) => void | PromiseLike<void>) | null
+      handler: ((ctx: Context, event: BrokerEvent<Native>) => void | Promise<void>) | null
     } = { handler: null }
     let subscribeArguments = 0
     const broker: Broker<void, void, Options, Native> = {
@@ -149,7 +149,7 @@ describe("typed Event Broker", () => {
   test("rejects missing, duplicate, and mismatched media types before codec decode", async () => {
     const deliveries: EventMessage<Value, Native>[] = []
     const capture: {
-      receive: ((ctx: Context, event: BrokerEvent<Native>) => void | PromiseLike<void>) | null
+      receive: ((ctx: Context, event: BrokerEvent<Native>) => void | Promise<void>) | null
     } = { receive: null }
     const broker: Broker<void, void, void, Native> = {
       async publish() {},

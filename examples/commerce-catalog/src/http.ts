@@ -5,7 +5,7 @@ import { contextHandler, type Handler } from "@go-like/web"
 import { createHealthHandler } from "@go-like/web/health"
 import { Hono, type Context as HonoContext } from "hono"
 
-import { decodePrice, encodePrice, fetchPrice, type PricingClient } from "./pricing"
+import { decodePrice, encodePrice, type PricingClient } from "./pricing"
 import {
   findProduct,
   isProductId,
@@ -76,7 +76,7 @@ export function newCatalogHandler(options: CatalogHandlerOptions): Handler {
     }
     if (selected === null) {
       try {
-        selected = await fetchPrice(ctx, options.client, productId, currency)
+        selected = await options.client.fetchPrice(ctx, productId, currency)
       } catch {
         return json(503, { error: "pricing_unavailable" })
       }

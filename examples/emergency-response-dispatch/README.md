@@ -8,7 +8,7 @@
 
 - `critical` 事件必须在报告后 5 分钟内调度，`urgent` 事件必须在 15 分钟内调度；已经到期的命令拒绝分配。
 - 只选择 `zone`、`service` 匹配且 `readiness=ready` 的实例，draining 实例不会收到新事件。
-- 同一 `incidentId` 和相同命令稳定返回同一响应单位；更改命令会产生冲突。
+- 在调度期限仍有效时，同一 `incidentId` 和相同命令返回同一响应单位；更改命令会产生冲突。
 - 调度入口和 Registry selector 都尊重调用方 Context 的取消状态。
 
 ## 文件职责

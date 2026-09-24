@@ -4,7 +4,7 @@ import { waitForContext } from "@go-like/core/lifecycle"
 import type { Subscription } from "@nats-io/transport-node"
 
 /** Creates one official NATS Core Subscription for lifecycle ownership at start time. */
-export type NatsCoreSubscriptionFactory = () => Subscription | PromiseLike<Subscription>
+export type NatsCoreSubscriptionFactory = () => Subscription | Promise<Subscription>
 
 /** Supplies an official Subscription directly or through a start-time factory. */
 export type NatsCoreSubscriptionSource = Subscription | NatsCoreSubscriptionFactory
@@ -157,7 +157,7 @@ function combinedFailure(failures: readonly Error[]): Error | null {
 
 /** Observes the official native terminal without consuming the Subscription iterator. */
 function observeClosed(subscription: Subscription): Promise<Error | null> {
-  let operation: PromiseLike<void | Error>
+  let operation: Promise<void | Error>
   try {
     operation = subscription.closed
   } catch (value) {

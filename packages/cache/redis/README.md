@@ -1,6 +1,6 @@
 # `@go-like/cache-redis`
 
-`@go-like/cache-redis` 使用官方 `@redis/client` 6.2.0 实现 `@go-like/cache`。连接由 Cache 生命周期拥有：
+`@go-like/cache-redis` 使用 manifest 固定的官方 `@redis/client` 6.2.1 实现 `@go-like/cache`。连接由 Cache 生命周期拥有：
 构造只捕获配置，`start(ctx)` 才连接，`stop(ctx)` 先停止新操作、等待已接纳操作，再关闭 Redis client。
 
 ```ts

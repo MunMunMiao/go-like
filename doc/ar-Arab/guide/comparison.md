@@ -13,34 +13,34 @@
 
 ## موقع go-like في المكدس
 
-| الأداة    | المشكلة الأساسية                       | ما تملكه عادةً                                                                                                                                                           | ما تكمله go-like ولا تستبدله                                                               |
-| --------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| NestJS    | إطار Node لتطبيقات مبني على الاصطلاحات | Modules وproviders وcontrollers وdecorators وapplication context ودورة حياة الإطار ومحوّل HTTP أو microservice                                                           | حدّ دورة حياة بنيوي أو عقد استدعاء داخلي حول تطبيق أصلي، إذا كُتب جسر صريح                 |
-| Fastify   | خادم HTTP في Node وخطّ معالجة الطلبات  | جدول المسارات وhooks وplugins وencapsulation ومستمع Node وكائنات request/reply                                                                                           | محوّل دورة حياة أو مزوّد حول مورد يملكه Fastify                                            |
-| Hono      | توجيه Middleware وفق Web Standards     | المسارات وmiddleware وsub-apps و`app.fetch` واختيار محوّل بيئة التشغيل                                                                                                   | Core App ودورة حياة الموارد وClient/Transport الداخلي والاكتشاف                            |
-| Elysia    | إطار Web typed موجّه أولاً إلى Bun     | شجرة المسارات وتركيب schema وdecorators وhooks ومحوّل Bun أو Web Standard                                                                                                | دورة حياة Core ولبنات الخدمة الداخلية مع الإبقاء على سلوك Elysia الأصلي                    |
-| Koa       | نواة Middleware صغيرة في Node          | مكدس middleware ومستمع Node؛ وغالباً يكون الموجّه خارجياً                                                                                                                | دورة الحياة وعقود الخدمات الداخلية من دون إدخال موجّه آخر                                  |
-| tRPC      | طبقة إجراءات typed                     | مسارات router/procedure وinput/output parsers وcontext factory ومحوّلات HTTP/Fetch/WS                                                                                    | ملكية المزوّدات وسياسة اكتشاف الخدمات ودورة حياة App الصريحة                               |
-| go-micro  | منظومة Go للخدمات المصغّرة والوكلاء    | Go Context وتجريدات service/client/transport/registry/broker ومنظومة المزوّدات ونطاقات إضافية للوكلاء/التدفق/MCP/A2A                                                     | تستعير go-like بعض المفردات، لا Go ABI ولا goroutines ولا توافق النقل                      |
-| go-kratos | إطار Go للخدمات السحابية الأصلية       | دورة حياة App وGo Context ونقلا HTTP/gRPC وmiddleware وregistry وconfig وتوليد Protobuf والشيفرة                                                                         | تشترك go-like في مفردات دورة الحياة الصريحة، لكنها تختار TypeScript/Web ولا تدّعي gRPC/IDL |
-| go-like   | لبنات TypeScript صريحة لبناء الخدمات   | Context ودورة حياة App/Server وحافة Fetch القياسية ونقل Message الداخلي الأحادي وClient/Server وRegistry/Discovery/Selector وConfig/Store/Cache/Broker/Health والمحوّلات | يظل التطبيق مالك المسارات الأصلية ومستويات البيانات الأصلية وسياسة العمل والمصادقة والنشر  |
+| الأداة    | المشكلة الأساسية                       | ما تملكه عادةً                                                                                                                                                           | ما تكمله go-like ولا تستبدله                                                              |
+| --------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| NestJS    | إطار Node لتطبيقات مبني على الاصطلاحات | Modules وproviders وcontrollers وdecorators وapplication context ودورة حياة الإطار ومحوّل HTTP أو microservice                                                           | حدّ دورة حياة بنيوي أو عقد استدعاء داخلي حول تطبيق أصلي، إذا كُتب جسر صريح                |
+| Fastify   | خادم HTTP في Node وخطّ معالجة الطلبات  | جدول المسارات وhooks وplugins وencapsulation ومستمع Node وكائنات request/reply                                                                                           | محوّل دورة حياة أو مزوّد حول مورد يملكه Fastify                                           |
+| Hono      | توجيه Middleware وفق Web Standards     | المسارات وmiddleware وsub-apps و`app.fetch` واختيار محوّل بيئة التشغيل                                                                                                   | Core App ودورة حياة الموارد وClient/Transport الداخلي والاكتشاف                           |
+| Elysia    | إطار Web typed موجّه أولاً إلى Bun     | شجرة المسارات وتركيب schema وdecorators وhooks ومحوّل Bun أو Web Standard                                                                                                | دورة حياة Core ولبنات الخدمة الداخلية مع الإبقاء على سلوك Elysia الأصلي                   |
+| Koa       | نواة Middleware صغيرة في Node          | مكدس middleware ومستمع Node؛ وغالباً يكون الموجّه خارجياً                                                                                                                | دورة الحياة وعقود الخدمات الداخلية من دون إدخال موجّه آخر                                 |
+| tRPC      | طبقة إجراءات typed                     | مسارات router/procedure وinput/output parsers وcontext factory ومحوّلات HTTP/Fetch/WS                                                                                    | ملكية المزوّدات وسياسة اكتشاف الخدمات ودورة حياة App الصريحة                              |
+| go-micro  | منظومة Go للخدمات المصغّرة والوكلاء    | Go Context وتجريدات service/client/transport/registry/broker ومنظومة المزوّدات ونطاقات إضافية للوكلاء/التدفق/MCP/A2A                                                     | تستعير go-like بعض المفردات، لا Go ABI ولا goroutines ولا توافق النقل                     |
+| go-kratos | إطار Go للخدمات السحابية الأصلية       | دورة حياة App وGo Context ونقلا HTTP/gRPC وmiddleware وregistry وconfig وتوليد Protobuf والشيفرة                                                                         | شيفرة Context-first فوق Protobuf-ES; gRPC قياسي بالأنماط الأربعة عبر `/native`            |
+| go-like   | لبنات TypeScript صريحة لبناء الخدمات   | Context ودورة حياة App/Server وحافة Fetch القياسية ونقل Message الداخلي الأحادي وClient/Server وRegistry/Discovery/Selector وConfig/Store/Cache/Broker/Health والمحوّلات | يظل التطبيق مالك المسارات الأصلية ومستويات البيانات الأصلية وسياسة العمل والمصادقة والنشر |
 
 لذلك لا تحاول go-like الفوز بمقارنة «أكبر إطار». السؤال هو: هل يحتاج التطبيق إلى جعل هذه الحدود صريحة وقابلة للتركيب؟
 
 ## مصفوفة الملكية
 
-| الاهتمام               | NestJS                                  | Fastify                           | Hono / Elysia / Koa                               | tRPC                                     | go-like                                                                  |
-| ---------------------- | --------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
-| جدول المسارات الخارجية | Controllers وdecorators                 | Fastify instance                  | Framework instance أو external router             | Procedure router، وليس REST routes عادية | External framework أو التطبيق                                            |
-| ABI لمعالج Web         | تجريد request/reply يملكه المحوّل       | Node request/reply                | Fetch القياسي محوري في Hono ومحوّلات Web Standard | Fetch/Node/Express/Fastify adapters      | `(Request) => Response \| Promise<Response>` القياسي                     |
-| دورة حياة التطبيق      | Application context وhooks              | `ready` و`listen` و`close` وhooks | يختلف محوّل بيئة التشغيل ودورة الإطار             | مسؤولية المضيف/المحوّل                   | `newApp` و`App.run` و`App.stop` وhooks وServers بنيوية                   |
-| دورة حياة المورد       | Hooks الحاوية/الإطار                    | Plugin وserver hooks              | مسؤولية التطبيق/بيئة التشغيل                      | مسؤولية التطبيق/المحوّل                  | عقود `Server.start(ctx)` / `stop(ctx)` الصريحة وملكية المكيّف            |
-| تركيب الاعتماديات      | Nest container/providers                | Plugin decoration وencapsulation  | Context/env والتركيب؛ لا حاوية DI عامة            | Context factory صريح وتركيب router       | Constructors وخيارات وظيفية صريحة؛ لا حاوية DI                           |
-| النقل الداخلي          | Microservice transports ومحوّلات الإطار | ليس تجريداً لاكتشاف الخدمات       | ليس تجريداً لاكتشاف الخدمات                       | Procedure adapters وWebSocket اختياري    | `Transport` و`Client` و`Listener` و`Socket` و`Message` الأحادية          |
-| الاكتشاف والاختيار     | خاص بالنقل أو خارجي                     | خارجي                             | خارجي                                             | خارجي                                    | `Registry` و`Discovery` و`Watcher` وFilters وسياسات Selector الخمس       |
-| إعادة المحاولة         | خاص بالإطار أو المزوّد                  | خاص بالتطبيق/الإضافة              | خاص بالتطبيق                                      | خاص بالmiddleware/المحوّل                | محاولة واحدة افتراضياً؛ و`withRetry` يتطلب تفويضاً وعدد محاولات إجمالياً |
-| التدفق                 | خيارات الإطار/المزوّد                   | خيارات Node/Web stream            | Web Streams الأصلية وواجهات الإطار                | يعتمد على المحوّل HTTP/WS                | التدفق العام أصلي في Web؛ وRPC الداخلي أحادي                             |
-| القياس العام           | تكامل الإطار/المزوّد                    | منظومة Plugins                    | منظومة Middleware                                 | Middleware/adapters                      | أغلفة صريحة؛ لا تثبيت لمزوّد عام                                         |
+| الاهتمام               | NestJS                                  | Fastify                           | Hono / Elysia / Koa                               | tRPC                                     | go-like                                                                                   |
+| ---------------------- | --------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| جدول المسارات الخارجية | Controllers وdecorators                 | Fastify instance                  | Framework instance أو external router             | Procedure router، وليس REST routes عادية | External framework أو التطبيق                                                             |
+| ABI لمعالج Web         | تجريد request/reply يملكه المحوّل       | Node request/reply                | Fetch القياسي محوري في Hono ومحوّلات Web Standard | Fetch/Node/Express/Fastify adapters      | `(Request) => Response \| Promise<Response>` القياسي                                      |
+| دورة حياة التطبيق      | Application context وhooks              | `ready` و`listen` و`close` وhooks | يختلف محوّل بيئة التشغيل ودورة الإطار             | مسؤولية المضيف/المحوّل                   | `newApp` و`App.run` و`App.stop` وhooks وServers بنيوية                                    |
+| دورة حياة المورد       | Hooks الحاوية/الإطار                    | Plugin وserver hooks              | مسؤولية التطبيق/بيئة التشغيل                      | مسؤولية التطبيق/المحوّل                  | عقود `Server.start(ctx)` / `stop(ctx)` الصريحة وملكية المكيّف                             |
+| تركيب الاعتماديات      | Nest container/providers                | Plugin decoration وencapsulation  | Context/env والتركيب؛ لا حاوية DI عامة            | Context factory صريح وتركيب router       | Constructors وخيارات وظيفية صريحة؛ لا حاوية DI                                            |
+| النقل الداخلي          | Microservice transports ومحوّلات الإطار | ليس تجريداً لاكتشاف الخدمات       | ليس تجريداً لاكتشاف الخدمات                       | Procedure adapters وWebSocket اختياري    | `Transport` و`Client` و`Listener` و`Socket` و`Message` الأحادية                           |
+| الاكتشاف والاختيار     | خاص بالنقل أو خارجي                     | خارجي                             | خارجي                                             | خارجي                                    | `Registry` و`Discovery` و`Watcher` وFilters وسياسات Selector الخمس                        |
+| إعادة المحاولة         | خاص بالإطار أو المزوّد                  | خاص بالتطبيق/الإضافة              | خاص بالتطبيق                                      | خاص بالmiddleware/المحوّل                | محاولة واحدة افتراضياً؛ و`withRetry` يتطلب تفويضاً وعدد محاولات إجمالياً                  |
+| التدفق                 | خيارات الإطار/المزوّد                   | خيارات Node/Web stream            | Web Streams الأصلية وواجهات الإطار                | يعتمد على المحوّل HTTP/WS                | Web Streams; Message unary; Fetch unary/server-streaming; `/native` client-streaming/bidi |
+| القياس العام           | تكامل الإطار/المزوّد                    | منظومة Plugins                    | منظومة Middleware                                 | Middleware/adapters                      | أغلفة صريحة؛ لا تثبيت لمزوّد عام                                                          |
 
 تصف الصفوف الخمسة الأولى مواقع معمارية، لا ترتيب جودة. قد تكون ملكية إطار لجدول المسارات مفيدة عندما تكون مشكلة تركيب المسارات هي الأساس. لكنها ببساطة اختيار ملكية مختلف عن ترك go-like المسارات للتطبيق.
 
@@ -64,7 +64,7 @@ interface App {
 
 كما أن go-like `Context` بنيوي ويستخدم `AbortSignal` داخلياً. يعرِض `deadline()` و`done()` و`err()` و`value(key)`، مع مُنشئات مثل `background` و`withCancel` و`withCancelCause` و`withTimeout` و`withDeadline` و`withoutCancel` و`withValue`.
 
-يشبه ذلك أسلوب Go الصريح الذي يضع Context أولاً، لكنه ليس متوافقاً ABI مع `context.Context`. ولا يوفّر goroutines أو channels أو gRPC. سؤال الترحيل الصحيح هو «أين يعبر الإلغاء والملكية هذا الحد؟»، لا «أي اسم نوع متطابق؟».
+يشبه ذلك أسلوب Go الصريح الذي يضع Context أولاً، لكنه ليس متوافقاً ABI مع `context.Context`. ولا يوفّر Context نفسه goroutines أو channels أو API لـ gRPC. سؤال الترحيل الصحيح هو «أين يعبر الإلغاء والملكية هذا الحد؟»، لا «أي اسم نوع متطابق؟».
 
 لا تضمن Core إيقاف Servers الأشقاء بترتيب عكسي. فهي تستدعي `stop(ctx)` للأشقاء بالتوازي، ثم تنتظر Promises الخاصة بـ `start` وتجمع حالات الفشل. قد يملك Nest application context أو شبكة Plugins في Fastify أو دورة حياة Elysia أو محوّل المضيف ترتيباً وحالة نهائية مختلفين. قارن المالك الفعلي، لا تسمية «graceful».
 
@@ -85,7 +85,7 @@ Client
   -> feedback and owner release
 ```
 
-يربط `Endpoint` typed تحقق `Struct` من الطلب والاستجابة بحدّ `Message` الموجود. وليس هو IDL ولا بروتوكولاً مولّداً. يتجاوز `withAddress(...)` كلاً من Discovery وSelector، ما يجعل مسار Memory Transport داخل العملية اختباراً أولياً مفيداً.
+يربط `Endpoint` typed تحقق `Struct` من الطلب والاستجابة بحدّ `Message` الموجود. وليس هو IDL ولا بروتوكولاً مولّداً. يختار `withAddress(...addresses)` لقطة مباشرة وقت الإنشاء؛ وتستخدم اللقطات المباشرة والمكتشفة Selector نفسه. لذلك يبقى مسار Memory Transport داخل العملية اختباراً أولياً مفيداً.
 
 لا تتطابق خيارات نقل microservice في NestJS أو محوّلات إجراءات tRPC أو نقولات أطر Go مع هذا الرسم البياني بالضرورة. فقد يملك كل منها هوية مسار أو نموذج تسلسل أو pool اتصالات أو طبقة retry مختلفة. يجب أن تسجل المقارنة هذه الفروق بدلاً من تعليم كل مربعات «RPC» بأنها الميزة نفسها.
 
@@ -110,6 +110,10 @@ Web framework or Fetch Handler
 go-like internal Client/Transport
   -> one unary Message request and one unary Message response
   -> no full-duplex RPC Stream SPI
+
+@go-like/transport-grpc-buf
+  -> Fetch: Connect/gRPC-Web unary and server-streaming
+  -> /native: standard gRPC unary, server-streaming, client-streaming, bidi
 ```
 
 إن `ReadableStream` في Web ليس قناة RPC داخلية. لا تقارن جسم HTTP متدفقاً بتبادل نقل متعدد الإطارات من `send` و`recv` وكأنهما ميزة واحدة.
@@ -122,7 +126,7 @@ go-like internal Client/Transport
 | هل يستطيع package واحد ربط مستمع Node ومستمع Deno؟                | المسارات الخاصة بالبيئة صريحة؛ `@go-like/web/node` و`@go-like/transport-http/node` مسارا Node | لا تكتب «كل الحزم تعمل بلا تغيير في كل مكان»                              |
 | هل يمكن لـ Fetch محمول استخدام PEM TLS وmTLS وALPN وHTTP/2 مخصصة؟ | يملك مسار نقل Node السلوك الأصلي؛ ولا يعرِض مسار Fetch الجذري كل عناصر التحكم                 | قارن قدرات المضيف ومسارات الاستيراد، لا أسماء الحزم فقط                   |
 | هل يحتفظ التطبيق بموجّه الإطار؟                                   | تمرر أمثلة Hono وElysia وH3 معالجات Fetch الأصلية                                             | go-like تكمل ملكية مسارات الإطار ولا تستبدلها                             |
-| هل يثبت إصدار الحزمة نشرها؟                                       | الجذر والحزم private/`0.0.1`؛ وتقول وثائق المستودع إنها لم تُنشر بعد                          | لا ادعاء بتوفر npm أو نضج المنظومة                                        |
+| هل يثبت إصدار الحزمة نشرها؟                                       | `workspace:*`, `0.0.1`                                                                        | لا ادعاء بتوفر npm أو نضج المنظومة                                        |
 
 يحتوي المستودع الحالي على أمثلة مصدر مباشرة لـ Hono وElysia وH3 وFetch بلا إطار. ولا يحتوي على جسر حالي لـ NestJS أو Fastify ولا على compatibility suite لهما. هذه جماهير ترحيل، لا تكاملات مباشرة مدعومة.
 
@@ -162,7 +166,7 @@ tRPC يملك router typed للإجراءات وmiddleware الإجراءات. �
 
 - تشترك `context.Context` في Go و`Context` في go-like في نية الإلغاء الصريح، لكن تمثيلهما وقت التشغيل مختلف.
 - لا ينبغي تعليم نموذج Registry watcher في go-micro على أنه stream أحداث مطابق للقطات الاستبدال الكاملة في go-like.
-- يختار go-kratos Protobuf/gRPC والشيفرة المولّدة، بينما تصرّ go-like صراحةً على أنها لا تدّعي ذلك.
+- يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
 - تعتمد افتراضات go-micro وgo-kratos في المزوّدات وحلقات retry وسلوك half-close في stream والاختيار الافتراضي على الإصدار. استخدم جدول commits الثابتة في سجل البحث وأعد التحقق قبل نشر مقارنة جديدة مرتبطة بإصدار.
 
 ## ماذا تختار؟

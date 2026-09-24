@@ -11,7 +11,7 @@ go-like is not the router in this example. The handler can come from plain Web c
 
 ## Before you install
 
-The repository root is private and currently records package version `0.0.1`. Repository documentation says the `@go-like/*` packages have not yet been published to npm. From a checkout, use the workspace lockfile:
+The repository root is private and currently records package version `0.0.1`. That version does not establish npm availability; verify publication independently before installing outside the workspace. From a checkout, use the workspace lockfile:
 
 ```sh
 bun install --frozen-lockfile
@@ -19,7 +19,7 @@ bun install --frozen-lockfile
 
 The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment. Command behavior and results, not version numbers, determine the outcome.
 
-After a future published release, the intended dependency shape for a small Node-hosted Web service is:
+When a published release is independently confirmed, the intended dependency shape for a small Node-hosted Web service is:
 
 ```sh
 bun add @go-like/context @go-like/core @go-like/web

@@ -2,7 +2,7 @@
 
 go-like 的驗證分成多條 evidence lane，不應把所有結果壓成兩類測試。`bun run test:unit` 執行不依賴外部服務的單元測試；`bun run test:e2e` 在本地建置套件，並驗證真實 provider、跨 runtime、可執行 example 與發布 tarball consumer。Docker suite 會啟動真實服務，再清理自己建立的資源。
 
-Format、Lint、Typecheck、Build、Runtime E2E、Provider E2E、Example E2E、Published、Soak、Documentation build 與 Audit 應分開記錄。Repository 的標準門禁是 `bun run verify`，會依序執行 `fmt:check`、`lint:check`、`typecheck`、`build` 與 `test:unit:coverage`；coverage 階段會執行一次 root 與 workspace 的 coverage script，並強制驗證 coverage。`examples/payments-ledger` 是唯一超出單元測試範圍的例外：它還會執行真實 PostgreSQL/NATS integration scenario，因此需要 Docker。完整 evidence lane、歷史 baseline 與本次文件 run record 請看[英文 Verification](/reference/verification)。
+Format、Lint、Typecheck、Build、Runtime E2E、Provider E2E、Example E2E、Published、Soak、Documentation build 與 Audit 應分開記錄。Repository 的標準門禁是 `bun run verify`，會依序執行 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、`build` 與 `test:unit:coverage`；coverage 階段會執行一次 root 與 workspace 的 coverage script，並強制驗證 coverage。`examples/payments-ledger` 是唯一超出單元測試範圍的例外：它還會執行真實 PostgreSQL/NATS integration scenario，因此需要 Docker。完整 evidence lane、歷史 baseline 與本次文件 run record 請看[英文 Verification](/reference/verification)。
 
 ```sh
 bun run verify

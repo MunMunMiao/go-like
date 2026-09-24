@@ -3,12 +3,7 @@ import { connect, type Socket } from "node:net"
 
 import { newClient, withAddress, withTransport } from "@go-like/client"
 import { background, withCancel, withCancelCause } from "@go-like/context"
-import {
-  address as serverAddress,
-  handler,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address as serverAddress, newServer, transport as serverTransport } from "@go-like/server"
 import { struct } from "@go-like/struct"
 import { endpoint, withConnClose } from "@go-like/transport"
 import { newNodeHTTPTransport } from "../../src/node"
@@ -508,24 +503,16 @@ const TypedResponse = struct.object({
   processedAt: struct.date().alias("processed_at")
 })
 const typedContract = endpoint("typed-http", "Increment", TypedRequest, TypedResponse)
-const typedServer = newServer(
-  serverTransport(transport),
-  serverAddress("127.0.0.1:0"),
-  handler(typedContract, (_ctx, request) => ({
-    id: request.id + 1n,
-    processedAt: new Date(request.requestedAt.getTime() + 1_000)
-  }))
-)
+const typedServer = newServer(serverTransport(transport), serverAddress("127.0.0.1:0"))
+typedServer.registerHandler(typedContract, (_ctx, request) => ({
+  id: request.id + 1n,
+  processedAt: new Date(request.requestedAt.getTime() + 1_000)
+}))
 const typedRunning = typedServer.start(background())
 const typedAddress = await typedServer.endpoint(background())
-const typedClient = newClient(withTransport(transport))
+const typedClient = newClient(withTransport(transport), withAddress(typedAddress))
 const requestedAt = new Date("2026-08-03T12:00:00.000Z")
-const typedResult = await typedClient.call(
-  background(),
-  typedContract,
-  { id: 41n, requestedAt },
-  withAddress(typedAddress)
-)
+const typedResult = await typedClient.call(background(), typedContract, { id: 41n, requestedAt })
 verify(typedResult.id === 42n, "typed HTTP bigint response changed")
 verify(
   typedResult.processedAt.getTime() === requestedAt.getTime() + 1_000,

@@ -4,7 +4,7 @@ import { waitForContext } from "@go-like/core/lifecycle"
 import type { ConsumerMessages } from "@nats-io/jetstream"
 
 /** Creates official ConsumerMessages for lifecycle ownership at start time. */
-export type NatsJetStreamMessagesFactory = () => ConsumerMessages | PromiseLike<ConsumerMessages>
+export type NatsJetStreamMessagesFactory = () => ConsumerMessages | Promise<ConsumerMessages>
 
 /** Supplies official ConsumerMessages directly or through a start-time factory. */
 export type NatsJetStreamMessagesSource = ConsumerMessages | NatsJetStreamMessagesFactory
@@ -164,7 +164,7 @@ function combinedFailure(failures: readonly Error[]): Error | null {
 
 /** Observes the official terminal without consuming the ConsumerMessages iterator. */
 function observeClosed(messages: ConsumerMessages): Promise<Error | null> {
-  let operation: PromiseLike<void | Error>
+  let operation: Promise<void | Error>
   try {
     operation = messages.closed()
   } catch (value) {

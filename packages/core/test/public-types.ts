@@ -30,13 +30,19 @@ import {
 import { waitForContext } from "../src/lifecycle"
 import { signal } from "../src/node"
 
+type ThenOnly<T> = Pick<Promise<T>, "then">
+
+declare const thenOnlyNumber: ThenOnly<number>
+
 const structural: Server = {
   async start() {},
   async stop() {}
 }
 const endpointer: Endpointer = {
+  protocol: () => "http",
   endpoint: () => "https://typed.example"
 }
+const endpointerProtocol: string = endpointer.protocol()
 declare const registry: Registrar
 const hook: AppHook = async () => {}
 const options: AppOption[] = [
@@ -61,11 +67,27 @@ const app: App = newApp(...options)
 const running: Promise<void> = app.run()
 const stopping: Promise<void> = app.stop()
 const waited: Promise<number> = waitForContext(background(), Promise.resolve(1))
+// @ts-expect-error waitForContext accepts only a native Promise.
+const rejectedThenOnlyWait: Promise<number> = waitForContext(background(), thenOnlyNumber)
 const info: AppInfo = app
 const infoContext: Context = newContext(background(), info)
 const readInfo: AppInfo | null = fromContext(infoContext)
 
-void [endpointer, running, stopping, waited, info, infoContext, readInfo]
+void [
+  endpointer,
+  endpointerProtocol,
+  running,
+  stopping,
+  waited,
+  rejectedThenOnlyWait,
+  info,
+  infoContext,
+  readInfo
+]
+
+// @ts-expect-error Endpointer requires a synchronous protocol discriminator.
+const missingProtocol: Endpointer = { endpoint: () => "https://typed.example" }
+void missingProtocol
 
 // @ts-expect-error Public interfaces are type-only.
 void Core.App

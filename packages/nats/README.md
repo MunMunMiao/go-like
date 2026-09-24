@@ -64,7 +64,7 @@ const subject = newNatsCoreServer(() =>
 - `newNatsCoreServer(source, ...options)`；
 - `natsCoreDrainTimeout(milliseconds)`。
 
-`source` 是官方 `Subscription`，或返回 `Subscription | PromiseLike<Subscription>` 的无参工厂。类型入口同时导出
+`source` 是官方 `Subscription`，或返回 `Subscription | Promise<Subscription>` 的无参工厂。类型入口同时导出
 `NatsCoreSubscriptionSource`、`NatsCoreSubscriptionFactory` 与 lifecycle error 类型。
 
 ### Core 生命周期契约
@@ -124,7 +124,7 @@ await processing
 await connection.drain()
 ```
 
-也可提供返回 `ConsumerMessages | PromiseLike<ConsumerMessages>` 的无参工厂。工厂同样不接收 go-like `Context`。
+也可提供返回 `ConsumerMessages | Promise<ConsumerMessages>` 的无参工厂。工厂同样不接收 go-like `Context`。
 
 ### ack、重投递与 DLQ 属于应用
 
@@ -190,8 +190,9 @@ for await (const message of messages) {
 
 包内构建与测试设置 `skipLibCheck: true`；根配置仍为 `false`。TypeScript 7.0.2 检查固定版本
 `@nats-io/nats-core` 时会命中 `MsgImpl.headers` / `Msg.headers` 与 `NatsConnectionImpl.info` /
-`NatsConnection.info` 两个已知 `TS2420`。发布包类型测试会精确匹配这些诊断，再使用官方原生类型执行
-consumer 检查；不得用 go-like facade 掩盖上游声明问题。
+`NatsConnection.info` 两个已知 `TS2420`，包内保留独立类型复现文件。当前发布包 consumer 也使用
+`skipLibCheck: true`；它检查应用对官方原生类型的使用、发布包解析闭包与运行行为，但不精确匹配这些诊断，
+也不证明全部上游 `.d.ts` 通过完整检查。不得用 go-like facade 掩盖上游声明问题。
 
 ## 验证
 

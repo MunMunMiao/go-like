@@ -333,7 +333,7 @@ test("preserves Broker native results, events, Subscribers, options, and receive
   const cancellation = new Error("broker operation canceled")
   const handlers = new Map<
     string,
-    (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>
+    (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>
   >()
   let publishOptions: PublishOptions | undefined
   let subscribeOptions: SubscribeOptions | undefined

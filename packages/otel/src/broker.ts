@@ -77,7 +77,7 @@ export function traceBroker<PublishOptions, PublishResult, SubscribeOptions, Nat
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
       options?: SubscribeOptions
     ): Promise<Subscriber> {
       if (typeof handler !== "function") throw new TypeError("broker handler must be a function")

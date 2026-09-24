@@ -8,7 +8,8 @@
 - `getService` 按服务名查询实例；
 - `watch` 返回 `Watcher`，通过 `next` 获取完整服务快照，通过 `stop` 停止监听。
 
-provider 不引入额外的注册句柄、运行器或结果包装类型。注册状态和 UDP socket 均由 provider 内部管理；调用 `deregister` 或 `Watcher.stop` 返回时，对应网络资源已经完成清理。
+provider 不引入额外的注册句柄、运行器或结果包装类型。注册状态和 UDP socket 均由 provider 内部管理；
+`deregister` 或 `Watcher.stop` 成功完成才表示对应清理完成。调用方 Context 提前终止等待不等于资源已经关闭。
 
 ## Node.js
 

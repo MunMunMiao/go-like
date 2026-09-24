@@ -1,5 +1,8 @@
 # go-like 包、Transport、Registry 与 Web 实施计划
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 > **面向执行代理：** 必须使用 `superpowers:subagent-driven-development`（推荐）或
 > `superpowers:executing-plans`，按任务逐项实施本计划。步骤使用复选框（`- [ ]`）跟踪。
 

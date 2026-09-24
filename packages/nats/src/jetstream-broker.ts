@@ -25,7 +25,7 @@ export type NatsJetStreamBrokerMessagesFactory<Options> = (
   ctx: Context,
   topic: string,
   options?: Options
-) => ConsumerMessages | PromiseLike<ConsumerMessages>
+) => ConsumerMessages | Promise<ConsumerMessages>
 
 /** Creates JetStream publish options with BrokerMessage as the only header source. */
 function publishOptions(
@@ -68,7 +68,7 @@ function messagesLifecycle(messages: ConsumerMessages): NativeBrokerLifecycle {
       return messages.close()
     },
     /** Returns the official ConsumerMessages terminal barrier. */
-    terminal(): PromiseLike<void | Error> {
+    terminal(): Promise<void | Error> {
       return messages.closed()
     },
     /** Forces only this ConsumerMessages stream to stop. */
@@ -117,7 +117,7 @@ export function newNatsJetStreamBroker<SubscribeOptions = void>(
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<JsMsg>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<JsMsg>) => void | Promise<void>,
       options?: SubscribeOptions
     ): Promise<Subscriber> {
       const failure = contextFailure(ctx)
@@ -126,7 +126,7 @@ export function newNatsJetStreamBroker<SubscribeOptions = void>(
       if (typeof handler !== "function") {
         throw new TypeError("NATS JetStream Broker handler must be callable")
       }
-      let supplied: ConsumerMessages | PromiseLike<ConsumerMessages>
+      let supplied: ConsumerMessages | Promise<ConsumerMessages>
       try {
         supplied =
           options === undefined ? messagesFactory(ctx, topic) : messagesFactory(ctx, topic, options)

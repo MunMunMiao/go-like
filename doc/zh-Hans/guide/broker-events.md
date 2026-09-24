@@ -4,7 +4,7 @@
 
 `@go-like/event` 是可选的 typed codec 层。发布时编码成独立 bytes，订阅时不急着解码，只有业务调用 `decode()` 才做 schema 校验。即使解码失败，原生 NATS `Msg` 或 JetStream `JsMsg` 仍然在，应用照样能选择正确的确认方式。
 
-`Broker.subscribe(ctx, topic, handler)` 返回带有 `unsubscribe(ctx)` 的 provider `Subscriber`。`newBrokerServer(...)` 把 `Broker` 接入 Core `Server` 契约：`start(ctx)` 表示完整运行期，`stop(ctx)` 请求停止。go-like 负责停止已经接纳的 subscription，但从不拥有 connection、stream 或 durable consumer；启动取消会回滚已创建但尚未接纳的 subscription。
+`newBrokerServer(...)` 只拥有一个订阅。owner 必须调用 `stop(ctx)`；如果接纳仍在进行，adapter 会等订阅返回后再调用 `unsubscribe`。仅取消 Context 不能证明晚到资源已释放。
 
 `@go-like/broker-rabbitmq` 的推荐入口使用 `amqplib@2` 官方 recovery setup：应用仍拥有 connection，
 go-like 在每次连接恢复后重放仍活跃订阅的 exchange、queue、binding、QoS 与 consumer。稳定

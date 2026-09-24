@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package order.v1;
+
+service OrderService {
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  rpc Delete(GetOrderRequest) returns (Order);
+  rpc WatchOrders(WatchOrdersRequest) returns (stream OrderEvent);
+  rpc UploadEvents(stream UploadEvent) returns (UploadSummary);
+  rpc SyncOrders(stream OrderCommand) returns (stream OrderEvent);
+}
+
+message GetOrderRequest {
+  string id = 1;
+}
+
+message Order {
+  string id = 1;
+  string state = 2;
+}
+
+message WatchOrdersRequest {
+  string customer_id = 1;
+}
+
+message OrderEvent {
+  string order_id = 1;
+  string type = 2;
+  int32 sequence = 3;
+}
+
+message UploadEvent {
+  string order_id = 1;
+  string type = 2;
+}
+
+message UploadSummary {
+  int32 count = 1;
+}
+
+message OrderCommand {
+  string order_id = 1;
+  string action = 2;
+}

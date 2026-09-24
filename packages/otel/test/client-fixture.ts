@@ -1,4 +1,4 @@
-import { newClient, withTransport, type Client } from "@go-like/client"
+import { newClient, withAddress, withTransport, type Client } from "@go-like/client"
 import type {
   Client as TransportClient,
   Listener,
@@ -14,7 +14,7 @@ export interface LoopbackClient {
 
 /** Creates one real go-like Client over an in-memory structural Transport. */
 export function newLoopbackClient(
-  reply: (request: Message) => Message | PromiseLike<Message>
+  reply: (request: Message) => Message | Promise<Message>
 ): LoopbackClient {
   const sent: Message[] = []
   const transport: Transport = {
@@ -55,5 +55,8 @@ export function newLoopbackClient(
       return "loopback"
     }
   }
-  return Object.freeze({ client: newClient(withTransport(transport)), sent })
+  return Object.freeze({
+    client: newClient(withTransport(transport), withAddress("memory://loopback")),
+    sent
+  })
 }

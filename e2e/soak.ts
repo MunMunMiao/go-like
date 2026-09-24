@@ -329,7 +329,7 @@ export async function observeSoakEnvironment(
   })
 }
 
-function countingTransport(onDial: () => void): Transport {
+function countingTransport(onDial: (address: string) => void): Transport {
   const subject = newHTTPTransport()
   return Object.freeze({
     kind(): string {
@@ -346,7 +346,7 @@ function countingTransport(onDial: () => void): Transport {
       address: string,
       ...options: readonly DialOption[]
     ): Promise<TransportClient> {
-      onDial()
+      onDial(address)
       return subject.dial(ctx, address, ...options)
     },
     listen(ctx: Context, address: string, ...options: readonly ListenOption[]): Promise<Listener> {
@@ -709,9 +709,11 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     client = newClient(
       poolSize(2),
       poolTtl(0),
+      withAddress(...web.serviceEndpoints),
       withTransport(
-        countingTransport(() => {
+        countingTransport((address) => {
           dials += 1
+          probeEndpoints.add(address)
         })
       )
     )
@@ -719,21 +721,12 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     const loadStarted = performance.now()
     probeRunning = (async function probeClientPool(): Promise<void> {
       while (!probeStop) {
-        const selected =
-          performance.now() - loadStarted < requestedDurationMs / 2
-            ? web.serviceEndpoints[0]
-            : web.serviceEndpoints[1]
-        probeEndpoints.add(selected)
         try {
-          const response = await client?.call(
-            background(),
-            {
-              service: "soak",
-              endpoint: "Ping",
-              message: { header: {}, body: new Uint8Array() }
-            },
-            withAddress(selected)
-          )
+          const response = await client?.call(background(), {
+            service: "soak",
+            endpoint: "Ping",
+            message: { header: {}, body: new Uint8Array() }
+          })
           if (response === undefined || Decoder.decode(response.body).length !== 1) {
             throw new Error("internal Client returned an invalid response")
           }

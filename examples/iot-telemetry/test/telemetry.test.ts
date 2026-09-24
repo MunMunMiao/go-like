@@ -301,7 +301,7 @@ describe("telemetry settlement", () => {
   test("adapts exactly one durable consumer into a Core server", async () => {
     let subscribedTopic = ""
     const subscriptionCapture: {
-      handler: ((ctx: Context, event: BrokerEvent<JsMsg>) => void | PromiseLike<void>) | null
+      handler: ((ctx: Context, event: BrokerEvent<JsMsg>) => void | Promise<void>) | null
     } = { handler: null }
     let stopCount = 0
     const accepted: Subscriber = Object.freeze({
@@ -317,7 +317,7 @@ describe("telemetry settlement", () => {
       async subscribe(
         _ctx: Context,
         topic: string,
-        handler: (ctx: Context, event: BrokerEvent<JsMsg>) => void | PromiseLike<void>
+        handler: (ctx: Context, event: BrokerEvent<JsMsg>) => void | Promise<void>
       ): Promise<Subscriber> {
         subscribedTopic = topic
         subscriptionCapture.handler = handler

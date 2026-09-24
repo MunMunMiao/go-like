@@ -6,7 +6,7 @@ import { transferQuoteEndpoint, type TransferQuote, type TransferQuoteCommand } 
 type QuoteTransferOperation = (
   ctx: Context,
   command: TransferQuoteCommand
-) => TransferQuote | PromiseLike<TransferQuote>
+) => TransferQuote | Promise<TransferQuote>
 
 /** Creates the standard Fetch endpoint for bank transfer quotes. */
 export function newBankTransferHandler(quote: QuoteTransferOperation): Handler {

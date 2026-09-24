@@ -5,12 +5,12 @@ import { timeout } from "./options"
 import type { Client, Listener, Message, Option, Transport } from "./types"
 
 /** Creates a fresh structural Transport for one isolated conformance case. */
-export type TransportFactory = () => Transport | PromiseLike<Transport>
+export type TransportFactory = () => Transport | Promise<Transport>
 
 /** Injects one real provider-owned listener failure without exposing provider internals. */
 export interface TransportConformanceFaultHarness {
   /** Makes listener terminate unexpectedly with cause while ctx remains active. */
-  failListener(ctx: Context, listener: Listener, cause: Error): void | PromiseLike<void>
+  failListener(ctx: Context, listener: Listener, cause: Error): void | Promise<void>
 }
 
 /** Configures the provider-neutral Transport conformance suite. */
@@ -52,9 +52,9 @@ interface RejectedOutcome {
 type Outcome<T = unknown> = FulfilledOutcome<T> | RejectedOutcome
 
 /** Performs one best-effort conformance cleanup operation. */
-type Cleanup = (ctx: Context) => void | PromiseLike<void>
+type Cleanup = (ctx: Context) => void | Promise<void>
 /** Performs one bounded conformance scenario. */
-type Scenario = (ctx: Context) => void | PromiseLike<void>
+type Scenario = (ctx: Context) => void | Promise<void>
 
 const DefaultConformanceTimeoutMs = 2_000
 
@@ -80,7 +80,7 @@ function fail(message: string): never {
 }
 
 /** Captures fulfillment or rejection without leaving an unhandled Promise. */
-async function outcome<T>(operation: PromiseLike<T>): Promise<Outcome<T>> {
+async function outcome<T>(operation: Promise<T>): Promise<Outcome<T>> {
   try {
     return Object.freeze({ rejected: false, value: await operation })
   } catch (failure) {
@@ -89,7 +89,7 @@ async function outcome<T>(operation: PromiseLike<T>): Promise<Outcome<T>> {
 }
 
 /** Captures both a synchronous throw and an asynchronous rejection from one invocation. */
-async function invokeOutcome<T>(operation: () => T | PromiseLike<T>): Promise<Outcome<T>> {
+async function invokeOutcome<T>(operation: () => T | Promise<T>): Promise<Outcome<T>> {
   try {
     return await outcome(Promise.resolve(operation()))
   } catch (failure) {
@@ -107,7 +107,7 @@ async function crossWebTaskBoundary(): Promise<void> {
 /** Bounds one operation with an existing owner Context. */
 async function boundedWithContext<T>(
   ctx: Context,
-  operation: (ctx: Context) => T | PromiseLike<T>,
+  operation: (ctx: Context) => T | Promise<T>,
   timeoutMs: number,
   label: string
 ): Promise<T> {
@@ -129,7 +129,7 @@ async function boundedWithContext<T>(
 
 /** Bounds one conformance operation so a broken provider cannot hang the runner. */
 async function bounded<T>(
-  operation: (ctx: Context) => T | PromiseLike<T>,
+  operation: (ctx: Context) => T | Promise<T>,
   timeoutMs: number,
   label: string
 ): Promise<T> {
@@ -235,7 +235,7 @@ function requireCode(result: Outcome, code: string, label: string): void {
 /** Cancels an operation only after its active invocation remains pending. */
 async function cancelStarted<T>(
   parent: Context,
-  operation: (ctx: Context) => T | PromiseLike<T>,
+  operation: (ctx: Context) => T | Promise<T>,
   label: string,
   onCancel: () => void = (): void => {}
 ): Promise<Outcome<T>> {
@@ -265,7 +265,7 @@ function verifyMessage(message: Message, topic = "before", firstByte = 1): void 
 }
 
 /** Returns whether a terminal operation remains pending after already-queued Promise work settles. */
-async function remainsPending(operation: PromiseLike<unknown>): Promise<boolean> {
+async function remainsPending(operation: Promise<unknown>): Promise<boolean> {
   let settled = false
   /** Records either terminal outcome through one shared callable. */
   function markSettled(): void {
@@ -1403,7 +1403,7 @@ function snapshotFaultHarness(value: unknown): TransportConformanceFaultHarness 
   }
   return Object.freeze({
     /** Delegates one fault injection through the snapshotted structural callable. */
-    failListener(ctx: Context, listener: Listener, cause: Error): void | PromiseLike<void> {
+    failListener(ctx: Context, listener: Listener, cause: Error): void | Promise<void> {
       return failListener.call(value, ctx, listener, cause)
     }
   })

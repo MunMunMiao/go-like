@@ -1,10 +1,17 @@
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withAddress,
+  withTransport,
+  type CallOption,
+  type Client
+} from "@go-like/client"
 import type { Context } from "@go-like/context"
 import {
   address,
-  handler,
   newServer,
   transport as serverTransport,
+  type Handler,
+  type HandlerRegistrar,
   type Server
 } from "@go-like/server"
 import { serviceError, type Message } from "@go-like/transport"
@@ -18,7 +25,8 @@ const PolicyEndpointName = "AppointmentPolicy.Check"
 const PolicyAddress = "memory://appointment-policy"
 export type ValidateAppointmentPolicy = (
   ctx: Context,
-  command: BookAppointmentCommand
+  command: BookAppointmentCommand,
+  ...options: readonly CallOption[]
 ) => Promise<void>
 
 export type ValidatedBookAppointment = (
@@ -29,6 +37,15 @@ export type ValidatedBookAppointment = (
 export interface AppointmentPolicyService {
   readonly server: Server
   readonly validate: ValidateAppointmentPolicy
+}
+
+export interface AppointmentPolicyClient {
+  readonly validate: ValidateAppointmentPolicy
+}
+
+/** Registers the appointment-policy implementation on one Server owner. */
+export function registerAppointmentPolicyHandler(server: HandlerRegistrar, handler: Handler): void {
+  server.registerHandler(PolicyServiceName, PolicyEndpointName, handler)
 }
 
 /** Decodes only the policy fields used by the internal service boundary. */
@@ -54,43 +71,16 @@ function policyCommand(message: Message): BookAppointmentCommand {
   return Object.freeze({ appointmentId, doctorId, patientId, startsAt, endsAt })
 }
 
-/** Composes an internal unary appointment-policy service over the memory transport. */
-export function newAppointmentPolicyService(
-  maximumDurationMs: number = 7_200_000
-): AppointmentPolicyService {
-  if (!Number.isSafeInteger(maximumDurationMs) || maximumDurationMs <= 0) {
-    throw new RangeError("maximumDurationMs must be a positive safe integer")
-  }
-  const transport = newMemoryTransport()
-  const server = newServer(
-    serverTransport(transport),
-    address(PolicyAddress),
-    handler(
-      PolicyServiceName,
-      PolicyEndpointName,
-      function validatePolicy(_ctx: Context, request: Message): Message {
-        const command = policyCommand(request)
-        if (command.endsAt - command.startsAt > maximumDurationMs) {
-          throw serviceError(
-            "appointment_policy_rejected",
-            "appointment duration exceeds policy",
-            409
-          )
-        }
-        return Object.freeze({
-          header: Object.freeze({ "content-type": "application/json" }),
-          body: Encoder.encode('{"allowed":true}')
-        })
-      }
-    )
-  )
-  const client = newClient(withTransport(transport))
-
+/** Creates the typed appointment-policy caller while borrowing one common Client owner. */
+export function newAppointmentPolicyClient(client: Client): AppointmentPolicyClient {
   return Object.freeze({
-    server,
-    async validate(callContext: Context, command: BookAppointmentCommand): Promise<void> {
+    async validate(
+      ctx: Context,
+      command: BookAppointmentCommand,
+      ...options: readonly CallOption[]
+    ): Promise<void> {
       const response = await client.call(
-        callContext,
+        ctx,
         {
           service: PolicyServiceName,
           endpoint: PolicyEndpointName,
@@ -99,7 +89,7 @@ export function newAppointmentPolicyService(
             body: Encoder.encode(JSON.stringify(command))
           }
         },
-        withAddress(PolicyAddress)
+        ...options
       )
       const result: unknown = JSON.parse(Decoder.decode(response.body))
       if (
@@ -110,6 +100,41 @@ export function newAppointmentPolicyService(
         throw new Error("appointment policy returned an invalid response")
       }
     }
+  })
+}
+
+/** Composes an internal unary appointment-policy service over the memory transport. */
+export function newAppointmentPolicyService(
+  maximumDurationMs: number = 7_200_000
+): AppointmentPolicyService {
+  if (!Number.isSafeInteger(maximumDurationMs) || maximumDurationMs <= 0) {
+    throw new RangeError("maximumDurationMs must be a positive safe integer")
+  }
+  const transport = newMemoryTransport()
+  const server = newServer(serverTransport(transport), address(PolicyAddress))
+  registerAppointmentPolicyHandler(
+    server,
+    function validatePolicy(_ctx: Context, request: Message): Message {
+      const command = policyCommand(request)
+      if (command.endsAt - command.startsAt > maximumDurationMs) {
+        throw serviceError(
+          "appointment_policy_rejected",
+          "appointment duration exceeds policy",
+          409
+        )
+      }
+      return Object.freeze({
+        header: Object.freeze({ "content-type": "application/json" }),
+        body: Encoder.encode('{"allowed":true}')
+      })
+    }
+  )
+  const client = newClient(withTransport(transport), withAddress(PolicyAddress))
+  const policy = newAppointmentPolicyClient(client)
+
+  return Object.freeze({
+    server,
+    validate: policy.validate
   })
 }
 

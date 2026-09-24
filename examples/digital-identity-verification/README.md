@@ -21,7 +21,7 @@
 
 ## go-like 能力
 
-`@go-like/resilience` 为每个允许的供应商提供独立 Circuit Breaker，`@go-like/context` 为调用设置确定的超时边界，`@go-like/health` 与 `@go-like/web/health` 发布 `/readyz`。测试实际触发超时、打开熔断器并观察 readiness 失败。
+`@go-like/resilience` 为每个允许的供应商提供独立 Circuit Breaker，`@go-like/context` 为调用设置确定的超时边界，`@go-like/health` 与 `@go-like/web/health` 组合独立的 health Handler。测试实际触发超时、打开熔断器并观察 readiness 失败。当前 `main.ts` 只挂载业务 Handler，未把独立的 `service.health` 接到 `/livez`、`/readyz`；readiness 也不是核验请求的前置门禁。
 
 ```bash
 bun run --filter @go-like/example-digital-identity-verification typecheck

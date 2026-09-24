@@ -317,7 +317,7 @@ describe("native Winston request logging", () => {
     interface NativeEvent {
       readonly sequence: number
     }
-    type Delivery = (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>
+    type Delivery = (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>
 
     const logger = new CaptureLogger()
     const nativeResult = Object.freeze({ sequence: 1 })

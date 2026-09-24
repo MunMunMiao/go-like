@@ -18,9 +18,9 @@ export interface CacheConformanceSubject<T extends Cache = Cache> {
   /** Creates two clients for one isolated shared backend when cross-client checks apply. */
   readonly createSharedCaches?: () => readonly [T, T]
   /** Runs one case while the provider owns any setup and cleanup outside the Cache contract. */
-  readonly useCache?: (cache: T, run: (cache: T) => PromiseLike<void>) => PromiseLike<void>
+  readonly useCache?: (cache: T, run: (cache: T) => Promise<void>) => Promise<void>
   /** Advances a deterministic provider clock; real providers may omit this hook. */
-  readonly advanceTime?: (milliseconds: number) => void | PromiseLike<void>
+  readonly advanceTime?: (milliseconds: number) => void | Promise<void>
   /** Bounds each operation and eventual convergence; defaults to 5,000 milliseconds. */
   readonly convergenceTimeoutMs?: number
   /** Selects one supported TTL used by expiry conformance. */
@@ -140,13 +140,10 @@ function normalizeError(value: unknown): Error {
 }
 
 /** Runs one operation under a portable conformance-owned Context deadline. */
-async function bounded<T>(
-  timeoutMs: number,
-  operation: (ctx: Context) => PromiseLike<T>
-): Promise<T> {
+async function bounded<T>(timeoutMs: number, operation: (ctx: Context) => Promise<T>): Promise<T> {
   const timed = withTimeout(background(), timeoutMs)
   try {
-    const promise = Promise.resolve().then(function invoke(): PromiseLike<T> {
+    const promise = Promise.resolve().then(function invoke(): Promise<T> {
       return operation(timed[0])
     })
     return await waitForContext(timed[0], promise)
@@ -159,7 +156,7 @@ async function bounded<T>(
 async function useCache<T extends Cache>(
   subject: CapturedSubject<T>,
   cache: T,
-  run: (cache: T) => PromiseLike<void>
+  run: (cache: T) => Promise<void>
 ): Promise<void> {
   if (subject.useCache === undefined) {
     await run(cache)
@@ -172,7 +169,7 @@ async function useCache<T extends Cache>(
 async function withCache<T extends Cache>(
   subject: CapturedSubject<T>,
   cleanupKey: string,
-  run: (cache: T) => PromiseLike<void>
+  run: (cache: T) => Promise<void>
 ): Promise<void> {
   await useCache(subject, freshCache(subject), async function verify(cache): Promise<void> {
     let primary: Error | null = null

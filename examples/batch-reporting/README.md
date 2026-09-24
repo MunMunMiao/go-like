@@ -1,11 +1,13 @@
-# 批量报表运行时示例设计
+# 批量报表运行时示例
 
-> 状态：可执行基线。2026-07-23 已通过类型检查、业务单测、Bun 原生覆盖率报告和固定 digest Redis Docker E2E。
+> 状态：可执行基线。提供类型检查、业务单测、覆盖率和固定 digest Redis Docker E2E；下文区分当前实现与生产接入要求，测试结果以对应检出的实际运行日志为准。
 
-本示例定义一个可落地的单实例批量报表服务：Croner 负责按固定 UTC 触发调度，BullMQ 与 Redis 负责持久队列、
+本示例定义一个可落地的单实例批量报表服务：Croner 按 cron 表达式触发调度，业务窗口按 UTC 计算，BullMQ 与 Redis 负责队列、
 重试和 stalled job 恢复，`@go-like/store-file` 保存本地 checkpoint，go-like 负责各常驻资源的显式生命周期。
 
-该方案按“任务可能重复执行”设计，不承诺 exactly-once，也不引入工作流引擎。
+该方案按“任务可能重复执行”设计，不承诺 exactly-once，也不引入工作流引擎。当前 publisher 只输出
+`GO_LIKE_REPORT_PUBLISHED` 到 stdout，随后推进 checkpoint，没有读取真实报表输入或持久化报表结果。
+Compose 与 E2E 均关闭 Redis RDB/AOF，未验证 Redis 重启后的队列恢复。
 
 ## 直接运行
 
@@ -33,7 +35,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
 | 平台运维   | Redis、进程、持久卷故障后能判断是否可恢复，并能安全停机。                   |
 | 开发者     | 直接使用 Croner、BullMQ 与 go-like 的真实 API，不维护第二套调度或队列抽象。 |
 
-## 业务目标
+## 生产接入目标
 
 - 按显式固定 UTC 为已经完整关闭的时间窗口生成报表。
 - 服务短暂停机或 Redis 暂时不可用后，从最后一个已提交 checkpoint 继续补齐窗口。
@@ -41,6 +43,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
 - 只有报表结果已经持久提交后才推进 checkpoint；失败窗口保持可见并阻断后续窗口。
 - 关停时先停止新调度，再排空 Worker，最后关闭 Queue 与 checkpoint Store。
 
+以上持久输出、恢复与有序停机是生产接入要求，当前 stdout publisher 和 `main.ts` 并未全部落实。
 基线刻意限制为一个应用实例、一个报表序列、同一时间最多一个逻辑窗口在途。该约束让单文件 checkpoint
 保持诚实；需要多副本或并行报表流时，应改用共享协调存储，而不是让多个进程争写同一文件。
 
@@ -51,7 +54,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
   Croner tick / startup reconciliation
                   |
                   v
-        scheduler admission barrier
+       enqueueNextClosedWindow
                   |
                   v
        BullMQ Queue ---------> Redis
@@ -59,13 +62,12 @@ docker compose -f examples/batch-reporting/compose.yaml down
                   v              | lock / retry / stalled state
         BullMQ Worker <----------+
                   |
-          read source snapshot
-                  |
-          publish report result
+          invoke publisher callback
+            (main: stdout only)
                   |
                   v
        @go-like/store-file checkpoint
-          on persistent volume
+       (directory owned by the app)
 ```
 
 Croner、Queue、Worker 和 Store 都保留各自的原生职责。go-like 不定义 job schema、不代理 processor，也不把
@@ -73,25 +75,25 @@ Queue 的生命周期错误地转交给 Worker adapter。
 
 ### 请求与数据流
 
-1. 启动时，应用打开 File Store，读取 `lastCommittedWindow`，计算最早尚未完成且已经关闭的窗口。
+1. 应用把 File Store、Queue owner、Worker 与 scheduler 交给 Core。调度函数读取 checkpoint，计算下一个已经关闭的窗口；没有 checkpoint 时，`main.ts` 从当前最近关闭窗口开始，不自动补齐更早历史。
 2. 启动 reconciliation 与每次 Croner tick 都只调用同一个 `enqueueNextClosedWindow` 业务函数。
 3. 该函数用规范化 UTC 窗口生成确定性 BullMQ `jobId`，例如 `report-20260722T000000Z`，并只入队下一个窗口。
-   job payload 只携带窗口和报表版本等业务标识，不携带凭据。
+   当前 job payload 只携带规范化窗口，不携带凭据。
 4. Redis 已保留相同 `jobId` 时，BullMQ 的原生去重避免再创建一条并行 job。该去重只在原生 job 仍被保留时有效。
 5. Worker 以 `concurrency: 1` 处理 job。processor 再次读取 checkpoint；已经提交的窗口直接返回成功。
-6. processor 读取该窗口的输入快照，把结果写入确定性目标键或支持幂等 upsert 的下游，并等待下游确认持久提交。
-7. 只有第 6 步成功后，processor 才把 checkpoint 原子推进到当前窗口；随后可触发下一次
+6. processor 调用注入的 publisher 并等待其完成；当前 `main.ts` 的 publisher 只写 stdout。真实输入快照、幂等下游与持久提交确认须由接入方实现。
+7. 只有第 6 步成功后，processor 才把 checkpoint 原子推进到当前窗口；后续 Cron tick 再触发
    `enqueueNextClosedWindow`，逐个补齐积压窗口。
 8. 如果进程在结果提交后、checkpoint 提交前崩溃，同一 job 会再次执行。下游幂等写是收敛该间隙的必要条件；
    文件 checkpoint 与 Redis 之间不存在分布式事务。
 
 ### 三层去重
 
-| 层                    | 作用                                              | 明确边界                                           |
-| --------------------- | ------------------------------------------------- | -------------------------------------------------- |
-| 确定性 `jobId`        | 抑制 Redis 中同一保留 job 的重复入队。            | job 被删除后不再提供历史去重。                     |
-| File Store checkpoint | 已完成窗口再次进入 processor 时快速跳过。         | 只适用于该单 owner 报表序列。                      |
-| 幂等输出键或 upsert   | 收敛“输出成功、checkpoint 尚未提交”时的重复执行。 | 由报表下游提供，不是 BullMQ 的 exactly-once 保证。 |
+| 层                    | 作用                                                      | 明确边界                                         |
+| --------------------- | --------------------------------------------------------- | ------------------------------------------------ |
+| 确定性 `jobId`        | 抑制 Redis 中同一保留 job 的重复入队。                    | job 被删除后不再提供历史去重。                   |
+| File Store checkpoint | 已完成窗口再次进入 processor 时快速跳过。                 | 只适用于该单 owner 报表序列。                    |
+| 幂等输出键或 upsert   | 生产接入时收敛“输出成功、checkpoint 尚未提交”的重复执行。 | 当前 stdout publisher 未提供；须由报表下游实现。 |
 
 ### 实现目录
 
@@ -114,11 +116,11 @@ src/
 | `@go-like/store`                                    | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
 | `@go-like/store-file` 与 `@go-like/store-file/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。    | 不支持跨进程 shared writers。                                             |
 
-Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直接调用 `queue.close()`，不为它新增通用框架
-包。Croner callback 的在途 `queue.add()` 由应用内 admission barrier 跟踪，
-因为 `@go-like/croner` 能停止后续调度，但 Croner 原生 `stop()` 不会等待已经运行的 callback。
+Queue 仍是 application-owned，`main.ts` 用本地 `queueServer` 包装其 `waitUntilReady / close`，不新增通用框架包。
+Core 并发停止 Store、Queue、Worker 与 scheduler；当前入口没有跟踪 Croner callback 的 admission barrier，
+也不保证 Worker 结束后才关闭 Queue/Store。Croner 原生 `stop()` 不等待已经运行的 callback，生产接入须补齐该依赖边界。
 
-## 生产不变量
+## 生产接入要求（不等于当前入口全部实现）
 
 1. 当前基线固定使用 UTC 计算窗口和 job identity；只有真实业务要求非 UTC 日界线时，才增加时区参数及夏令时测试。
 2. 同一 checkpoint 目录只能有一个存活 owner，应用只能运行一个副本，目录必须位于持久卷而不是容器临时层。
@@ -148,7 +150,8 @@ Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直
 
 ### 关停
 
-本示例的 E2E 按依赖到消费者显式启动 File Store → Queue owner → BullMQ Worker → scheduler，并按相反顺序关停：
+E2E 单独创建 Queue、启动 File Store 与 scheduler，再按场景启动 Worker，并在测试主路径显式执行
+`scheduler → Worker → Queue → Store` 关闭。这个顺序属于 E2E 编排，不是 `main.ts` 的 Core 停机保证。生产接入需要：
 
 1. scheduler 关闭 admission，停止 Croner 的未来 tick，并等待已接纳的 `queue.add()` barrier。
 2. `@go-like/bullmq` 调用 `pause(false)` 停止新 job admission，并等待 active processor。
@@ -177,7 +180,7 @@ Queue 仍是 application-owned。本示例的编排代码在 Worker 终止后直
 | 组件             | 当前仓库真实 pin                                                                                                 | 用途                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | Redis            | `redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241`，E2E 回读为 8.10.0 | BullMQ queue、lock、retry 与 stalled 状态。 |
-| BullMQ           | `6.0.6`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
+| BullMQ           | `6.3.1`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
 | Croner           | `10.0.1`                                                                                                         | 定时调度。                                  |
 | go-like packages | workspace `0.0.1`                                                                                                | 生命周期与 checkpoint provider。            |
 
@@ -189,22 +192,23 @@ Docker E2E 必须启动真实 Redis 容器并执行真实 BullMQ processor；内
 
 ## 验证
 
-运行以下命令：
+从仓库根目录运行以下命令：
 
 ```bash
-bun run typecheck
-bun run test:unit
-bun run test:unit:coverage
+bun run --filter @go-like/example-batch-reporting typecheck
+bun run --filter @go-like/example-batch-reporting test:unit
+bun run --filter @go-like/example-batch-reporting test:unit:coverage
 bun run test:e2e:examples
 ```
 
 真实 Docker E2E 覆盖 Redis 8.10.0 与固定 image digest、
 重复 Cron tick 只保留一个确定性 job、原生 attempts `0,1,2` 与 fixed backoff、独立 Worker 进程持锁后以 17 退出、
-`attemptsStarted=2` 与 `stalledCounter=1` 的恢复、File Store checkpoint fresh readback，以及
-scheduler → Worker → Queue → Store 关停顺序。关停后持久 Redis 连接数和 owner-labeled 容器残留数均为 0。
+`attemptsStarted >= 2` 与 `stalledCounter >= 1` 的恢复、File Store checkpoint fresh readback，以及
+测试编排的 scheduler → Worker → Queue → Store 关停顺序。此外会启动 `start:prepared`，确认 stdout 发布标记后发送 SIGTERM，
+断言有限退出与零持久 Redis 连接；该 smoke 不证明带在途业务的有序排空。场景还检查 owner-labeled 容器零残留。
 
-本基线尚未把 Redis stop/start、最终 failed job、checkpoint 写失败、SIGTERM 或非协作 processor timeout 纳入本示例
-E2E；这些仍应在采用对应生产策略前单独演练，不能从当前通过结果外推。
+本基线尚未把 Redis stop/start、最终 failed job、checkpoint 写失败或非协作 processor timeout 纳入本示例
+E2E；这些仍应在采用对应生产策略前单独演练，不能从当前场景外推。
 
 ## 非目标
 

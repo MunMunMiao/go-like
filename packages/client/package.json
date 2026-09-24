@@ -15,7 +15,8 @@
     "dist"
   ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./discovery": "./src/discovery.ts"
   },
   "scripts": {
     "build": "bun x --bun tsdown --config-loader native",

@@ -9,7 +9,9 @@ This page is organized by the question an application is trying to answer, not b
 - **Lifecycle adapter** means a Server wrapper around an application-created native resource.
 - **Evidence** identifies the kind of repository support: source/export, declared tests, or a reported local command result. It does not turn a package version into an npm or production claim.
 
-The current source inventory is 43 non-private `@go-like/*` package manifests and 23 public source subpaths, all at version `0.0.1` in this checkout. The 44 `examples/*` workspaces are private applications, not public packages.
+The current source inventory is 45 non-private `@go-like/*` package manifests and 25 public source subpaths, all at version `0.0.1` in this checkout. The 44 `examples/*` workspaces are private applications, not public packages.
+
+`@go-like/transport-grpc-buf` and `@go-like/protoc-gen-like` appear here for package navigation; they are an upstream-runtime integration and a build-time generator, not interchangeable Transport SPI providers.
 
 ## Choose by job
 
@@ -17,6 +19,7 @@ The current source inventory is 43 non-private `@go-like/*` package manifests an
 | ----------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Expose a Web API                    | `@go-like/web`, `@go-like/core`          | `@go-like/web/node` or a framework's native Fetch handler                 | Router, framework middleware, auth, response policy          |
 | Call an internal service            | `@go-like/client`, `@go-like/transport`  | `@go-like/transport-memory`, `@go-like/transport-http`, `@go-like/struct` | Business idempotency, generated IDL, full-duplex RPC         |
+| Use generated Protobuf RPC          | `@go-like/transport-grpc-buf`            | `@go-like/protoc-gen-like`; add `/native` for managed standard gRPC       | Buf online services, Google runtime, health/reflection       |
 | Discover service instances          | `@go-like/registry`                      | One Registry provider, filters, a Selector                                | Backend lease/revision consistency or global service locator |
 | Load configuration                  | `@go-like/config`                        | env/file/YAML or one external Config provider                             | Ambient global configuration and cross-resource transactions |
 | Store authoritative bytes           | `@go-like/store`                         | Memory, File, Consul, etcd, or Vault provider                             | A generic database/ORM or uniform provider guarantees        |
@@ -37,19 +40,22 @@ The current source inventory is 43 non-private `@go-like/*` package manifests an
 | `@go-like/health`     | Liveness and readiness probe registry                           | `newProbeRegistry`, `ProbeRegistry`, `Probe`, `ProbeReport`                                                                                                                                                       | Empty liveness passes; empty readiness fails closed; default probe timeout is 1,000 ms          |
 | `@go-like/resilience` | Explicit retry, circuit breaker, and non-blocking rate limiting | `retry`, `exponentialBackoff`, `newCircuitBreaker`, `newTokenBucketLimiter`, `circuitOpen`                                                                                                                        | Retry authorization is caller-declared; no automatic idempotency or background limiter task     |
 
-## Web and internal call packages
+## Web, generated RPC, and internal call packages
 
-| Package                        | Use it for                                                               | Principal public API                                                                                                                                                                                         | Does not own                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `@go-like/web`                 | Standard Web Handler and request Context bridge                          | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                | Routes, WebSockets, SSE policy, listener, authentication                              |
-| `@go-like/web/health`          | Health Handler routes                                                    | `createHealthHandler`                                                                                                                                                                                        | Probe registration or framework route mounting                                        |
-| `@go-like/web/node`            | Node listener around a Fetch Handler                                     | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                   | Internal HTTP Transport TLS/HTTP2; use `@go-like/transport-http/node` for that        |
-| `@go-like/client`              | Internal unary calls, discovery, selection, middleware, retries, pooling | `newClient`, `withTransport`, `withAddress`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Framework routes, business replay safety, physical socket limits                      |
-| `@go-like/server`              | Internal unary Message server and route dispatch                         | `newServer`, `transport`, `address`, `advertise`, `handler`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                                      | External Fetch routes and protocol-specific business authorization                    |
-| `@go-like/transport`           | Transport SPI and Message boundary                                       | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                     | A concrete wire unless a provider is selected; no internal full-duplex promise        |
-| `@go-like/transport-memory`    | In-process unary Transport                                               | `newMemoryTransport`                                                                                                                                                                                         | Cross-process behavior, persistence, network fallback, TLS                            |
-| `@go-like/transport-http`      | Fetch-backed internal HTTP Transport                                     | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                            | A complete portable listener without an injected `HTTPHost`; native Node TLS controls |
-| `@go-like/transport-http/node` | Native Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                           | Deno listener or automatic security policy                                            |
+| Package                              | Use it for                                                               | Principal public API                                                                                                                                                                                                        | Does not own                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `@go-like/web`                       | Standard Web Handler and request Context bridge                          | `Handler`, `ContextHandler`, `contextHandler`                                                                                                                                                                               | Routes, WebSockets, SSE policy, listener, authentication                              |
+| `@go-like/web/health`                | Health Handler routes                                                    | `createHealthHandler`                                                                                                                                                                                                       | Probe registration or framework route mounting                                        |
+| `@go-like/web/node`                  | Node listener around a Fetch Handler                                     | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                                                                                                                                                                  | Internal HTTP Transport TLS/HTTP2; use `@go-like/transport-http/node` for that        |
+| `@go-like/client`                    | Internal unary calls, discovery, selection, middleware, retries, pooling | `newClient`, `withTransport`, `withAddress`, `withService`, `withDiscovery`, `withSelector`, `withFilter`, `withBlock`, `withRetry`, `middleware`, `use`, `circuitBreakerMiddleware`, `closeTimeout`, `poolSize`, `poolTtl` | Framework routes, business replay safety, physical socket limits                      |
+| `@go-like/server`                    | Internal unary Message server and route dispatch                         | `newServer`, `Server.registerHandler`, `httpRoute`, `transport`, `address`, `advertise`, `middleware`, `use`, `listenOption`, `rateLimitMiddleware`                                                                         | Framework router, application authorization                                           |
+| `@go-like/transport`                 | Transport SPI and Message boundary                                       | `Transport`, `Client`, `Listener`, `Socket`, `Message`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                                                    | A concrete wire unless a provider is selected; no internal full-duplex promise        |
+| `@go-like/transport-memory`          | In-process unary Transport                                               | `newMemoryTransport`                                                                                                                                                                                                        | Cross-process behavior, persistence, network fallback, TLS                            |
+| `@go-like/transport-http`            | Fetch-backed internal HTTP Transport                                     | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                                           | A complete portable listener without an injected `HTTPHost`; native Node TLS controls |
+| `@go-like/transport-http/node`       | Native Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                                          | Deno listener or automatic security policy                                            |
+| `@go-like/transport-grpc-buf`        | Portable generated RPC over Connect and gRPC-Web                         | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                                           | Listener, Fetch request-streaming/bidi, or browser standard gRPC                      |
+| `@go-like/transport-grpc-buf/native` | Managed standard-gRPC Client/Server for backend runtimes                 | `newClient`, `newServer`, direct/Discovery/Selector/TLS construction options                                                                                                                                                | Protobuf/framing reimplementation, browser transport, health/reflection               |
+| `@go-like/protoc-gen-like`           | Project-local Node 22+ build-time generation                             | `protoc-gen-like` executable, `protocGenLike`                                                                                                                                                                               | Runtime dependency, provider package, Bun requirement, or second Deno launcher        |
 
 ## Config packages
 
@@ -84,19 +90,19 @@ Registry is reachability state, not durable business data. A provider may retain
 
 ## Store and Cache packages
 
-| Package                    | Use it for                         | Principal function                                                                                                 | Boundary                                                                                  |
-| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `@go-like/store`           | Record contract and options        | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`, `writeOptions`, `deleteOptions`, `listOptions` | Revisions, CAS, TTL, pagination; provider capabilities vary                               |
-| `@go-like/store/provider`  | Provider write/delete/list helpers | `writeOptions`, `deleteOptions`, `listOptions`, snapshot and conflict helpers                                      | Provider-facing; not a durable backend by itself                                          |
-| `@go-like/store-memory`    | Process-local Store tests          | `newMemoryStore`, `clock`                                                                                          | No restart durability or cross-process state                                              |
-| `@go-like/store-file`      | Local file Store                   | `newFileStore`                                                                                                     | Single-owner local state; use `/node` for the Node host                                   |
-| `@go-like/store-file/node` | Node file capability               | `newNodeFileStoreHost`                                                                                             | Explicit Node subpath                                                                     |
-| `@go-like/store-consul`    | Consul KV Store                    | `newConsulStore`                                                                                                   | Consul sessions, TTL/CAS combinations, and uncertain mutation behavior                    |
-| `@go-like/store-etcd`      | etcd KV Store                      | `newEtcdStore`                                                                                                     | Gateway, lease, revision, compaction and uncertain mutation behavior                      |
-| `@go-like/store-vault`     | Vault KV v2 Store                  | `newVaultStore`                                                                                                    | Does not promise uniform Store TTL/CAS semantics                                          |
-| `@go-like/cache`           | Disposable value/TTL contract      | `expiresIn`, `putOptions`                                                                                          | No CAS, revision, durability, or authority                                                |
-| `@go-like/cache-memory`    | Process-local cache                | `newMemoryCache`, `clock`                                                                                          | No persistence; lazy expiry; suitable for tests and local acceleration                    |
-| `@go-like/cache-redis`     | Redis-backed cache                 | `newRedisCache`                                                                                                    | Native Redis connection, URL credential handling, and runtime requirements remain visible |
+| Package                    | Use it for                         | Principal function                                                            | Boundary                                                                                  |
+| -------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `@go-like/store`           | Record contract and options        | `expiresIn`, `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`            | Revisions, CAS, TTL, pagination; provider capabilities vary                               |
+| `@go-like/store/provider`  | Provider write/delete/list helpers | `writeOptions`, `deleteOptions`, `listOptions`, snapshot and conflict helpers | Provider-facing; not a durable backend by itself                                          |
+| `@go-like/store-memory`    | Process-local Store tests          | `newMemoryStore`, `clock`                                                     | No restart durability or cross-process state                                              |
+| `@go-like/store-file`      | Local file Store                   | `newFileStore`                                                                | Single-owner local state; use `/node` for the Node host                                   |
+| `@go-like/store-file/node` | Node file capability               | `newNodeFileStoreHost`                                                        | Explicit Node subpath                                                                     |
+| `@go-like/store-consul`    | Consul KV Store                    | `newConsulStore`                                                              | Consul sessions, TTL/CAS combinations, and uncertain mutation behavior                    |
+| `@go-like/store-etcd`      | etcd KV Store                      | `newEtcdStore`                                                                | Gateway, lease, revision, compaction and uncertain mutation behavior                      |
+| `@go-like/store-vault`     | Vault KV v2 Store                  | `newVaultStore`                                                               | Does not promise uniform Store TTL/CAS semantics                                          |
+| `@go-like/cache`           | Disposable value/TTL contract      | `expiresIn`                                                                   | No CAS, revision, durability, or authority                                                |
+| `@go-like/cache-memory`    | Process-local cache                | `newMemoryCache`, `clock`                                                     | No persistence; lazy expiry; suitable for tests and local acceleration                    |
+| `@go-like/cache-redis`     | Redis-backed cache                 | `newRedisCache`                                                               | Native Redis connection, URL credential handling, and runtime requirements remain visible |
 
 ## Broker, event, and work packages
 
@@ -125,35 +131,37 @@ Registry is reachability state, not durable business data. A provider may retain
 
 ## Complete public source subpath inventory
 
-These are the 23 explicit source subpaths declared by the current package manifests. Generated packages may add a metadata-only `./package.json` export; that is not a source API.
+These are the 25 explicit source subpaths declared by the current package manifests. Generated packages may add a metadata-only `./package.json` export; that is not a source API.
 
-|   # | Subpath                          | Principal exports                                          | Audience                      |
-| --: | -------------------------------- | ---------------------------------------------------------- | ----------------------------- |
-|   1 | `@go-like/broker/provider`       | `registerSubscriberTerminal`, `subscriberTerminal`         | Provider authors              |
-|   2 | `@go-like/cache/provider`        | `putOptions`                                               | Provider authors              |
-|   3 | `@go-like/config/env`            | `envSource`                                                | Application authors           |
-|   4 | `@go-like/config/file`           | `fileSource`, `jsonFileDecoder`                            | Application authors           |
-|   5 | `@go-like/config/node`           | `newNodeFileCapability`                                    | Node runtime authors          |
-|   6 | `@go-like/config/yaml`           | `decodeYaml`                                               | Application authors           |
-|   7 | `@go-like/core/lifecycle`        | `waitForContext`                                           | Lifecycle/provider authors    |
-|   8 | `@go-like/core/node`             | `signal`                                                   | Node/Bun process integration  |
-|   9 | `@go-like/nats/broker`           | `newNatsCoreBroker`                                        | NATS Core applications        |
-|  10 | `@go-like/nats/jetstream`        | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | JetStream applications        |
-|  11 | `@go-like/nats/jetstream/broker` | `newNatsJetStreamBroker`                                   | JetStream Broker applications |
-|  12 | `@go-like/registry/provider`     | provider options and snapshot helpers                      | Provider authors              |
-|  13 | `@go-like/registry-mdns/node`    | `newNodeMDNSHost`                                          | Node mDNS applications        |
-|  14 | `@go-like/store/provider`        | write/delete/list options and snapshots                    | Provider authors              |
-|  15 | `@go-like/store-file/node`       | `newNodeFileStoreHost`                                     | Node file Store applications  |
-|  16 | `@go-like/struct/codec`          | `encodeJson`, `decodeJson`                                 | Typed contract authors        |
-|  17 | `@go-like/struct/runtime`        | introspection and parsing helpers                          | Runtime/provider authors      |
-|  18 | `@go-like/transport/headers`     | `Go-Like-*` header constants                               | Transport/provider authors    |
-|  19 | `@go-like/transport/json`        | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | Typed/raw transport authors   |
-|  20 | `@go-like/transport/provider`    | Message, metadata, ServiceError codecs and errors          | Provider authors              |
-|  21 | `@go-like/transport-http/node`   | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | Node HTTP applications        |
-|  22 | `@go-like/web/health`            | `createHealthHandler`                                      | Web applications              |
-|  23 | `@go-like/web/node`              | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | Node Web host applications    |
+|   # | Subpath                              | Principal exports                                          | Audience                      |
+| --: | ------------------------------------ | ---------------------------------------------------------- | ----------------------------- |
+|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`         | Provider authors              |
+|   2 | `@go-like/cache/provider`            | `putOptions`                                               | Provider authors              |
+|   3 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                | Client owner authors          |
+|   4 | `@go-like/config/env`                | `envSource`                                                | Application authors           |
+|   5 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                            | Application authors           |
+|   6 | `@go-like/config/node`               | `newNodeFileCapability`                                    | Node runtime authors          |
+|   7 | `@go-like/config/yaml`               | `decodeYaml`                                               | Application authors           |
+|   8 | `@go-like/core/lifecycle`            | `waitForContext`                                           | Lifecycle/provider authors    |
+|   9 | `@go-like/core/node`                 | `signal`                                                   | Node/Bun process integration  |
+|  10 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                        | NATS Core applications        |
+|  11 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`      | JetStream applications        |
+|  12 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                   | JetStream Broker applications |
+|  13 | `@go-like/registry/provider`         | provider options and snapshot helpers                      | Provider authors              |
+|  14 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                          | Node mDNS applications        |
+|  15 | `@go-like/store/provider`            | write/delete/list options and snapshots                    | Provider authors              |
+|  16 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                     | Node file Store applications  |
+|  17 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                 | Typed contract authors        |
+|  18 | `@go-like/struct/runtime`            | introspection and parsing helpers                          | Runtime/provider authors      |
+|  19 | `@go-like/transport/headers`         | `Go-Like-*` header constants                               | Transport/provider authors    |
+|  20 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`      | Typed/raw transport authors   |
+|  21 | `@go-like/transport/provider`        | Message, metadata, ServiceError codecs and errors          | Provider authors              |
+|  22 | `@go-like/transport-grpc-buf/native` | managed standard-gRPC Client/Server and options            | Backend RPC applications      |
+|  23 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`         | Node HTTP applications        |
+|  24 | `@go-like/web/health`                | `createHealthHandler`                                      | Web applications              |
+|  25 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout` | Node Web host applications    |
 
-The current TypeScript configuration contains stale path mappings for `@go-like/otel/testing` and `@go-like/web/node/testing`, but those are not current package manifest exports. Do not document them as public entrypoints until the repository reconciles them.
+`@go-like/otel/testing` and `@go-like/web/node/testing` are not TypeScript path mappings or current package manifest exports. Do not document them as public entrypoints.
 
 ## Runtime decision matrix
 
@@ -161,6 +169,9 @@ The current TypeScript configuration contains stale path mappings for `@go-like/
 | -------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------- |
 | Context, Core root, Health, Metadata, Resilience, Struct       | Yes                                | No native import required                              | Selected runtime lanes are declared         | Source contract; check current executed matrix before release wording |
 | Web root and Web health                                        | Yes                                | Host required separately                               | Standard Handler boundary                   | Handler is portable; a Handler is not a listener                      |
+| `@go-like/transport-grpc-buf` portable Fetch bridge            | Standard `Request`/`Response`      | Uses caller-owned Connect transport/client             | Node/Bun/Deno runtime tests                 | Connect/gRPC-Web unary and server-streaming evidence only             |
+| `@go-like/transport-grpc-buf/native` managed standard gRPC     | No browser claim                   | Node upstream support; Bun 1.4.0 compatibility target  | Deno 2.9.5 compatibility target             | Four cardinalities in the physical-package interoperability matrix    |
+| `@go-like/protoc-gen-like` build-time generator                | No application runtime dependency  | Project-local Node 22+ executable                      | Generate in Node-enabled CI                 | npm/pnpm/Yarn scripts; no Bun requirement or second Deno launcher     |
 | Memory Transport, Memory Store, Memory Cache, Memory Broker    | Process-local source               | No external service                                    | Same process-local meaning                  | Not distributed, durable, or cross-process                            |
 | HTTP root and Fetch-backed Config/Registry/Store providers     | Injected Fetch                     | Runtime chooses Fetch                                  | Source-backed where the package lane exists | Portable by source or declared runtime lane, not universal parity     |
 | `/node` subpaths                                               | No                                 | Node-specific, with some Bun execution possible        | No Deno entrypoint                          | Explicit import changes runtime graph                                 |
@@ -171,10 +182,11 @@ The current TypeScript configuration contains stale path mappings for `@go-like/
 
 - Use `contextHandler` at the Web edge when you need Context, not a custom framework request bag.
 - Use `newApp` and `server(...)` when one process has more than one admitted resource or when signal and shutdown ownership should be explicit.
-- Use typed `endpoint(...)` and `handler(contract, fn)` when both sides should share runtime Struct validation. Use raw `handler(service, endpoint, fn)` when the application owns a different byte contract.
-- Use `withAddress(...)` before Discovery. It is easier to test and makes destination identity explicit.
-- Use `withDiscovery(...)`, `withSelector(...)`, `withFilter(...)`, and `withBlock()` only when the service needs the control-plane behavior they add.
-- Use `withRetry(...)` only after writing down replay authorization, maximum total attempts, failure predicate, and business idempotency.
+- Use typed `server.registerHandler(endpoint, handler)` when both sides should share runtime Struct validation. Use raw `server.registerHandler(service, endpoint, handler)` when the application owns a different byte contract.
+- Use project-local `protoc-gen-like` when a Protobuf service needs generated ctx-first Handler/Client glue. Generated clients borrow a Connect `Transport`; the managed Client implements that transport contract. The portable Fetch root proves unary/server-streaming; `/native` owns standard gRPC and all four cardinalities.
+- For `@go-like/client`, use construction-time `withAddress(...addresses)` for direct routing. For Discovery, use `withService(...)` and `withDiscovery(...)` together; do not combine direct addresses with Discovery. Both sources use the same Selector.
+- For the unary `@go-like/client`, use `withSelector(...)`, `withFilter(...)`, and `withBlock()` only when the service needs the control-plane behavior they add.
+- For the unary `@go-like/client`, use `withRetry(...)` only after writing down replay authorization, maximum total attempts, failure predicate, and business idempotency.
 - Use `newMemoryStore` for deterministic tests, not for a durability claim.
 - Use `newMemoryCache` for disposable acceleration, not as the appointment or payment authority.
 - Use `newBrokerServer` to attach one subscription to Core, not to obtain a universal queue worker or settlement API.
@@ -182,4 +194,8 @@ The current TypeScript configuration contains stale path mappings for `@go-like/
 
 ## Explicit exclusions
 
-No package in the current public inventory should be documented as owning gRPC, Protobuf, IDL code generation, generated RPC clients, internal full-duplex streams, Event Store/history/replay, generic authentication/authorization, ORM behavior, a global service locator, or cluster orchestration. A provider or application may use an unrelated library for one of those concerns, but that would be outside go-like's current contract.
+The managed gRPC compatibility evidence has a known [Deno drain limitation](/reference/claims#native-grpc-drain-status): Deno 2.9.5 and 2.9.7 can terminate an admitted slow-consumer stream during server shutdown. The full physical-package matrix currently fails this regression; prior four-cardinality and TLS passes do not imply production shutdown reliability.
+
+The current inventory owns generated ctx-first Protobuf RPC glue, a portable Connect/gRPC-Web Fetch bridge, and managed standard-gRPC owners at `/native`. Portable Fetch does not support request-streaming/bidi or browser standard gRPC. The managed path owns session reuse, close, Discovery/Selector integration, and TLS/mTLS construction; its required-client-auth evidence is scoped to Node 26.7.0, Bun 1.4.0, and Deno 2.9.5, including trusted success and missing/untrusted rejection before handler entry. Official health/reflection, validation, canonical error-details mapping, a Google gRPC runtime, any Buf online service, and future runtime-version compatibility remain outside the contract. Event Store/history/replay, generic authentication/authorization, ORM behavior, a global service locator, and cluster orchestration also remain outside the current contract.
+
+For the tested Connect, Bun Fetch, and Deno cancellation/drain limitations, see the [claims ledger](/reference/claims#stream-cancellation-limits). Interoperability results do not establish production shutdown or stream cleanup.

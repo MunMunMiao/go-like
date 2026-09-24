@@ -11,9 +11,7 @@ export interface StartedStore {
 }
 
 /** Runs one test against a real isolated filesystem directory and always removes it. */
-export async function withTempDirectory(
-  run: (directory: string) => PromiseLike<void>
-): Promise<void> {
+export async function withTempDirectory(run: (directory: string) => Promise<void>): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "go-like-store-file-"))
   try {
     await run(directory)

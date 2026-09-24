@@ -1,0 +1,17 @@
+version: v2
+clean: true
+plugins:
+  - local:
+      - node
+      - node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es
+    out: test/fixtures/protobuf-rpc/.artifacts/gen
+    opt:
+      - target=ts
+      - import_extension=js
+  - local:
+      - node
+      - packages/protoc-gen-like/dist/bin/protoc-gen-like.cjs
+    out: test/fixtures/protobuf-rpc/.artifacts/gen
+    opt:
+      - target=ts
+      - import_extension=js

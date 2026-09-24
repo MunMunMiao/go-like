@@ -9,6 +9,7 @@ import * as natsJetstreamBroker from "@go-like/nats/jetstream/broker"
 import * as otel from "@go-like/otel"
 import * as pino from "@go-like/pino"
 import * as prometheus from "@go-like/prometheus"
+import "@go-like/protoc-gen-like"
 import * as registryZookeeper from "@go-like/registry-zookeeper"
 import * as winston from "@go-like/winston"
 

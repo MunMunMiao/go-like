@@ -1,5 +1,8 @@
 # go-like 新代码复审修复 Implementation Plan
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复两个已复现的生命周期终止缺陷，清零已知开发链漏洞，并让 Examples、发布前置检查与公开文档只声明已经被真实证据支持的能力。

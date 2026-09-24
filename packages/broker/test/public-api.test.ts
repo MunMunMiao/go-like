@@ -22,5 +22,5 @@ test("provider subpath contains only private terminal association helpers", () =
       { topic: "topic", unsubscribe: async () => {} },
       null as never
     )
-  ).toThrow("PromiseLike")
+  ).toThrow(/^broker provider terminal must be a Promise$/)
 })

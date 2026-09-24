@@ -7,3 +7,5 @@ La configuración puede venir del entorno, archivos, Consul, etcd o Vault KV v2 
 Los proveedores reciben dirección, credenciales y capacidades del host de forma explícita. Los proveedores HTTP portables usan un Fetch inyectado, no variables globales del runtime. Los tokens solo viajan en headers y no aparecen en errores públicos. Ante huecos como una compactación de etcd o un `410 Gone` de Kubernetes, el watch toma una instantánea nueva antes de continuar. Los watches de ZooKeeper también se rearman tras una entrega de un solo uso o la expiración de la sesión. Si la cancelación llega después de enviar un `multi`, el proveedor espera el resultado real y revierte el estado exacto; si el resultado sigue siendo ambiguo, cierra la sesión y restaura los owners de registro aceptados anteriormente.
 
 El Store de archivos vale para poco estado local, no para escritores multiproceso. El registro describe disponibilidad efímera, no datos duraderos del negocio. Mantener esas fronteras evita promesas que el backend nunca podría cumplir.
+
+La persistencia y las opciones TTL/CAS dependen del proveedor; `store-memory` pierde sus datos al salir el proceso.

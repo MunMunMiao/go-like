@@ -1,5 +1,8 @@
 # 第三方原生生命周期适配实施计划
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 > **执行说明：** 按任务逐项实施并更新复选框；每项完成都必须有对应测试或运行证据。
 
 **Goal:** 将 Croner、Node Fetch host、Pino、Winston、BullMQ 与 NATS 收敛为第三方原生对象的 `Server`

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { newBrokerServer, type Broker, type BrokerEvent, type Subscriber } from "../src/index"
-import { registerSubscriberTerminal } from "../src/provider"
+import { registerSubscriberTerminal, subscriberTerminal } from "../src/provider"
 import { background, withCancelCause, type Context } from "@go-like/context"
 
 interface NativeEvent {
@@ -24,7 +24,7 @@ function nativeSubscription(topic: string, calls: string[] = []): Subscriber {
 }
 
 /** Requires one operation to reject with an Error and returns its exact value. */
-async function rejected(operation: PromiseLike<unknown>): Promise<Error> {
+async function rejected(operation: Promise<unknown>): Promise<Error> {
   try {
     await operation
   } catch (value) {
@@ -40,7 +40,7 @@ describe("broker subscription Server", () => {
     const native = nativeSubscription("orders.created", unsubscribeCalls)
     const calls: unknown[] = []
     const captured: {
-      handler: ((ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>) | null
+      handler: ((ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>) | null
     } = { handler: null }
     const broker = {
       identity: "captured-receiver",
@@ -48,7 +48,7 @@ describe("broker subscription Server", () => {
       async subscribe(
         ctx: Context,
         topic: string,
-        handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | PromiseLike<void>,
+        handler: (ctx: Context, event: BrokerEvent<NativeEvent>) => void | Promise<void>,
         options?: SubscribeOptions
       ) {
         calls.push([this.identity, ctx, topic, options])
@@ -387,6 +387,27 @@ describe("broker subscription Server", () => {
 
     await expect(running).rejects.toBe(failure)
     await server.stop(background())
+  })
+
+  test("assimilates a structural provider terminal at the runtime boundary", async () => {
+    const callbacks: (() => void)[] = []
+    const thenable = Object.freeze({
+      // oxlint-disable-next-line unicorn/no-thenable -- The runtime boundary deliberately assimilates thenables.
+      then(onFulfilled: () => void): void {
+        callbacks.push(onFulfilled)
+      }
+    })
+    const native = nativeSubscription("topic")
+
+    expect(Reflect.apply(registerSubscriberTerminal, undefined, [native, thenable])).toBe(native)
+    const retained = subscriberTerminal(native)
+    if (retained === null) throw new Error("provider terminal missing")
+    await Promise.resolve()
+    const fulfill = callbacks[0]
+    if (fulfill === undefined) throw new Error("thenable was not assimilated")
+    Reflect.apply(fulfill, undefined, [])
+
+    await retained
   })
 
   test("fails closed when a provider terminal resolves outside owner stop", async () => {

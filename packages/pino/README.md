@@ -80,8 +80,8 @@ Pino `10.3.1` 当前声明 `sonic-boom ^4.0.1`，消费应用可以独立使用 
 函数引用。构造前已经存在的结构化包装会成为基线；本包不再承诺 implementation package provenance 或精确
 SonicBoom 版本。
 由于 Pino、其 destination 实现与 ThreadStream 的公开声明引用 Node 类型，该包把固定版本的 `@types/node` 声明为正式
-依赖，保证仅安装真实发布 tarball 的 TypeScript 消费者也能解析完整声明闭包。当前使用最新 `26.1.2`。
-ThreadStream `4.2.0` 仍引用该版本删除的旧别名 `TransferListItem`；它在 Node 25 声明中精确等价于仍存在的
+依赖，供仅安装真实发布 tarball 的 TypeScript 消费者解析 Node 声明。当前 manifest 固定 `26.4.0`。
+ThreadStream `4.2.0` 仍引用 Node 26 类型中已删除的旧别名 `TransferListItem`；它在 Node 25 声明中精确等价于仍存在的
 `Transferable`。本包随声明输出一个仅包含 `TransferListItem = Transferable` 的兼容 module augmentation，
 不改变运行时代码或 Pino API；对应的[上游问题](https://github.com/pinojs/thread-stream/issues/228)修复发布后
 删除该临时声明桥。

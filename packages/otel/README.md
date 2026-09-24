@@ -55,6 +55,7 @@ import {
   middleware as clientMiddleware,
   newClient,
   withDiscovery,
+  withService,
   withTransport
 } from "@go-like/client"
 import {
@@ -68,6 +69,7 @@ import { middleware } from "@go-like/server"
 const requestMetrics = newRequestMetrics(meterProvider.getMeter("orders"))
 const existingClientWithMetrics = measureClient(client, requestMetrics)
 const clientWithMetrics = newClient(
+  withService("orders-http"),
   withDiscovery(discovery),
   withTransport(transport),
   clientMiddleware(measureClientMiddleware(requestMetrics))

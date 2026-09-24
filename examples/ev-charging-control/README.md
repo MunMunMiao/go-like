@@ -36,6 +36,8 @@
 }
 ```
 
+readiness 探针由服务对象独立提供并在单元测试中调用；当前 `main.ts` 只挂载业务 Handler，没有公开 `/livez` 或 `/readyz` 路由。
+
 ## 验证
 
 ```sh

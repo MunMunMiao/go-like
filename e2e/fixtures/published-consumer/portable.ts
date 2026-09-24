@@ -18,6 +18,7 @@ import * as core from "@go-like/core"
 import * as coreLifecycle from "@go-like/core/lifecycle"
 import * as croner from "@go-like/croner"
 import * as event from "@go-like/event"
+import * as grpcBuf from "@go-like/transport-grpc-buf"
 import * as health from "@go-like/health"
 import * as metadata from "@go-like/metadata"
 import * as registry from "@go-like/registry"
@@ -99,7 +100,14 @@ const modules = [
 ]
 
 export function runPortable(): void {
-  if (modules.some((value) => typeof value !== "object" || value === null)) {
+  if (!("newHandler" in grpcBuf) || typeof grpcBuf.newHandler !== "function") {
+    throw new Error("published portable export did not load as a module")
+  }
+  const handler = grpcBuf.newHandler(() => {})
+  if (
+    typeof handler !== "function" ||
+    modules.some((value) => typeof value !== "object" || value === null)
+  ) {
     throw new Error("published portable export did not load as a module")
   }
 }

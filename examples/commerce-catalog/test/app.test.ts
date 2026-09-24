@@ -4,12 +4,16 @@ import {
   newClient,
   withDiscovery,
   withSelector,
+  withService,
   withTransport,
+  type CallOptions,
   type CallRequest,
-  type CallOption
+  type CallOption,
+  type Client
 } from "@go-like/client"
 import { background, type Context } from "@go-like/context"
 import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
+import type { HandlerRegistrar } from "@go-like/server"
 import { executor, newHTTPTransport } from "@go-like/transport-http"
 import { expect, test } from "bun:test"
 
@@ -19,20 +23,25 @@ import {
   decodePrice,
   decodePricingRequest,
   encodePrice,
+  newPricingClient,
   newPricingHandler,
+  registerPricingHandler,
   type PricingClient
 } from "../src/pricing"
 
 /** Creates a Client that invokes the real Pricing handler without network I/O. */
 function directClient(onCall: () => void): PricingClient {
   const pricing = newPricingHandler()
-  const client: PricingClient = {
+  const client = Object.freeze({
     async call(ctx: Context, request: CallRequest, ..._options: readonly CallOption[]) {
       onCall()
       return await pricing(ctx, request.message)
+    },
+    async close(): Promise<void> {
+      return
     }
-  }
-  return Object.freeze(client)
+  }) as unknown as Client
+  return newPricingClient(client)
 }
 
 /** Creates one immediately usable memory Cache. */
@@ -57,6 +66,63 @@ function failingCache(overrides: Partial<Cache> = {}): Cache {
     ...overrides
   })
 }
+
+test("registers the Pricing handler on its exact service endpoint", () => {
+  const handler = newPricingHandler()
+  let registration: readonly unknown[] = Object.freeze([])
+  const server: HandlerRegistrar = {
+    registerHandler(...args: readonly unknown[]): void {
+      registration = args
+    }
+  }
+
+  registerPricingHandler(server, handler)
+
+  expect(registration).toEqual(["pricing", "Pricing.Get", handler])
+})
+
+test("creates a typed Pricing client that preserves codec, options and errors", async () => {
+  const ctx = background()
+  const response = Object.freeze({
+    productId: "sku-001",
+    currency: "USD",
+    amountMinor: 1_299,
+    validUntil: Date.now() + 60_000
+  })
+  const option: CallOption = (options) => options
+  const failure = new Error("Pricing unavailable")
+  let rejected = false
+  let observed: readonly unknown[] = Object.freeze([])
+  const client = Object.freeze({
+    async call(ctxValue: unknown, request: CallRequest, ...options: readonly CallOption[]) {
+      observed = [ctxValue, request, ...options]
+      if (rejected) throw failure
+      return {
+        header: Object.freeze({ "Content-Type": "application/json" }),
+        body: new TextEncoder().encode(JSON.stringify(response))
+      }
+    },
+    async close(): Promise<void> {}
+  }) as unknown as Client
+  const { fetchPrice } = newPricingClient(client)
+
+  expect(await fetchPrice(ctx, "sku-001", "USD", option)).toEqual(response)
+  expect(observed[0]).toBe(ctx)
+  expect(observed[1]).toMatchObject({ service: "pricing", endpoint: "Pricing.Get" })
+  const request = observed[1] as CallRequest
+  expect(JSON.parse(new TextDecoder().decode(request.message.body))).toEqual({
+    productId: "sku-001",
+    currency: "USD"
+  })
+  const observedOptions = observed.slice(2) as readonly CallOption[]
+  expect(observedOptions.at(-1)).toBe(option)
+  let callOptions: CallOptions = Object.freeze({ filters: Object.freeze([]), retry: null })
+  for (const configure of observedOptions.slice(0, -1)) callOptions = configure(callOptions)
+  expect(callOptions.filters).toHaveLength(1)
+  expect(callOptions.retry).toMatchObject({ authorization: "idempotent", maxAttempts: 3 })
+  rejected = true
+  await expect(fetchPrice(ctx, "sku-001", "USD")).rejects.toBe(failure)
+})
 
 test("serves a product through Pricing once and then the cache", async () => {
   const cache = memoryCache()
@@ -139,10 +205,11 @@ test("retries one transient Pricing failure through the production handler", asy
   retryExecutor.preconnect = function preconnect(): void {}
   const client = newClient(
     withDiscovery(discovery),
+    withService("pricing"),
     withSelector(newRoundRobinSelector()),
     withTransport(newHTTPTransport(executor(retryExecutor)))
   )
-  const handler = newCatalogHandler({ cache, client })
+  const handler = newCatalogHandler({ cache, client: newPricingClient(client) })
 
   try {
     const response = await handler(
@@ -241,7 +308,7 @@ test("keeps Pricing errors and invalid responses distinct from cache failures", 
   const unavailable = newCatalogHandler({
     cache,
     client: {
-      async call() {
+      async fetchPrice() {
         throw new Error("pricing unavailable")
       }
     }
@@ -253,8 +320,8 @@ test("keeps Pricing errors and invalid responses distinct from cache failures", 
   const invalid = newCatalogHandler({
     cache,
     client: {
-      async call() {
-        return { header: {}, body: new TextEncoder().encode("{}") }
+      async fetchPrice() {
+        return null
       }
     }
   })

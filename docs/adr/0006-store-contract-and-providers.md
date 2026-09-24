@@ -30,7 +30,7 @@ owner cleanup。
 - list 使用 Unicode code-point 排序和 opaque cursor；provider 必须基于稳定快照继续分页，或在相关数据改变后
   明确拒绝 stale cursor，不能静默重复或遗漏记录。
 
-公共层只提供稳定的 lifecycle 和 conflict error。它不定义 capability negotiation、watch、transaction DSL、query、
+公共层公开 `StoreConflictError`；文件锁、运行状态与停止等生命周期错误由 File provider 定义。它不定义 capability negotiation、watch、transaction DSL、query、
 index、schema migration、cache stampede 策略或全局默认 Store。
 
 ### 不可变性与错误语义
@@ -51,15 +51,17 @@ CAS 失败返回稳定 `StoreConflictError`，同时保留 expected revision 和
 - `@go-like/store-file` 使用应用指定的 filesystem 根目录，实现单进程文件持久化、TTL、CAS 和稳定分页。
   Node filesystem host 位于 runtime-specific provider 内，portable 公共契约不静态引用 `node:`。
   进程崩溃留下的 lock 会 fail closed；provider 不按 PID 猜测并自动抢占。运维确认 owner 已终止并显式移除
-  lock 后，启动只读取最后一份完整 checksum snapshot，忽略并在正常停止时清理 crash temp。
+  lock 后，启动只读取最后一份完整 checksum snapshot，并在持有锁的启动阶段清理 crash temp。
 - `@go-like/store-consul` 使用注入的标准 Fetch 调用 Consul KV/session HTTP API。CAS 使用 ModifyIndex；TTL
   使用独立 session；不确定写响应必须通过 exact readback 判断。所有 Store 数据和 admission key 都位于
   独占物理 root（默认 `go-like/store`）下；root 外的 Registry、Config 或应用 KV 不参与解码与分页。
 - `@go-like/store-etcd` 使用注入的标准 Fetch 调用 etcd v3 JSON gateway。revision 保持 provider-opaque；
-  CAS 使用 transaction；TTL 使用 lease，并在 stop 时撤销本 owner 的 lease。
+  CAS 使用 transaction；TTL 使用服务端 lease。已证明的覆盖或删除会清理旧 lease，未提交写入会尝试回收新
+  lease；构造即用的 Store 没有 `stop()`，不能依赖应用停机撤销已经提交的 TTL 数据。
 - `@go-like/store-vault` 使用注入的标准 Fetch 调用 Vault KV v2。逻辑 key 编码到独占 root 下的单层物理
   keyspace；TTL 与统一 write/delete CAS 均 fail closed。delete 只 soft-delete 已读取的精确 version；分页首页
-  完整物化一次 LIST+GET 快照，后续一次性 cursor 只读取有上限、可过期、stop 时清理的进程内快照。
+  完整物化一次 LIST+GET 快照，后续一次性 cursor 只读取有上限、可过期的进程内快照。cursor 消费后移除，
+  保存新 cursor 时清理过期项；没有后台清理 timer 或 `stop()`。
 
 每个 provider 单独发布、单独声明 runtime 与所有权；公共 Store 不依赖任何供应商 SDK。
 
@@ -76,8 +78,9 @@ CAS 失败返回稳定 `StoreConflictError`，同时保留 expected revision 和
 
 所有 provider 必须复用仓库内部的 provider-neutral conformance，并补充实现特有的协议测试；conformance
 不是用户 API，也不进入 `@go-like/store` 的发布导出。
-外部服务测试必须使用固定 digest 的真实容器，覆盖 CRUD、排序、分页、CAS、TTL、停止、重启、故障恢复、
+外部服务测试必须使用固定 digest 的真实容器，覆盖 CRUD、排序、分页、支持的 CAS/TTL、后端重启、故障恢复、
 凭据边界和零残留。File provider 必须在 Node 上使用真实临时目录，并证明关闭后 watcher、timer 与文件句柄归零。
+不支持的 option 必须验证拒绝行为；只对具有生命周期的 provider 验证 `start/stop`。
 纯内存 provider 不启动无意义容器；它使用确定性 clock、完整 conformance 和发布态 Bun/Node/Deno 验证。
 
 ## 后果

@@ -19,7 +19,7 @@
 
 ## go-like 能力
 
-主要演示 `@go-like/core` 如何把用户实现的结构式理赔复核 Worker 当作 `Server` 纳入 App 生命周期：`start(ctx)` 表示整个运行期，`stop(ctx)` 请求停止，App 并发停止所有 Server；`@go-like/web` 仍只暴露标准 Fetch Handler。
+理赔裁定在 HTTP 请求中同步完成；当前复核 Worker 只演示生命周期，不执行后台核赔。主要演示 `@go-like/core` 如何把用户实现的结构式 Worker 当作 `Server` 纳入 App 生命周期：`start(ctx)` 表示整个运行期，`stop(ctx)` 请求停止，App 并发停止所有 Server；`@go-like/web` 仍只暴露标准 Fetch Handler。
 
 ## 验证矩阵
 

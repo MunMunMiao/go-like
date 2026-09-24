@@ -21,6 +21,7 @@ import {
   withAddress,
   withFilter,
   withRetry,
+  withService,
   type Call,
   type CallOption,
   type CallOptions,
@@ -41,15 +42,17 @@ const TypedRequest = struct.object({ currency: struct.literal("USD") })
 const TypedResponse = struct.object({ total: struct.number() })
 
 const request: CallRequest = { service: "orders", endpoint: "Create", message }
-const client: Client = newClient(withDiscovery(discovery), withTransport(transport))
+const client: Client = newClient(
+  withService("orders-registry"),
+  withDiscovery(discovery),
+  withTransport(transport)
+)
 const response: Promise<Message> = client.call(background(), request)
 const closed: Promise<void> = client.close(background())
-const directClient: Client = newClient(withTransport(transport))
-const directResponse: Promise<Message> = directClient.call(
-  background(),
-  request,
-  withAddress("memory://orders")
-)
+const addressOption: ClientOption = withAddress("memory://orders")
+const serviceOption: ClientOption = withService("orders-registry")
+const directClient: Client = newClient(withTransport(transport), addressOption)
+const directResponse: Promise<Message> = directClient.call(background(), request)
 const call: Call = client.call
 const typedEndpoint = endpoint("orders", "Quote", TypedRequest, TypedResponse)
 const typedResponse: Promise<{ readonly total: number }> = client.call(
@@ -66,11 +69,10 @@ const callRetry: CallRetryOptions = {
   backoff: () => 0
 }
 const callOptions: CallOptions = {
-  address: null,
   filters: [],
   retry: callRetry
 }
-const callOption: CallOption = withAddress("memory://orders")
+const callOption: CallOption = withFilter(filterVersion("v1"))
 const filteredResponse: Promise<Message> = client.call(
   background(),
   request,
@@ -85,6 +87,8 @@ const circuitOptions: CircuitBreakerOptions = {
 }
 const operationBreaker: ClientMiddleware = circuitBreakerMiddleware(circuitOptions)
 const options: ClientOptions = {
+  addresses: [],
+  service: "orders-registry",
   discovery,
   selector,
   transport,
@@ -103,6 +107,7 @@ const blockOption: ClientOption = withBlock()
 const block: boolean | undefined = options.block
 const configured: Client = newClient(
   blockOption,
+  withService("orders-registry"),
   withDiscovery(discovery),
   withSelector(selector),
   withTransport(transport),
@@ -119,6 +124,8 @@ void [
   closed,
   directClient,
   directResponse,
+  addressOption,
+  serviceOption,
   call,
   typedResponse,
   callOptions,
@@ -128,6 +135,16 @@ void [
   block,
   configured
 ]
+
+// @ts-expect-error withAddress is construction-only, never a per-call option.
+const perCallAddress: CallOption = withAddress("memory://orders")
+void perCallAddress
+// @ts-expect-error CallOptions no longer carries a per-call address.
+void callOptions.address
+// @ts-expect-error ClientOptions address snapshots are immutable.
+options.addresses.push("memory://other")
+// @ts-expect-error ClientOptions service identity is immutable.
+options.service = "billing-registry"
 
 // @ts-expect-error Client.call requires Context as its independent first argument.
 client.call(request)

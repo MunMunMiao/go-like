@@ -3,13 +3,13 @@ export type RedisCacheErrorHandler = (error: Error) => void
 
 /** Carries the command subset shared by official standalone, Sentinel, and Cluster clients. */
 export interface RedisCacheCommandClient {
-  get(key: string): PromiseLike<string | null>
+  get(key: string): Promise<string | null>
   set(
     key: string,
     value: string,
     options?: Readonly<{ expiration: Readonly<{ type: "PX"; value: number }> }>
-  ): PromiseLike<string | null>
-  del(key: string): PromiseLike<number>
+  ): Promise<string | null>
+  del(key: string): Promise<number>
 }
 
 /** Describes the dormant official node-redis capability owned by one Cache lifecycle. */
@@ -20,8 +20,8 @@ export interface RedisCacheClient {
   withCommandOptions(
     options: Readonly<{ abortSignal?: AbortSignal; timeout: number }>
   ): RedisCacheCommandClient
-  connect(): PromiseLike<unknown>
-  close(): PromiseLike<unknown>
+  connect(): Promise<unknown>
+  close(): Promise<unknown>
   destroy(): unknown
 }
 

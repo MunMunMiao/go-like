@@ -13,8 +13,9 @@
 
 `POST /v1/laboratory-results` 只返回接收回执。检验正文仅保存在仓储边界内部。
 本示例没有声称已接入真实 LIS、Pino 或 OpenTelemetry 后端。
-跨服务审计调用只传播 `x-request-id` 与 `x-encounter-id`；Authorization、患者标识和检验正文即使存在于
-入站 server metadata，也不会进入 downstream client metadata。就绪探针失败只返回固定基础设施错误。
+`newSafeResultAuditSink` 可把 downstream client metadata 限制为 `x-request-id` 与 `x-encounter-id`，
+单元测试验证 Authorization、患者标识和检验正文不会被该包装器传播。当前 `main.ts` 使用进程内审计 sink，
+未装配该 Metadata 包装器、真实远程审计调用或 HTTP health 路由；探针与包装器由测试独立验证。
 
 ## 直接运行
 

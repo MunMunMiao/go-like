@@ -6,6 +6,8 @@
 
 状态：**Implemented**
 
+当前入口核对：2026-09-23。本文的实施结果保留原提交快照；CLI、CI 与 runtime 限制按下文当前说明使用。
+
 本文是 go-like E2E 实施与验收的规范性来源。调研事实、上游证据和曾评估的宿主机 containment 方案保留在 [`2026-07-29-go-like-e2e-evidence-architecture.md`](./2026-07-29-go-like-e2e-evidence-architecture.md)，仅作为历史研究。
 
 ## 1. 支持边界
@@ -36,7 +38,8 @@ go-like 不承诺或要求操作系统级进程沙箱、fork-complete containmen
 - 不改变任何产品 package 的 public API 或运行语义。
 - 不把 scope、目录或脚本名称包装成新的测试等级；go-like 只有 unit 与 E2E。
 - 不把 E2E runner 设计成宿主机安全边界或恶意进程沙箱。
-- 不要求 hosted CI 运行 Docker、published、examples、k6 或长时间 soak。
+- 不要求 hosted CI 运行完整 provider、published、examples、k6 或长时间 soak lanes；当前 Verify 的 coverage
+  链仍会运行 `payments-ledger` 的 PostgreSQL/NATS Docker 场景。
 - 不维护 committed inventory、source scanner、evidence overlay 或长期生成的测试 manifest。
 
 ## 3. 执行架构
@@ -51,9 +54,11 @@ bun run test:e2e:runtimes
 bun run test:e2e:examples
 bun run test:e2e:published
 bun run test:e2e:soak
+bun run test:e2e:grpc-soak
 ```
 
 有限时长公共 lane 先执行一次 `bun run build`，再调用 `e2e/run.ts`。内部 CLI 不隐式 build；直接调用前必须准备 package dist。
+`test:e2e:grpc-soak` 是独立入口，先生成 protobuf fixture，再执行 `e2e/grpc-soak.ts`，不经过 root E2E scope 选择。
 
 `--scope` 与 `--suite` 互斥。未知参数、缺值、重复 scope、未知 suite 或空选择都失败。显式 suite 按首次出现顺序去重；`all` 按 `suites → runtimes → examples → published` 运行。
 
@@ -87,7 +92,8 @@ Examples lane 每次从 immediate `examples/*/package.json` 动态生成 executi
 
 ### 3.5 Runtime 与 published contract
 
-Registered runtime plan 对登记项 fail-closed，但不推断未登记能力。当前验证版本为：
+Registered runtime plan 对登记项 fail-closed，但不推断未登记能力，也不以固定版本作为一般执行资格。
+下列版本仅属于第 6 节的历史验收环境，不是当前机器版本或支持范围：
 
 - Bun `1.3.14`
 - Node.js `26.5.0`
@@ -97,6 +103,10 @@ Registered runtime plan 对登记项 fail-closed，但不推断未登记能力�
 
 Published lane 动态发现 non-private publishable packages 并生成真实 npm tarball。Node consumer 执行 NodeNext emit，Bun consumer 使用 `--no-install`，Deno consumer 先 `check` 再以 `--no-prompt` 和最小权限运行。所有 consumer 只通过安装后的 package name 导入。
 
+当前 published lane 还覆盖 Buf 生成、标准 gRPC 互操作与 mTLS。`protoc-gen-like` 是 Node 22+ 构建期工具，
+这一前提与一般 runtime preflight 分开。Deno HTTP/2 排空及其他已知 RPC 限制见
+[grpc-buf README](../../../packages/transport/grpc-buf/README.md)；第 6 节的旧通过数不能替代当前完整矩阵。
+
 ### 3.6 k6 与 soak
 
 k6 workload 是 committed、独立 typecheck、未 bundle 的 TypeScript，并由 fixed-digest image 直接执行。10 秒运行只证明 short lifecycle、result marker 与 cleanup path；只有实际完成至少 60 分钟的独立运行才支持 long-duration claim。k6/soak 不属于默认有限时长 `test:e2e`。
@@ -105,17 +115,16 @@ k6 workload 是 committed、独立 typecheck、未 bundle 的 TypeScript，并�
 
 Committed E2E TypeScript 必须属于明确 tsconfig：root tests、ordinary E2E、k6、published authoring、package 或 example workspace 各自维护 owner。新增 runtime、example 或 package E2E 时，必须在同一变更中补齐注册、脚本、fixture、文档和 typecheck owner。
 
-Hosted Verify/Release 只运行：
+当前 Hosted Verify 运行下列命令；仓库没有自动 Release workflow：
 
 ```sh
 bun install --frozen-lockfile
-bun run fmt:check
-bun run typecheck
-bun run build
-bun run test:unit
+bun run verify
 ```
 
-Hosted CI green 不等于 full E2E green。真实 provider、runtime、examples、published、Docker 与 soak 结果只能由实际完成的对应命令证明。
+`verify` 依次运行 protobuf lint/generate/typecheck/integration、format、lint、全库 typecheck、build 和
+unit coverage。最后一阶段包含 payments 的真实 Docker 场景。Hosted CI green 不等于 full E2E green；
+其余 provider、runtime、examples、published 与 soak 结果仍需对应命令的实际完成记录。
 
 ## 5. 完成验证
 
@@ -123,10 +132,7 @@ Hosted CI green 不等于 full E2E green。真实 provider、runtime、examples�
 
 ```sh
 bun install --frozen-lockfile
-bun run fmt:check
-bun run typecheck
-bun run build
-bun run test:unit
+bun run verify
 bun run test:e2e
 git diff --check
 git status --short --untracked-files=all

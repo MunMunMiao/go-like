@@ -11,10 +11,10 @@ export interface RegistryConformanceCase {
 
 /** Supplies isolated providers and deterministic fixtures to conformance. */
 export interface RegistryConformanceSubject {
-  readonly createRegistry: () => Registry | PromiseLike<Registry>
+  readonly createRegistry: () => Registry | Promise<Registry>
   readonly createSharedRegistries: () =>
     | readonly [Registry, Registry]
-    | PromiseLike<readonly [Registry, Registry]>
+    | Promise<readonly [Registry, Registry]>
   readonly service: (revision: "initial" | "updated") => ServiceInstance
   readonly convergenceTimeoutMs?: number
 }

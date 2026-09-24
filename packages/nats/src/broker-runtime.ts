@@ -10,9 +10,9 @@ export interface NativeBrokerLifecycle {
   /** Identifies the native lifecycle whose exact semantics are retained. */
   readonly kind: NativeBrokerKind
   /** Starts the provider's graceful subscription shutdown. */
-  graceful(): void | Error | PromiseLike<void | Error>
+  graceful(): void | Error | Promise<void | Error>
   /** Returns the provider's true terminal barrier. */
-  terminal(): PromiseLike<void | Error>
+  terminal(): Promise<void | Error>
   /** Forces only this subscription to stop after graceful shutdown fails or times out. */
   force(): void
 }
@@ -110,7 +110,7 @@ function consumeFailure(_value: unknown): void {}
 
 /** Observes the provider terminal without consuming its delivery iterator. */
 function observeNativeTerminal(lifecycle: NativeBrokerLifecycle): Promise<Error | null> {
-  let operation: PromiseLike<void | Error>
+  let operation: Promise<void | Error>
   try {
     operation = lifecycle.terminal()
   } catch (value) {
@@ -336,7 +336,7 @@ export function managedSubscriber<Native>(
   stream: AsyncIterable<Native>,
   runtime: NativeBrokerRuntime,
   event: (native: Native) => BrokerEvent<Native>,
-  handler: (ctx: Context, event: BrokerEvent<Native>) => void | PromiseLike<void>
+  handler: (ctx: Context, event: BrokerEvent<Native>) => void | Promise<void>
 ): Subscriber {
   if (
     runtime === null ||

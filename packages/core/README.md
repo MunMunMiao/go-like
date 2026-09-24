@@ -14,8 +14,11 @@ import type { Registrar } from "@go-like/registry"
 declare const registry: Registrar
 const httpServer: Server = {
   async start(ctx: Context) {
+    const done = ctx.done()
+    if (done === null) throw new Error("this Server requires a cancelable runtime Context")
+    if (done.aborted) return
     await new Promise<void>((resolve) => {
-      ctx.done()?.addEventListener("abort", () => resolve(), { once: true })
+      done.addEventListener("abort", () => resolve(), { once: true })
     })
   },
   async stop(_ctx: Context) {}
@@ -35,7 +38,8 @@ export interface Server {
 }
 
 export interface Endpointer {
-  endpoint(ctx: Context): string | PromiseLike<string>
+  protocol(): string
+  endpoint(ctx: Context): string | Promise<string>
 }
 
 export interface App {
@@ -54,8 +58,9 @@ export interface App {
 - `registrar(registry)` 在 Server 启动后注册一个 Kratos `ServiceInstance`，并在停止 Server 前反注册；
   `registrarTimeout(ms)` 限制 register/deregister caller 的等待，默认十秒。超时或停止后迟到成功的 register
   会触发一次 best-effort 补偿反注册。
-- 显式 `endpoint(...)` 优先作为注册地址；未显式配置时，App 会异步读取 Server 可选的
-  `Endpointer.endpoint(ctx)`。这是 JavaScript 异步监听模型对 Kratos `Endpointer` 的直接映射。
+- App 在发布一个 `ServiceInstance` 前会同步校验全部 Endpointer 的非空 `protocol()` 相同；该值仅用于
+  本地发布保护，不写入 URL、metadata 或 Registry。显式 `endpoint(...)` 仍会执行协议校验，但不会调用
+  `Endpointer.endpoint(ctx)`；未显式配置时，App 才会异步读取它。
 - Server 并发启动；`App.stop()` 使用同一个 stop Context 并发调用全部 Server。
 - `Server.start(ctx)` 既可在接纳完成后返回，也可像 Kratos HTTP/gRPC Server 一样持续到运行期结束；
   Core 不把它当作 readiness Promise。

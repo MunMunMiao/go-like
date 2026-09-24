@@ -11,3 +11,5 @@ ConfigMap/Secret，以及通过 `@go-like/config-vault` 读取 Vault KV v2。Reg
 Provider 构造时显式接收地址、凭据和宿主能力。可移植 HTTP provider 使用注入的单参数 Fetch，不读 runtime 全局变量。密钥只进 header，公共错误不能泄漏密钥或响应 body。watch 遇到 etcd compaction、Kubernetes `410 Gone` 这类观测缺口时，会重新拿完整快照再继续。ZooKeeper watch 在一次性通知或 session 过期后也会重新挂载；如果取消发生在 `multi` 已提交之后，provider 会等待真实结果并按精确状态回滚，结果仍然不明确时则关闭 session，再恢复此前已接纳的注册 owner。
 
 文件 Store 适合少量本地状态，不是多进程数据库；Registry 记录的是短暂可达性，也不是业务持久化表。边界说清楚，才不会被一个看似方便的 API 骗去依赖后端根本给不了的保证。
+
+持久性与 TTL/CAS 能力取决于 provider；`store-memory` 的数据会在进程退出时丢失。

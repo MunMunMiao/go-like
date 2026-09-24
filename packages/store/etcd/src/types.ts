@@ -3,7 +3,7 @@ import type { Store } from "@go-like/store"
 /** Executes one borrowed standard Web Fetch request. */
 export interface EtcdStoreFetch {
   /** Performs one operation without transferring Fetch ownership to the Store. */
-  (request: Request): Response | PromiseLike<Response>
+  (request: Request): Response | Promise<Response>
 }
 
 /** Configures one portable etcd v3 JSON gateway Store. */

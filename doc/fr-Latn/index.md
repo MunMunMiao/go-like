@@ -5,7 +5,7 @@ go-like propose de petites briques TypeScript explicites pour des services backe
 go-like est volontairement complémentaire d'un framework applicatif. Votre framework reste propriétaire des routes, du middleware, de la policy de requête, des Web Streams, des upgrades WebSocket, de la composition des dépendances et du comportement métier. Votre fournisseur reste propriétaire de sa connexion native, de son modèle d'acknowledgement, de ses leases, de ses retries et de son protocole. go-like fournit des contrats étroits et une propriété de cycle de vie là où ces frontières sont utiles.
 
 > [!IMPORTANT]
-> Ce checkout est un workspace privé en `0.0.1`. La documentation du dépôt indique que les paquets `@go-like/*` ne sont pas encore publiés sur npm. Les exemples ci-dessous sont destinés à être exécutés depuis un checkout, sauf si une release publiée a été confirmée séparément.
+> Ce checkout utilise des paquets `workspace:*` en version `0.0.1`. La version du manifest ne prouve pas leur disponibilité sur npm ; vérifiez la publication avant une installation hors workspace.
 
 > [!NOTE]
 > L'arborescence anglaise `doc/` est la source canonique de ce parcours documentaire. Le code des paquets, les manifests et les tests ciblés font autorité pour l'API. La présence d'un test ou d'un script E2E dans le dépôt correspond à une couverture déclarée ; ce n'est pas un résultat réussi tant qu'une commande n'a pas été exécutée et que son code de sortie n'a pas été relevé.
@@ -59,8 +59,8 @@ Internal unary call
 
 La frontière produit actuelle ne revendique pas :
 
-- gRPC, Protobuf, fichiers IDL, clients RPC générés ou stubs de serveur générés ;
-- une API de streams RPC internes full-duplex, un protocole de half-close, un modèle de frames ou un contrat de backpressure ;
+- Cela n’inclut pas gRPC standard dans le navigateur, request-streaming/bidi via Fetch, health/reflection officiels, authentification générique, Event Store/replay, ORM ou orchestration de clusters.
+- Fetch request-streaming/bidi; gRPC standard avec quatre cardinalités via `/native`.
 - un routeur externe ou un DSL de middleware propre à un framework ;
 - un conteneur global d'injection de dépendances ou un service locator ;
 - JWT, OAuth, OIDC, claims, ACL ou autorisation applicative automatiques ;
@@ -73,7 +73,7 @@ Le streaming Web public reste fondé sur `Request`/`Response` Fetch standard et 
 
 ## Inventaire public
 
-Les manifests source actuels contiennent **43 paquets `@go-like/*` non privés**, tous en version `0.0.1` dans ce checkout, ainsi que **23 sous-chemins source publics**. `@go-like/struct` fait partie de cet inventaire public et fournit le contrat runtime utilisé par les appels `Endpoint` typés. Les exports de métadonnées `dist/package.json` générés ne sont ni des paquets supplémentaires ni des API source.
+Les manifests source actuels contiennent **45 paquets `@go-like/*` non privés**, tous en version `0.0.1` dans ce checkout, ainsi que **25 sous-chemins source publics**. `@go-like/struct` fait partie de cet inventaire public et fournit le contrat runtime utilisé par les appels `Endpoint` typés. Les exports de métadonnées `dist/package.json` générés ne sont ni des paquets supplémentaires ni des API source.
 
 Utilisez la [référence des paquets](/fr-Latn/reference/packages) pour choisir un contrat ou un fournisseur, puis la [référence des fournisseurs](/fr-Latn/reference/providers) pour comparer backend et sémantique runtime.
 
@@ -94,3 +94,7 @@ Ce rapport n'établissait pas `build`, `doc:build`, les E2E des fournisseurs Doc
 - [Santé et observabilité](/fr-Latn/guide/health-observability) : ajouter readiness, métriques, traces et logs sans installer silencieusement une infrastructure globale.
 - [Comparaison](/fr-Latn/guide/comparison) et [Migration](/fr-Latn/guide/migration) : comparer la propriété avec les frameworks tiers et adopter go-like progressivement.
 - [Paquets](/fr-Latn/reference/packages), [Fournisseurs](/fr-Latn/reference/providers) et [Vérification](/fr-Latn/reference/verification) : utiliser la piste de référence lorsque l'API ou la limite de preuve compte.
+
+`@go-like/protoc-gen-like` génère le code Protobuf RPC avec `Context` en premier argument, sur Protobuf-ES. `@go-like/transport-grpc-buf` fournit unary et server-streaming Connect/gRPC-Web via Fetch ; `/native` ajoute gRPC standard avec les quatre cardinalités, dont client-streaming et bidi. Ce chemin est indépendant du Transport SPI unaire.
+
+[Limites d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

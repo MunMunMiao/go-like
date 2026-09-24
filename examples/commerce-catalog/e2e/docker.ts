@@ -1,5 +1,12 @@
 import { newRedisCache } from "@go-like/cache-redis"
-import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@go-like/client"
+import {
+  newClient,
+  withDiscovery,
+  withSelector,
+  withService,
+  withTransport,
+  type Client
+} from "@go-like/client"
 import { background } from "@go-like/context"
 import {
   endpoint,
@@ -14,12 +21,7 @@ import {
 } from "@go-like/core"
 import { newRoundRobinSelector } from "@go-like/registry"
 import { newConsulRegistry } from "@go-like/registry-consul"
-import {
-  address,
-  handler as serviceHandler,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 
@@ -31,7 +33,7 @@ import {
   type OwnedDockerContext
 } from "../../../e2e/harness/owned-docker"
 import { newCatalogHandler } from "../src/http"
-import { newPricingHandler } from "../src/pricing"
+import { newPricingClient, newPricingHandler, registerPricingHandler } from "../src/pricing"
 
 const ConsulImage =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
@@ -257,16 +259,12 @@ async function main(): Promise<void> {
       retryMaximumMs: 200,
       deregisterCriticalServiceAfterMs: 60_000
     })
-    const pricingServer = newServer(
-      serverTransport(newNodeHTTPTransport()),
-      address("127.0.0.1:0"),
-      serviceHandler(
-        "pricing",
-        "Pricing.Get",
-        newPricingHandler(function countCall(): void {
-          pricingCalls += 1
-        })
-      )
+    const pricingServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
+    registerPricingHandler(
+      pricingServer,
+      newPricingHandler(function countCall(): void {
+        pricingCalls += 1
+      })
     )
     const pricingEndpoint = await pricingServer.endpoint(background())
     pricingApp = newApp(
@@ -291,6 +289,7 @@ async function main(): Promise<void> {
     })
     client = newClient(
       withDiscovery(registry),
+      withService("pricing"),
       withSelector(newRoundRobinSelector()),
       withTransport(newHTTPTransport())
     )
@@ -298,7 +297,7 @@ async function main(): Promise<void> {
     catalogRun = catalogApp.run()
     void catalogRun.catch(() => {})
     await waitForCache(cache)
-    const handler = newCatalogHandler({ cache, client })
+    const handler = newCatalogHandler({ cache, client: newPricingClient(client) })
 
     const first = await handler(new Request("http://example.test/v1/products/sku-001?currency=USD"))
     const firstBody = await first.text()

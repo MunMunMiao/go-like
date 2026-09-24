@@ -1,7 +1,8 @@
 # go-like v1 微服务工具包完整落地实施计划
 
-状态：历史计划。`@go-like/struct`、Handle、ResidentClient、Fetch Transport、ServiceDeclaration 与自动注册
-组合器已经在首发前删除；当前公共契约以 `docs/developer-experience-alignment.md` 为准。
+状态：历史计划。Handle、ResidentClient、Fetch Transport、ServiceDeclaration 与自动注册组合器不再是当前
+公共契约；当前已包含独立的 `@go-like/struct`。实际入口以
+[开发者体验基线](../../developer-experience-alignment.md) 与各包 README 为准。
 
 > **执行要求：** 按任务使用 TDD 红—绿—重构；每个生产切片完成后分别做规范符合性与代码质量审查。
 

@@ -20,6 +20,8 @@
 
 使用 `@go-like/context` 把取消状态传入派单仓储，使用 `@go-like/web` 暴露可嵌入任意标准 Fetch 运行时的入口，并使用 `@go-like/health` 把健康配送容量纳入服务 readiness。
 
+readiness 探针由服务对象独立提供并在单元测试中调用；当前 `main.ts` 只挂载业务 Handler，没有公开 `/livez` 或 `/readyz` 路由。
+
 ## 验证矩阵
 
 | 场景                        | 证据                               |

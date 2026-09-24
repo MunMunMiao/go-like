@@ -24,8 +24,11 @@ export interface Server {
 
 /** Resolves the endpoint advertised by one Server. */
 export interface Endpointer {
+  /** Returns the synchronous protocol discriminator used for local publication checks. */
+  protocol(): string
+
   /** Returns the actual endpoint after any asynchronous bind completes. */
-  endpoint(ctx: Context): string | PromiseLike<string>
+  endpoint(ctx: Context): string | Promise<string>
 }
 
 export interface AppInfo {
@@ -54,7 +57,7 @@ export interface App extends AppInfo {
 }
 
 /** Runs one application lifecycle hook. */
-export type AppHook = (ctx: Context) => void | PromiseLike<void>
+export type AppHook = (ctx: Context) => void | Promise<void>
 
 /** Applies one construction-time option to an application. */
 export type AppOption = (config: AppConfig) => void
@@ -357,7 +360,7 @@ function addFailure(errors: Error[], error: Error): void {
 }
 
 /** Waits directly or through one lifecycle deadline Context. */
-function waitForPhase<T>(ctx: Context, operation: PromiseLike<T>, bounded: boolean): Promise<T> {
+function waitForPhase<T>(ctx: Context, operation: Promise<T>, bounded: boolean): Promise<T> {
   return bounded ? waitForContext(ctx, operation) : Promise.resolve(operation)
 }
 
@@ -405,7 +408,7 @@ function invokeStart(
   index: number,
   onFailure: (error: Error) => void
 ): Promise<void> {
-  let started: PromiseLike<void>
+  let started: Promise<void>
   try {
     started = subject.start(ctx)
   } catch (value) {
@@ -562,6 +565,23 @@ export function newApp(
     startContext: Context,
     boundedStart: boolean
   ): Promise<ServiceInstance> {
+    let selectedProtocol: string | null = null
+    for (const subject of config.servers) {
+      const resolveEndpoint: unknown = Reflect.get(subject, "endpoint")
+      if (typeof resolveEndpoint !== "function") continue
+      const resolveProtocol: unknown = Reflect.get(subject, "protocol")
+      if (typeof resolveProtocol !== "function") {
+        throw new TypeError("app Endpointer must implement protocol")
+      }
+      const value: unknown = resolveProtocol.call(subject)
+      if (typeof value !== "string" || value.length === 0) {
+        throw new TypeError("app Endpointer protocol must be a non-empty string")
+      }
+      if (selectedProtocol !== null && value !== selectedProtocol) {
+        throw new TypeError(`app Endpointer protocols must match: ${selectedProtocol}, ${value}`)
+      }
+      selectedProtocol = value
+    }
     if (currentEndpoints.length === 0) {
       const endpoints: string[] = []
       for (const subject of config.servers) {

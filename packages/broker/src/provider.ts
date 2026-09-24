@@ -5,13 +5,13 @@ const terminals = new WeakMap<Subscriber, Promise<void>>()
 /** Associates one stable provider terminal with an upstream-style Subscriber. */
 export function registerSubscriberTerminal(
   subscriber: Subscriber,
-  terminal: PromiseLike<void>
+  terminal: Promise<void>
 ): Subscriber {
   if (typeof subscriber !== "object" || subscriber === null) {
     throw new TypeError("broker provider Subscriber must be an object")
   }
   if (typeof terminal !== "object" || terminal === null || typeof terminal.then !== "function") {
-    throw new TypeError("broker provider terminal must be a PromiseLike")
+    throw new TypeError("broker provider terminal must be a Promise")
   }
   const retained = Promise.resolve(terminal)
   void retained.catch(() => {})

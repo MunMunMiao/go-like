@@ -3,7 +3,7 @@
 Instala solo las piezas que necesites. Un servicio HTTP habitual parte de `@go-like/context`, `@go-like/core`, `@go-like/web` y un framework que exponga un handler Fetch nativo. Para llamadas internas añade `@go-like/client`, `@go-like/transport` y `@go-like/transport-http`; el registro, la configuración y el almacén se eligen de forma explícita.
 
 > [!IMPORTANT]
-> Este checkout enlaza los paquetes `@go-like/*` mediante `workspace:*` con la versión de manifest `0.0.1`; esa versión todavía no se ha publicado en npm. El comando `bun add` de abajo describe el uso posterior a la publicación. Para validar y ejecutar el código fuente actual desde la raíz del repositorio:
+> Este checkout usa paquetes `workspace:*` en versión `0.0.1`. La versión del manifest no demuestra disponibilidad en npm; comprueba la publicación antes de instalar fuera del workspace.
 >
 > ```sh
 > bun install --frozen-lockfile

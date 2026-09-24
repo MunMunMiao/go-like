@@ -56,4 +56,4 @@ curl -sS http://127.0.0.1:3000/v1/enrollments \
 
 请求会经过 Capacity Client、Memory Transport 与内部 Capacity Server。前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM` 可触发 Core 排空。
 
-本例无需 Docker：Memory Transport 是 go-like 的真实进程内 provider，且没有外部中间件。它验证服务契约和生命周期，不宣称具备跨进程持久化能力。
+本例无需 Docker：Memory Transport 是 go-like 的真实进程内 provider，且没有外部中间件。它验证服务契约和生命周期，不宣称具备跨进程持久化能力。Capacity 预占与 Enrollment 保存是两个独立步骤，没有原子事务或失败补偿；预占后的取消、保存失败或并发重复选课仍可能占用额外席位。

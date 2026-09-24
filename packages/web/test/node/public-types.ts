@@ -27,9 +27,10 @@ const coreServer: Server = server
 void coreServer
 
 const running: Promise<void> = server.start({} as never)
+const protocol: string = server.protocol()
 const endpoint: Promise<string> = server.endpoint({} as never)
 const stopping: Promise<void> = server.stop({} as never)
-void [running, endpoint, stopping]
+void [running, protocol, endpoint, stopping]
 
 declare const alreadyStarted: NodeServerAlreadyStartedError
 const alreadyCode: "GO_LIKE_NODE_SERVER_ALREADY_STARTED" = alreadyStarted.code

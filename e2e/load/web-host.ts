@@ -1,11 +1,5 @@
 import { background } from "@go-like/context"
-import {
-  address,
-  handler,
-  newServer,
-  transport,
-  type Server as ServiceServer
-} from "@go-like/server"
+import { address, newServer, transport, type Server as ServiceServer } from "@go-like/server"
 import type { Message } from "@go-like/transport"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { hostname, newNodeServer, nodeShutdownTimeout, port } from "@go-like/web/node"
@@ -26,13 +20,10 @@ async function startService(label: string): Promise<{
   readonly running: Promise<void>
   readonly server: ServiceServer
 }> {
-  const server = newServer(
-    transport(newNodeHTTPTransport()),
-    address("127.0.0.1:0"),
-    handler("soak", "Ping", async function ping(): Promise<Message> {
-      return { header: {}, body: new TextEncoder().encode(label) }
-    })
-  )
+  const server = newServer(transport(newNodeHTTPTransport()), address("127.0.0.1:0"))
+  server.registerHandler("soak", "Ping", async function ping(): Promise<Message> {
+    return { header: {}, body: new TextEncoder().encode(label) }
+  })
   const running = server.start(background())
   void running.catch((error) => unhandled.push(error))
   return { endpoint: await server.endpoint(background()), running, server }

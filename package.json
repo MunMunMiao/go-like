@@ -24,12 +24,13 @@
     "packages/store/file",
     "packages/store/memory",
     "packages/store/vault",
+    "packages/transport/grpc-buf",
     "packages/transport/http",
     "packages/transport/memory",
     "examples/*"
   ],
   "scripts": {
-    "verify": "bun run fmt:check && bun run lint:check && bun run typecheck && bun run build && bun run test:unit:coverage",
+    "verify": "bun run test:protobuf && bun run fmt:check && bun run lint:check && bun run typecheck && bun run build && bun run test:unit:coverage",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
     "lint": "oxlint --fix . && oxfmt . && oxlint --deny-warnings .",
@@ -53,9 +54,19 @@
     "test:e2e:examples": "bun run build && bun e2e/run.ts --scope examples",
     "test:e2e:published": "bun run build && bun e2e/run.ts --scope published",
     "test:e2e": "bun run build && bun e2e/run.ts --scope all",
-    "test:e2e:soak": "bun run build && bun e2e/soak.ts --duration 60m --output .artifacts/soak/http.json"
+    "test:e2e:soak": "bun run build && bun e2e/soak.ts --duration 60m --output .artifacts/soak/http.json",
+    "test:e2e:grpc-soak": "bun run proto:generate && bun e2e/grpc-soak.ts",
+    "proto:lint": "bunx --bun buf lint test/fixtures/protobuf-rpc",
+    "proto:generate": "bun run --cwd packages/protoc-gen-like build && bunx --bun buf generate test/fixtures/protobuf-rpc --template test/fixtures/protobuf-rpc/buf.gen.yaml && bun scripts/stage-protobuf-rpc.ts",
+    "proto:typecheck": "tsc -p test/fixtures/protobuf-rpc/tsconfig.json --pretty false",
+    "proto:check": "bun run proto:lint && bun run proto:generate && bun run proto:typecheck",
+    "test:protobuf": "bun run proto:check && bun test --isolate --no-orphans test/fixtures/protobuf-rpc/integration.test.ts"
   },
   "devDependencies": {
+    "@bufbuild/buf": "1.72.0",
+    "@bufbuild/protobuf": "2.14.0",
+    "@bufbuild/protoc-gen-es": "2.14.0",
+    "@connectrpc/connect": "2.1.2",
     "@types/bun": "1.4.0",
     "@types/k6": "2.2.0",
     "oxfmt": "0.65.0",

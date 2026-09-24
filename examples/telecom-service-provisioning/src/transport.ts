@@ -1,10 +1,16 @@
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withAddress,
+  withTransport,
+  type CallOption,
+  type Client
+} from "@go-like/client"
 import type { Context } from "@go-like/context"
 import {
   address,
-  handler,
   newServer,
   transport as serverTransport,
+  type HandlerRegistrar,
   type Server
 } from "@go-like/server"
 import type { Message } from "@go-like/transport"
@@ -23,7 +29,11 @@ const endpointName = "Provisioning.Activate"
 const mediaType = "application/json"
 
 export interface TelecomProvisioningClient {
-  provision(ctx: Context, command: ProvisionServiceCommand): Promise<ProvisionedService>
+  provision(
+    ctx: Context,
+    command: ProvisionServiceCommand,
+    ...options: readonly CallOption[]
+  ): Promise<ProvisionedService>
 }
 
 export interface TelecomProvisioningMicroservice {
@@ -85,37 +95,52 @@ function decodeService(bytes: Uint8Array): ProvisionedService {
   })
 }
 
+/** Registers the telecom provisioning implementation on one Server owner. */
+export function registerTelecomProvisioningHandler(
+  server: HandlerRegistrar,
+  handler: ProvisionTelecomService
+): void {
+  server.registerHandler(
+    serviceName,
+    endpointName,
+    async function provisionService(ctx: Context, message: Message): Promise<Message> {
+      return encodeMessage(await handler(ctx, decodeCommand(message.body)))
+    }
+  )
+}
+
+/** Creates the typed telecom caller while borrowing one common Client owner. */
+export function newTelecomProvisioningClient(client: Client): TelecomProvisioningClient {
+  return Object.freeze({
+    async provision(
+      ctx: Context,
+      command: ProvisionServiceCommand,
+      ...options: readonly CallOption[]
+    ): Promise<ProvisionedService> {
+      const response = await client.call(
+        ctx,
+        {
+          service: serviceName,
+          endpoint: endpointName,
+          message: encodeMessage(command)
+        },
+        ...options
+      )
+      return decodeService(response.body)
+    }
+  })
+}
+
 /** Composes an internal unary telecom service over the real Memory Transport provider. */
 export function newTelecomProvisioningMicroservice(
   provision: ProvisionTelecomService
 ): TelecomProvisioningMicroservice {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport))
+  const client = newClient(withTransport(transport), withAddress(serviceAddress))
+  const server = newServer(serverTransport(transport), address(serviceAddress))
+  registerTelecomProvisioningHandler(server, provision)
   return Object.freeze({
-    server: newServer(
-      serverTransport(transport),
-      address(serviceAddress),
-      handler(
-        serviceName,
-        endpointName,
-        async function provisionService(ctx: Context, message: Message): Promise<Message> {
-          return encodeMessage(await provision(ctx, decodeCommand(message.body)))
-        }
-      )
-    ),
-    client: Object.freeze({
-      async provision(ctx: Context, command: ProvisionServiceCommand): Promise<ProvisionedService> {
-        const response = await client.call(
-          ctx,
-          {
-            service: serviceName,
-            endpoint: endpointName,
-            message: encodeMessage(command)
-          },
-          withAddress(serviceAddress)
-        )
-        return decodeService(response.body)
-      }
-    })
+    server,
+    client: newTelecomProvisioningClient(client)
   })
 }

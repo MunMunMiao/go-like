@@ -6,7 +6,14 @@ import { dirname, resolve } from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
-import { newClient, withDiscovery, withSelector, withTransport, type Client } from "@go-like/client"
+import {
+  newClient,
+  withDiscovery,
+  withSelector,
+  withService,
+  withTransport,
+  type Client
+} from "@go-like/client"
 import { newConfig, schema, source } from "@go-like/config"
 import { vaultSource } from "@go-like/config-vault"
 import { background, withoutCancel } from "@go-like/context"
@@ -30,13 +37,7 @@ import { newPinoServer } from "@go-like/pino"
 import { createPrometheusHandler } from "@go-like/prometheus"
 import { newRoundRobinSelector } from "@go-like/registry"
 import { newConsulRegistry } from "@go-like/registry-consul"
-import {
-  address,
-  handler as serviceHandler,
-  middleware,
-  newServer,
-  transport as serverTransport
-} from "@go-like/server"
+import { address, middleware, newServer, transport as serverTransport } from "@go-like/server"
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { createHealthHandler } from "@go-like/web/health"
@@ -82,7 +83,13 @@ import type {
   ProcessSupervisor
 } from "../../../../e2e/harness/process"
 import { runtimeConfigSchema } from "#src/config"
-import { echoEndpointName, echoServiceName, newEchoHandler } from "#src/echo"
+import {
+  echoEndpointName,
+  echoServiceName,
+  newEchoClient,
+  newEchoHandler,
+  registerEchoHandler
+} from "#src/echo"
 import { newManagementHandler } from "#src/management"
 import { registerRuntimeProbes } from "#src/probes"
 import { newPlatformRuntimeState } from "#src/runtime-state"
@@ -729,34 +736,33 @@ async function run(): Promise<void> {
     const echoServer = newServer(
       serverTransport(newNodeHTTPTransport()),
       address("127.0.0.1:0"),
-      serviceHandler(
-        echoServiceName,
-        echoEndpointName,
-        newEchoHandler(runtimeConfig, function recordCall(): void {
-          handlerCalls += 1
-          requests.inc({ result: "ok" })
-          otelCalls.add(1, { result: "ok" })
-        })
-      ),
       middleware(traceUnaryMiddleware(tracer, propagator))
     )
+    registerEchoHandler(
+      echoServer,
+      newEchoHandler(runtimeConfig, function recordCall(): void {
+        handlerCalls += 1
+        requests.inc({ result: "ok" })
+        otelCalls.add(1, { result: "ok" })
+      })
+    )
     const serviceEndpoint = await echoServer.endpoint(background())
-    const activeClient = traceClient(
+    client = traceClient(
       newClient(
         withDiscovery(registry),
+        withService(echoServiceName),
         withSelector(newRoundRobinSelector()),
         withTransport(newHTTPTransport())
       ),
       tracer,
       propagator
     )
-    client = activeClient
     const probes = newProbeRegistry()
     registerRuntimeProbes(probes, () => runtimeConfig.value("release").load() !== null)
     const managementHandler = newManagementHandler(
       createHealthHandler(probes),
       createPrometheusHandler(prometheus),
-      activeClient
+      newEchoClient(client)
     )
     const managementServer = newNodeServer(managementHandler, hostname("127.0.0.1"), port(0))
     const managementAddress = await managementServer.endpoint(background())

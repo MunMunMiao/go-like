@@ -60,7 +60,7 @@ examples/healthcare-appointments/
 bun install --frozen-lockfile
 ```
 
-الحزم هي اعتماديات workspace في هذا checkout. لا يستخدم المستودع إصدارات بيئات التشغيل أو الأدوات كشرط للسماح بالتنفيذ. يتحقق كل مسار تحقق محدد من إمكانية تشغيل أدواته المطلوبة ويسجل البيئة المرصودة. سلوك الأوامر ونتائجها، لا أرقام الإصدارات، هو ما يحدد النتيجة. وتقول وثائق الحزم الحالية إن الحزم لم تُنشر بعد إلى npm.
+يستخدم هذا checkout حزم `workspace:*` بالإصدار `0.0.1`. لا يثبت رقم manifest توفر الحزم على npm؛ تحقّق من النشر بصورة مستقلة قبل التثبيت خارج workspace.
 
 شغّل مثال الأساس الموجود:
 
@@ -147,8 +147,7 @@ function overlaps(
 ```ts
 import { background } from "@go-like/context"
 import { expect, test } from "bun:test"
-
-// The concrete repository factory is the one in src/service.ts.
+import { newBookAppointment, newMemoryAppointmentRepository } from "../src/service"
 test("rejects an overlapping active slot", () => {
   const repository = newMemoryAppointmentRepository()
   const book = newBookAppointment(repository, () => 1_000)
@@ -214,13 +213,7 @@ export const checkAppointment = endpoint(
 ```ts
 import { newClient, withAddress, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
-import {
-  address,
-  handler,
-  newServer,
-  transport as serverTransport,
-  type Server
-} from "@go-like/server"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
 import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
@@ -235,22 +228,19 @@ export interface AppointmentPolicy {
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport))
-  const server = newServer(
-    serverTransport(transport),
-    address(policyAddress),
-    handler(checkAppointment, (_ctx, request) => {
-      if (request.endsAt - request.startsAt > maximumDurationMs) {
-        throw new Error("appointment duration exceeds policy")
-      }
-      return { allowed: true }
-    })
-  )
+  const client = newClient(withTransport(transport), withAddress(policyAddress))
+  const server = newServer(serverTransport(transport), address(policyAddress))
+  server.registerHandler(checkAppointment, (_ctx, request) => {
+    if (request.endsAt - request.startsAt > maximumDurationMs) {
+      throw new Error("appointment duration exceeds policy")
+    }
+    return { allowed: true }
+  })
 
   return Object.freeze({
     server,
     async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request, withAddress(policyAddress))
+      return await client.call(ctx, checkAppointment, request)
     },
     close(ctx: Context): Promise<void> {
       return client.close(ctx)
@@ -294,10 +284,22 @@ async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appoi
 يفيد Cache في إسقاط قراءة، لا في مرجعية الحجز. تعرض حزمة Cache الدوال `get` و`put` و`delete` التي تأخذ Context أولاً؛ وتوفر `@go-like/cache-memory` الدالة `newMemoryCache()`، بينما توفر `@go-like/cache` الدالة `expiresIn(...)`:
 
 ```ts
+import type { Context } from "@go-like/context"
 import { expiresIn } from "@go-like/cache"
 import { newMemoryCache } from "@go-like/cache-memory"
+import type { AppointmentRepository } from "./service"
+
+interface Availability {
+  readonly doctorId: string
+  readonly slots: readonly { readonly startsAt: number; readonly endsAt: number }[]
+}
+
+interface AvailabilityRepository extends AppointmentRepository {
+  readAvailability(ctx: Context, doctorId: string): Availability
+}
 
 const availabilityCache = newMemoryCache()
+declare const repository: AvailabilityRepository
 
 async function readAvailability(ctx: Context, doctorId: string) {
   const key = `availability/${doctorId}`
@@ -337,10 +339,24 @@ async function invalidateAvailability(ctx: Context, doctorId: string): Promise<v
 أنشئ Registry في جذر التركيب، ووجّه مسارين إلى `createHealthHandler(...)`:
 
 ```ts
-import { createHealthHandler } from "@go-like/web/health"
+import type { Context } from "@go-like/context"
 import { newProbeRegistry } from "@go-like/health"
+import { createHealthHandler } from "@go-like/web/health"
 import type { Handler } from "@go-like/web"
 
+import type { Appointment, BookAppointmentCommand } from "./service"
+import { newBookAppointment, newCancelAppointment, newMemoryAppointmentRepository } from "./service"
+import { newAppointmentPolicy } from "./transport"
+import { newAppointmentHandler } from "./http"
+
+const repository = newMemoryAppointmentRepository()
+const policy = newAppointmentPolicy()
+const book = async (ctx: Context, command: BookAppointmentCommand): Promise<Appointment> => {
+  const decision = await policy.validate(ctx, command)
+  if (!decision.allowed) throw new Error("appointment policy rejected request")
+  return newBookAppointment(repository)(ctx, command)
+}
+const cancel = newCancelAppointment(repository)
 const probes = newProbeRegistry()
 probes.register("ready", "policy", async (ctx) => {
   await policy.server.endpoint(ctx)
@@ -370,7 +386,6 @@ import { afterStart, afterStop, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
 import { hostname, newNodeServer, port } from "@go-like/web/node"
 
-const policy = newAppointmentPolicy()
 const httpServer = newNodeServer(webHandler, hostname("127.0.0.1"), port(3000))
 const app = newApp(
   signal(),
@@ -389,6 +404,8 @@ await app.run()
 إن hook `afterStop` حد ترتيب صريح لـ policy Client. ويوقف Core نفسه Servers الأشقاء بالتوازي. إذا احتجت إلى ترتيب تبعيات أكثر تعقيداً، فركّب الموارد التابعة في Server واحد أو في hook صريح بدلاً من الاعتماد على ترتيب التصريح.
 
 إن `signal()` هو محوّل عملية Node/Bun. ويمكن أن تبقى وحدات المجال والعقد typed وMemory Transport والصحة محمولة؛ أما الاستيراد من `@go-like/core/node` فاختيار مقصود لبيئة التشغيل.
+
+يعيد M4 استخدام `policy` و`webHandler` اللذين أُنشئا في M3؛ لا تنشئ نسخة ثانية من الخدمة.
 
 ## M5: خطة الاختبار والدليل
 
@@ -452,7 +469,7 @@ bun run test:e2e:examples
 
 ### يبلّغ الاستدعاء typed عن جسم طلب أو استجابة غير صالح
 
-تحقّق من أن Client وServer يستخدمان مثيلي `Endpoint` وStruct نفسيهما، وأن Content-Type للطلب هو `application/json` بالضبط. ينفّذ `handler(contract, fn)` تحقق JSON وStruct عند حد Server.
+تحقّق من أن Client وServer يستخدمان مثيلي `Endpoint` وStruct نفسيهما، وأن Content-Type للطلب هو `application/json` بالضبط. ينفّذ `server.registerHandler(contract, fn)` تحقق JSON وStruct عند حد Server.
 
 ### لا يستطيع Memory Client الوصول إلى Server
 
@@ -460,7 +477,7 @@ bun run test:e2e:examples
 
 ### يبدو أن `app.run()` عالق
 
-قد يبقى `Server.start(ctx)` طويل العمر في الانتظار طوال مدة الخدمة. هذا متوقع. يحل `app.run()` بعد الإيقاف والتنظيف النهائي، لا فور ربط listener. استخدم `afterStart` أو `server.endpoint(ctx)` لإشارة القبول.
+لا يثبت `Server.start(ctx)` أو `afterStart` وحده الجاهزية. انتظر `endpoint(ctx)` أو إشارة قبول خاصة بالمورد داخل hook قبل إعلان الجاهزية. يوقف Core الموارد الشقيقة بالتوازي؛ اجمع الموارد في مالك واحد إذا كان ترتيب الإيقاف ضرورياً.
 
 ### يعيد stop timeout أو خطأً مجمعاً
 

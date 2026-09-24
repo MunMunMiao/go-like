@@ -15,5 +15,13 @@
     // ponytail: fixed NATS declarations fail TS 7 lib checking; staged trace and runtime gates retain the package boundary.
     "skipLibCheck": true
   },
-  "files": ["portable.ts", "node.ts", "bun.ts"]
+  "files": [
+    "browser.ts",
+    "portable.ts",
+    "node.ts",
+    "bun.ts",
+    "test/e2e/native-harness.ts",
+    "test/e2e/native-runtime.ts",
+    "test/e2e/native-upstream.ts"
+  ]
 }

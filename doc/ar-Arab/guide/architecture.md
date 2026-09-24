@@ -33,4 +33,4 @@ App.stop()
   -> terminal joins -> one result
 ```
 
-لا يعني `Server.start(ctx)` أن الخدمة جاهزة لاستقبال traffic؛ استخدم `endpoint(ctx)` أو hook `afterStart` لإشارة admission. ولا يضمن Core إيقاف الأشقاء بترتيب عكسي. إذا كان الترتيب مهماً، فاجمع الموارد ذات الصلة داخل `Server` واحد أو hook صريح.
+لا يثبت `Server.start(ctx)` أو `afterStart` وحده الجاهزية. انتظر `endpoint(ctx)` أو إشارة قبول خاصة بالمورد داخل hook قبل إعلان الجاهزية. يوقف Core الموارد الشقيقة بالتوازي؛ اجمع الموارد في مالك واحد إذا كان ترتيب الإيقاف ضرورياً.

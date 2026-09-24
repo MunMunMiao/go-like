@@ -3,7 +3,7 @@
 只装服务真正需要的包就行。一个常见的 HTTP 服务会用到 `@go-like/context`、`@go-like/core`、`@go-like/web`，再加一个能导出原生 Fetch Handler 的 Web 框架。内部服务调用才需要 `@go-like/client`、`@go-like/transport` 和 `@go-like/transport-http`；注册中心、配置中心和存储后端都由应用明确选择，不会偷偷塞进默认全家桶。
 
 > [!IMPORTANT]
-> 当前仓库通过 `workspace:*` 关联 manifest 版本为 `0.0.1` 的 `@go-like/*` 包；该版本尚未发布到 npm。下面的 `bun add` 命令描述首发后的用法；当前源码请在仓库 checkout 的根目录验证并运行：
+> 此 checkout 使用版本为 `0.0.1` 的 `workspace:*` 包。Manifest 版本不能证明 npm 可用；在 workspace 外安装前，应独立核实发布状态。
 >
 > ```sh
 > bun install --frozen-lockfile

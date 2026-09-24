@@ -27,4 +27,4 @@ App.stop()
   -> joins terminales -> un resultado
 ```
 
-`Server.start(ctx)` no equivale a readiness. Usa `endpoint(ctx)` o un hook `afterStart` como señal de admisión. Core tampoco promete apagar los Servers hermanos en orden inverso; si el orden importa, compón esos recursos dentro de un `Server` o hook explícito.
+Ni `Server.start(ctx)` ni `afterStart` por sí solos prueban readiness. Espera `endpoint(ctx)` o la señal de admisión del recurso dentro del hook antes de anunciarla. Core detiene los Servers hermanos en paralelo; agrupa los recursos en un propietario si necesitan un orden específico.

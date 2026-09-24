@@ -75,21 +75,20 @@ Para quien viene de Go o Kratos, migra conceptos, no nombres:
 | Transport         | `@go-like/transport`                                                                                               | Los providers y los headers de `Message` son contratos de TypeScript/Web         |
 | Registry          | `@go-like/registry`                                                                                                | Los watchers devuelven snapshots de reemplazo completo                           |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | El feedback es síncrono y depende de la policy                                   |
-| Protobuf/IDL      | no hay equivalente en go-like                                                                                      | `Endpoint` + `Struct` es validación en runtime, no código de esquema generado    |
-| gRPC stream       | no existe un equivalente actual en go-like                                                                         | El streaming Web público está separado del transporte interno unary              |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | Código Context-first sobre Protobuf-ES                                           |
+| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC estándar con cuatro cardinalidades mediante `/native`                       |
 
 Un primer paso incremental es hacer una llamada tipada a una dirección directa sobre Memory Transport:
 
 ```ts
+// Composition excerpt: quote and pricingQuoteHandler are application-owned.
+// Admit this server through App before calling; close client during shutdown.
 const transport = newMemoryTransport()
-const server = newServer(
-  serverTransport(transport),
-  address("memory://pricing"),
-  handler(pricingEndpoint, pricingHandler)
-)
-const client = newClient(withTransport(transport))
+const server = newServer(serverTransport(transport), address("memory://pricing"))
+server.registerHandler(quote, pricingQuoteHandler)
 
-const result = await client.call(ctx, pricingEndpoint, request, withAddress("memory://pricing"))
+const client = newClient(withTransport(transport), withAddress("memory://pricing"))
+const result = await client.call(ctx, quote, request)
 ```
 
 Solo después de probar esta frontera conviene introducir Discovery, un provider real de Registry o un transporte HTTP. Así conservas el contrato de dominio mientras sustituyes el destino y la configuración de ownership.
@@ -163,4 +162,8 @@ Antes de integrar una frontera, verifica:
 
 ## Frontera de soporte actual
 
-El repositorio contiene ejemplos directos para Fetch sin framework, Hono, Elysia, H3, Memory Transport, llamadas internas tipadas, health, brokers, workers y adaptadores de observabilidad. No demuestra bridges automáticos para NestJS o Fastify, compatibilidad con gRPC/Protobuf/IDL, streams internos full-duplex, autenticación universal ni orquestación de despliegues. Todo eso requeriría adaptadores, pruebas y compromisos de producto separados.
+`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del Transport SPI unary.
+
+Esto no incluye gRPC estándar en el navegador, request-streaming/bidi mediante Fetch, health/reflection oficiales, autenticación genérica, Event Store/replay, ORM ni orquestación de clústeres.
+
+[Límites de cancelación y apagado](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

@@ -75,21 +75,20 @@ framework route table
 | Transport         | `@go-like/transport`                                                                                               | المزوّدات وحقول headers في `Message` عقود TypeScript/Web           |
 | Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                 |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | الملاحظات الراجعة متزامنة وتعتمد على السياسة                       |
-| Protobuf/IDL      | لا مقابل له في go-like                                                                                             | `Endpoint` + `Struct` تحقق وقت التشغيل، وليس شيفرة مخطط مولّدة     |
-| gRPC stream       | لا يوجد مقابل حالي في go-like                                                                                      | تدفق Web العام منفصل عن النقل الداخلي الأحادي                      |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | شيفرة Context-first فوق Protobuf-ES                                |
+| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC قياسي بالأنماط الأربعة عبر `/native`                          |
 
 الخطوة التدريجية الأولى هي استدعاء typed إلى عنوان مباشر عبر Memory Transport:
 
 ```ts
+// Composition excerpt: quote and pricingQuoteHandler are application-owned.
+// Admit this server through App before calling; close client during shutdown.
 const transport = newMemoryTransport()
-const server = newServer(
-  serverTransport(transport),
-  address("memory://pricing"),
-  handler(pricingEndpoint, pricingHandler)
-)
-const client = newClient(withTransport(transport))
+const server = newServer(serverTransport(transport), address("memory://pricing"))
+server.registerHandler(quote, pricingQuoteHandler)
 
-const result = await client.call(ctx, pricingEndpoint, request, withAddress("memory://pricing"))
+const client = newClient(withTransport(transport), withAddress("memory://pricing"))
+const result = await client.call(ctx, quote, request)
 ```
 
 لا تقدّم Discovery أو مزوّد Registry حقيقياً أو HTTP Transport إلا بعد اختبار هذا الحدّ. هكذا تحافظ على عقد المجال أثناء استبدال الوجهة وتركيب الملكية.
@@ -163,4 +162,8 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 ## حدّ الدعم الحالي
 
-يحتوي المستودع على أمثلة مباشرة لـ Fetch بلا إطار، وHono، وElysia، وH3، وMemory Transport، والاستدعاءات الداخلية typed، والصحة، والوسطاء، والعاملين، ومحوّلات قابلية الرصد. لكنه لا يثبت جسوراً تلقائية لـ NestJS أو Fastify، ولا توافقاً مع gRPC/Protobuf/IDL، ولا تدفقات داخلية full-duplex، ولا مصادقة عامة، ولا تنسيقاً للنشر. كل ذلك يحتاج إلى محوّلات واختبارات والتزامات منتج منفصلة.
+يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
+
+لا يشمل ذلك gRPC القياسي داخل المتصفح، أو تدفق طلبات Fetch ثنائي الاتجاه، أو health/reflection القياسيين، أو مصادقة عامة، أو Event Store/replay، أو ORM، أو تنسيق العناقيد.
+
+[قيود الإلغاء والإيقاف](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

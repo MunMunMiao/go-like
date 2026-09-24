@@ -36,4 +36,4 @@ curl -sS http://127.0.0.1:3000/v1/appointments \
   -d "{\"appointmentId\":\"appointment-1\",\"doctorId\":\"doctor-1\",\"patientId\":\"patient-1\",\"startsAt\":$((NOW + 3600000)),\"endsAt\":$((NOW + 5400000))}"
 ```
 
-前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM`，Core 会反向停止 HTTP Server 与 Memory Transport 策略服务。
+前台按 `Ctrl-C` 或向 Node 进程发送 `SIGTERM`，Core 会并发请求停止 HTTP Server 与 Memory Transport 策略服务，不保证两者的停止顺序。

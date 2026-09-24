@@ -3,7 +3,7 @@
 Installez uniquement les briques utiles. Un service HTTP classique part de `@go-like/context`, `@go-like/core`, `@go-like/web` et d’un framework qui expose un handler Fetch natif. Les appels internes ajoutent `@go-like/client`, `@go-like/transport` et `@go-like/transport-http` ; registre, configuration et stockage sont des choix explicites.
 
 > [!IMPORTANT]
-> Les paquets `@go-like/*` ne sont pas encore publiés sur npm. Depuis une copie de travail du dépôt, `workspace:*` résout les dépendances vers les paquets `@go-like/*` locaux ; la version `0.0.1` des manifestes ne signifie pas qu’ils sont disponibles sur npm. La commande `bun add` ci-dessous décrit donc le parcours après publication. Pour valider et exécuter le code source actuel depuis la racine du dépôt :
+> Ce checkout utilise des paquets `workspace:*` en version `0.0.1`. La version du manifest ne prouve pas leur disponibilité sur npm ; vérifiez la publication avant une installation hors workspace.
 >
 > ```sh
 > bun install --frozen-lockfile

@@ -76,6 +76,7 @@ async function requestWhenReady(port: number, path: string): Promise<HTTPResult>
 
 test("endpoint binds once and shares the listener with start", async () => {
   const server = newNodeServer(() => new Response("endpoint"), nodeShutdownTimeout(0))
+  expect(server.protocol()).toBe("http")
   const endpoint = await server.endpoint(background())
   const running = server.start(background())
 

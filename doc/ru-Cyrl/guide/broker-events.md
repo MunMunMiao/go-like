@@ -4,7 +4,7 @@
 
 `@go-like/event` добавляет необязательный типизированный codec. При публикации он кодирует независимые bytes, а при получении ждёт вызова `decode()` перед проверкой schema. Даже после ошибки декодирования нативный NATS `Msg` или JetStream `JsMsg` остаётся доступным, и приложение выбирает правильный settlement.
 
-`Broker.subscribe(ctx, topic, handler)` возвращает provider `Subscriber` с методом `unsubscribe(ctx)`. `newBrokerServer(...)` адаптирует `Broker` к контракту Core `Server`: `start(ctx)` представляет весь период работы, а `stop(ctx)` запрашивает остановку. go-like останавливает принятую subscription, но никогда не владеет connection, stream или durable consumer. Отмена запуска освобождает созданную, но ещё не принятую subscription.
+`newBrokerServer(...)` владеет одной подпиской. Владелец должен вызвать `stop(ctx)`; при незавершённом допуске адаптер ждёт подписку, затем вызывает `unsubscribe`. Сама отмена Context не доказывает освобождение поздно созданного ресурса.
 
 Broker нужен для доставки событий и fan-out. Если важна именно модель jobs, retry, backoff, token и Worker из BullMQ, используйте `@go-like/bullmq`. Это разные инструменты, и честный API не делает вид, будто различий нет.
 

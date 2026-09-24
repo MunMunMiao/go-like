@@ -38,6 +38,10 @@ const instance: ServiceInstance = snapshotServiceInstance({
   endpoints: ["http://127.0.0.1:8000"]
 })
 const registrationErrorHandler: RegistrationErrorHandler = (_error, _service) => Promise.resolve()
+const syncRegistrationErrorHandler: RegistrationErrorHandler = () => {}
+declare const thenOnlyVoid: Pick<Promise<void>, "then">
+// @ts-expect-error A then-only value is not a native Promise.
+const thenOnlyRegistrationErrorHandler: RegistrationErrorHandler = () => thenOnlyVoid
 const providerOptionInput: ProviderOptionInput = { onRegistrationError: registrationErrorHandler }
 declare const providerOptions: ProviderOptions
 const normalizedRegistrationErrorHandler: RegistrationErrorHandler | null =
@@ -112,7 +116,9 @@ void [
   compatibleOutcome,
   detailedOutcome,
   providerOptionInput,
-  normalizedRegistrationErrorHandler
+  normalizedRegistrationErrorHandler,
+  syncRegistrationErrorHandler,
+  thenOnlyRegistrationErrorHandler
 ]
 
 // @ts-expect-error Context is always the independent first argument.

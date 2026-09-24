@@ -30,7 +30,7 @@ bun run test:parallel
 bun run test:stability
 ```
 
-`bun run verify` 係 repository 嘅標準門禁，會順序執行 `fmt:check`、`lint:check`、`typecheck`、`build` 同 `test:unit:coverage`；coverage 階段會執行一次 root 同 workspace 嘅 coverage script，並強制校驗 coverage。`examples/payments-ledger` 係唯一超出單元測試範圍嘅例外：佢仲會執行真實 PostgreSQL/NATS integration scenario，所以需要 Docker。只有收窄失敗範圍時先單獨執行其中一個階段；單一階段通過唔可以取代完整門禁。`bun run fmt` 會修正格式。`bun run lint` 會套用安全嘅 Oxlint 修正、重新格式化，並喺仲有 warning 時失敗。門禁使用唔會修改檔案嘅 `fmt:check` 同 `lint:check`，而 `lint:check` 同樣要求零 warning。呢啲命令唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
+`bun run verify` 係 repository 嘅標準門禁，會順序執行 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、`build` 同 `test:unit:coverage`；coverage 階段會執行一次 root 同 workspace 嘅 coverage script，並強制校驗 coverage。`examples/payments-ledger` 係唯一超出單元測試範圍嘅例外：佢仲會執行真實 PostgreSQL/NATS integration scenario，所以需要 Docker。只有收窄失敗範圍時先單獨執行其中一個階段；單一階段通過唔可以取代完整門禁。`bun run fmt` 會修正格式。`bun run lint` 會套用安全嘅 Oxlint 修正、重新格式化，並喺仲有 warning 時失敗。門禁使用唔會修改檔案嘅 `fmt:check` 同 `lint:check`，而 `lint:check` 同樣要求零 warning。呢啲命令唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
 
 `test:parallel` 用兩個隔離嘅 Bun worker 執行一次相同單元測試範圍，專門檢查檔案級並行安全。`test:stability` 會隨機排列各段測試，將每個測試檔案重複兩次，輸出可以重現次序嘅 seed，而且唔會 retry。兩者都係獨立檢查，唔屬於 canonical gate，亦唔可以取代 `verify`；`test:stability` 係搵次序依賴同偶發失敗，唔同於驗證 60 分鐘運行行為嘅 `test:e2e:soak`。
 

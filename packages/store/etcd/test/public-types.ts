@@ -16,6 +16,11 @@ import {
 } from "../src/index"
 
 declare const fetch: EtcdStoreFetch
+const syncFetch: EtcdStoreFetch = () => new Response()
+const nativePromiseFetch: EtcdStoreFetch = () => Promise.resolve(new Response())
+declare const thenOnlyResponse: Pick<Promise<Response>, "then">
+// @ts-expect-error A then-only value is not a native Promise.
+const thenOnlyFetch: EtcdStoreFetch = () => thenOnlyResponse
 const options: EtcdStoreOptions = { fetch, address: "http://127.0.0.1:2379" }
 const etcd: EtcdStore = newEtcdStore(options)
 const structural: Store = etcd
@@ -28,4 +33,17 @@ declare const leaseLost: EtcdStoreLeaseLostError
 declare const uncertain: EtcdStoreUncertainError
 declare const cleanup: EtcdStoreCleanupError
 
-void [structural, operation, http, protocol, transport, compacted, leaseLost, uncertain, cleanup]
+void [
+  structural,
+  operation,
+  http,
+  protocol,
+  transport,
+  compacted,
+  leaseLost,
+  uncertain,
+  cleanup,
+  syncFetch,
+  nativePromiseFetch,
+  thenOnlyFetch
+]

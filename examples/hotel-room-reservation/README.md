@@ -20,6 +20,8 @@
 
 使用 `@go-like/context` 贯穿预留仓储操作，使用 `@go-like/web` 提供预留与释放的标准 Fetch 入口，并使用 `@go-like/health` 在房型库存目录未加载时让 readiness 失败关闭。
 
+readiness 探针由服务对象独立提供并在单元测试中调用；当前 `main.ts` 只挂载业务 Handler，没有公开 `/livez` 或 `/readyz` 路由。
+
 ## 验证矩阵
 
 | 场景                      | 证据                               |

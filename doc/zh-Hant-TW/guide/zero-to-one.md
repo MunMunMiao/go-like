@@ -60,7 +60,7 @@ examples/healthcare-appointments/
 bun install --frozen-lockfile
 ```
 
-目前 checkout 中，packages 透過 workspace dependencies 互相連結。Repository 不會把 runtime 或工具版本當成執行資格。每個被選取的驗證 lane 只檢查所需工具能否執行，並記錄實際環境；執行結果由命令行為與結果決定，而不是由版本號決定。目前 package 文件說明這些 packages 尚未發布到 npm。
+此 checkout 使用版本 `0.0.1` 的 `workspace:*` 套件。Manifest 版本不能證明 npm 可用；在 workspace 外安裝前，應獨立核實發布狀態。
 
 執行現有的 baseline example：
 
@@ -147,8 +147,7 @@ function overlaps(
 ```ts
 import { background } from "@go-like/context"
 import { expect, test } from "bun:test"
-
-// The concrete repository factory is the one in src/service.ts.
+import { newBookAppointment, newMemoryAppointmentRepository } from "../src/service"
 test("rejects an overlapping active slot", () => {
   const repository = newMemoryAppointmentRepository()
   const book = newBookAppointment(repository, () => 1_000)
@@ -214,13 +213,7 @@ route token 使用可見的 ASCII，而且不能包含 `/` 或 `*`。`Endpoint` 
 ```ts
 import { newClient, withAddress, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
-import {
-  address,
-  handler,
-  newServer,
-  transport as serverTransport,
-  type Server
-} from "@go-like/server"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
 import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
@@ -235,22 +228,19 @@ export interface AppointmentPolicy {
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport))
-  const server = newServer(
-    serverTransport(transport),
-    address(policyAddress),
-    handler(checkAppointment, (_ctx, request) => {
-      if (request.endsAt - request.startsAt > maximumDurationMs) {
-        throw new Error("appointment duration exceeds policy")
-      }
-      return { allowed: true }
-    })
-  )
+  const client = newClient(withTransport(transport), withAddress(policyAddress))
+  const server = newServer(serverTransport(transport), address(policyAddress))
+  server.registerHandler(checkAppointment, (_ctx, request) => {
+    if (request.endsAt - request.startsAt > maximumDurationMs) {
+      throw new Error("appointment duration exceeds policy")
+    }
+    return { allowed: true }
+  })
 
   return Object.freeze({
     server,
     async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request, withAddress(policyAddress))
+      return await client.call(ctx, checkAppointment, request)
     },
     close(ctx: Context): Promise<void> {
       return client.close(ctx)
@@ -294,10 +284,22 @@ async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appoi
 Cache 適合用來做讀取投影，不適合當成預約的權威來源。Cache package 提供 Context-first 的 `get`、`put` 與 `delete`；`@go-like/cache-memory` 提供 `newMemoryCache()`，`@go-like/cache` 提供 `expiresIn(...)`：
 
 ```ts
+import type { Context } from "@go-like/context"
 import { expiresIn } from "@go-like/cache"
 import { newMemoryCache } from "@go-like/cache-memory"
+import type { AppointmentRepository } from "./service"
+
+interface Availability {
+  readonly doctorId: string
+  readonly slots: readonly { readonly startsAt: number; readonly endsAt: number }[]
+}
+
+interface AvailabilityRepository extends AppointmentRepository {
+  readAvailability(ctx: Context, doctorId: string): Availability
+}
 
 const availabilityCache = newMemoryCache()
+declare const repository: AvailabilityRepository
 
 async function readAvailability(ctx: Context, doctorId: string) {
   const key = `availability/${doctorId}`
@@ -337,10 +339,24 @@ async function invalidateAvailability(ctx: Context, doctorId: string): Promise<v
 在 composition root 建立 registry，並把兩個路徑委派給 `createHealthHandler(...)`：
 
 ```ts
-import { createHealthHandler } from "@go-like/web/health"
+import type { Context } from "@go-like/context"
 import { newProbeRegistry } from "@go-like/health"
+import { createHealthHandler } from "@go-like/web/health"
 import type { Handler } from "@go-like/web"
 
+import type { Appointment, BookAppointmentCommand } from "./service"
+import { newBookAppointment, newCancelAppointment, newMemoryAppointmentRepository } from "./service"
+import { newAppointmentPolicy } from "./transport"
+import { newAppointmentHandler } from "./http"
+
+const repository = newMemoryAppointmentRepository()
+const policy = newAppointmentPolicy()
+const book = async (ctx: Context, command: BookAppointmentCommand): Promise<Appointment> => {
+  const decision = await policy.validate(ctx, command)
+  if (!decision.allowed) throw new Error("appointment policy rejected request")
+  return newBookAppointment(repository)(ctx, command)
+}
+const cancel = newCancelAppointment(repository)
 const probes = newProbeRegistry()
 probes.register("ready", "policy", async (ctx) => {
   await policy.server.endpoint(ctx)
@@ -370,7 +386,6 @@ import { afterStart, afterStop, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
 import { hostname, newNodeServer, port } from "@go-like/web/node"
 
-const policy = newAppointmentPolicy()
 const httpServer = newNodeServer(webHandler, hostname("127.0.0.1"), port(3000))
 const app = newApp(
   signal(),
@@ -452,7 +467,7 @@ bun run test:e2e:examples
 
 ### typed call 回報 invalid request 或 response body
 
-檢查 client 與 server 是否使用同一組 `Endpoint` Structs，並確認 request Content-Type 正好是 `application/json`。`handler(contract, fn)` 會在 Server boundary 做 JSON 與 Struct validation。
+檢查 client 與 server 是否使用同一組 `Endpoint` Structs，並確認 request Content-Type 正好是 `application/json`。`server.registerHandler(contract, fn)` 會在 Server boundary 做 JSON 與 Struct validation。
 
 ### Memory Client 無法連到 Server
 
@@ -460,7 +475,7 @@ bun run test:e2e:examples
 
 ### `app.run()` 看起來卡住了
 
-長時間執行的 `Server.start(ctx)` 可能會一直 pending，直到服務生命週期結束，這是預期行為。`app.run()` 會在 stop 與終態 cleanup 後 resolve，不會在 listener 剛綁定後立即 resolve。使用 `afterStart` 或 `server.endpoint(ctx)` 觀察 admission signal。
+`Server.start(ctx)` 或 `afterStart` 本身不代表 readiness。應在 hook 內等待 `endpoint(ctx)` 或資源自身的接納訊號，再宣布就緒。Core 並行停止兄弟 Server；需要嚴格順序的資源應組合在同一個 owner 內。
 
 ### Stop 回傳 timeout 或 aggregate error
 

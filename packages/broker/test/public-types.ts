@@ -25,6 +25,11 @@ const nativeSubscription: Subscriber = {
   topic: "events",
   unsubscribe: async (_ctx) => {}
 }
+const nativePromise: Promise<void> = Promise.resolve()
+const thenOnly: Pick<Promise<void>, "then"> = {
+  // oxlint-disable-next-line unicorn/no-thenable -- The type fixture must isolate Promise.then.
+  then: nativePromise.then.bind(nativePromise)
+}
 const broker: Broker<PublishOptions, number, SubscribeOptions, Native> = {
   publish: async (_ctx, _topic, _message) => 1,
   subscribe: async (_ctx, _topic, _handler) => nativeSubscription,
@@ -47,13 +52,29 @@ const subscribed: Promise<Subscriber> = broker.subscribe(
 const running: Promise<void> = server.start(background())
 const stopping: Promise<void> = server.stop(background())
 const published: Promise<number> = broker.publish(background(), "events", message, { reply: "x" })
-const providerSubscriber: Subscriber = registerSubscriberTerminal(
-  nativeSubscription,
-  Promise.resolve()
-)
+const providerSubscriber: Subscriber = registerSubscriberTerminal(nativeSubscription, nativePromise)
 const providerTerminal: Promise<void> | null = subscriberTerminal(providerSubscriber)
+const asynchronouslySubscribed: Promise<Subscriber> = broker.subscribe(
+  background(),
+  "events",
+  async () => {}
+)
 
-void [event, running, stopping, published, subscribed, providerSubscriber, providerTerminal]
+// @ts-expect-error Provider terminals require a native Promise, not a then-only object.
+registerSubscriberTerminal(nativeSubscription, thenOnly)
+// @ts-expect-error Broker handlers accept synchronous void or a native Promise only.
+broker.subscribe(background(), "events", () => thenOnly)
+
+void [
+  event,
+  running,
+  stopping,
+  published,
+  subscribed,
+  asynchronouslySubscribed,
+  providerSubscriber,
+  providerTerminal
+]
 
 // @ts-expect-error Broker does not invent native acknowledgement methods.
 event.ack()

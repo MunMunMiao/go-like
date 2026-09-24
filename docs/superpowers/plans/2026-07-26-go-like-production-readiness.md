@@ -1,5 +1,8 @@
 # go-like Production Readiness Implementation Plan
 
+> 历史设计与实施记录：下文的版本、API 草案、执行范围和验收结果只描述原任务，不构成当前使用说明或新的执行授权。
+> 当前公共契约见 [开发者体验基线](../../developer-experience-alignment.md) 与各包 README；历史完成数不代表当前全量验证结果。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不改变 go-like 既定产品边界的前提下，为生命周期、后台终态、连接池、RabbitMQ、Redis、可观测性和发布链补齐可验证的生产安全边界。
@@ -125,7 +128,7 @@ bun run --filter @go-like/core build
 ```ts
 export type ConfigTerminalErrorHandler = (
   error: Error
-) => void | PromiseLike<void>
+) => void | Promise<void>
 
 export function onTerminalError(
   handler: ConfigTerminalErrorHandler
@@ -215,7 +218,7 @@ README 给出使用现有 Health probe 撤销 readiness 并请求 `app.stop()` �
 export type RegistrationErrorHandler = (
   error: Error,
   service: ServiceInstance
-) => void | PromiseLike<void>
+) => void | Promise<void>
 
 export interface ProviderOptionInput {
   readonly logger?: ProviderLogger | null

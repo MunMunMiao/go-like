@@ -87,7 +87,7 @@ export interface RabbitMqBroker extends Broker<
 /** Rebuilds package-owned channels through amqplib's official recovery setup hook. */
 export type RabbitMqRecoveryConnector = (
   setup: (model: ChannelModel) => Promise<void>
-) => PromiseLike<RecoveringChannelModel>
+) => Promise<RecoveringChannelModel>
 
 /** Returns one stable Broker and its application-owned recovering connection. */
 export interface RecoveringRabbitMqBroker {
@@ -113,12 +113,12 @@ type RabbitMqPublishBoundary = (
   routingKey: string,
   body: Buffer,
   properties: Options.Publish
-) => boolean | PromiseLike<boolean>
+) => boolean | Promise<boolean>
 
 interface ConsumerState {
   readonly topic: string
   readonly context: Context
-  readonly handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | PromiseLike<void>
+  readonly handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | Promise<void>
   consumerTag: string
   consumerGeneration: number
   accepting: boolean
@@ -134,7 +134,7 @@ interface ConsumerState {
 interface RecoveringSubscription {
   readonly topic: string
   readonly context: Context
-  readonly handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | PromiseLike<void>
+  readonly handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | Promise<void>
   readonly options: RabbitMqSubscribeOptions | undefined
   stopped: boolean
   native: Subscriber | null
@@ -479,7 +479,7 @@ function createRabbitMqBroker(
     async subscribe(
       ctx: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | Promise<void>,
       options?: RabbitMqSubscribeOptions
     ): Promise<Subscriber> {
       const initialFailure = contextFailure(ctx)
@@ -910,7 +910,7 @@ export function startRecoveringRabbitMqBroker(
     async subscribe(
       subscribeContext: Context,
       topic: string,
-      handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | PromiseLike<void>,
+      handler: (ctx: Context, event: BrokerEvent<ConsumeMessage>) => void | Promise<void>,
       options?: RabbitMqSubscribeOptions
     ): Promise<Subscriber> {
       const failure = contextFailure(subscribeContext)

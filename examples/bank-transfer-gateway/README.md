@@ -17,7 +17,7 @@
 
 ## go-like 能力
 
-主要演示 `@go-like/struct` 契约、`@go-like/transport` 的类型化 `endpoint`、`@go-like/server` 的 `handler(contract, fn)` 与 `@go-like/client` 的 `client.call(ctx, contract, value)`。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 消息交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
+主要演示 `@go-like/struct` 契约、`@go-like/transport` 的类型化 `endpoint`、`@go-like/server` 与 `@go-like/client`。`src/transport.ts` 定义本地包装函数 `registerTransferQuoteHandler(server, handler)` 和 `newBankTransferClient(client)`。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 消息交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
 
 ## 验证矩阵
 
@@ -47,7 +47,7 @@ bun run --filter @go-like/example-bank-transfer-gateway test:unit
 bun run --filter @go-like/example-bank-transfer-gateway start
 ```
 
-看到 `GO_LIKE_EXAMPLE_READY` 后请求转账报价。HTTP Handler 会真实经过 Client → Server → Memory Transport 内部微服务链：
+看到 `GO_LIKE_EXAMPLE_READY` 后请求转账报价。HTTP Handler 会真实经过 Client → Memory Transport → Server 内部微服务链：
 
 ```bash
 curl -i http://127.0.0.1:3000/v1/transfer-quotes \

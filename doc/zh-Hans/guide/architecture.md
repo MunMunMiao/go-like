@@ -27,6 +27,6 @@ App.stop()
   -> 等待终态 -> 一个结果
 ```
 
-`Server.start(ctx)` 不等于 readiness。要观察 admission，请用 `endpoint(ctx)` 或 `afterStart` hook。Core 也不承诺 sibling Server 按反向顺序停止；如果顺序重要，就把相关资源组合到一个 `Server` 或显式 hook 里。
+`Server.start(ctx)` 或 `afterStart` 本身不代表 readiness。应在 hook 内等待 `endpoint(ctx)` 或资源自身的接纳信号，再宣布就绪。Core 并发停止兄弟 Server；需要严格顺序的资源应组合在同一 owner 内。
 
 本地示例继续用 `127.0.0.1` 绑定再 `curl` 是对的。Compose / Docker Desktop 是另一套拓扑：宿主发布端口可能经 docker-proxy 在容器 HTTP/TLS listen 之前就接受 TCP。只在 Compose 网络里可用的 Redis、AMQP、etcd 和应用 HTTP，应走该网络上的服务 DNS（常常再经 dest 所有的代理），不要把宿主 `localhost` 握手当成稳定探活。`startRecoveringRabbitMqBroker` 让应用在 connector setup 完成前拿到 Broker 再绑 HTTP；这是接纳，不是 health 端点，本包不提供 `/healthz`。

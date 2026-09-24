@@ -53,7 +53,7 @@ import {
   isError,
   newCompletedCallFailure
 } from "./cleanup"
-import { newDiscoveryResolver } from "./resolver"
+import { newDiscoveryResolver, type DiscoveryResolver } from "./resolver"
 
 const serviceHeaderLower = serviceHeader.toLowerCase()
 const endpointHeaderLower = endpointHeader.toLowerCase()
@@ -66,6 +66,8 @@ const callTransportStates = new WeakSet<object>()
 const typedResponseValidatorKey = Object.freeze({})
 const typedResponseValidators = new WeakSet<object>()
 const defaultClientOptions: ClientOptions = Object.freeze({
+  addresses: Object.freeze([]),
+  service: null,
   discovery: null,
   selector: null,
   transport: null,
@@ -77,12 +79,13 @@ const defaultClientOptions: ClientOptions = Object.freeze({
   poolTtlMs: 60_000
 })
 const defaultCallOptions: CallOptions = Object.freeze({
-  address: null,
   filters: Object.freeze([]),
   retry: null
 })
 
 interface ClientOptionsCandidate {
+  readonly addresses?: unknown
+  readonly service?: unknown
   readonly discovery?: unknown
   readonly selector?: unknown
   readonly transport?: unknown
@@ -94,8 +97,12 @@ interface ClientOptionsCandidate {
   readonly poolTtlMs?: unknown
 }
 
+interface DiscoverySource {
+  readonly resolver: DiscoveryResolver
+  readonly service: string
+}
+
 interface CallOptionsCandidate {
-  readonly address?: unknown
   readonly filters?: unknown
   readonly retry?: unknown
 }
@@ -222,6 +229,20 @@ function callText(value: unknown, field: string, nonEmpty: boolean): string {
     throw new TypeError(`${field} must be a${nonEmpty ? " non-empty" : ""} well-formed string`)
   }
   return value
+}
+
+/** Copies one duplicate-free address list without interpreting provider-specific bytes. */
+function snapshotAddresses(value: unknown, field: string): readonly string[] {
+  if (!Array.isArray(value)) throw new TypeError(`${field} must be an array`)
+  const captured: string[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    const address = callText(item, `${field} entry`, true)
+    if (seen.has(address)) throw new TypeError(`${field} must not contain duplicate addresses`)
+    seen.add(address)
+    captured.push(address)
+  }
+  return Object.freeze(captured)
 }
 
 /** Preserves Error identity and normalizes non-Error boundary failures with their cause. */
@@ -524,8 +545,6 @@ export interface Client {
 
 /** Captures the immutable routing and retry settings for one unary call. */
 export interface CallOptions {
-  /** Direct transport address, bypassing Discovery and Selector when present. */
-  readonly address: string | null
   /** Ordered go-micro-style filters applied before endpoint selection. */
   readonly filters: readonly Filter[]
   /** Explicit replay authorization and retry policy, or null for exactly one attempt. */
@@ -546,6 +565,8 @@ export type ClientMiddleware = Middleware<CallRequest, Promise<Message>, readonl
 
 /** Captures the immutable construction settings used by one Client. */
 export interface ClientOptions {
+  readonly addresses: readonly string[]
+  readonly service: string | null
   readonly discovery: Discovery | null
   readonly selector: Selector | null
   readonly transport: Transport | null
@@ -645,6 +666,9 @@ function snapshotClientOptions(value: unknown): ClientOptions {
   ) {
     throw new TypeError("Client options must contain middleware collections")
   }
+  const addresses = snapshotAddresses(value.addresses, "ClientOptions.addresses")
+  const service =
+    value.service === null ? null : callText(value.service, "ClientOptions.service", true)
   if (value.discovery !== null && !isDiscovery(value.discovery)) {
     throw new TypeError("Client discovery option must implement Discovery")
   }
@@ -675,6 +699,8 @@ function snapshotClientOptions(value: unknown): ClientOptions {
     operationMiddleware.set(operationSelector(selector), Object.freeze(selected))
   }
   return Object.freeze({
+    addresses,
+    service,
     discovery: value.discovery,
     selector: value.selector,
     transport: value.transport,
@@ -687,11 +713,52 @@ function snapshotClientOptions(value: unknown): ClientOptions {
   })
 }
 
+/** Configures immutable direct transport addresses for every future call. */
+export function withAddress(...addresses: readonly string[]): ClientOption {
+  if (addresses.length === 0) throw new TypeError("withAddress requires at least one address")
+  const captured = snapshotAddresses(addresses, "withAddress addresses")
+  return (options) =>
+    snapshotClientOptions({
+      addresses: captured,
+      service: options.service,
+      discovery: options.discovery,
+      selector: options.selector,
+      transport: options.transport,
+      block: options.block,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      closeTimeoutMs: options.closeTimeoutMs,
+      poolSize: options.poolSize,
+      poolTtlMs: options.poolTtlMs
+    })
+}
+
+/** Configures the Discovery service identity for every future call. */
+export function withService(value: string): ClientOption {
+  const captured = callText(value, "withService value", true)
+  return (options) =>
+    snapshotClientOptions({
+      addresses: options.addresses,
+      service: captured,
+      discovery: options.discovery,
+      selector: options.selector,
+      transport: options.transport,
+      block: options.block,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      closeTimeoutMs: options.closeTimeoutMs,
+      poolSize: options.poolSize,
+      poolTtlMs: options.poolTtlMs
+    })
+}
+
 /** Configures the service Discovery used by future calls. */
 export function withDiscovery(value: Discovery): ClientOption {
   if (!isDiscovery(value)) throw new TypeError("discovery must implement Discovery")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: value,
       selector: options.selector,
       transport: options.transport,
@@ -708,6 +775,8 @@ export function withDiscovery(value: Discovery): ClientOption {
 export function withBlock(): ClientOption {
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -725,6 +794,8 @@ export function withSelector(value: Selector): ClientOption {
   if (!isSelector(value)) throw new TypeError("selector must implement Selector")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: value,
       transport: options.transport,
@@ -742,6 +813,8 @@ export function withTransport(value: Transport): ClientOption {
   if (!isTransport(value)) throw new TypeError("transport must implement Transport")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: value,
@@ -759,6 +832,8 @@ export function middleware(value: ClientMiddleware): ClientOption {
   if (typeof value !== "function") throw new TypeError("Client middleware must be a function")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -788,6 +863,8 @@ export function use(
     const operationMiddleware = new Map(options.operationMiddleware)
     operationMiddleware.set(operation, Object.freeze(selected))
     return snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -855,6 +932,8 @@ export function closeTimeout(timeoutMs: number): ClientOption {
   const captured = timeoutInteger(timeoutMs, "closeTimeout")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -872,6 +951,8 @@ export function poolSize(maxIdle: number): ClientOption {
   const captured = timeoutInteger(maxIdle, "poolSize")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -889,6 +970,8 @@ export function poolTtl(milliseconds: number): ClientOption {
   const captured = timeoutInteger(milliseconds, "poolTtl")
   return (options) =>
     snapshotClientOptions({
+      addresses: options.addresses,
+      service: options.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -984,21 +1067,9 @@ function snapshotCallOptions(value: unknown): CallOptions {
     throw new TypeError("Call options must be an object")
   }
   return Object.freeze({
-    address: value.address === null ? null : callText(value.address, "CallOptions.address", true),
     filters: snapshotFilters(value.filters),
     retry: snapshotCallRetry(value.retry)
   })
-}
-
-/** Uses one direct transport address instead of Discovery and Selector for a call. */
-export function withAddress(value: string): CallOption {
-  const captured = callText(value, "withAddress value", true)
-  return (options) =>
-    snapshotCallOptions({
-      address: captured,
-      filters: options.filters,
-      retry: options.retry
-    })
 }
 
 /** Appends go-micro-style Registry filters in declaration order. */
@@ -1010,7 +1081,6 @@ export function withFilter(...values: readonly Filter[]): CallOption {
   }
   return (options) =>
     snapshotCallOptions({
-      address: options.address,
       filters: options.filters.concat(captured),
       retry: options.retry
     })
@@ -1021,7 +1091,6 @@ export function withRetry(options: CallRetryOptions): CallOption {
   const captured = snapshotCallRetry(options)
   return (current) =>
     snapshotCallOptions({
-      address: current.address,
       filters: current.filters,
       retry: captured
     })
@@ -1052,6 +1121,22 @@ function filteredInstances(
   return filtered
 }
 
+/** Creates the one immutable direct-address snapshot consumed by the shared Selector path. */
+function directInstances(
+  service: string,
+  addresses: readonly string[]
+): readonly ServiceInstance[] {
+  return Object.freeze([
+    Object.freeze({
+      id: "",
+      name: service,
+      version: "",
+      metadata: Object.freeze({}),
+      endpoints: addresses
+    })
+  ])
+}
+
 /** Classifies one caller-visible primary error for selector health feedback. */
 function selectionError(ctx: Context, primary: Error | null): Error | null {
   if (primary === null) return null
@@ -1063,14 +1148,12 @@ function selectionError(ctx: Context, primary: Error | null): Error | null {
 
 /** Creates one lightweight unary Client from one already resolved option snapshot. */
 function createClient(
-  discovery: Discovery | null,
-  selector: Selector | null,
+  source: DiscoverySource | null,
+  selector: Selector,
   transport: Transport,
   config: ClientOptions
 ): Client {
-  const resolver = discovery === null ? null : newDiscoveryResolver(discovery)
-  const getService = resolver?.getService ?? null
-  const select = selector?.select ?? null
+  const select = selector.select
   const dial = transport.dial
   const kind = transportKind(transport)
   const closedError = new Error("client is closed")
@@ -1273,7 +1356,7 @@ function createClient(
     return selected
   }
 
-  /** Performs one selected or direct dial-send-recv attempt with exact cleanup ownership. */
+  /** Performs one selected dial-send-recv attempt with exact cleanup ownership. */
   async function attempt(
     ctx: Context,
     service: string,
@@ -1289,21 +1372,13 @@ function createClient(
     let bytesReceived = false
     let replyMetadata: Metadata | null = null
     try {
-      let address: string
-      if (options.address === null) {
-        if (discovery === null || selector === null || getService === null || select === null) {
-          throw new TypeError("client call without a direct address requires discovery")
-        }
-        const instances = filteredInstances(
-          await getService.call(resolver, ctx, service, config.block === true),
-          options.filters
-        )
-        const selection = snapshotSelection(select.call(selector, ctx, instances))
-        complete = selection[1]
-        address = selection[0]
-      } else {
-        address = options.address
-      }
+      let snapshot: readonly ServiceInstance[]
+      if (source === null) snapshot = directInstances(service, config.addresses)
+      else snapshot = await source.resolver.getService(ctx, source.service, config.block === true)
+      const instances = filteredInstances(snapshot, options.filters)
+      const selection = snapshotSelection(select.call(selector, ctx, instances))
+      complete = selection[1]
+      const address = selection[0]
       let attemptContext = ctx
       let projected = callTransportState(ctx)
       if (projected === null) {
@@ -1519,7 +1594,7 @@ function createClient(
   function beginClientClose(): Promise<void> {
     if (clientClosing !== null) return clientClosing
     const operations: Promise<void>[] = [beginTransportClose()]
-    if (resolver !== null) operations.push(resolver.close(background()))
+    if (source !== null) operations.push(source.resolver.close(background()))
     clientClosing = (async function drainClientOwners(): Promise<void> {
       const settled = await Promise.allSettled(operations)
       const failures: unknown[] = []
@@ -1545,9 +1620,27 @@ function createClient(
 export function newClient(...options: readonly ClientOption[]): Client {
   const resolved = clientOptions(options)
   if (resolved.transport === null) throw new TypeError("newClient requires a transport option")
-  const selector =
-    resolved.discovery !== null && resolved.selector === null
-      ? newRoundRobinSelector()
-      : resolved.selector
-  return createClient(resolved.discovery, selector, resolved.transport, resolved)
+  if (resolved.addresses.length > 0 && resolved.discovery !== null) {
+    throw new TypeError("newClient cannot combine direct addresses with discovery")
+  }
+  let source: DiscoverySource | null
+  if (resolved.discovery !== null) {
+    if (resolved.service === null) {
+      throw new TypeError("newClient discovery requires a service option")
+    }
+    source = {
+      resolver: newDiscoveryResolver(resolved.discovery),
+      service: resolved.service
+    }
+  } else {
+    if (resolved.service !== null) {
+      throw new TypeError("newClient service option requires discovery")
+    }
+    if (resolved.addresses.length === 0) {
+      throw new TypeError("newClient requires direct addresses or discovery")
+    }
+    source = null
+  }
+  const selector = resolved.selector ?? newRoundRobinSelector()
+  return createClient(source, selector, resolved.transport, resolved)
 }

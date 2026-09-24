@@ -26,7 +26,8 @@ Pino、Winston、OpenTelemetry 等官方 API；go-like 只定义公共契约、�
 - 可移植入口只依赖 ECMAScript 与标准 Web API，并在 Bun、Node.js、Deno 后端运行时验证。
 - runtime 或供应商能力通过独立入口隔离；应用拥有第三方库的数据面，go-like 只接管明确移交的生命周期。
 - 外部 HTTP 应用属于 `@go-like/web`；内部微服务同步通信属于 `@go-like/transport` 及其实现。
-- gRPC、Protobuf、IDL 代码生成和全双工 HTTP stream 不属于 v1。
+- Buf/Protobuf RPC 位于独立的生成与 runtime 边界；portable Fetch 只覆盖 unary 和 server-streaming，
+  `@go-like/transport-grpc-buf/native` 提供托管的标准 gRPC client/server。
 
 ## 包结构
 
@@ -59,6 +60,7 @@ packages/
     zookeeper/             @go-like/registry-zookeeper
   resilience/              @go-like/resilience
   server/                  @go-like/server
+  struct/                  @go-like/struct
   store/                   @go-like/store
     consul/                @go-like/store-consul
     etcd/                  @go-like/store-etcd
@@ -66,6 +68,7 @@ packages/
     memory/                @go-like/store-memory
     vault/                 @go-like/store-vault
   transport/               @go-like/transport
+    grpc-buf/              @go-like/transport-grpc-buf
     http/                  @go-like/transport-http
     memory/                @go-like/transport-memory
   web/                     @go-like/web
@@ -76,6 +79,7 @@ packages/
   winston/                 @go-like/winston
   otel/                    @go-like/otel
   prometheus/              @go-like/prometheus
+  protoc-gen-like/         @go-like/protoc-gen-like
 ```
 
 `@go-like/config/env`、`@go-like/config/file`、`@go-like/config/node` 与 `@go-like/config/yaml` 是配置子路径；
@@ -132,8 +136,8 @@ H3 2.x 直接提供 `app.fetch`，H3 1.x 使用官方 `toWebHandler(app)`；应�
 `@go-like/transport` 定义与 go-micro 同角色的公共 `Transport`、`Client`、`Listener`、`Socket`、`Message`、
 `TransportInfo` 和 options。`TransportInfo` 通过独立的 client/server Context 域暴露 kind、endpoint、operation
 及请求/响应 metadata。`endpoint(...)` 可在同一 Message 边界上声明类型化 unary contract；
-request/response `Struct` 是唯一契约，`@go-like/transport/json` 统一完成 UTF-8 JSON 编解码与 Struct 校验，
-不引入 IDL 或生成代码。
+在这条 unary Message 边界上，request/response `Struct` 是唯一契约，`@go-like/transport/json` 统一完成
+UTF-8 JSON 编解码与 Struct 校验，不引入 IDL 或生成代码。
 canonical `service/endpoint` 的两段 route token 只能使用 U+0021–U+007E 可见 ASCII，并且禁止 `/`、`*`，
 以保证 Client、Server 和 operation middleware 不会把不同路由折叠为同一个名称。
 当前提供两个明确 provider：
@@ -147,8 +151,8 @@ HTTP provider 的主要入口如下：
 - `newHTTPTransport().dial(...)` 创建基于标准 Fetch 的 unary client；
 - `@go-like/transport-http/node` 的 `newNodeHTTPTransport()` 同时提供 Node listener 与原生 client；Client
   支持 CA/mTLS/SNI，并通过 ALPN 优先使用 HTTP/2、回退 HTTP/1.1；
-- `@go-like/server` 的 `newServer(transport(...), handler(service, endpoint, fn))` 把 Transport listener、
-  内部路由和 Core `Server` 生命周期组合起来；
+- `@go-like/server` 的 `newServer(transport(...))` 把 Transport listener、内部路由和 Core `Server`
+  生命周期组合起来；命名 service 使用 `registerXHandler(server, handler)` 在启动前注册；
 - 直接使用底层 Transport 时，`listener.accept(...)` 承接内部 `Message` request/response。
 
 ```ts
@@ -168,6 +172,56 @@ await client.close(ctx)
 
 `@go-like/transport` 只描述内部服务通信，不承接外部 Web Handler。标准 `Request` / `Response` 的外部 HTTP
 接入始终归 `@go-like/web`；两条边界不通过名称相似的 Fetch transport 混在一起。
+
+## Buf / Connect generated RPC
+
+`@go-like/protoc-gen-like` 是 project-local Node 22+ build-time generator；`@go-like/transport-grpc-buf`
+集成上游 Protobuf-ES 与 Connect-ES。go-like 只生成 ctx-first Handler/Client glue，并提供 portable Fetch
+入口与 `/native` 的托管 owner，不重写 message codec、routing、framing、stream state machine 或 HTTP/2。
+
+生成 Handler 的 unary/server-streaming 请求是解码后的 `MessageShape`，client-streaming/bidi 请求是
+`AsyncIterable<MessageShape<...>>`；响应接受 `MessageInitShape`，其中 unary 允许直接值或 `Promise`，
+client-streaming 返回原生 `Promise<MessageInitShape<...>>`，server-streaming/bidi 返回
+`AsyncIterable<MessageInitShape<...>>`。生成 Client 的 unary/server-streaming 请求接受
+`MessageInitShape`，client-streaming/bidi 请求接受 `AsyncIterable<MessageInitShape<...>>`；解码响应是
+`MessageShape`，其中 unary/client-streaming 返回 `Promise`，server-streaming/bidi 返回 `AsyncIterable`。
+生成的 service API 统一使用 `registerXHandler(server, handler)` 和 `newXClient(client)`；Client glue 借用
+调用方传入的 Connect transport，不替调用方决定或关闭 owner。
+
+portable Fetch 入口：
+
+```ts
+import { newHandler } from "@go-like/transport-grpc-buf"
+
+const handler = newHandler((server) => {
+  registerOrderServiceHandler(server, orderService)
+})
+```
+
+该入口在 Node、Bun、Deno 的进程内 Fetch bridge 测试中覆盖 Connect/gRPC-Web unary 与 server-streaming
+协议往返；这不证明真实 HTTP 取消传播。Fetch request-streaming/bidi 会明确拒绝，浏览器不宣称标准 gRPC。
+托管的后端标准 gRPC 使用 capability subpath：
+
+```ts
+import { newClient, withAddress } from "@go-like/transport-grpc-buf/native"
+
+const client = newClient(withAddress("https://orders.internal"))
+const orders = newOrderServiceClient(client)
+const order = await orders.getOrder(ctx, { id: "order-1" })
+await client.close(ctx)
+```
+
+`/native` 的标准 gRPC unary、server-streaming、client-streaming、bidi 的既有物理发布包记录包含 Node 26.7.0、
+Bun 1.4.0、Deno 2.9.5；Node 是 Connect-ES 上游支持的 runtime，Bun/Deno 由 LikeGo 兼容性 lane 记录实际
+执行结果，版本记录不构成固定版本门禁。生成器由 npm、pnpm 或 Yarn package script 调用项目本地 binary，
+不要求 consumer 安装 Bun。
+新增故障回归确认 Deno 2.9.5/2.9.7 在服务停止与慢消费并存时可能提前断流，完整 published matrix 仍在此失败；
+Node 26.9.0/Bun 1.4.2 通过同一场景。另已用纯 HTTP 复现 Bun 1.4.2 Fetch 对静默响应流的取消未及时传播到远端；
+纯上游 Connect 2.1.2 在 Node/Bun 上也可因消费者取消后停止读取而保留 deadline timer 至原 deadline，延迟自然退出。
+当前 Connect 依赖未修补；基础调用通过不等于这些清理场景通过。详见
+[gRPC runtime 与依赖限制](packages/transport/grpc-buf/README.md)。
+当前仍不包含 health、reflection、validation、canonical error-details mapping、Google gRPC runtime 或任何
+Buf online service。
 
 ## Registry 与配置中心
 
@@ -200,11 +254,11 @@ Selector 提供 round-robin、random、显式权重 round-robin、带 in-flight/
   `scan(ctx, schema)`、`value(key)`、`watch(key, observer)` 与 `close(ctx)`，不是 Core `Server`。resolver 在
   source 合并后、schema 与发布前按声明顺序运行；`placeholderResolver()` 只解析当前快照中的显式
   `${dotted.key}` 引用，不读取 ambient env。应用通过 `beforeStart` 加载，通过 `afterStop` 关闭。
-  TypeScript 没有 Go 目标对象反射，因此校验和转换使用 Standard Schema。`onReloadError` 只补足
-  `load(ctx)` 返回后 watcher 失败的异步错误通道。
+  TypeScript 没有 Go 目标对象反射，因此校验和转换使用 Standard Schema。`onReloadError` 观察可恢复的重载失败；
+  `onTerminalError` 才通知初始加载成功后不可恢复的 watcher 终态，并由 `close(ctx)` 加入资源清理。
 - 环境值、文件、YAML、Consul、etcd、Kubernetes ConfigMap/Secret 与 Vault KV v2 都通过显式 Config source
   组合。
-  `@go-like/config-vault` 使用 metadata version 与真实轮询 watcher；`@go-like/config/node` 提供真实 Node
+  `@go-like/config-vault` 使用 metadata version 与 created_time 共同组成 generation revision，并由真实 watcher 轮询；`@go-like/config/node` 提供真实 Node
   文件读取、内容哈希 revision 和可跨原子替换继续工作的 parent-directory watcher；portable `./file` 入口
   不直接导入 `node:` builtin。
 - `@go-like/store` 定义 Context-first `read/write/delete/list`、CAS、TTL、prefix 与稳定分页。
@@ -246,9 +300,10 @@ idle pool 默认全 Client 最多 100 个 owner、60,000ms 过期；`poolSize(..
 可调整边界，其中 `poolSize(0)` 禁用 idle reuse，`poolTtl(0)` 只禁用时间过期。
 `client.close(ctx)` 关闭空闲、活跃和迟到连接。
 
-`newClient(...)` 至少使用 `withTransport(...)`；需要服务发现时再组合 `withDiscovery(...)` 与
-`withSelector(...)`。每次调用可用 `withAddress(...)` 绕过 Discovery/Selector，或用
-`withFilter(filterVersion(...), filterLabel(...))` 过滤实例。
+`newClient(...)` 在构造时选择一个地址来源：`withAddress(...addresses)` 直连，或
+`withService(service)` / `withDiscovery(discovery)` 使用服务发现。两种来源都进入同一个 `Selector`；
+`withSelector(...)` 只覆盖默认 round robin。调用期只保留 `withFilter(...)`、`withRetry(...)` 等行为 option，
+不能临时覆盖地址或 service。
 只有显式传入 `withRetry(...)` 才允许重放请求。`closeTimeout(...)` 只限制逻辑 Transport Client 的关闭等待，
 不冒充业务超时。`circuitBreakerMiddleware(...)` 按 canonical `service/endpoint` 隔离 breaker，并把显式 retry
 的多个 attempt 作为一个逻辑 outcome；open operation 在 Discovery 和 Transport I/O 前拒绝。
@@ -257,13 +312,14 @@ idle pool 默认全 Client 最多 100 个 owner、60,000ms 过期；`poolSize(..
 两种调用的 `service`/`endpoint` 都使用同一 route-token 约束：只能使用 U+0021–U+007E 可见 ASCII，
 并且禁止 `/`、`*`。
 
-`@go-like/server` 提供 go-micro 风格的内部 unary Server：用 `transport(...)` 选择底层传输，
-`handler("service", "endpoint", fn)` 以分离身份注册原始 Message 路由，也可用 `handler(contract, fn)` 注册共享
-类型化 contract；`listenOption(...)` 原样传递 provider 的 Transport
-listen option。`middleware(...)` 安装全局链，`use(selector, ...middleware)` 按精确 operation、最长尾部
+`@go-like/server` 提供 go-micro 风格的内部 unary Server：先用 `transport(...)` 选择底层传输，再通过命名
+`registerXHandler(server, handler)` 或 `server.registerHandler(...)` 在启动前注册 raw/typed route；
+`listenOption(...)` 原样传递 provider 的 Transport listen option。`middleware(...)` 安装全局链，
+`use(selector, ...middleware)` 按精确 operation、最长尾部
 `*` 前缀和全局 `*` fallback 选择一条 operation 链；同 selector 后声明覆盖，空链可屏蔽宽规则。
 `rateLimitMiddleware(limiter)` 的一个实例共享一个 limiter；需要 operation 隔离时，用 `use(...)` 为不同规则
 组合独立 limiter。
+第一次 `endpoint(ctx)` 或 `start(ctx)` 会 seal handler 注册并在 listener I/O 前拒绝空、重复或 late registration。
 `newServer(...)` 创建同时实现 Core `Server` 与 `Endpointer` 的实例；`endpoint(ctx)` 与启动共享同一次 bind，
 返回注册端点。`address(...)` 只配置监听地址；wildcard bind、容器端口映射或 Ingress 场景必须通过
 `advertise(...)` 显式给出可达 host 或完整端点，host-only 值保留真实绑定端口。应用需要自动注册时，把
@@ -284,15 +340,15 @@ interface Server {
 因此 Cron、Web framework、broker consumer、日志 sink、telemetry provider、cache warmer 或业务 control loop
 都不需要进入 Core。应用可以自行实现 Server，也可以使用以下薄适配包：
 
-| 包                    | 生命周期职责                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| `@go-like/croner`     | 原生 Croner `Cron` 的启动、停止和可观察终态；表达式、timezone、overlap 仍归 Croner。              |
-| `@go-like/bullmq`     | 应用创建的原生 Worker 启动、暂停、取消、关闭与终态；Queue、connection、processor 仍归应用。       |
-| `@go-like/nats`       | 原生 NATS Subscription 与 JetStream ConsumerMessages 的接纳回滚、owner stop、被动退出和真实终态。 |
-| `@go-like/pino`       | Pino destination 生命周期，以及 Client、unary Server、Web、Broker 的显式请求日志包装。            |
-| `@go-like/winston`    | Winston Logger 生命周期，以及 Client、unary Server、Web、Broker 的显式请求日志包装。              |
-| `@go-like/otel`       | 应用配置的 provider shutdown，以及 Client、unary Server、Broker 的显式 W3C trace wrapper。        |
-| `@go-like/prometheus` | prom-client scrape Handler，以及 Client、unary Server、Web、Broker 的固定低基数请求指标。         |
+| 包                    | 生命周期职责                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `@go-like/croner`     | 原生 Croner `Cron` 的启动与停止；无法观察被动终态或保证活动回调排空。表达式、timezone、overlap 仍归 Croner。 |
+| `@go-like/bullmq`     | 应用创建的原生 Worker 启动、暂停、取消、关闭与终态；Queue、connection、processor 仍归应用。                  |
+| `@go-like/nats`       | 原生 NATS Subscription 与 JetStream ConsumerMessages 的接纳回滚、owner stop、被动退出和真实终态。            |
+| `@go-like/pino`       | Pino destination 生命周期，以及 Client、unary Server、Web、Broker 的显式请求日志包装。                       |
+| `@go-like/winston`    | Winston Logger 生命周期，以及 Client、unary Server、Web、Broker 的显式请求日志包装。                         |
+| `@go-like/otel`       | 应用配置的 provider shutdown，以及 Client、unary Server、Web、Broker 的显式 W3C trace wrapper。              |
+| `@go-like/prometheus` | prom-client scrape Handler，以及 Client、unary Server、Web、Broker 的固定低基数请求指标。                    |
 
 同一原生资源只能有一个生命周期 owner。`Server.start(ctx)` 可以在启动接纳后返回，也可以持续到运行期结束；
 go-like Core 接受两种上游常见实现。`Server.stop(ctx)` 请求停止；缺少可靠 force 原语时，适配器必须等待真实终态，
@@ -328,10 +384,11 @@ SIGTERM 接入同一个 `app.run()` 生命周期；portable Core 不读取进程
 每个发布包在自身目录由 `tsdown` 生成 ESM、DTS、包级 README/LICENSE 和最小 `dist/package.json`；工作区依赖
 保持 external，不生成 min bundle。根 `build` 使用 Bun workspace 顺序调用各发布包的 `build`。
 
-仓库的标准门禁是 `bun run verify`，它依次执行 `fmt:check`、`lint:check`、`typecheck`、`build` 和
+仓库的标准门禁是 `bun run verify`，它依次执行 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、`build` 和
 `test:unit:coverage`；覆盖率阶段会执行一次 root 与 workspace 的 coverage 脚本，最后由 `coverage:verify`
 强制校验覆盖率契约，不再先把同一批测试无覆盖率地重复执行一遍。`examples/payments-ledger` 是唯一例外：它的
-coverage 脚本还会运行真实 PostgreSQL/NATS 集成场景，因此完整门禁需要 Docker。
+coverage 脚本还会运行真实 PostgreSQL/NATS 集成场景，因此完整门禁需要 Docker。`test:protobuf` 会执行本地
+Buf lint/generate、生成代码 typecheck 和集成测试，其中包含生成器构建与 fixture 产物写入。
 
 测试只分两类：
 
@@ -367,7 +424,8 @@ bun run test:e2e:soak
 
 `fmt` 会修复格式；`lint` 会应用安全的 Oxlint 修复、重新格式化，并在仍有 warning 时失败。只有缩小门禁失败范围时才单独运行
 `fmt:check`、`lint:check` 等只读阶段，其中 `lint:check` 同样要求零 warning。单个阶段通过不能替代完整 `bun run verify`。Hosted Verify 在 frozen install 后执行同一个标准门禁，包含格式、lint、类型、构建，以及带覆盖率强制校验的完整 unit suite；不会用托管
-CI 冒充依赖 Docker、跨运行时或长时间运行的 E2E。`test:stability` 用于发现测试顺序依赖与偶发失败，不能替代验证 60 分钟运行行为的 `test:e2e:soak`。`audit` 与 VitePress 的 `doc:build` 是独立工程命令，不属于测试类型。
+CI 冒充完整 provider、跨运行时或长时间运行的 E2E lanes；但上述 payments-ledger coverage 确实会在该门禁中启动
+Docker PostgreSQL/NATS，不能把 Hosted Verify 描述为完全不运行 Docker。`test:stability` 用于发现测试顺序依赖与偶发失败，不能替代验证 60 分钟运行行为的 `test:e2e:soak`。`audit` 与 VitePress 的 `doc:build` 是独立工程命令，不属于测试类型。
 
 公共包当前均为 `0.0.1`，尚未发布到 npm。仓库当前不提供自动版本或 npm 发布流程；首次公开发布应作为独立变更
 选择并验证与实际发布策略匹配的版本和发布机制。

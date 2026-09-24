@@ -1,4 +1,11 @@
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withAddress,
+  withTransport,
+  type CallOption,
+  type CallRequest,
+  type Client
+} from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, spyOn, test } from "bun:test"
@@ -8,7 +15,11 @@ import {
   newCancelAppointment,
   newMemoryAppointmentRepository
 } from "../src/service"
-import { newAppointmentPolicyService, newValidatedBookAppointment } from "../src/transport"
+import {
+  newAppointmentPolicyClient,
+  newAppointmentPolicyService,
+  newValidatedBookAppointment
+} from "../src/transport"
 
 describe("healthcare appointments", () => {
   test("rejects overlapping active slots for the same doctor", () => {
@@ -167,6 +178,45 @@ describe("healthcare appointments", () => {
     )
   })
 
+  test("creates a typed appointment-policy client that preserves codec, options and errors", async () => {
+    const ctx = background()
+    const command = Object.freeze({
+      appointmentId: "client-policy",
+      doctorId: "doctor-1",
+      patientId: "patient-1",
+      startsAt: 2_000,
+      endsAt: 3_000
+    })
+    const option: CallOption = (options) => options
+    const failure = new Error("appointment policy unavailable")
+    let rejected = false
+    let observed: readonly unknown[] = Object.freeze([])
+    const client = Object.freeze({
+      async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
+        observed = [ctxValue, request, ...options]
+        if (rejected) throw failure
+        return {
+          header: Object.freeze({ "content-type": "application/json" }),
+          body: new TextEncoder().encode('{"allowed":true}')
+        }
+      },
+      async close(): Promise<void> {}
+    }) as unknown as Client
+    const { validate } = newAppointmentPolicyClient(client)
+
+    await validate(ctx, command, option)
+    expect(observed[0]).toBe(ctx)
+    expect(observed[1]).toMatchObject({
+      service: "appointment-policy",
+      endpoint: "AppointmentPolicy.Check"
+    })
+    const request = observed[1] as CallRequest
+    expect(JSON.parse(new TextDecoder().decode(request.message.body))).toEqual(command)
+    expect(observed.slice(2)).toEqual([option])
+    rejected = true
+    await expect(validate(ctx, command)).rejects.toBe(failure)
+  })
+
   test("rejects malformed policy messages over the public client and server transport", async () => {
     const policy = newAppointmentPolicyService()
     const app = newApp(name("healthcare-appointments-policy-boundary-test"), server(policy.server))
@@ -174,27 +224,26 @@ describe("healthcare appointments", () => {
     await policy.server.endpoint(background())
     const transport = policy.server.options().transport
     if (transport === null) throw new Error("policy server did not retain its transport")
-    const client = newClient(withTransport(transport))
+    const rawClient = newClient(
+      withTransport(transport),
+      withAddress("memory://appointment-policy")
+    )
     const call = (body: string) =>
-      client.call(
-        background(),
-        {
-          service: "appointment-policy",
-          endpoint: "AppointmentPolicy.Check",
-          message: {
-            header: Object.freeze({ "content-type": "application/json" }),
-            body: new TextEncoder().encode(body)
-          }
-        },
-        withAddress("memory://appointment-policy")
-      )
+      rawClient.call(background(), {
+        service: "appointment-policy",
+        endpoint: "AppointmentPolicy.Check",
+        message: {
+          header: Object.freeze({ "content-type": "application/json" }),
+          body: new TextEncoder().encode(body)
+        }
+      })
     try {
       await expect(call("null")).rejects.toThrow("internal service error")
       await expect(call(JSON.stringify({ appointmentId: "only-id" }))).rejects.toThrow(
         "internal service error"
       )
     } finally {
-      await client.close(background())
+      await rawClient.close(background())
       await app.stop()
       await running
     }

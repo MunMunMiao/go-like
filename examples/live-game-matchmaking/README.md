@@ -33,7 +33,7 @@ bun run --filter @go-like/example-live-game-matchmaking typecheck
 bun run --filter @go-like/example-live-game-matchmaking test:unit
 ```
 
-默认模式无需 Docker。真实 Kubernetes 注册模式还需要 `KUBERNETES_NAMESPACE`、可选
+默认模式无需 Docker。真实 Kubernetes 注册模式可通过 `KUBERNETES_NAMESPACE` 指定 namespace（默认 `default`），并设置可选
 `KUBERNETES_TOKEN`，以及对 EndpointSlice 的最小 RBAC；API 不可用或无权限时启动会失败，不会返回假成功。
 生产系统仍应由真实 Discovery 快照替换静态游戏服节点，并迁移进程内等待队列。
 
