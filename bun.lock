@@ -95,7 +95,7 @@
         "@go-like/transport": "workspace:*",
         "@go-like/transport-http": "workspace:*",
         "@go-like/web": "workspace:*",
-        "hono": "4.13.5",
+        "hono": "4.13.7",
       },
       "devDependencies": {
         "@go-like/cache-memory": "workspace:*",
@@ -261,7 +261,7 @@
         "@go-like/context": "workspace:*",
         "@go-like/core": "workspace:*",
         "@go-like/web": "workspace:*",
-        "hono": "4.13.5",
+        "hono": "4.13.7",
       },
       "devDependencies": {
         "@types/node": "26.4.0",
@@ -458,7 +458,7 @@
         "@go-like/resilience": "workspace:*",
         "@go-like/store-consul": "workspace:*",
         "@go-like/web": "workspace:*",
-        "hono": "4.13.5",
+        "hono": "4.13.7",
         "pino": "10.3.1",
       },
       "devDependencies": {
@@ -1833,7 +1833,7 @@
 
     "hast-util-whitespace": ["hast-util-whitespace@3.0.0", "", { "dependencies": { "@types/hast": "^3.0.0" } }, "sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw=="],
 
-    "hono": ["hono@4.13.5", "", {}, "sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw=="],
+    "hono": ["hono@4.13.7", "", {}, "sha512-c8/gF9ac8Y78/agExVocyLevgR+JlpNB444Py0FSX8pJoPdYUfUzRcXtYEYGwt6l19qIlVZPN5Mfsw9jFShmQQ=="],
 
     "hookable": ["hookable@6.1.1", "", {}, "sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ=="],
 
