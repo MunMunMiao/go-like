@@ -439,11 +439,6 @@ async function command(
   return result.stdout.trim()
 }
 
-function opensslDate(value: Date): string {
-  const component = (number: number): string => String(number).padStart(2, "0")
-  return `${value.getUTCFullYear()}${component(value.getUTCMonth() + 1)}${component(value.getUTCDate())}${component(value.getUTCHours())}${component(value.getUTCMinutes())}${component(value.getUTCSeconds())}Z`
-}
-
 function certificateSpki(certificate: X509Certificate): string {
   return createHash("sha256")
     .update(certificate.publicKey.export({ format: "der", type: "spki" }))
@@ -549,9 +544,6 @@ export async function createPublishedMtlsFixture(
     { encoding: "utf8", flag: "wx", mode: 0o600 }
   )
 
-  const now = Date.now()
-  const notBefore = opensslDate(new Date(now - 5 * 60_000))
-  const notAfter = opensslDate(new Date(now + 24 * 60 * 60_000))
   await generateKey(paths.serverKey)
   await openssl(
     "req",
@@ -575,10 +567,8 @@ export async function createPublishedMtlsFixture(
     paths.trustedCaKey,
     "-set_serial",
     "0x1001",
-    "-not_before",
-    notBefore,
-    "-not_after",
-    notAfter,
+    "-days",
+    "1",
     "-sha256",
     "-extfile",
     serverExtensions,
@@ -615,10 +605,8 @@ export async function createPublishedMtlsFixture(
       caKey,
       "-set_serial",
       "0x2001",
-      "-not_before",
-      notBefore,
-      "-not_after",
-      notAfter,
+      "-days",
+      "1",
       "-sha256",
       "-extfile",
       clientExtensions,
