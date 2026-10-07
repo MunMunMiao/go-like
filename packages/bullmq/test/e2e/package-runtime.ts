@@ -5,4 +5,4 @@ const expected = ["bullMqWorkerShutdownTimeout", "newBullMqWorkerServer"]
 if (JSON.stringify(exports) !== JSON.stringify(expected)) {
   throw new Error(`unexpected bullmq exports: ${exports.join(",")}`)
 }
-console.log("bullmq-package-runtime ok bullmq=6.0.6")
+console.log("bullmq-package-runtime ok")
