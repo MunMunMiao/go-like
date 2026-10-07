@@ -180,7 +180,7 @@ E2E 单独创建 Queue、启动 File Store 与 scheduler，再按场景启动 Wo
 | 组件             | 当前仓库真实 pin                                                                                                 | 用途                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | Redis            | `redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241`，E2E 回读为 8.10.0 | BullMQ queue、lock、retry 与 stalled 状态。 |
-| BullMQ           | `6.3.1`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
+| BullMQ           | `6.3.4`（默认 Redis adapter 使用 `ioredis` `6.0.0`）                                                             | Queue 与 Worker 原生数据面。                |
 | Croner           | `10.0.1`                                                                                                         | 定时调度。                                  |
 | go-like packages | workspace `0.0.1`                                                                                                | 生命周期与 checkpoint provider。            |
 

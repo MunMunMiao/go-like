@@ -29,7 +29,7 @@
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
     "@types/node": "26.4.0",
-    "bullmq": "6.3.1",
+    "bullmq": "6.3.4",
     "ioredis": "6.0.0"
   },
   "license": "MIT"
