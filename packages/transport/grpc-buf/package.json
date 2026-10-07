@@ -28,7 +28,7 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.14.0",
     "@connectrpc/connect": "2.1.2",
-    "@connectrpc/connect-node": "2.1.2",
+    "@connectrpc/connect-node": "2.2.0",
     "@go-like/client": "0.0.1",
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
