@@ -2,7 +2,7 @@
 
 هذا مسار إرشادي من 0 إلى 1 لمشروع صغير يتعلّم فيه القارئ go-like من خلال قاعدة عمل ملموسة، لا من خلال قائمة Todo عامة. يصف المشروع هدفاً ونقاط تحقق قابلة للتشغيل؛ ولا يدّعي أن شجرة الهدف موجودة بالفعل كتطبيق يمكن نسخه وتشغيله دفعة واحدة. المشروع خدمة لحجز مواعيد عيادة، فيها خدمة سياسة داخل العملية، ومستودع مرجعي للمواعيد، وCache مؤقت للتوافر، ونقاط Health، ودورة حياة واحدة صريحة للتطبيق.
 
-يحتوي المستودع بالفعل على `examples/healthcare-appointments`، وهو تنفيذ البداية لهذا الدليل. تستخدم شيفرته الحالية معالجة `Message` بصيغة JSON الخام لخدمة السياسة. أما نسخة `Endpoint` و`Struct` typed أدناه فهي مسار ترقية موثّق مبني على exports العامة الحالية؛ ولم تُضف إلى المثال أثناء مرحلة التوثيق هذه. حافظ على هذا الفرق عند تسجيل نتائج التحقق.
+يحتوي المستودع بالفعل على `examples/healthcare-appointments`، وهو تنفيذ البداية لهذا الدليل. تستخدم خدمة السياسة `defineService("appointment-policy.v1")` مع endpoint `check` و`withEndpoint("memory://appointment-policy.v1")` و`serviceError(..., 409)`. والمقاطع أدناه تطابق هذا المثال.
 
 ## القاعدة الثابتة
 
@@ -44,7 +44,7 @@ examples/healthcare-appointments/
 |-- README.md
 |-- src/
 |   |-- service.ts
-|   |-- transport.ts      # current raw JSON policy boundary
+|   |-- transport.ts      # defineService appointment-policy.v1
 |   |-- http.ts
 |   `-- main.ts
 `-- test/main.test.ts
@@ -175,15 +175,15 @@ test("rejects an overlapping active slot", () => {
 
 ## M1: خدمة سياسة داخلية typed
 
-يستخدم العقد الداخلي typed `@go-like/struct` و`@go-like/transport`. هذا تحقق وقت التشغيل على حدّ Message أحادي، وليس IDL ولا خدمة RPC مولّدة.
+يستخدم العقد الداخلي typed `@go-like/struct` و`defineService` من `@go-like/transport`. هذا تحقق Struct وقت التشغيل على جسم JSON لـ Fetch، وليس IDL ولا خدمة Protobuf مولّدة.
 
 ### `src/contract.ts`
 
 ```ts
-import { struct, type Infer } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
 
-const CheckRequest = struct.object({
+const appointmentPolicyCommand = struct.object({
   appointmentId: struct.string(),
   doctorId: struct.string(),
   patientId: struct.string(),
@@ -191,72 +191,107 @@ const CheckRequest = struct.object({
   endsAt: struct.number()
 })
 
-const CheckResponse = struct.object({
-  allowed: struct.boolean()
+const appointmentPolicyDecision = struct.object({
+  allowed: struct.literal(true)
 })
 
-export type CheckRequest = Infer<typeof CheckRequest>
-export type CheckResponse = Infer<typeof CheckResponse>
-
-export const checkAppointment = endpoint(
-  "appointment-policy",
-  "AppointmentPolicy.Check",
-  CheckRequest,
-  CheckResponse
-)
+export const appointmentPolicy = defineService("appointment-policy.v1", {
+  check: {
+    request: appointmentPolicyCommand,
+    response: appointmentPolicyDecision
+  }
+})
 ```
 
-رموز المسار ASCII المرئية، ولا يجوز أن تحتوي `/` أو `*`. يحتوي `Endpoint` على مثيلي Struct للطلب والاستجابة وعلى رمزي المسار. ولا يصف عنوان شبكة ولا عميلاً مولّداً.
+تطابق رموز المسار `^[A-Za-z0-9._~-]+$` (محارف URL unreserved) ولا يجوز أن تكون `.` أو `..` تمامًا. يسمّي `defineService` خدمة العقد وكل مفتاح endpoint. وتكوّن هذه الرموز مسار URL‏ `/<service>/<endpoint>`. وهي ليست عنوان شبكة. ويوفّر `withEndpoint` العقدة.
 
 ### `src/transport.ts`
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
+import { appointmentPolicy } from "./contract"
 
-const policyAddress = "memory://appointment-policy"
+const policyAddress = "memory://appointment-policy.v1"
 
 export interface AppointmentPolicy {
   readonly server: Server
-  validate(ctx: Context, request: CheckRequest): Promise<CheckResponse>
+  validate(
+    ctx: Context,
+    command: {
+      readonly appointmentId: string
+      readonly doctorId: string
+      readonly patientId: string
+      readonly startsAt: number
+      readonly endsAt: number
+    }
+  ): Promise<void>
   close(ctx: Context): Promise<void>
 }
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport), withAddress(policyAddress))
   const server = newServer(serverTransport(transport), address(policyAddress))
-  server.registerHandler(checkAppointment, (_ctx, request) => {
-    if (request.endsAt - request.startsAt > maximumDurationMs) {
-      throw new Error("appointment duration exceeds policy")
+  appointmentPolicy.registerHandler(server, {
+    check(_ctx, command) {
+      if (command.endsAt - command.startsAt > maximumDurationMs) {
+        throw serviceError(
+          "appointment_policy_rejected",
+          "appointment duration exceeds policy",
+          409
+        )
+      }
+      return { allowed: true }
     }
-    return { allowed: true }
   })
-
-  return Object.freeze({
+  const client = newClient(withTransport(transport), withEndpoint(policyAddress))
+  const caller = appointmentPolicy.newClient(client)
+  const policy: AppointmentPolicy = {
     server,
-    async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request)
+    async validate(ctx, command) {
+      await caller.check(ctx, command)
     },
-    close(ctx: Context): Promise<void> {
+    close(ctx) {
       return client.close(ctx)
     }
-  })
+  }
+  return Object.freeze(policy)
 }
 ```
 
-يستخدم المثال الملتزم حالياً معالج سياسة `Message` خاماً و`serviceError(...)` مع الحالة `409`. وهذا حد أدنى صالح. تغيّر النسخة typed أعلاه codec الطلب والاستجابة، لكنها لا تغيّر نموذج الملكية الأساسي: مثيل Memory Transport واحد، وServer داخلي واحد، وClient واحد، وإغلاق صريح.
+يسجّل المثال الملتزم `check` عبر `appointmentPolicy.registerHandler` ويرفض الموعد الطويل جداً بـ `serviceError(..., 409)`. تبقى الملكية: مثيل Memory Transport واحد، وServer داخلي واحد، وClient واحد، وإغلاق صريح لذلك Client.
 
 ### مرّر Context
 
 ينبغي لحالة الاستخدام الخاصة بالحجز أن تمرر Context الطلب نفسه إلى Client الخاص بالسياسة والمستودع:
 
 ```ts
-async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appointment> {
+import type { Context } from "@go-like/context"
+
+interface BookCommand {
+  readonly appointmentId: string
+  readonly doctorId: string
+  readonly patientId: string
+  readonly startsAt: number
+  readonly endsAt: number
+}
+
+interface Appointment {
+  readonly id: string
+}
+
+declare const policy: {
+  validate(ctx: Context, command: BookCommand): Promise<void>
+}
+declare const repository: {
+  book(ctx: Context, command: BookCommand): Promise<Appointment>
+}
+
+async function validatedBook(ctx: Context, command: BookCommand): Promise<Appointment> {
   await policy.validate(ctx, command)
   return repository.book(ctx, command)
 }

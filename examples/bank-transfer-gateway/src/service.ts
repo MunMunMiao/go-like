@@ -28,6 +28,7 @@ export function validateTransferQuote(command: TransferQuoteCommand): void {
   }
   if (
     command.beneficiaryBic !== null &&
+    command.beneficiaryBic !== undefined &&
     !/^[A-Z0-9]{8}(?:[A-Z0-9]{3})?$/.test(command.beneficiaryBic)
   ) {
     throw new TypeError("invalid beneficiaryBic")
@@ -61,7 +62,7 @@ export function buildTransferQuote(
       settlementBusinessDays: 1
     })
   }
-  if (command.beneficiaryBic === null) {
+  if (command.beneficiaryBic === null || command.beneficiaryBic === undefined) {
     throw new Error("beneficiaryBic is required for SWIFT")
   }
   return Object.freeze({

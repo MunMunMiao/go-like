@@ -1,5 +1,5 @@
 import { background, canceled, withCancel, type Context } from "@go-like/context"
-import { type AcceptHandler, type TransportLogger } from "@go-like/transport"
+import { type TransportHandler, type TransportLogger } from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportStateError,
@@ -148,7 +148,7 @@ function hostDone(handle: HTTPHostHandle): Promise<void> {
 export function newHTTPListener(
   address: string,
   handle: HTTPHostHandle,
-  capabilities: HTTPHostCapabilities,
+  _capabilities: HTTPHostCapabilities,
   logger: TransportLogger | null = null,
   secure = false,
   maxMessageBytes = defaultHTTPMaxMessageBytes
@@ -276,7 +276,7 @@ export function newHTTPListener(
     const contextFailure = contextError(ctx)
     if (contextFailure !== null) return Promise.reject(contextFailure)
     if (acceptUsed || mode !== "idle") {
-      return Promise.reject(newTransportStateError("HTTP listener accept is one-shot"))
+      return Promise.reject(newTransportStateError("HTTP listener serve is one-shot"))
     }
     acceptUsed = true
     mode = "accepting"
@@ -386,20 +386,12 @@ export function newHTTPListener(
       return admission.promise
     },
     /** Starts the one-shot serve loop and waits for true terminal state. */
-    accept(ctx: Context, handler: AcceptHandler): Promise<void> {
+    serve(ctx: Context, handler: TransportHandler): Promise<void> {
       if (typeof handler !== "function")
-        return Promise.reject(new TypeError("HTTP accept handler must be a function"))
-      /** Adapts one unary socket exchange through the shared HTTP owner. */
+        return Promise.reject(new TypeError("HTTP serve handler must be a function"))
+      /** Forwards one host Request through the shared HTTP owner. */
       function dispatchUnary(owner: Context, input: HTTPHostRequest): Promise<Response> {
-        return dispatchHTTPHostRequest(
-          owner,
-          handler,
-          input,
-          capabilities.connectionMetadata,
-          logger,
-          endpoint,
-          maxMessageBytes
-        )
+        return dispatchHTTPHostRequest(owner, handler, input, logger, endpoint, maxMessageBytes)
       }
       return startAccept(ctx, dispatchUnary)
     },

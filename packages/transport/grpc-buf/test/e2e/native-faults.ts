@@ -15,7 +15,7 @@ import {
   address,
   newClient,
   newServer,
-  withAddress,
+  withEndpoint,
   withSelector,
   type Client,
   type Server
@@ -111,7 +111,7 @@ async function managed(handler: Partial<OrderServiceHandler>) {
   void running.catch(() => {})
   let client: Client
   try {
-    client = newClient(withAddress(await within(Promise.resolve(server.endpoint(background())))))
+    client = newClient(withEndpoint(await within(Promise.resolve(server.endpoint(background())))))
   } catch (error) {
     await cleanup(
       error,
@@ -379,7 +379,7 @@ async function peerReset() {
     assert.ok(bound && typeof bound !== "string")
     const roundRobin = newRoundRobinSelector()
     client = newClient(
-      withAddress(`http://127.0.0.1:${bound.port}`),
+      withEndpoint(`http://127.0.0.1:${bound.port}`),
       withSelector({
         select(ctx, instances, ...options) {
           const [selection, done] = roundRobin.select(ctx, instances, ...options)

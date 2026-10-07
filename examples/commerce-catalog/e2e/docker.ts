@@ -3,7 +3,7 @@ import {
   newClient,
   withDiscovery,
   withSelector,
-  withService,
+  withEndpoint,
   withTransport,
   type Client
 } from "@go-like/client"
@@ -33,7 +33,8 @@ import {
   type OwnedDockerContext
 } from "../../../e2e/harness/owned-docker"
 import { newCatalogHandler } from "../src/http"
-import { newPricingClient, newPricingHandler, registerPricingHandler } from "../src/pricing"
+import { pricing } from "../src/contract"
+import { newPricingClient, newPricingHandler } from "../src/pricing"
 
 const ConsulImage =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
@@ -129,7 +130,7 @@ async function waitForPricingCount(consul: string, expected: number): Promise<vo
   const deadline = Date.now() + 10_000
   let observed = -1
   while (Date.now() < deadline) {
-    const response = await fetch(`${consul}/v1/health/service/pricing?passing=true`)
+    const response = await fetch(`${consul}/v1/health/service/pricing.v1?passing=true`)
     if (response.ok) {
       const services: unknown = await response.json()
       if (Array.isArray(services)) {
@@ -260,16 +261,15 @@ async function main(): Promise<void> {
       deregisterCriticalServiceAfterMs: 60_000
     })
     const pricingServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
-    registerPricingHandler(
-      pricingServer,
-      newPricingHandler(function countCall(): void {
+    pricing.registerHandler(pricingServer, {
+      get: newPricingHandler(function countCall(): void {
         pricingCalls += 1
       })
-    )
+    })
     const pricingEndpoint = await pricingServer.endpoint(background())
     pricingApp = newApp(
       id(`pricing-${RunId}`),
-      name("pricing"),
+      name("pricing.v1"),
       version("v1"),
       endpoint(pricingEndpoint),
       registrar(registry),
@@ -289,7 +289,7 @@ async function main(): Promise<void> {
     })
     client = newClient(
       withDiscovery(registry),
-      withService("pricing"),
+      withEndpoint("discovery:///pricing.v1"),
       withSelector(newRoundRobinSelector()),
       withTransport(newHTTPTransport())
     )

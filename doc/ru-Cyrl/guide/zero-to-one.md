@@ -2,7 +2,7 @@
 
 Это guided-путь от 0 до 1 для небольшого проекта, где go-like изучается через конкретный бизнес-инвариант, а не через очередной обобщённый Todo. Здесь описаны целевая форма и исполняемые checkpoints; это не утверждение, что целевое дерево уже собрано в готовое приложение для копирования. Проект — сервис записи в клинику с внутрипроцессным сервисом политики, авторитетным repository записей, временным кешем доступности, health-эндпоинтами и одним явным жизненным циклом приложения.
 
-В репозитории уже есть `examples/healthcare-appointments`, от которого начинается этот материал. Текущий код использует для сервиса политики необработанный JSON на границе `Message`. Типизированная версия с `Endpoint` и `Struct` ниже — документированный путь улучшения, построенный на текущих публичных exports; в рамках этой фазы документации она не добавлялась в example. При описании проверки сохраняйте это различие.
+В репозитории уже есть `examples/healthcare-appointments`, от которого начинается этот материал. Сервис политики использует `defineService("appointment-policy.v1")` с endpoint `check`, `withEndpoint("memory://appointment-policy.v1")` и `serviceError(..., 409)`. Фрагменты ниже совпадают с этим примером.
 
 ## Инвариант
 
@@ -44,7 +44,7 @@ examples/healthcare-appointments/
 |-- README.md
 |-- src/
 |   |-- service.ts
-|   |-- transport.ts      # current raw JSON policy boundary
+|   |-- transport.ts      # defineService appointment-policy.v1
 |   |-- http.ts
 |   `-- main.ts
 `-- test/main.test.ts
@@ -175,15 +175,15 @@ test("rejects an overlapping active slot", () => {
 
 ## M1: типизированный внутренний сервис политики
 
-Типизированный внутренний контракт использует `@go-like/struct` и `@go-like/transport`. Это runtime-валидация на границе unary Message, а не IDL и не сгенерированный RPC service.
+Типизированный внутренний контракт использует `@go-like/struct` и `defineService` из `@go-like/transport`. Это runtime-валидация Struct на JSON-теле Fetch, а не IDL и не сгенерированный Protobuf service.
 
 ### `src/contract.ts`
 
 ```ts
-import { struct, type Infer } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
 
-const CheckRequest = struct.object({
+const appointmentPolicyCommand = struct.object({
   appointmentId: struct.string(),
   doctorId: struct.string(),
   patientId: struct.string(),
@@ -191,72 +191,107 @@ const CheckRequest = struct.object({
   endsAt: struct.number()
 })
 
-const CheckResponse = struct.object({
-  allowed: struct.boolean()
+const appointmentPolicyDecision = struct.object({
+  allowed: struct.literal(true)
 })
 
-export type CheckRequest = Infer<typeof CheckRequest>
-export type CheckResponse = Infer<typeof CheckResponse>
-
-export const checkAppointment = endpoint(
-  "appointment-policy",
-  "AppointmentPolicy.Check",
-  CheckRequest,
-  CheckResponse
-)
+export const appointmentPolicy = defineService("appointment-policy.v1", {
+  check: {
+    request: appointmentPolicyCommand,
+    response: appointmentPolicyDecision
+  }
+})
 ```
 
-Route tokens видимы и используют ASCII; они не могут содержать `/` или `*`. `Endpoint` содержит экземпляры request и response Struct и два route token. Он не описывает сетевой адрес или сгенерированный client.
+Route token соответствуют `^[A-Za-z0-9._~-]+$` (URL unreserved) и не могут быть ровно `.` или `..`. `defineService` задаёт имя контрактного сервиса и каждый ключ endpoint. Эти token образуют путь URL `/<service>/<endpoint>`. Это не сетевой адрес. Узел задаёт `withEndpoint`.
 
 ### `src/transport.ts`
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
+import { appointmentPolicy } from "./contract"
 
-const policyAddress = "memory://appointment-policy"
+const policyAddress = "memory://appointment-policy.v1"
 
 export interface AppointmentPolicy {
   readonly server: Server
-  validate(ctx: Context, request: CheckRequest): Promise<CheckResponse>
+  validate(
+    ctx: Context,
+    command: {
+      readonly appointmentId: string
+      readonly doctorId: string
+      readonly patientId: string
+      readonly startsAt: number
+      readonly endsAt: number
+    }
+  ): Promise<void>
   close(ctx: Context): Promise<void>
 }
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport), withAddress(policyAddress))
   const server = newServer(serverTransport(transport), address(policyAddress))
-  server.registerHandler(checkAppointment, (_ctx, request) => {
-    if (request.endsAt - request.startsAt > maximumDurationMs) {
-      throw new Error("appointment duration exceeds policy")
+  appointmentPolicy.registerHandler(server, {
+    check(_ctx, command) {
+      if (command.endsAt - command.startsAt > maximumDurationMs) {
+        throw serviceError(
+          "appointment_policy_rejected",
+          "appointment duration exceeds policy",
+          409
+        )
+      }
+      return { allowed: true }
     }
-    return { allowed: true }
   })
-
-  return Object.freeze({
+  const client = newClient(withTransport(transport), withEndpoint(policyAddress))
+  const caller = appointmentPolicy.newClient(client)
+  const policy: AppointmentPolicy = {
     server,
-    async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request)
+    async validate(ctx, command) {
+      await caller.check(ctx, command)
     },
-    close(ctx: Context): Promise<void> {
+    close(ctx) {
       return client.close(ctx)
     }
-  })
+  }
+  return Object.freeze(policy)
 }
 ```
 
-Текущий закреплённый в репозитории пример использует raw `Message` policy handler и `serviceError(...)` со статусом `409`. Это корректная низкоуровневая граница. Типизированная версия выше меняет codec request и response, но не модель владения: один экземпляр Memory Transport, один внутренний Server, один Client и явный close.
+Закреплённый пример регистрирует `check` через `appointmentPolicy.registerHandler` и отклоняет слишком длинную запись с `serviceError(..., 409)`. Владение прежнее: один экземпляр Memory Transport, один внутренний Server, один Client и явный close этого Client.
 
 ### Передавайте тот же Context
 
 Сценарий записи должен передавать тот же request Context policy Client и repository:
 
 ```ts
-async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appointment> {
+import type { Context } from "@go-like/context"
+
+interface BookCommand {
+  readonly appointmentId: string
+  readonly doctorId: string
+  readonly patientId: string
+  readonly startsAt: number
+  readonly endsAt: number
+}
+
+interface Appointment {
+  readonly id: string
+}
+
+declare const policy: {
+  validate(ctx: Context, command: BookCommand): Promise<void>
+}
+declare const repository: {
+  book(ctx: Context, command: BookCommand): Promise<Appointment>
+}
+
+async function validatedBook(ctx: Context, command: BookCommand): Promise<Appointment> {
   await policy.validate(ctx, command)
   return repository.book(ctx, command)
 }

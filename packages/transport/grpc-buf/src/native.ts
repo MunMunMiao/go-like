@@ -1,10 +1,9 @@
 export { newClient, type Client } from "./client"
 export {
-  withAddress,
   withBlock,
   withDiscovery,
+  withEndpoint,
   withSelector,
-  withService,
   withTLSConfig,
   type ClientOption
 } from "./options"

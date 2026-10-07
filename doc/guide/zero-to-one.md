@@ -2,7 +2,7 @@
 
 This is a guided 0-to-1 project path for learning go-like through a concrete business invariant rather than a generic Todo list. It describes a target project and its runnable checkpoints; it is not a claim that the target tree is already committed as one copy-paste application. The project is a clinic appointment service with an in-process policy service, a canonical appointment repository, a disposable availability cache, health endpoints, and one explicit application lifecycle.
 
-The repository already contains `examples/healthcare-appointments`, which is the starting implementation for this guide. Its current code uses raw JSON `Message` handling for the policy service. The typed `Endpoint` and `Struct` version below is a documented upgrade path built from current public exports; it was not added to the example during this documentation phase. Keep that distinction when reporting verification.
+The repository already contains `examples/healthcare-appointments`, which is the starting implementation for this guide. Its policy service is `defineService("appointment-policy.v1")` with endpoint `check`, `withEndpoint("memory://appointment-policy.v1")`, and `serviceError(..., 409)`. The snippets below match that example.
 
 ## The invariant
 
@@ -44,7 +44,7 @@ examples/healthcare-appointments/
 |-- README.md
 |-- src/
 |   |-- service.ts
-|   |-- transport.ts      # current raw JSON policy boundary
+|   |-- transport.ts      # defineService appointment-policy.v1
 |   |-- http.ts
 |   `-- main.ts
 `-- test/main.test.ts
@@ -175,15 +175,15 @@ The current `test/main.test.ts` contains this case plus cancellation reuse, idem
 
 ## M1: a typed internal policy service
 
-The typed internal contract uses `@go-like/struct` and `@go-like/transport`. This is runtime validation on a unary Message boundary, not an IDL or generated RPC service.
+The typed internal contract uses `@go-like/struct` and `defineService` from `@go-like/transport`. This is runtime Struct validation on a JSON Fetch body, not an IDL or generated Protobuf service.
 
 ### `src/contract.ts`
 
 ```ts
-import { struct, type Infer } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
 
-const CheckRequest = struct.object({
+const appointmentPolicyCommand = struct.object({
   appointmentId: struct.string(),
   doctorId: struct.string(),
   patientId: struct.string(),
@@ -191,72 +191,107 @@ const CheckRequest = struct.object({
   endsAt: struct.number()
 })
 
-const CheckResponse = struct.object({
-  allowed: struct.boolean()
+const appointmentPolicyDecision = struct.object({
+  allowed: struct.literal(true)
 })
 
-export type CheckRequest = Infer<typeof CheckRequest>
-export type CheckResponse = Infer<typeof CheckResponse>
-
-export const checkAppointment = endpoint(
-  "appointment-policy",
-  "AppointmentPolicy.Check",
-  CheckRequest,
-  CheckResponse
-)
+export const appointmentPolicy = defineService("appointment-policy.v1", {
+  check: {
+    request: appointmentPolicyCommand,
+    response: appointmentPolicyDecision
+  }
+})
 ```
 
-The route tokens are visible ASCII and cannot contain `/` or `*`. The `Endpoint` contains request and response Struct instances and the two route tokens. It does not describe a network address or a generated client.
+Route tokens match `^[A-Za-z0-9._~-]+$` (URL unreserved characters) and cannot be exactly `.` or `..`. `defineService` names the contract service and each endpoint key. Those tokens are the URL path `/<service>/<endpoint>`. They are not a network address. `withEndpoint` supplies the node.
 
 ### `src/transport.ts`
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
+import { appointmentPolicy } from "./contract"
 
-const policyAddress = "memory://appointment-policy"
+const policyAddress = "memory://appointment-policy.v1"
 
 export interface AppointmentPolicy {
   readonly server: Server
-  validate(ctx: Context, request: CheckRequest): Promise<CheckResponse>
+  validate(
+    ctx: Context,
+    command: {
+      readonly appointmentId: string
+      readonly doctorId: string
+      readonly patientId: string
+      readonly startsAt: number
+      readonly endsAt: number
+    }
+  ): Promise<void>
   close(ctx: Context): Promise<void>
 }
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport), withAddress(policyAddress))
   const server = newServer(serverTransport(transport), address(policyAddress))
-  server.registerHandler(checkAppointment, (_ctx, request) => {
-    if (request.endsAt - request.startsAt > maximumDurationMs) {
-      throw new Error("appointment duration exceeds policy")
+  appointmentPolicy.registerHandler(server, {
+    check(_ctx, command) {
+      if (command.endsAt - command.startsAt > maximumDurationMs) {
+        throw serviceError(
+          "appointment_policy_rejected",
+          "appointment duration exceeds policy",
+          409
+        )
+      }
+      return { allowed: true }
     }
-    return { allowed: true }
   })
-
-  return Object.freeze({
+  const client = newClient(withTransport(transport), withEndpoint(policyAddress))
+  const caller = appointmentPolicy.newClient(client)
+  const policy: AppointmentPolicy = {
     server,
-    async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request)
+    async validate(ctx, command) {
+      await caller.check(ctx, command)
     },
-    close(ctx: Context): Promise<void> {
+    close(ctx) {
       return client.close(ctx)
     }
-  })
+  }
+  return Object.freeze(policy)
 }
 ```
 
-The current committed example uses a raw `Message` policy handler and a `serviceError(...)` with status `409`. That is a valid lower-level boundary. The typed version above changes the request and response codec, but it does not change the core ownership model: one Memory Transport instance, one internal Server, one Client, and explicit close.
+The committed example registers `check` with `appointmentPolicy.registerHandler` and rejects an over-long appointment with `serviceError(..., 409)`. Ownership stays one Memory Transport instance, one internal Server, one Client, and an explicit close of that Client.
 
 ### Forward the Context
 
 The booking use case should pass the same request Context to the policy Client and repository:
 
 ```ts
-async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appointment> {
+import type { Context } from "@go-like/context"
+
+interface BookCommand {
+  readonly appointmentId: string
+  readonly doctorId: string
+  readonly patientId: string
+  readonly startsAt: number
+  readonly endsAt: number
+}
+
+interface Appointment {
+  readonly id: string
+}
+
+declare const policy: {
+  validate(ctx: Context, command: BookCommand): Promise<void>
+}
+declare const repository: {
+  book(ctx: Context, command: BookCommand): Promise<Appointment>
+}
+
+async function validatedBook(ctx: Context, command: BookCommand): Promise<Appointment> {
   await policy.validate(ctx, command)
   return repository.book(ctx, command)
 }

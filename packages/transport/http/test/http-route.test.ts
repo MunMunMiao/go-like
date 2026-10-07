@@ -2,8 +2,8 @@ import { expect, test } from "bun:test"
 
 import { background } from "@go-like/context"
 import { address, httpRoute, newServer, transport as serverTransport } from "@go-like/server"
-import { serviceError, type Message } from "@go-like/transport"
-import { decodeServiceError } from "@go-like/transport/provider"
+import { serviceError } from "@go-like/transport"
+import { decodeServiceErrorResponse } from "@go-like/transport/provider"
 
 import { newNodeHTTPTransport } from "../src/node"
 
@@ -13,28 +13,10 @@ const noProxy = [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1", "local
 process.env.NO_PROXY = noProxy
 process.env.no_proxy = noProxy
 
-const Encoder = new TextEncoder()
-const Decoder = new TextDecoder()
-const PeerIdentityHeader = "Go-Like-Peer-Identity"
-const DestMissingServiceHeader = "missing Go-Like-Service header"
-
 interface HTTPReply {
   readonly status: number
   readonly header: Readonly<Record<string, string>>
-  readonly body: Uint8Array
   readonly text: string
-}
-
-/** Reads one header name case-insensitively. */
-function headerValue(header: Readonly<Record<string, string>>, name: string): string | undefined {
-  const expected = name.toLowerCase()
-  let found: string | undefined
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() !== expected) continue
-    if (found !== undefined) throw new Error(`duplicate ${name} header`)
-    found = header[key]
-  }
-  return found
 }
 
 /** Copies one Fetch Headers object into a frozen lower-cased record. */
@@ -44,21 +26,6 @@ function snapshotHeaders(headers: Headers): Readonly<Record<string, string>> {
     entries.push([key, value])
   })
   return Object.freeze(Object.fromEntries(entries))
-}
-
-/** Copies Go-Like-Peer-Identity into the dest-shaped command JSON body. */
-function commandMessage(request: Message): Message {
-  return Object.freeze({
-    header: Object.freeze({ "Content-Type": "application/json" }),
-    body: Encoder.encode(
-      JSON.stringify(
-        Object.freeze({
-          status: "accepted",
-          peerIdentity: headerValue(request.header, PeerIdentityHeader) ?? ""
-        })
-      )
-    )
-  })
 }
 
 /** Sends one HTTP request once the Node listener is admitting requests. */
@@ -82,12 +49,10 @@ async function sendHTTP(
       if (response.status === 503) {
         last = new Error("HTTP 503 before listener admission")
       } else {
-        const bytes = new Uint8Array(await response.arrayBuffer())
         return Object.freeze({
           status: response.status,
           header: snapshotHeaders(response.headers),
-          body: bytes,
-          text: Decoder.decode(bytes)
+          text: await response.text()
         })
       }
     } catch (error) {
@@ -100,285 +65,177 @@ async function sendHTTP(
   throw last instanceof Error ? last : new Error("listener never admitted the request")
 }
 
-/** POSTs JSON once the Node listener is admitting requests. */
-function postJSON(
-  url: string,
-  header: Readonly<Record<string, string>>,
-  body: unknown
-): Promise<HTTPReply> {
-  return sendHTTP(url, "POST", header, body)
+/** Returns one JSON command acknowledgement. */
+function accepted(): Response {
+  return new Response(JSON.stringify(Object.freeze({ status: "accepted" })), {
+    headers: Object.freeze({ "content-type": "application/json" })
+  })
 }
 
-test("POST /v1/machine-commands without Go-Like-Service returns HTTP 201 from httpRoute", async () => {
-  const received: Message[] = []
+test("POST /v1/machine-commands hits httpRoute and returns its success status", async () => {
+  let calls = 0
   const transport = newNodeHTTPTransport()
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
+  server.registerHandler("machine-gateway", "command", function handle(): Response {
+    calls += 1
+    return accepted()
   })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
-    const reply = await postJSON(
+    const reply = await sendHTTP(
       new URL("/v1/machine-commands", endpoint).href,
+      "POST",
+      { "content-type": "text/plain" },
+      undefined
+    )
+    const routed = await sendHTTP(
+      new URL("/v1/machine-commands", endpoint).href,
+      "POST",
       {},
-      Object.freeze({ command: "reboot" })
+      {
+        command: "reboot"
+      }
     )
 
-    expect(received).toHaveLength(1)
-    const request = received[0]
-    if (request === undefined) throw new Error("registered handler was not invoked")
-    expect(headerValue(request.header, "Go-Like-Service")).toBe("machine-gateway")
-    expect(headerValue(request.header, "Go-Like-Endpoint")).toBe("command")
+    expect(calls).toBe(2)
     expect(reply.status).toBe(201)
-    expect(JSON.parse(reply.text)).toMatchObject({ status: "accepted" })
-    const peerIdentity = (JSON.parse(reply.text) as { peerIdentity?: unknown }).peerIdentity
-    expect(typeof peerIdentity).toBe("string")
-    const requestPeer = headerValue(request.header, PeerIdentityHeader) ?? ""
-    expect(peerIdentity).toBe(requestPeer)
+    expect(routed.status).toBe(201)
+    expect(JSON.parse(routed.text)).toEqual({ status: "accepted" })
+    expect(routed.header["go-like-service"]).toBeUndefined()
+    expect(routed.header["go-like-endpoint"]).toBeUndefined()
   } finally {
     await server.stop(background())
     await running
   }
 })
 
-test("envelope POST with Go-Like-Service still uses HTTP 200 when httpRoute would return 201", async () => {
+test("RPC pathname stays on the registered endpoint when another httpRoute exists", async () => {
+  const seen: string[] = []
   const transport = newNodeHTTPTransport()
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => commandMessage(request))
+  server.registerHandler("machine-gateway", "command", function handle(_ctx, request): Response {
+    seen.push(new URL(request.url).pathname)
+    return accepted()
+  })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
-    const reply = await postJSON(
-      new URL("/v1/machine-commands", endpoint).href,
-      {
-        "Go-Like-Service": "machine-gateway",
-        "Go-Like-Endpoint": "command"
-      },
+    const reply = await sendHTTP(
+      new URL("/machine-gateway/command", endpoint).href,
+      "POST",
+      {},
       Object.freeze({ command: "envelope" })
     )
 
+    expect(seen).toEqual(["/machine-gateway/command"])
     expect(reply.status).toBe(200)
-    expect(JSON.parse(reply.text)).toMatchObject({ status: "accepted" })
+    expect(JSON.parse(reply.text)).toEqual({ status: "accepted" })
   } finally {
     await server.stop(background())
     await running
   }
 })
 
-test("envelope ServiceError still uses HTTP carrier 200", async () => {
+test("ServiceError uses its own HTTP status on both httpRoute and RPC paths", async () => {
   const transport = newNodeHTTPTransport()
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
-  server.registerHandler("machine-gateway", "command", () => {
+  server.registerHandler("machine-gateway", "command", function reject(): Response {
     throw serviceError("permission_denied", "machine command rejected", 403)
   })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
-    const reply = await postJSON(
-      new URL("/v1/machine-commands", endpoint).href,
-      {
-        "Go-Like-Service": "machine-gateway",
-        "Go-Like-Endpoint": "command"
-      },
-      Object.freeze({ command: "reject" })
+    const routed = await sendHTTP(new URL("/v1/machine-commands", endpoint).href, "POST", {}, {})
+    const rpc = await sendHTTP(new URL("/machine-gateway/command", endpoint).href, "POST", {}, {})
+    const routedError = await decodeServiceErrorResponse(
+      new Response(routed.text, {
+        status: routed.status,
+        headers: { "content-type": "application/json" }
+      })
+    )
+    const rpcError = await decodeServiceErrorResponse(
+      new Response(rpc.text, {
+        status: rpc.status,
+        headers: { "content-type": "application/json" }
+      })
     )
 
-    expect(reply.status).toBe(200)
-    expect(decodeServiceError("unary", reply.status, reply.header, reply.body)).toMatchObject({
+    expect(routed.status).toBe(403)
+    expect(rpc.status).toBe(403)
+    expect(routedError).toMatchObject({ code: "permission_denied", status: 403 })
+    expect(rpcError).toMatchObject({
       code: "permission_denied",
-      status: 403
+      message: "machine command rejected"
     })
+    expect(routed.header["go-like-service-error"]).toBeUndefined()
   } finally {
     await server.stop(background())
     await running
   }
 })
 
-test("POST without envelope and without matching httpRoute is HTTP 404 not dest missing-header", async () => {
-  const received: Message[] = []
-  const transport = newNodeHTTPTransport()
-  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
-  })
-  const running = server.start(background())
-  try {
-    const endpoint = await server.endpoint(background())
-    const reply = await postJSON(
-      new URL("/v1/machine-commands", endpoint).href,
-      {},
-      Object.freeze({ command: "reboot" })
-    )
-
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(404)
-    expect(reply.status).not.toBe(200)
-    expect(reply.text).not.toContain(DestMissingServiceHeader)
-    expect(Decoder.decode(reply.body)).not.toContain(DestMissingServiceHeader)
-  } finally {
-    await server.stop(background())
-    await running
-  }
-})
-
-test("GET on a POST httpRoute path is HTTP 405 not dest missing-header", async () => {
-  const received: Message[] = []
+test("unregistered and method-mismatched paths use Fetch status codes", async () => {
+  let calls = 0
   const transport = newNodeHTTPTransport()
   const server = newServer(
     serverTransport(transport),
     address("127.0.0.1:0"),
     httpRoute("POST", "/v1/machine-commands", "machine-gateway", "command", 201)
   )
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
+  server.registerHandler("machine-gateway", "command", function handle(): Response {
+    calls += 1
+    return accepted()
   })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
-    const reply = await sendHTTP(new URL("/v1/machine-commands", endpoint).href, "GET")
+    const missing = await sendHTTP(new URL("/v1/other-commands", endpoint).href, "POST", {}, {})
+    const method = await sendHTTP(new URL("/v1/machine-commands", endpoint).href, "GET")
+    const livez = await sendHTTP(new URL("/livez", endpoint).href, "GET")
 
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(405)
-    expect(reply.status).not.toBe(200)
-    expect(reply.text).not.toContain(DestMissingServiceHeader)
-    expect(Decoder.decode(reply.body)).not.toContain(DestMissingServiceHeader)
+    expect(calls).toBe(0)
+    expect(missing.status).toBe(404)
+    expect(JSON.parse(missing.text)).toMatchObject({ code: "not_found" })
+    expect(method.status).toBe(405)
+    expect(method.header.allow).toBe("POST")
+    expect(JSON.parse(method.text)).toMatchObject({ code: "method_not_allowed" })
+    expect(livez.status).toBe(404)
+    expect(JSON.parse(livez.text)).toMatchObject({ code: "not_found", message: "not found" })
   } finally {
     await server.stop(background())
     await running
   }
 })
 
-test("GET /healthz without Go-Like-Service is HTTP 200 not dest missing-header", async () => {
-  const received: Message[] = []
+test("GET and HEAD /healthz are empty 200 responses", async () => {
   const transport = newNodeHTTPTransport()
   const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
+  server.registerHandler("machine-gateway", "command", function handle(): Response {
+    return accepted()
   })
   const running = server.start(background())
   try {
     const endpoint = await server.endpoint(background())
-    const reply = await sendHTTP(new URL("/healthz", endpoint).href, "GET")
+    const get = await sendHTTP(new URL("/healthz", endpoint).href, "GET")
+    const head = await sendHTTP(new URL("/healthz", endpoint).href, "HEAD")
 
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(200)
-    expect(reply.status).not.toBe(500)
-    expect(reply.text).not.toContain(DestMissingServiceHeader)
-    expect(Decoder.decode(reply.body)).not.toContain(DestMissingServiceHeader)
-  } finally {
-    await server.stop(background())
-    await running
-  }
-})
-
-test("HEAD /healthz without Go-Like-Service is HTTP 200", async () => {
-  const received: Message[] = []
-  const transport = newNodeHTTPTransport()
-  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
-  })
-  const running = server.start(background())
-  try {
-    const endpoint = await server.endpoint(background())
-    const reply = await sendHTTP(new URL("/healthz", endpoint).href, "HEAD")
-
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(200)
-    expect(reply.status).not.toBe(500)
-    expect(reply.text).not.toContain(DestMissingServiceHeader)
-    expect(Decoder.decode(reply.body)).not.toContain(DestMissingServiceHeader)
-  } finally {
-    await server.stop(background())
-    await running
-  }
-})
-
-test("GET /livez without a matching httpRoute is HTTP 404 not dest missing-header", async () => {
-  const received: Message[] = []
-  const transport = newNodeHTTPTransport()
-  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
-  })
-  const running = server.start(background())
-  try {
-    const endpoint = await server.endpoint(background())
-    const reply = await sendHTTP(new URL("/livez", endpoint).href, "GET")
-
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(404)
-    expect(reply.status).not.toBe(200)
-    expect(reply.text).not.toContain(DestMissingServiceHeader)
-    expect(Decoder.decode(reply.body)).not.toContain(DestMissingServiceHeader)
-  } finally {
-    await server.stop(background())
-    await running
-  }
-})
-
-test("GET with a non-empty Go-Like-Service envelope is a protocol 500", async () => {
-  const received: Message[] = []
-  const transport = newNodeHTTPTransport()
-  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => {
-    received.push(request)
-    return commandMessage(request)
-  })
-  const running = server.start(background())
-  try {
-    const endpoint = await server.endpoint(background())
-    const reply = await sendHTTP(new URL("/v1/machine-commands", endpoint).href, "GET", {
-      "Go-Like-Service": "machine-gateway",
-      "Go-Like-Endpoint": "command"
-    })
-
-    expect(received).toHaveLength(0)
-    expect(reply.status).toBe(500)
-    expect(reply.text).toBe("Internal Server Error")
-  } finally {
-    await server.stop(background())
-    await running
-  }
-})
-
-test("envelope POST with Go-Like-Service still HTTP 200", async () => {
-  const transport = newNodeHTTPTransport()
-  const server = newServer(serverTransport(transport), address("127.0.0.1:0"))
-  server.registerHandler("machine-gateway", "command", (_ctx, request) => commandMessage(request))
-  const running = server.start(background())
-  try {
-    const endpoint = await server.endpoint(background())
-    const reply = await postJSON(
-      new URL("/v1/machine-commands", endpoint).href,
-      {
-        "Go-Like-Service": "machine-gateway",
-        "Go-Like-Endpoint": "command"
-      },
-      Object.freeze({ command: "envelope" })
-    )
-
-    expect(reply.status).toBe(200)
-    expect(JSON.parse(reply.text)).toMatchObject({ status: "accepted" })
+    expect(get.status).toBe(200)
+    expect(get.text).toBe("")
+    expect(head.status).toBe(200)
+    expect(head.text).toBe("")
   } finally {
     await server.stop(background())
     await running

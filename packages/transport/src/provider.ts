@@ -1,17 +1,15 @@
+export { observeCall } from "./body-end"
 export {
-  decodeServiceError,
-  encodeServiceError,
+  decodeServiceErrorResponse,
   internalServiceError,
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
-  newUnsupportedTransportCapabilityError
+  newUnsupportedTransportCapabilityError,
+  serviceErrorResponse
 } from "./errors"
-export { snapshotMessage } from "./message"
 export { decodeMetadataHeader, encodeMetadataHeader } from "./metadata"
 export type {
-  ServiceErrorEnvelope,
-  ServiceErrorWireKind,
   TransportClosedError,
   TransportProtocolError,
   TransportStateError,

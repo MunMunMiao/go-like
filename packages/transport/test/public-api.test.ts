@@ -4,6 +4,7 @@ import * as Headers from "../src/headers"
 import * as Transport from "../src/index"
 import * as Json from "../src/json"
 import * as Provider from "../src/provider"
+import * as Sse from "../src/sse/index"
 
 const ErrorFactories = [
   "newTransportClosedError",
@@ -14,8 +15,9 @@ const ErrorFactories = [
 
 test("root exports exactly the reviewed lower-camel runtime surface", () => {
   expect(Object.keys(Transport).sort()).toEqual([
+    "applyResponseObservers",
     "chain",
-    "codec",
+    "defineService",
     "endpoint",
     "fromClientContext",
     "fromServerContext",
@@ -23,11 +25,13 @@ test("root exports exactly the reviewed lower-camel runtime surface", () => {
     "logger",
     "newClientContext",
     "newServerContext",
+    "observeResponseBody",
     "secure",
     "serviceError",
     "timeout",
     "tlsConfig",
     "withConnClose",
+    "withResponseObserver",
     "withTimeout"
   ])
 })
@@ -39,39 +43,36 @@ test("json subpath exports only the Struct JSON body boundary", () => {
 test("provider subpath exports exactly the reviewed lower-camel wire surface", () => {
   expect(Object.keys(Provider).sort()).toEqual([
     "decodeMetadataHeader",
-    "decodeServiceError",
+    "decodeServiceErrorResponse",
     "encodeMetadataHeader",
-    "encodeServiceError",
     "internalServiceError",
     "newTransportClosedError",
     "newTransportProtocolError",
     "newTransportStateError",
     "newUnsupportedTransportCapabilityError",
-    "snapshotMessage"
+    "observeCall",
+    "serviceErrorResponse"
   ])
 })
 
-test("headers subpath exports the 19 exact reviewed names and values", () => {
+test("sse subpath exports the parser and event encoder", () => {
+  expect(Object.keys(Sse).sort()).toEqual([
+    "SSEParserLimitError",
+    "createLineParser",
+    "createMessageParser",
+    "defaultSSEMaxMessageBytes",
+    "encodeSSEComment",
+    "encodeSSEEvent",
+    "encodeSSEJsonEvent",
+    "eventStreamContentType",
+    "readStreamBytes"
+  ])
+})
+
+test("headers subpath exports only the reviewed Fetch names and values", () => {
   expect(Headers).toEqual({
-    message: "Go-Like-Topic",
-    request: "Go-Like-Service",
-    error: "Go-Like-Error",
-    endpoint: "Go-Like-Endpoint",
-    method: "Go-Like-Method",
     metadata: "Go-Like-Metadata",
-    id: "Go-Like-ID",
-    prefix: "Go-Like-",
-    namespace: "Go-Like-Namespace",
-    protocol: "Go-Like-Protocol",
-    target: "Go-Like-Target",
-    contentType: "Content-Type",
-    serviceError: "Go-Like-Service-Error",
-    serviceErrorCode: "Go-Like-Service-Error-Code",
-    serviceErrorStatus: "Go-Like-Service-Error-Status",
-    spanId: "Go-Like-Span-ID",
-    traceId: "Go-Like-Trace-ID",
-    stream: "Go-Like-Stream",
-    peerIdentity: "Go-Like-Peer-Identity"
+    timeout: "Go-Like-Timeout-Ms"
   })
 })
 

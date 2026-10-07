@@ -71,8 +71,8 @@ Pour un lecteur venant de Go ou de Kratos, migrez les concepts plutôt que les n
 | `context.Context`   | `@go-like/context` `Context`                                                                                       | `done()` est un `AbortSignal` ou `null`, pas un channel Go                      |
 | Cycle de vie Server | `Server` structurel de Core                                                                                        | `start(ctx)` peut durer toute la vie du service et ne signifie pas readiness    |
 | App runner          | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` n'accepte pas de Context du caller et renvoie une Promise partagée |
-| RPC client          | `@go-like/client`                                                                                                  | Les appels internes sont des `Message` unaires ; le retry est opt-in            |
-| Transport           | `@go-like/transport`                                                                                               | Les fournisseurs et les headers de `Message` sont des contrats TypeScript/Web   |
+| RPC client          | `@go-like/client`                                                                                                  | Les appels internes sont du JSON Fetch ou du SSE ; le retry est opt-in          |
+| Transport           | `@go-like/transport`                                                                                               | Les fournisseurs et les headers Fetch sont des contrats TypeScript/Web          |
 | Registry            | `@go-like/registry`                                                                                                | Les watchers renvoient des snapshots de remplacement complet                    |
 | Selector            | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Le feedback est synchrone et propre à la policy                                 |
 | Protobuf/IDL        | `@go-like/protoc-gen-like`                                                                                         | Code Context-first sur Protobuf-ES                                              |
@@ -81,14 +81,33 @@ Pour un lecteur venant de Go ou de Kratos, migrez les concepts plutôt que les n
 Un premier pas incrémental consiste à effectuer un appel typé à une adresse directe sur Memory Transport :
 
 ```ts
-// Composition excerpt: quote and pricingQuoteHandler are application-owned.
-// Admit this server through App before calling; close client during shutdown.
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const quoteService = defineService("pricing", {
+  quote: {
+    request: struct.object({ sku: struct.string() }),
+    response: struct.object({ amount: struct.number() })
+  }
+})
+
 const transport = newMemoryTransport()
 const server = newServer(serverTransport(transport), address("memory://pricing"))
-server.registerHandler(quote, pricingQuoteHandler)
+quoteService.registerHandler(server, {
+  quote(_ctx, request) {
+    return { amount: request.sku.length }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://pricing"))
-const result = await client.call(ctx, quote, request)
+const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
+const caller = quoteService.newClient(client)
+const ctx: Context = background()
+const result = await caller.quote(ctx, { sku: "a" })
+void result
 ```
 
 Ce n'est qu'après avoir testé cette frontière qu'il faut introduire Discovery, un fournisseur Registry réel ou un transport HTTP. Vous conservez ainsi le contrat métier tout en remplaçant la destination et le câblage de propriété.
@@ -103,7 +122,7 @@ Gardez Kubernetes natif :
 - un EndpointSlice n'est pas le DNS d'un Kubernetes Service et ne fournit pas de TTL d'enregistrement universel ;
 - les références facultatives au propriétaire du Pod et le deregistration explicite ont des sémantiques d'échec différentes.
 
-Commencez par la santé et la configuration avant de sélectionner directement depuis des EndpointSlice. Si l'application dispose déjà d'un nom DNS stable de Service, `withAddress(...)` avec un transport HTTP peut être plus simple et plus honnête que l'ajout d'un fournisseur Registry.
+Commencez par la santé et la configuration avant de sélectionner directement depuis des EndpointSlice. Si l'application dispose déjà d'un nom DNS stable de Service, `withEndpoint(...)` avec un transport HTTP peut être plus simple et plus honnête que l'ajout d'un fournisseur Registry.
 
 ## Adopter les brokers et les jobs
 
@@ -162,7 +181,7 @@ Avant de fusionner une frontière, vérifiez :
 
 ## Frontière de support actuelle
 
-`@go-like/protoc-gen-like` génère le code Protobuf RPC avec `Context` en premier argument, sur Protobuf-ES. `@go-like/transport-grpc-buf` fournit unary et server-streaming Connect/gRPC-Web via Fetch ; `/native` ajoute gRPC standard avec les quatre cardinalités, dont client-streaming et bidi. Ce chemin est indépendant du Transport SPI unaire.
+`@go-like/protoc-gen-like` génère le code Protobuf RPC avec `Context` en premier argument, sur Protobuf-ES. `@go-like/transport-grpc-buf` fournit unary et server-streaming Connect/gRPC-Web via Fetch ; `/native` ajoute gRPC standard avec les quatre cardinalités, dont client-streaming et bidi. Ce chemin est indépendant du chemin interne Fetch/SSE.
 
 Cela n’inclut pas gRPC standard dans le navigateur, request-streaming/bidi via Fetch, health/reflection officiels, authentification générique, Event Store/replay, ORM ou orchestration de clusters.
 

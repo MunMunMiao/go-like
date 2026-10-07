@@ -20,6 +20,6 @@ ALPN HTTP/2。Web 框架直接把原生 Fetch Handler 交给 `@go-like/web`；go
 公开包名里没有含糊的 `adapters` 大桶，项目自定义
 header 一律使用 `Go-Like-` 前缀。
 
-`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于 unary Transport SPI 的调用路径。
+`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于内部 Fetch/SSE 路径的调用路径。
 
 [取消与停机的已知限制](/reference/claims#stream-cancellation-limits)：Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

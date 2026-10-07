@@ -16,19 +16,6 @@ const MaximumKeyBytes = 4_096
 const MaximumValueBytes = 16_777_216
 const Encoder = new TextEncoder()
 
-/** Reports whether a string contains no unmatched UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Returns the exact cancellation carried by one terminal Context. */
 function contextFailure(ctx: Context): Error | null {
   const failure = ctx.err()
@@ -43,7 +30,7 @@ function checkContext(ctx: Context): void {
 
 /** Validates one exact non-empty Cache key and its UTF-8 provider bound. */
 function cacheKey(value: string): string {
-  if (typeof value !== "string" || value.length === 0 || !isWellFormed(value)) {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
     throw new TypeError("Memory Cache key must be a non-empty well-formed string")
   }
   if (Encoder.encode(value).byteLength > MaximumKeyBytes) {

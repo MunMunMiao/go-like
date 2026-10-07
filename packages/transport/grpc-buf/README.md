@@ -8,9 +8,13 @@ service，也不集成 Google gRPC runtime。
 ## Portable Fetch
 
 ```ts
+import { background } from "@go-like/context"
 import { createConnectTransport } from "@connectrpc/connect-web"
 import { newHandler } from "@go-like/transport-grpc-buf"
 import { newOrderServiceClient, registerOrderServiceHandler } from "./gen/order_like.js"
+import type { OrderServiceHandler } from "./gen/order_like.js"
+
+declare const orderService: OrderServiceHandler
 
 export const handler = newHandler((server) => {
   registerOrderServiceHandler(server, orderService)
@@ -18,6 +22,7 @@ export const handler = newHandler((server) => {
 
 const client = createConnectTransport({ baseUrl: "https://api.example.com" })
 const orders = newOrderServiceClient(client)
+const ctx = background()
 const order = await orders.getOrder(ctx, { id: "order-1" })
 ```
 
@@ -34,30 +39,37 @@ prompt cancellation 的 Bun 长连接业务不能据基础协议测试宣称可�
 
 ## Managed standard gRPC
 
-直连一个地址：
+`withAddress` 与 `withService` 已删除。直连使用绝对根 URL；`discovery:///<name>` 是 Registry 应用名，不能放进地址数组。直连一个地址：
 
 ```ts
-import { newClient, withAddress } from "@go-like/transport-grpc-buf/native"
-import { newOrderServiceClient } from "./gen/order_like.js"
+import { background } from "@go-like/context"
+import { newClient, withEndpoint } from "@go-like/transport-grpc-buf/native"
 
-const client = newClient(withAddress("https://orders.internal"))
+declare function newOrderServiceClient(client: {
+  close(ctx: ReturnType<typeof background>): Promise<void>
+}): {
+  getOrder(ctx: ReturnType<typeof background>, request: { id: string }): Promise<{ id: string }>
+}
+
+const client = newClient(withEndpoint("https://orders.internal"))
 const orders = newOrderServiceClient(client)
+const ctx = background()
 const order = await orders.getOrder(ctx, { id: "order-1" })
-
+void order
 await client.close(ctx)
 ```
 
-直连多个地址和服务发现都复用 `@go-like/registry` 的 `Selector`。多地址直连：
+真实生成代码从 `./gen/order_like.js` 导入 `newOrderServiceClient`。直连多个地址和服务发现都复用 `@go-like/registry` 的 `Selector`。多地址直连：
 
 ```ts
-import { newClient, withAddress, withSelector } from "@go-like/transport-grpc-buf/native"
+import { newClient, withEndpoint, withSelector } from "@go-like/transport-grpc-buf/native"
 import { newRoundRobinSelector } from "@go-like/registry"
 
 const client = newClient(
-  withAddress("https://orders-a.internal", "https://orders-b.internal"),
+  withEndpoint(["https://orders-a.internal", "https://orders-b.internal"]),
   withSelector(newRoundRobinSelector())
 )
-const orders = newOrderServiceClient(client)
+void client
 ```
 
 服务发现：
@@ -66,17 +78,19 @@ const orders = newOrderServiceClient(client)
 import {
   newClient,
   withDiscovery,
-  withSelector,
-  withService
+  withEndpoint,
+  withSelector
 } from "@go-like/transport-grpc-buf/native"
-import { newRoundRobinSelector } from "@go-like/registry"
+import { newRoundRobinSelector, type Discovery } from "@go-like/registry"
+
+declare const discovery: Discovery
 
 const client = newClient(
-  withService("orders-grpc"),
+  withEndpoint("discovery:///orders-grpc"),
   withDiscovery(discovery),
   withSelector(newRoundRobinSelector())
 )
-const orders = newOrderServiceClient(client)
+void client
 ```
 
 托管 Server 在启动前使用同一份生成胶水注册：
@@ -84,6 +98,9 @@ const orders = newOrderServiceClient(client)
 ```ts
 import { address, advertise, newServer } from "@go-like/transport-grpc-buf/native"
 import { registerOrderServiceHandler } from "./gen/order_like.js"
+import type { OrderServiceHandler } from "./gen/order_like.js"
+
+declare const orderService: OrderServiceHandler
 
 const server = newServer(address("0.0.0.0:9000"), advertise("orders.internal:9000"))
 registerOrderServiceHandler(server, orderService)

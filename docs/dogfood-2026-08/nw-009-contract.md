@@ -2,6 +2,7 @@
 
 > 历史验收合同：本文绑定下表的冻结生产者与战役快照；下文的调用示例及签名不代表后续 API。
 > 当前构造与注册方式见 [开发者体验基线](../developer-experience-alignment.md)，原始验收记录保留供追溯。
+> 信封头 `Go-Like-Service` / `Go-Like-Endpoint` 已被 path `/<service>/<endpoint>` 取代。
 
 本文钉死 `NW-009`（findings `MS-009-001` … `MS-009-006`）的公共 API 与可观察行为。标识符、头名、状态码、路径与包名保持英文。实现必须满足下列条款；未列入的行为不得借本票扩大范围。
 

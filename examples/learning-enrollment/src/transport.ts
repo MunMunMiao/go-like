@@ -1,9 +1,10 @@
-import { background, type Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
-import type { Listener, Message, Socket } from "@go-like/transport"
-import { endpoint as endpointHeader, request as serviceHeader } from "@go-like/transport/headers"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import type { Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
+import { learningCapacity } from "./contract"
 import {
   enrollmentFingerprint,
   learnerCourseKey,
@@ -11,16 +12,19 @@ import {
   type EnrollmentReceipt
 } from "./service"
 
+/** Stores enrollment receipts and learner-course occupancy in process memory. */
 export interface EnrollmentRepository {
   find(ctx: Context, command: EnrollCommand): EnrollmentReceipt | null
   learnerEnrolled(ctx: Context, learnerId: string, courseId: string): boolean
   save(ctx: Context, command: EnrollCommand, remainingSeats: number): EnrollmentReceipt
 }
 
+/** Reserves one course seat through the internal capacity service. */
 export interface CapacityClient {
   reserve(ctx: Context, requestId: string, courseId: string): Promise<number>
 }
 
+/** Owns the capacity Server, its caller, and the local remaining-seat view. */
 export interface CapacityRuntime {
   readonly server: Server
   readonly client: CapacityClient
@@ -37,39 +41,12 @@ interface CapacityRequest {
   readonly courseId: string
 }
 
-interface CapacityReply {
-  readonly remainingSeats: number
-}
-
-const capacityAddress = "memory://learning-capacity"
-const encoder = new TextEncoder()
-const decoder = new TextDecoder()
+const capacityAddress = "memory://learning-capacity.v1"
 
 /** Rejects work admitted from an already terminal Context. */
 function checkContext(ctx: Context): void {
   const failure = ctx.err()
   if (failure !== null) throw failure
-}
-
-/** Converts unknown JSON into one capacity request without coercion. */
-function capacityRequestFrom(value: unknown): CapacityRequest {
-  if (value === null || typeof value !== "object") throw new TypeError("invalid capacity request")
-  const requestId: unknown = Reflect.get(value, "requestId")
-  const courseId: unknown = Reflect.get(value, "courseId")
-  if (typeof requestId !== "string" || typeof courseId !== "string") {
-    throw new TypeError("invalid capacity request")
-  }
-  return Object.freeze({ requestId, courseId })
-}
-
-/** Converts unknown JSON into one capacity reply without coercion. */
-function capacityReplyFrom(value: unknown): CapacityReply {
-  if (value === null || typeof value !== "object") throw new TypeError("invalid capacity reply")
-  const remainingSeats: unknown = Reflect.get(value, "remainingSeats")
-  if (!Number.isSafeInteger(remainingSeats) || typeof remainingSeats !== "number") {
-    throw new TypeError("invalid capacity reply")
-  }
-  return Object.freeze({ remainingSeats })
 }
 
 /** Creates the process-local enrollment repository. */
@@ -124,8 +101,6 @@ export function newCapacityRuntime(
   const transport = newMemoryTransport()
   const remainingByCourse = new Map<string, number>()
   const reservationByRequest = new Map<string, string>()
-  let started = false
-  let listener: Listener | null = null
   for (const [courseId, seats] of Object.entries(initialCapacity)) {
     if (!Number.isSafeInteger(seats) || seats < 0) {
       throw new RangeError("course capacity must be a non-negative safe integer")
@@ -134,80 +109,44 @@ export function newCapacityRuntime(
   }
 
   /** Reserves one seat exactly once for the request identity. */
-  function reserveSeat(ctx: Context, request: CapacityRequest): CapacityReply {
-    checkContext(ctx)
+  function reserveSeat(_ctx: Context, request: CapacityRequest): { remainingSeats: number } {
     const previousCourse = reservationByRequest.get(request.requestId)
     if (previousCourse !== undefined) {
-      if (previousCourse !== request.courseId) throw new Error("capacity idempotency conflict")
+      if (previousCourse !== request.courseId) {
+        throw serviceError("failed_precondition", "capacity idempotency conflict", 409)
+      }
       const previousRemaining = remainingByCourse.get(request.courseId)
-      if (previousRemaining === undefined) throw new Error("unknown course")
+      if (previousRemaining === undefined) throw serviceError("not_found", "unknown course", 404)
       return Object.freeze({ remainingSeats: previousRemaining })
     }
     const available = remainingByCourse.get(request.courseId)
-    if (available === undefined) throw new Error("unknown course")
-    if (available === 0) throw new Error("course is full")
+    if (available === undefined) throw serviceError("not_found", "unknown course", 404)
+    if (available === 0) throw serviceError("resource_exhausted", "course is full", 409)
     const remainingSeats = available - 1
     remainingByCourse.set(request.courseId, remainingSeats)
     reservationByRequest.set(request.requestId, request.courseId)
     return Object.freeze({ remainingSeats })
   }
 
-  /** Handles one internal capacity exchange over a transport Socket. */
-  async function handleCapacity(ctx: Context, socket: Socket): Promise<void> {
-    const message = await socket.recv(ctx)
-    try {
-      const request = capacityRequestFrom(JSON.parse(decoder.decode(message.body)))
-      const reply = reserveSeat(ctx, request)
-      await socket.send(ctx, {
-        header: Object.freeze({ status: "ok" }),
-        body: encoder.encode(JSON.stringify(reply))
-      })
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : "capacity request failed"
-      await socket.send(ctx, {
-        header: Object.freeze({ status: "error" }),
-        body: encoder.encode(messageText)
-      })
-    }
-  }
-
-  const capacityServer: Server = Object.freeze({
-    async start(ctx: Context): Promise<void> {
-      if (started) throw new Error("capacity service already started")
+  const server = newServer(serverTransport(transport), address(capacityAddress))
+  learningCapacity.registerHandler(server, {
+    reserve(ctx, request) {
       checkContext(ctx)
-      listener = await transport.listen(ctx, capacityAddress)
-      started = true
-      await listener.accept(ctx, handleCapacity)
-    },
-    async stop(ctx: Context): Promise<void> {
-      if (listener !== null) await listener.close(ctx)
+      return reserveSeat(ctx, request)
     }
   })
-
-  const client: CapacityClient = Object.freeze({
-    async reserve(ctx: Context, requestId: string, courseId: string): Promise<number> {
-      const socket = await transport.dial(ctx, capacityAddress)
-      try {
-        const message: Message = Object.freeze({
-          header: Object.freeze({
-            [serviceHeader]: "learning-capacity",
-            [endpointHeader]: "Capacity.Reserve"
-          }),
-          body: encoder.encode(JSON.stringify({ requestId, courseId }))
-        })
-        await socket.send(ctx, message)
-        const reply = await socket.recv(ctx)
-        if (reply.header.status !== "ok") throw new Error(decoder.decode(reply.body))
-        return capacityReplyFrom(JSON.parse(decoder.decode(reply.body))).remainingSeats
-      } finally {
-        await socket.close(background())
-      }
-    }
-  })
+  const caller = learningCapacity.newClient(
+    newClient(withEndpoint(capacityAddress), withTransport(transport))
+  )
 
   return Object.freeze({
-    server: capacityServer,
-    client,
+    server,
+    client: Object.freeze({
+      async reserve(ctx: Context, requestId: string, courseId: string): Promise<number> {
+        const reply = await caller.reserve(ctx, { requestId, courseId })
+        return reply.remainingSeats
+      }
+    }),
     remaining(ctx: Context, courseId: string): number {
       checkContext(ctx)
       const remainingSeats = remainingByCourse.get(courseId)

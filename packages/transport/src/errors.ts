@@ -1,20 +1,12 @@
 import type {
   ServiceError,
-  ServiceErrorEnvelope,
-  ServiceErrorWireKind,
   TransportClosedError,
   TransportProtocolError,
   TransportStateError,
   UnsupportedTransportCapabilityError
 } from "./types"
-import {
-  contentType,
-  serviceError as serviceErrorHeader,
-  serviceErrorCode,
-  serviceErrorStatus
-} from "./headers"
 
-const ServiceErrorContentType = "application/json; charset=utf-8"
+const ServiceErrorContentType = "application/json"
 const MaximumServiceErrorMessageBytes = 4_096
 const MaximumServiceErrorMetadataEntries = 32
 const MaximumServiceErrorMetadataKeyBytes = 128
@@ -25,11 +17,6 @@ const Encoder = new TextEncoder()
 const Decoder = new TextDecoder("utf-8", { fatal: true })
 const ServiceErrorBrand = new WeakSet<object>()
 
-interface HeaderValue {
-  readonly found: boolean
-  readonly value: string
-}
-
 /** Reports whether a value is a non-array object suitable for structural inspection. */
 function isRecord(value: unknown): value is object {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -38,19 +25,6 @@ function isRecord(value: unknown): value is object {
 /** Reads one own data property without invoking an inherited member. */
 function own(value: object, key: string): unknown {
   return Object.getOwnPropertyDescriptor(value, key)?.value
-}
-
-/** Returns whether a string contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
 }
 
 /** Returns the exact UTF-8 length of one already well-formed string. */
@@ -88,7 +62,7 @@ function snapshotServiceErrorMetadata(value: unknown): Readonly<Record<string, s
   const entries: [string, string][] = []
   for (const key of keys) {
     const item = own(value, key)
-    if (!isWellFormed(key) || typeof item !== "string" || !isWellFormed(item)) {
+    if (!key.isWellFormed() || typeof item !== "string" || !item.isWellFormed()) {
       throw new TypeError("ServiceError metadata must contain well-formed string keys and values")
     }
     if (utf8Length(key) > MaximumServiceErrorMetadataKeyBytes) {
@@ -99,7 +73,9 @@ function snapshotServiceErrorMetadata(value: unknown): Readonly<Record<string, s
     }
     entries.push([key, item])
   }
-  return Object.freeze(Object.fromEntries(entries))
+  const metadata = Object.create(null) as Record<string, string>
+  for (const [key, item] of entries) metadata[key] = item
+  return Object.freeze(metadata)
 }
 
 /** Encodes one already validated ServiceError as its exact canonical JSON bytes. */
@@ -108,7 +84,6 @@ function canonicalServiceErrorBody(error: ServiceError): Uint8Array {
     JSON.stringify({
       code: error.code,
       message: error.message,
-      status: error.status,
       metadata: error.metadata
     })
   )
@@ -149,7 +124,7 @@ export function serviceError(
   if (typeof code !== "string" || !ServiceErrorCode.test(code)) {
     throw new TypeError("ServiceError code is invalid")
   }
-  if (typeof message !== "string" || !isWellFormed(message)) {
+  if (typeof message !== "string" || !message.isWellFormed()) {
     throw new TypeError("ServiceError message must be a well-formed string")
   }
   if (utf8Length(message) > MaximumServiceErrorMessageBytes) {
@@ -177,156 +152,81 @@ export function internalServiceError(): ServiceError {
   return serviceError("internal", "internal service error", 500)
 }
 
-/** Validates one ServiceError wire kind at a public runtime boundary. */
-function wireKind(value: unknown): ServiceErrorWireKind {
-  if (value !== "unary") throw new TypeError("ServiceError wire kind must be unary")
-  return value
-}
-
-/** Builds a frozen envelope whose body reads never expose retained canonical bytes. */
-function serviceErrorEnvelope(
-  _kind: ServiceErrorWireKind,
-  error: ServiceError,
-  body: Uint8Array
-): ServiceErrorEnvelope {
-  const retained = new Uint8Array(body)
-  const header = Object.freeze({
-    [serviceErrorHeader]: "v1",
-    [serviceErrorCode]: error.code,
-    [serviceErrorStatus]: String(error.status),
-    [contentType]: ServiceErrorContentType
-  })
-  const envelope: ServiceErrorEnvelope = {
-    serviceStatus: error.status,
-    carrierStatus: 200,
-    header,
-    /** Returns detached canonical ServiceError bytes for every read. */
-    get body(): Uint8Array {
-      return new Uint8Array(retained)
-    }
-  }
-  return Object.freeze(envelope)
-}
-
-/** Encodes one branded ServiceError through the sole canonical wire helper. */
-export function encodeServiceError(
-  kind: ServiceErrorWireKind,
-  error: ServiceError
-): ServiceErrorEnvelope {
-  const selectedKind = wireKind(kind)
-  if (!isServiceError(error)) throw new TypeError("ServiceError encoder requires a branded error")
-  return serviceErrorEnvelope(selectedKind, error, canonicalServiceErrorBody(error))
-}
-
-/** Reads one header name case-insensitively and rejects ambiguous case variants. */
-function headerValue(header: unknown, expectedName: string): HeaderValue {
-  if (!isRecord(header)) throw new TypeError("ServiceError header must be a string record")
-  const prototype = Object.getPrototypeOf(header)
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new TypeError("ServiceError header must be a plain string record")
-  }
-  const expected = expectedName.toLowerCase()
-  let found = false
-  let value = ""
-  for (const key of Object.keys(header)) {
-    const item = own(header, key)
-    if (typeof item !== "string") throw new TypeError("ServiceError header values must be strings")
-    if (key.toLowerCase() !== expected) continue
-    if (found) throw new TypeError("ServiceError header contains duplicate case variants")
-    found = true
-    value = item
-  }
-  return Object.freeze({ found, value })
-}
-
-/** Copies one parsed metadata object into a string record for bounded validation. */
+/** Copies parsed metadata into a string record, or throws when the value is not one. */
 function parsedMetadata(value: unknown): Readonly<Record<string, string>> {
   if (!isRecord(value)) throw new TypeError("ServiceError body metadata must be an object")
-  const entries: [string, string][] = []
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("ServiceError body metadata must be a plain object")
+  }
+  const metadata = Object.create(null) as Record<string, string>
   for (const key of Object.keys(value)) {
     const item = own(value, key)
     if (typeof item !== "string") {
       throw new TypeError("ServiceError body metadata values must be strings")
     }
-    entries.push([key, item])
+    metadata[key] = item
   }
-  return Object.fromEntries(entries)
+  return metadata
 }
 
-/** Reports whether two byte sequences are exactly equal. */
-function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) return false
-  }
-  return true
+/** Reports whether the media type is exactly application/json, ignoring parameters. */
+function jsonMediaType(response: Response): boolean {
+  const raw = response.headers.get("content-type")
+  if (raw === null) return false
+  return raw.split(";", 1)[0]?.trim().toLowerCase() === ServiceErrorContentType
 }
 
-/** Decodes one marker-present ServiceError carrier under strict canonical rules. */
-function decodeMarkedServiceError(
-  _kind: ServiceErrorWireKind,
-  carrierStatus: number,
-  header: Readonly<Record<string, string>>,
-  body: Uint8Array,
-  marker: HeaderValue
-): ServiceError {
-  if (marker.value !== "v1") throw new TypeError("ServiceError marker is unsupported")
-  if (!Number.isInteger(carrierStatus))
-    throw new TypeError("ServiceError carrier status is invalid")
-  if (carrierStatus !== 200) throw new TypeError("unary ServiceError carrier status must be 200")
-  const codeHeader = headerValue(header, serviceErrorCode)
-  const statusHeader = headerValue(header, serviceErrorStatus)
-  const typeHeader = headerValue(header, contentType)
-  if (!codeHeader.found || !statusHeader.found || !typeHeader.found) {
-    throw new TypeError("ServiceError wire is missing a required header")
-  }
-  if (typeHeader.value !== ServiceErrorContentType) {
-    throw new TypeError("ServiceError content type is invalid")
-  }
-  if (!(body instanceof Uint8Array) || body.byteLength > MaximumServiceErrorBodyBytes) {
-    throw new TypeError("ServiceError body is invalid")
-  }
-  const text = Decoder.decode(body)
-  const parsed: unknown = JSON.parse(text)
-  if (!isRecord(parsed)) throw new TypeError("ServiceError body must be an object")
-  if (Object.keys(parsed).join(",") !== "code,message,status,metadata") {
-    throw new TypeError("ServiceError body schema is invalid")
-  }
-  const code = own(parsed, "code")
-  const message = own(parsed, "message")
-  const status = own(parsed, "status")
-  if (typeof code !== "string" || typeof message !== "string" || typeof status !== "number") {
-    throw new TypeError("ServiceError body fields are invalid")
-  }
-  const decoded = serviceError(code, message, status, parsedMetadata(own(parsed, "metadata")))
-  if (codeHeader.value !== decoded.code || statusHeader.value !== String(decoded.status)) {
-    throw new TypeError("ServiceError header and body disagree")
-  }
-  if (!equalBytes(body, canonicalServiceErrorBody(decoded))) {
-    throw new TypeError("ServiceError body is not canonical")
-  }
-  return decoded
+/** Reports whether a parsed object has exactly the Fetch ServiceError keys. */
+function exactServiceErrorKeys(value: object): boolean {
+  const keys = Object.keys(value)
+  return (
+    keys.length === 3 &&
+    keys.includes("code") &&
+    keys.includes("message") &&
+    keys.includes("metadata")
+  )
 }
 
-/** Decodes one canonical ServiceError or returns null when its marker is absent. */
-export function decodeServiceError(
-  kind: ServiceErrorWireKind,
-  carrierStatus: number,
-  header: Readonly<Record<string, string>>,
-  body: Uint8Array
-): ServiceError | null {
-  const selectedKind = wireKind(kind)
-  let marker: HeaderValue
+/** Copies encoded bytes into a standalone ArrayBuffer accepted as a Fetch body. */
+function responseBytes(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
+}
+
+/** Encodes a ServiceError as the Fetch response required by the internal wire. */
+export function serviceErrorResponse(error: ServiceError): Response {
+  if (!isServiceError(error)) throw new TypeError("ServiceError response requires a branded error")
+  return new Response(responseBytes(canonicalServiceErrorBody(error)), {
+    status: error.status,
+    headers: { "content-type": ServiceErrorContentType }
+  })
+}
+
+/** Decodes a Fetch ServiceError response, or returns null when the body is not canonical. */
+export async function decodeServiceErrorResponse(response: Response): Promise<ServiceError | null> {
+  if (!(response instanceof Response)) return null
+  if (!Number.isInteger(response.status) || response.status < 400 || response.status > 599) {
+    return null
+  }
+  if (!jsonMediaType(response)) return null
+  let bytes: Uint8Array
   try {
-    marker = headerValue(header, serviceErrorHeader)
+    bytes = new Uint8Array(await response.arrayBuffer())
   } catch {
-    throw newTransportProtocolError("invalid ServiceError wire")
+    return null
   }
-  if (!marker.found) return null
+  if (bytes.byteLength > MaximumServiceErrorBodyBytes) return null
   try {
-    return decodeMarkedServiceError(selectedKind, carrierStatus, header, body, marker)
+    const parsed: unknown = JSON.parse(Decoder.decode(bytes))
+    if (!isRecord(parsed) || !exactServiceErrorKeys(parsed)) return null
+    const code = own(parsed, "code")
+    const message = own(parsed, "message")
+    if (typeof code !== "string" || typeof message !== "string") return null
+    return serviceError(code, message, response.status, parsedMetadata(own(parsed, "metadata")))
   } catch {
-    throw newTransportProtocolError("invalid ServiceError wire")
+    return null
   }
 }
 

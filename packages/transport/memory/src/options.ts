@@ -1,5 +1,4 @@
 import {
-  codec,
   logger,
   secure,
   timeout,
@@ -17,7 +16,6 @@ export const defaultDialTimeoutMs = 5_000
 /** Returns the reviewed provider-neutral common defaults. */
 export function defaultMemoryOptions(): Options {
   return Object.freeze({
-    codec: null,
     logger: null,
     timeoutMs: 0,
     secure: false,
@@ -32,7 +30,6 @@ export function snapshotMemoryOptions(value: Options): Options {
   }
   let snapshot = defaultMemoryOptions()
   const reducers: readonly Option[] = [
-    codec(value.codec),
     logger(value.logger),
     timeout(value.timeoutMs),
     secure(value.secure),

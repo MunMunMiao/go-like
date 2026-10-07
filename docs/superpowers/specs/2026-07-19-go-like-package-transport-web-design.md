@@ -5,6 +5,7 @@
 状态：部分被后续决策取代；保留为历史实施依据
 
 > 更新（2026-08-03）：本文关于 `@go-like/hono`、`@go-like/h3`、`@go-like/elysia` 的设计已被原生 Fetch 边界取代。Hono、Elysia 与 H3 2.x 直接提供 `app.fetch`，H3 1.x 使用官方 `toWebHandler(app)`；当前边界见 [ADR 0003](../../adr/0003-resident-adapter-ownership.md)。
+> 文中的 `Go-Like-Service` / `Go-Like-Endpoint` 路由头已被 path `/<service>/<endpoint>` 取代。
 
 ## 1. 文档效力
 

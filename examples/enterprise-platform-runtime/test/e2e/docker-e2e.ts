@@ -10,7 +10,7 @@ import {
   newClient,
   withDiscovery,
   withSelector,
-  withService,
+  withEndpoint,
   withTransport,
   type Client
 } from "@go-like/client"
@@ -83,13 +83,8 @@ import type {
   ProcessSupervisor
 } from "../../../../e2e/harness/process"
 import { runtimeConfigSchema } from "#src/config"
-import {
-  echoEndpointName,
-  echoServiceName,
-  newEchoClient,
-  newEchoHandler,
-  registerEchoHandler
-} from "#src/echo"
+import { echoService } from "#src/contract"
+import { echoEndpointName, echoServiceName, newEchoHandler } from "#src/echo"
 import { newManagementHandler } from "#src/management"
 import { registerRuntimeProbes } from "#src/probes"
 import { newPlatformRuntimeState } from "#src/runtime-state"
@@ -738,7 +733,7 @@ async function run(): Promise<void> {
       address("127.0.0.1:0"),
       middleware(traceUnaryMiddleware(tracer, propagator))
     )
-    registerEchoHandler(
+    echoService.registerHandler(
       echoServer,
       newEchoHandler(runtimeConfig, function recordCall(): void {
         handlerCalls += 1
@@ -750,7 +745,7 @@ async function run(): Promise<void> {
     client = traceClient(
       newClient(
         withDiscovery(registry),
-        withService(echoServiceName),
+        withEndpoint(`discovery:///${echoServiceName}`),
         withSelector(newRoundRobinSelector()),
         withTransport(newHTTPTransport())
       ),
@@ -762,7 +757,7 @@ async function run(): Promise<void> {
     const managementHandler = newManagementHandler(
       createHealthHandler(probes),
       createPrometheusHandler(prometheus),
-      newEchoClient(client)
+      echoService.newClient(client)
     )
     const managementServer = newNodeServer(managementHandler, hostname("127.0.0.1"), port(0))
     const managementAddress = await managementServer.endpoint(background())

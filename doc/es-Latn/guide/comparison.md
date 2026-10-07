@@ -29,18 +29,18 @@ Por eso el proyecto no intenta ganar una comparación de “framework más grand
 
 ## Matriz de propiedad
 
-| Preocupación                   | NestJS                                                    | Fastify                                         | Hono / Elysia / Koa                                             | tRPC                                               | go-like                                                                                   |
-| ------------------------------ | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Tabla de rutas externas        | Controllers y decorators                                  | Instancia de Fastify                            | Instancia del framework o router externo                        | Router de procedures, no rutas REST ordinarias     | Framework externo o la aplicación                                                         |
-| ABI del handler Web            | Abstracción request/reply propiedad del adaptador         | request/reply de Node                           | Fetch estándar como centro en Hono y adaptadores Web Standard   | Adaptadores Fetch/Node/Express/Fastify             | `(Request) => Response \| Promise<Response>` estándar                                     |
-| Ciclo de vida de la aplicación | Application context y hooks                               | `ready`, `listen`, `close`, hooks               | El adaptador de runtime y el ciclo de vida del framework varían | Responsabilidad del host/adaptador                 | `newApp`, `App.run`, `App.stop`, hooks, Servers estructurales                             |
-| Ciclo de vida de recursos      | Hooks del container/framework                             | Hooks de plugin y server                        | Responsabilidad de la aplicación/runtime                        | Responsabilidad de la aplicación/adaptador         | Contratos explícitos `Server.start(ctx)` / `stop(ctx)` y ownership del adaptador          |
-| Composición de dependencias    | Container/providers de Nest                               | Decoration y encapsulation de plugins           | Context/env y composición; no hay un container DI general       | Context factory explícito y composición del router | Constructores explícitos y functional options; no hay container DI                        |
-| Transporte interno             | Transportes de microservicios y adaptadores del framework | No es una abstracción de discovery de servicios | No es una abstracción de discovery de servicios                 | Adaptadores de procedures y WebSocket opcional     | `Transport`, `Client`, `Listener`, `Socket`, `Message` unary                              |
-| Discovery y selección          | Específicos del transporte o externos                     | Externos                                        | Externos                                                        | Externos                                           | `Registry`, `Discovery`, `Watcher`, Filters, cinco policies de Selector                   |
-| Retry                          | Específico del framework o provider                       | Específico de la aplicación/plugin              | Específico de la aplicación                                     | Específico de middleware/adaptador                 | Una sola tentativa por defecto; `withRetry` requiere autorización y total de intentos     |
-| Streaming                      | Opciones de framework/provider                            | Opciones de streams Node/Web                    | Web Streams nativas y APIs del framework                        | Depende del adaptador HTTP/WS                      | Web Streams; Message unary; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Instrumentación global         | Integración de framework/provider                         | Ecosistema de plugins                           | Ecosistema de middleware                                        | Middleware/adaptadores                             | Wrappers explícitos; no instala providers globales                                        |
+| Preocupación                   | NestJS                                                    | Fastify                                         | Hono / Elysia / Koa                                             | tRPC                                               | go-like                                                                                               |
+| ------------------------------ | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Tabla de rutas externas        | Controllers y decorators                                  | Instancia de Fastify                            | Instancia del framework o router externo                        | Router de procedures, no rutas REST ordinarias     | Framework externo o la aplicación                                                                     |
+| ABI del handler Web            | Abstracción request/reply propiedad del adaptador         | request/reply de Node                           | Fetch estándar como centro en Hono y adaptadores Web Standard   | Adaptadores Fetch/Node/Express/Fastify             | `(Request) => Response \| Promise<Response>` estándar                                                 |
+| Ciclo de vida de la aplicación | Application context y hooks                               | `ready`, `listen`, `close`, hooks               | El adaptador de runtime y el ciclo de vida del framework varían | Responsabilidad del host/adaptador                 | `newApp`, `App.run`, `App.stop`, hooks, Servers estructurales                                         |
+| Ciclo de vida de recursos      | Hooks del container/framework                             | Hooks de plugin y server                        | Responsabilidad de la aplicación/runtime                        | Responsabilidad de la aplicación/adaptador         | Contratos explícitos `Server.start(ctx)` / `stop(ctx)` y ownership del adaptador                      |
+| Composición de dependencias    | Container/providers de Nest                               | Decoration y encapsulation de plugins           | Context/env y composición; no hay un container DI general       | Context factory explícito y composición del router | Constructores explícitos y functional options; no hay container DI                                    |
+| Transporte interno             | Transportes de microservicios y adaptadores del framework | No es una abstracción de discovery de servicios | No es una abstracción de discovery de servicios                 | Adaptadores de procedures y WebSocket opcional     | `Transport`, `Client`, `Listener`, `defineService`, SSE `ServerStream`                                |
+| Discovery y selección          | Específicos del transporte o externos                     | Externos                                        | Externos                                                        | Externos                                           | `Registry`, `Discovery`, `Watcher`, Filters, cinco policies de Selector                               |
+| Retry                          | Específico del framework o provider                       | Específico de la aplicación/plugin              | Específico de la aplicación                                     | Específico de middleware/adaptador                 | Una sola tentativa por defecto; `withRetry` requiere autorización y total de intentos                 |
+| Streaming                      | Opciones de framework/provider                            | Opciones de streams Node/Web                    | Web Streams nativas y APIs del framework                        | Depende del adaptador HTTP/WS                      | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
+| Instrumentación global         | Integración de framework/provider                         | Ecosistema de plugins                           | Ecosistema de middleware                                        | Middleware/adaptadores                             | Wrappers explícitos; no instala providers globales                                                    |
 
 Las etiquetas de las primeras cinco filas describen posiciones arquitectónicas, no una clasificación de calidad. Que un framework sea dueño de una tabla de rutas es útil cuando ese es el problema de composición. Simplemente es una decisión de propiedad distinta de la que toma go-like al dejar las rutas en la aplicación.
 
@@ -79,13 +79,13 @@ Client
   -> Selector.select
   -> opaque ServiceEndpoint URL
   -> Transport.dial or resident logical owner
-  -> send(Message)
+  -> fetch(Request)
   -> @go-like/server route and unary handler
-  -> recv(Message)
+  -> read Response
   -> feedback and owner release
 ```
 
-Un `Endpoint` tipado vincula la validación de request y response de `Struct` con la frontera `Message` existente. No es un IDL ni un protocolo generado. `withAddress(...addresses)` selecciona una instantánea directa durante la construcción; las instantáneas directas y descubiertas usan el mismo Selector. La ruta en proceso con Memory Transport sigue siendo una buena primera prueba.
+Un `Endpoint` tipado vincula la validación de request y response de `Struct` con un cuerpo JSON de Fetch. No es un IDL ni un protocolo generado. `withEndpoint(...)` selecciona una instantánea directa durante la construcción; las instantáneas directas y descubiertas usan el mismo Selector. La ruta en proceso con Memory Transport sigue siendo una buena primera prueba.
 
 Las opciones de transporte de microservicios de NestJS, los adaptadores de procedures de tRPC y los transportes de frameworks Go no son intercambiables con este DAG. Pueden tener otra identidad de ruta, modelo de serialización, pool de conexiones o capa de retry. Una comparación debe registrar esas diferencias en lugar de marcar como iguales todas las casillas de “RPC”.
 
@@ -108,8 +108,8 @@ Web framework or Fetch Handler
   -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
 
 go-like internal Client/Transport
-  -> one unary Message request and one unary Message response
-  -> no full-duplex RPC Stream SPI
+  -> one JSON body, or one SSE server stream when `stream: true`
+  -> not a bidirectional multi-frame protocol
 
 @go-like/transport-grpc-buf
   -> Fetch: Connect/gRPC-Web unary and server-streaming
@@ -158,7 +158,7 @@ Koa es un kernel pequeño de middleware para Node y no incluye un router. Es un 
 
 ### tRPC
 
-tRPC controla un router de procedures tipado y su middleware de procedures. Puede usar adaptadores Fetch, Node, Express, Fastify o WebSocket, pero no es un Registry, Selector, pool de conexiones ni gestor del ciclo de vida de la aplicación. El `Endpoint` tipado de go-like es un binding runtime más pequeño de `Struct` sobre `Message` unary, no un DSL de procedures ni un IDL generado que compita con tRPC.
+tRPC controla un router de procedures tipado y su middleware de procedures. Puede usar adaptadores Fetch, Node, Express, Fastify o WebSocket, pero no es un Registry, Selector, pool de conexiones ni gestor del ciclo de vida de la aplicación. El `Endpoint` tipado de go-like es un binding runtime más pequeño de `Struct` sobre un cuerpo JSON de Fetch, no un DSL de procedures ni un IDL generado que compita con tRPC.
 
 ### go-micro y go-kratos
 
@@ -166,7 +166,7 @@ Estos proyectos Go son referencias arquitectónicas útiles para llamadas Contex
 
 - Go `context.Context` y go-like `Context` comparten la intención de cancelación explícita, pero tienen representaciones runtime distintas.
 - El modelo de watchers de Registry de go-micro y los snapshots de reemplazo completo de go-like no deben enseñarse como streams de eventos idénticos.
-- `@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del Transport SPI unary.
+- `@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
 - Los defaults de providers de go-micro y go-kratos, los loops de retry, el half-close de streams y los defaults de selectors dependen de la versión. Usa la tabla de commits upstream fijados en el registro de investigación y vuelve a comprobarla antes de publicar una nueva comparación.
 
 ## Qué elegir
@@ -193,7 +193,7 @@ Las afirmaciones de go-like en esta página se pueden rastrear al árbol actual 
 - `packages/web/src/context.ts` para el Handler estándar y el bridge de Context;
 - `packages/client/src/index.ts` para las opciones de Client, pooling, retry y el pipeline de intentos;
 - `packages/server/src/index.ts` para handlers internos unary y dispatch de rutas;
-- `packages/transport/src/types.ts` y `packages/transport/src/endpoint.ts` para las fronteras de Message y Endpoint tipado;
+- `packages/transport/src/types.ts` y `packages/transport/src/endpoint.ts` para las fronteras Fetch Request/Response y defineService;
 - `packages/registry/src/types.ts` y `packages/registry/src/selector.ts` para snapshots, filters, selectors y feedback.
 
 El registro de investigación también guarda estas entradas de comparación externas fijadas:

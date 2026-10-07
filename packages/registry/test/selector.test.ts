@@ -14,8 +14,10 @@ import {
   type NoAvailableEndpointError,
   type Filter,
   type SelectionDone,
+  type Selector,
   type ServiceInstance
 } from "../src/index"
+import { snapshotServiceInstances } from "../src/provider"
 import { flush } from "./helpers"
 
 const a: ServiceInstance = {
@@ -2450,4 +2452,73 @@ describe("power-of-two-choices endpoint selector", () => {
     firstDone(background(), { error: null })
     done(background(), { error: null })
   })
+})
+
+/** Builds a deterministic random source that cycles through fixed samples. */
+function cyclingSamples(): () => number {
+  const samples = [0.1, 0.9, 0.5, 0.3, 0.7, 0.2]
+  let index = 0
+  return function nextSample(): number {
+    const sample = samples[index % samples.length] ?? 0
+    index += 1
+    return sample
+  }
+}
+
+const selectorKinds: readonly (readonly [string, () => Selector])[] = [
+  ["round-robin", () => newRoundRobinSelector()],
+  ["random", () => newRandomSelector(cyclingSamples())],
+  [
+    "weighted round-robin",
+    () => newWeightedRoundRobinSelector((endpoint) => (endpoint.url.length % 3) + 1)
+  ],
+  ["EWMA", () => newEWMASelector({ random: cyclingSamples(), now: () => 0 })],
+  ["power-of-two-choices", () => newP2CSelector({ random: cyclingSamples(), now: () => 0 })]
+]
+
+describe("published service snapshots", () => {
+  for (const [name, create] of selectorKinds) {
+    test(`${name} selects identically from a published snapshot and raw instances`, () => {
+      const raw = [b, a, billing]
+      const published = snapshotServiceInstances(raw)
+      const fromRaw = create()
+      const fromPublished = create()
+
+      for (let round = 0; round < 8; round += 1) {
+        const [expected, expectedDone] = fromRaw.select(background(), raw)
+        const [actual, actualDone] = fromPublished.select(background(), published)
+        expect(actual.url).toBe(expected.url)
+        expect(actual.instance).toEqual(expected.instance)
+        // The published snapshot is trusted as is, so its own instances are handed out.
+        expect(published.includes(actual.instance)).toBe(true)
+        expect(raw.includes(expected.instance)).toBe(false)
+        expectedDone(background(), { error: null })
+        actualDone(background(), { error: null })
+      }
+      expect(() => create().select(background(), snapshotServiceInstances([]))).toThrow(
+        "no service endpoint is available"
+      )
+      const [ctx, cancel] = withCancelCause(background())
+      const failure = new Error("selection canceled")
+      cancel(failure)
+      expect(() => create().select(ctx, published)).toThrow(failure)
+    })
+
+    test(`${name} revalidates filter output and forged arrays built from a published snapshot`, () => {
+      const published = snapshotServiceInstances([b, a, billing])
+      const filtered = filterLabel("zone", "a")(published)
+      expect(filtered).not.toBe(published)
+      expect(filtered.map((instance) => instance.id)).toEqual(["billing-a", "a"])
+      const [endpoint] = create().select(background(), filtered)
+      expect(filtered.some((instance) => instance.id === endpoint.instance.id)).toBe(true)
+
+      const invalid = { ...selectorA, endpoints: ["relative"] }
+      expect(() => create().select(background(), Object.freeze([...published, invalid]))).toThrow(
+        TypeError
+      )
+      expect(() =>
+        create().select(background(), Object.freeze([...published, ...published]))
+      ).toThrow(TypeError)
+    })
+  }
 })

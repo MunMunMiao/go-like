@@ -3,8 +3,14 @@ import type { CallOption, CallRequest, Client } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import type { Middleware } from "@go-like/server"
 import type { Infer, Struct } from "@go-like/struct"
-import type { Endpoint, Message } from "@go-like/transport"
-import { endpoint, request as service } from "@go-like/transport/headers"
+import {
+  fromServerContext,
+  observeResponseBody,
+  type Endpoint,
+  type ResponseBodyEnd,
+  type ServerStream
+} from "@go-like/transport"
+import { observeCall } from "@go-like/transport/provider"
 import type { Handler as WebHandler } from "@go-like/web"
 import type { Logger } from "winston"
 
@@ -16,7 +22,7 @@ type RawClientCall = (
   ctx: Context,
   request: CallRequest,
   ...options: readonly CallOption[]
-) => Promise<Message>
+) => Promise<Response>
 /** Calls one runtime-erased typed Client endpoint. */
 type UnknownTypedClientCall = (
   ctx: Context,
@@ -33,6 +39,10 @@ interface CompletionRecord {
   httpStatus?: number
   errorType?: string
   errorCode?: string
+  messageCount?: number
+  handshakeMs?: number
+  streamStatus?: string
+  serviceCode?: string
 }
 
 /** Reads one bounded error identifier without exposing or trusting the complete failure object. */
@@ -68,15 +78,22 @@ function writeCompletion(
   outcome: Outcome,
   startedAt: number,
   httpStatus: number | null,
-  failure: unknown
+  failure: unknown,
+  end: ResponseBodyEnd | null = null
 ): void {
   const record: CompletionRecord = {
     component,
     operation,
     outcome,
-    durationMs: performance.now() - startedAt
+    durationMs: end?.durationMs ?? Math.max(0, performance.now() - startedAt)
   }
   if (httpStatus !== null) record.httpStatus = httpStatus
+  if (end?.stream === true) {
+    record.messageCount = end.messageCount
+    record.handshakeMs = end.handshakeMs
+    record.streamStatus = end.status.kind
+    if (end.status.kind === "error") record.serviceCode = end.status.code
+  }
   if (outcome === "failure") {
     const errorType = errorIdentifier(failure, "name", errorTypePattern)
     const errorCode = errorIdentifier(failure, "code", errorCodePattern)
@@ -107,21 +124,54 @@ function webOutcome(signal: AbortSignal, failed: boolean): Outcome {
   return failed ? "failure" : "success"
 }
 
-/** Reads one case-insensitive routing field without logging the remaining request headers. */
-function routeField(headers: Readonly<Record<string, string>>, expected: string): string {
-  const normalized = expected.toLowerCase()
-  let found: string | null = null
-  for (const name of Object.keys(headers)) {
-    if (name.toLowerCase() !== normalized) continue
-    if (found !== null) return "unknown"
-    found = headers[name] ?? ""
-  }
-  return found === null || found.length === 0 ? "unknown" : found
+/** Classifies one body-end or thrown completion without reading payloads. */
+function observedOutcome(
+  component: CompletionRecord["component"],
+  ctx: Context,
+  end: ResponseBodyEnd | null,
+  failure: unknown
+): Outcome {
+  if (failure !== null) return contextFailureOutcome(ctx)
+  if (end === null) return "success"
+  if (end.reason === "cancel" || end.status.kind === "canceled") return "canceled"
+  if (end.stream) return end.status.kind === "success" ? "success" : "failure"
+  if (component === "web" && end.httpStatus >= 500) return "failure"
+  return "success"
 }
 
-/** Returns the stable unary service operation carried by go-like routing headers. */
-function unaryOperation(message: Message): string {
-  return `${routeField(message.header, service)}/${routeField(message.header, endpoint)}`
+/** Writes one completion, adding stream counters only when the body was an event stream. */
+function writeObserved(
+  logger: Logger,
+  component: CompletionRecord["component"],
+  operation: string,
+  ctx: Context,
+  startedAt: number,
+  httpStatus: number | null,
+  end: ResponseBodyEnd | null,
+  failure: unknown
+): void {
+  const outcome = observedOutcome(component, ctx, end, failure)
+  const diagnostic =
+    failure ??
+    (outcome === "failure" && end !== null && !end.stream ? httpFailure(end.httpStatus) : null)
+  writeCompletion(logger, component, operation, outcome, startedAt, httpStatus, diagnostic, end)
+}
+
+/** Returns the stable unary service operation carried by TransportInfo. */
+function unaryOperation(ctx: Context): string {
+  let operation = ""
+  try {
+    const info = fromServerContext(ctx)
+    if (info !== null) operation = info.operation()
+  } catch {
+    operation = ""
+  }
+  const slash = operation.indexOf("/")
+  const service = slash < 0 ? operation : operation.slice(0, slash)
+  const endpoint = slash < 0 ? "" : operation.slice(slash + 1)
+  const serviceName = operation.length === 0 || service.length === 0 ? "unknown" : service
+  const endpointName = operation.length === 0 || endpoint.length === 0 ? "unknown" : endpoint
+  return `${serviceName}/${endpointName}`
 }
 
 /** Distinguishes an asynchronous Web Handler without replacing synchronous responses. */
@@ -175,7 +225,7 @@ export function logClient(client: Client, logger: Logger): Client {
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[]
-  ): Promise<Message>
+  ): Promise<Response>
 
   /** Logs either public Client call overload through the original receiver. */
   async function loggedCall(
@@ -187,20 +237,23 @@ export function logClient(client: Client, logger: Logger): Client {
     for (let index = 2; index < arguments.length; index += 1) {
       values.push(arguments[index])
     }
+    const operation = `${subject.service}/${subject.endpoint}`
     const startedAt = performance.now()
-    try {
-      let response: unknown
-      if ("message" in subject) {
-        const argumentsList: [Context, CallRequest, ...CallOption[]] = [ctx, subject]
-        for (const value of values) {
-          if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
-          argumentsList.push(value)
+    return await observeCall(
+      ctx,
+      startedAt,
+      async function invoke(observed: Context): Promise<unknown> {
+        if ("headers" in subject && "body" in subject) {
+          const argumentsList: [Context, CallRequest, ...CallOption[]] = [observed, subject]
+          for (const value of values) {
+            if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
+            argumentsList.push(value)
+          }
+          return await rawCall.apply(client, argumentsList)
         }
-        response = await rawCall.apply(client, argumentsList)
-      } else {
         if (values.length === 0) throw new TypeError("Client typed call requires a request value")
         const argumentsList: [Context, Endpoint, unknown, ...CallOption[]] = [
-          ctx,
+          observed,
           subject,
           values[0]
         ]
@@ -209,35 +262,45 @@ export function logClient(client: Client, logger: Logger): Client {
           if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
           argumentsList.push(value)
         }
-        response = await typedCall.apply(client, argumentsList)
+        return await typedCall.apply(client, argumentsList)
+      },
+      function record(end, failure): void {
+        writeObserved(logger, "client", operation, ctx, startedAt, null, end, failure)
       }
-      writeCompletion(
-        logger,
-        "client",
-        `${subject.service}/${subject.endpoint}`,
-        "success",
-        startedAt,
-        null,
-        null
-      )
-      return response
-    } catch (value) {
-      const outcome = contextFailureOutcome(ctx)
-      writeCompletion(
-        logger,
-        "client",
-        `${subject.service}/${subject.endpoint}`,
-        outcome,
-        startedAt,
-        null,
-        value
-      )
-      throw value
-    }
+    )
+  }
+
+  /** Logs one server stream when its body ends. */
+  async function loggedStream<RequestStruct extends Struct, ResponseStruct extends Struct>(
+    ctx: Context,
+    endpoint: Endpoint<RequestStruct, ResponseStruct, true>,
+    request: NoInfer<Infer<RequestStruct>>,
+    ...options: readonly CallOption[]
+  ): Promise<ServerStream<Infer<ResponseStruct>>> {
+    if (typeof client.stream !== "function") throw new TypeError("client must implement stream")
+    const operation = `${endpoint.service}/${endpoint.endpoint}`
+    const startedAt = performance.now()
+    return (await observeCall(
+      ctx,
+      startedAt,
+      function invoke(observed: Context): Promise<unknown> {
+        const args: [
+          Context,
+          Endpoint<RequestStruct, ResponseStruct, true>,
+          NoInfer<Infer<RequestStruct>>,
+          ...CallOption[]
+        ] = [observed, endpoint, request, ...options]
+        return client.stream!.apply(client, args)
+      },
+      function record(end, failure): void {
+        writeObserved(logger, "client", operation, ctx, startedAt, null, end, failure)
+      }
+    )) as ServerStream<Infer<ResponseStruct>>
   }
 
   return Object.freeze({
     call: loggedCall,
+    stream: loggedStream,
     /** Closes the wrapped Client through its original receiver without inventing a log operation. */
     close(ctx: Context): Promise<void> {
       return close.call(client, ctx)
@@ -250,20 +313,58 @@ export function logUnaryMiddleware(logger: Logger): Middleware {
   validateLogger(logger)
   return (next) => {
     if (typeof next !== "function") throw new TypeError("unary handler must be a function")
-    return async (ctx, message) => {
-      const operation = unaryOperation(message)
+    return async (ctx, request) => {
+      const operation = unaryOperation(ctx)
       const startedAt = performance.now()
       try {
-        const response = await next(ctx, message)
-        writeCompletion(logger, "server", operation, "success", startedAt, null, null)
-        return response
+        const response = await next(ctx, request)
+        if (!(response instanceof Response)) {
+          writeObserved(logger, "server", operation, ctx, startedAt, null, null, null)
+          return response
+        }
+        return observeResponseBody(
+          response,
+          function ended(end: ResponseBodyEnd): void {
+            writeObserved(logger, "server", operation, ctx, startedAt, null, end, null)
+          },
+          { startedAt }
+        )
       } catch (value) {
-        const outcome = contextFailureOutcome(ctx)
-        writeCompletion(logger, "server", operation, outcome, startedAt, null, value)
+        writeObserved(logger, "server", operation, ctx, startedAt, null, null, value)
         throw value
       }
     }
   }
+}
+
+/** Completes one Web response when its body ends, preserving a null body. */
+function completeWebResponse(
+  logger: Logger,
+  request: Request,
+  startedAt: number,
+  response: Response
+): Response {
+  return observeResponseBody(
+    response,
+    function ended(end: ResponseBodyEnd): void {
+      const canceled =
+        request.signal.aborted || end.reason === "cancel" || end.status.kind === "canceled"
+      const failed =
+        !canceled && (end.stream ? end.status.kind !== "success" : response.status >= 500)
+      const outcome: Outcome = canceled ? "canceled" : failed ? "failure" : "success"
+      writeCompletion(
+        logger,
+        "web",
+        request.method,
+        outcome,
+        startedAt,
+        response.status,
+        failed && !end.stream ? httpFailure(response.status) : null,
+        end
+      )
+    },
+    { startedAt }
+  )
 }
 
 /** Wraps one standard Web Handler while preserving its synchronous or asynchronous result shape. */
@@ -278,19 +379,7 @@ export function logWebHandler(handler: WebHandler, logger: Logger): WebHandler {
       const result = captured(request)
       if (isResponsePromise(result)) {
         return result.then(
-          (response) => {
-            const failed = response.status >= 500
-            writeCompletion(
-              logger,
-              "web",
-              request.method,
-              webOutcome(request.signal, failed),
-              startedAt,
-              response.status,
-              failed ? httpFailure(response.status) : null
-            )
-            return response
-          },
+          (response) => completeWebResponse(logger, request, startedAt, response),
           (value: unknown) => {
             const outcome = webOutcome(request.signal, true)
             writeCompletion(logger, "web", request.method, outcome, startedAt, null, value)
@@ -298,17 +387,7 @@ export function logWebHandler(handler: WebHandler, logger: Logger): WebHandler {
           }
         )
       }
-      const failed = result.status >= 500
-      writeCompletion(
-        logger,
-        "web",
-        request.method,
-        webOutcome(request.signal, failed),
-        startedAt,
-        result.status,
-        failed ? httpFailure(result.status) : null
-      )
-      return result
+      return completeWebResponse(logger, request, startedAt, result)
     } catch (value) {
       const outcome = webOutcome(request.signal, true)
       writeCompletion(logger, "web", request.method, outcome, startedAt, null, value)

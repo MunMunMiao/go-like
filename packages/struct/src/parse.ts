@@ -1,55 +1,320 @@
-import { issue } from "./errors"
-import { resolveObjectShape } from "./shape"
+import { hasErrorMap, issue, StructError } from "./errors"
+import { resolveStructFields, type ResolvedStructField } from "./fields"
 import { DEFINITION, OMIT } from "./symbols"
 import type {
   ArrayDefinition,
   DiscriminatedUnionDefinition,
   EnumDefinition,
+  InternalParseResult,
   IntersectionDefinition,
   LiteralDefinition,
   LiteralValue,
   ObjectDefinition,
   ParseMode,
-  ParseResult,
+  ParseFailure,
   Path,
   PrimitiveDefinition,
   PrimitiveKind,
   RecordDefinition,
   RuntimeStruct,
-  StructDefinition,
   StructIssue,
   TupleDefinition,
   UnionDefinition
 } from "./types"
-import { expectedType, failure, hasOwnKey, isPlainObject, success } from "./utils"
+import { expectedType, failure, hasOwnKey, isPlainObject, matchesEnum, success } from "./utils"
+import {
+  foldIntersectionResults,
+  mergePlainObjects,
+  portableValueGraphError,
+  PORTABLE_VALUE_GRAPH_DEPTH_LIMIT
+} from "./value-graph"
+
+// Failed union candidates are discarded. Public entry points always request detailed issues.
+const QUIET_FAILURE: ParseFailure = {
+  ok: false,
+  issue: { code: "invalid_union", expected: "", message: "", path: [], received: undefined }
+}
+
+interface ParseGraph {
+  readonly active: WeakSet<object>
+  depth: number
+}
+
+const parseGraphs: ParseGraph[] = []
+
+function valueContainer(value: unknown): object | undefined {
+  if (Array.isArray(value) || isPlainObject(value)) {
+    return value
+  }
+  return undefined
+}
+
+function graphFailure(path: Path, input: unknown, message: string): InternalParseResult<never> {
+  return failure(issue([...path], "custom", "safe struct value graph", input, message))
+}
+
+function withParseGraph<T>(
+  input: unknown,
+  run: () => InternalParseResult<T>
+): InternalParseResult<T> {
+  parseGraphs.push({ active: new WeakSet(), depth: 0 })
+  try {
+    return enterRoot(input, run)
+  } finally {
+    parseGraphs.pop()
+  }
+}
+
+function enterRoot<T>(input: unknown, run: () => InternalParseResult<T>): InternalParseResult<T> {
+  const container = valueContainer(input)
+  if (container === undefined) {
+    return run()
+  }
+  const graph = parseGraphs[parseGraphs.length - 1] as ParseGraph
+  graph.depth = 1
+  graph.active.add(container)
+  try {
+    return run()
+  } finally {
+    graph.active.delete(container)
+    graph.depth = 0
+  }
+}
 
 export function parseValue(
   struct: RuntimeStruct,
   input: unknown,
   path: Path,
+  mode: ParseMode,
+  useAliases = false
+): InternalParseResult<unknown> {
+  return withParseGraph(input, () => drive(struct, input, [...path], mode, useAliases, true))
+}
+
+export function parseRootValue(
+  struct: RuntimeStruct,
+  input: unknown,
+  mode: ParseMode,
+  useAliases = false
+): InternalParseResult<unknown> {
+  return withParseGraph(input, () => drive(struct, input, [], mode, useAliases, true))
+}
+
+type ParsePhase = "array" | "intersection" | "object" | "record" | "tuple" | "union"
+type ParseStart = "object" | "value"
+
+interface ParseFrame {
+  cached: { inputKey: string; value: unknown } | undefined
+  container: object | undefined
+  entered: boolean
+  fields: readonly ResolvedStructField[] | undefined
+  index: number
+  input: unknown
+  keys: readonly string[] | undefined
   mode: ParseMode
-): ParseResult<unknown> {
-  const definition = struct[DEFINITION]
+  objectSides: boolean
+  opened: boolean
+  output: unknown
+  pathPushed: boolean
+  phase: ParsePhase
+  reportIssues: boolean
+  segment: number | string | undefined
+  sides: unknown[] | undefined
+  sink: { [key: string]: unknown } | undefined
+  start: ParseStart
+  struct: RuntimeStruct
+  useAliases: boolean
+  waiting: boolean
+}
 
-  if (input === undefined) {
-    return parseMissingValue(struct, path, mode)
+interface ParseBox {
+  result: InternalParseResult<unknown>
+}
+
+// Heap frames keep nested or() and discriminatedUnion() off the JavaScript stack.
+function drive(
+  struct: RuntimeStruct,
+  input: unknown,
+  path: Path,
+  mode: ParseMode,
+  useAliases: boolean,
+  reportIssues: boolean
+): InternalParseResult<unknown> {
+  const box: ParseBox = { result: success(undefined) }
+  const frames: ParseFrame[] = [
+    parseFrame(struct, input, mode, useAliases, reportIssues, undefined, "value", undefined)
+  ]
+  while (frames.length > 0) {
+    const frame = frames[frames.length - 1] as ParseFrame
+    if (!frame.opened) openFrame(frame, frames, path, box)
+    else stepFrame(frame, frames, path, box)
   }
+  return box.result
+}
 
+function parseFrame(
+  struct: RuntimeStruct,
+  input: unknown,
+  mode: ParseMode,
+  useAliases: boolean,
+  reportIssues: boolean,
+  segment: number | string | undefined,
+  start: ParseStart,
+  sink: { [key: string]: unknown } | undefined
+): ParseFrame {
+  return {
+    cached: undefined,
+    container: undefined,
+    entered: false,
+    fields: undefined,
+    index: 0,
+    input,
+    keys: undefined,
+    mode,
+    objectSides: false,
+    opened: false,
+    output: undefined,
+    pathPushed: false,
+    phase: "union",
+    reportIssues,
+    segment,
+    sides: undefined,
+    sink,
+    start,
+    struct,
+    useAliases,
+    waiting: false
+  }
+}
+
+function reject(
+  reportIssues: boolean,
+  path: Path,
+  code: StructIssue["code"],
+  expected: string,
+  received: unknown
+): InternalParseResult<never> {
+  if (!reportIssues) return QUIET_FAILURE
+  return failure(issue([...path], code, expected, received))
+}
+
+function unionIsWaiting(frames: readonly ParseFrame[]): boolean {
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index] as ParseFrame
+    if (frame.phase === "union" && frame.waiting) return true
+  }
+  return false
+}
+
+function finish(
+  frames: ParseFrame[],
+  path: Path,
+  box: ParseBox,
+  result: InternalParseResult<unknown>
+): void {
+  const frame = frames.pop() as ParseFrame
+  if (frame.entered && frame.container !== undefined) {
+    const graph = parseGraphs[parseGraphs.length - 1] as ParseGraph
+    graph.active.delete(frame.container)
+    graph.depth -= 1
+  }
+  if (frame.pathPushed) path.pop()
+  box.result = result
+}
+
+function openFrame(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  if (frame.segment !== undefined) {
+    path.push(frame.segment)
+    frame.pathPushed = true
+    const container = valueContainer(frame.input)
+    frame.container = container
+    if (container !== undefined) {
+      const graph = parseGraphs[parseGraphs.length - 1] as ParseGraph
+      const depth = graph.depth + 1
+      if (depth > PORTABLE_VALUE_GRAPH_DEPTH_LIMIT) {
+        finish(
+          frames,
+          path,
+          box,
+          graphFailure(
+            path,
+            frame.input,
+            `struct value exceeds portable container depth limit ${PORTABLE_VALUE_GRAPH_DEPTH_LIMIT}`
+          )
+        )
+        return
+      }
+      if (graph.active.has(container)) {
+        finish(frames, path, box, graphFailure(path, frame.input, "struct value contains a cycle"))
+        return
+      }
+      graph.depth = depth
+      graph.active.add(container)
+      frame.entered = true
+    }
+  }
+  frame.opened = true
+  if (frame.start === "object") beginObject(frame, frames, path, box)
+  else beginValue(frame, frames, path, box)
+}
+
+function beginValue(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION]
+  const input = frame.input
+  if (input === undefined) {
+    if (definition.flags.optional) {
+      finish(frames, path, box, success(frame.mode === "field" ? OMIT : undefined))
+      return
+    }
+    finish(
+      frames,
+      path,
+      box,
+      reject(
+        frame.reportIssues,
+        path,
+        frame.mode === "field" ? "missing_key" : "invalid_type",
+        expectedType(definition),
+        input
+      )
+    )
+    return
+  }
   if (input === null) {
     if (definition.kind === "null" || definition.flags.nullable) {
-      return success(null)
+      finish(frames, path, box, success(null))
+      return
     }
-    return parseMissingValue(struct, path, mode)
+    const delegatesNull =
+      (definition.kind === "literal" && definition.value === null) ||
+      definition.kind === "intersection" ||
+      definition.kind === "or"
+    if (!delegatesNull) {
+      finish(
+        frames,
+        path,
+        box,
+        reject(frame.reportIssues, path, "invalid_type", expectedType(definition), input)
+      )
+      return
+    }
   }
 
   switch (definition.kind) {
     case "any":
-    case "unknown":
-      return success(input)
-
+    case "unknown": {
+      const message = portableValueGraphError(input)
+      finish(
+        frames,
+        path,
+        box,
+        message !== undefined ? graphFailure(path, input, message) : success(input)
+      )
+      return
+    }
     case "array":
-      return parseArrayValue(definition, input, path)
-
+      beginArray(frame, frames, path, box)
+      return
     case "arrayBuffer":
     case "bigint":
     case "blob":
@@ -59,355 +324,509 @@ export function parseValue(
     case "null":
     case "number":
     case "string":
-      return parsePrimitiveValue(definition, input, path)
-
+      finish(frames, path, box, parsePrimitiveValue(definition, input, path, frame.reportIssues))
+      return
     case "enum":
-      return parseEnumValue(definition, input, path)
-
+      finish(frames, path, box, parseEnumValue(definition, input, path, frame.reportIssues))
+      return
     case "intersection":
-      return parseIntersectionValue(definition, input, path)
-
+      beginIntersection(frame)
+      return
     case "literal":
-      return parseLiteralValue(definition, input, path)
-
+      finish(frames, path, box, parseLiteralValue(definition, input, path, frame.reportIssues))
+      return
     case "object":
-      return parseObjectValue(struct, definition, input, path)
-
+      beginObject(frame, frames, path, box)
+      return
     case "or":
-      return parseUnionValue(definition, input, path)
-
-    case "discriminatedUnion":
-      return parseDiscriminatedUnionValue(definition, input, path)
-
+      frame.phase = "union"
+      frame.index = 0
+      frame.waiting = false
+      return
+    case "discriminatedUnion": {
+      const resolved = resolveDiscriminatedTarget(
+        definition,
+        input,
+        path,
+        frame.useAliases,
+        frame.reportIssues
+      )
+      if (!("matched" in resolved)) {
+        finish(frames, path, box, resolved)
+        return
+      }
+      frame.struct = resolved.runtime
+      frame.cached = resolved.cached
+      beginObject(frame, frames, path, box)
+      return
+    }
     case "record":
-      return parseRecordValue(definition, input, path)
-
+      beginRecord(frame, frames, path, box)
+      return
     case "tuple":
-      return parseTupleValue(definition, input, path)
+      beginTuple(frame, frames, path, box)
+      return
   }
 }
 
-function parseMissingValue(
-  struct: RuntimeStruct,
+function beginObject(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as ObjectDefinition
+  if (!isPlainObject(frame.input)) {
+    finish(
+      frames,
+      path,
+      box,
+      reject(frame.reportIssues, path, "invalid_type", "object", frame.input)
+    )
+    return
+  }
+  frame.phase = "object"
+  frame.output = frame.sink ?? Object.create(null)
+  frame.fields = resolveStructFields(frame.struct, definition)
+  frame.index = 0
+  frame.waiting = false
+}
+
+function beginArray(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  if (!Array.isArray(frame.input)) {
+    finish(
+      frames,
+      path,
+      box,
+      reject(frame.reportIssues, path, "invalid_type", "array", frame.input)
+    )
+    return
+  }
+  frame.phase = "array"
+  frame.output = []
+  frame.index = 0
+  frame.waiting = false
+}
+
+function beginTuple(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as TupleDefinition
+  if (!Array.isArray(frame.input) || frame.input.length !== definition.items.length) {
+    finish(
+      frames,
+      path,
+      box,
+      reject(
+        frame.reportIssues,
+        path,
+        "invalid_type",
+        `tuple of length ${definition.items.length}`,
+        frame.input
+      )
+    )
+    return
+  }
+  frame.phase = "tuple"
+  frame.output = []
+  frame.index = 0
+  frame.waiting = false
+}
+
+function beginRecord(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  if (!isPlainObject(frame.input)) {
+    finish(
+      frames,
+      path,
+      box,
+      reject(frame.reportIssues, path, "invalid_type", "record", frame.input)
+    )
+    return
+  }
+  frame.phase = "record"
+  frame.output = Object.create(null)
+  frame.keys = Object.keys(frame.input)
+  frame.index = 0
+  frame.waiting = false
+}
+
+function beginIntersection(frame: ParseFrame): void {
+  const definition = frame.struct[DEFINITION] as IntersectionDefinition
+  const objectSides = definition.objectSides && isPlainObject(frame.input)
+  frame.phase = "intersection"
+  frame.objectSides = objectSides
+  frame.index = 0
+  frame.waiting = false
+  frame.sides = objectSides ? undefined : []
+  if (objectSides) frame.output = Object.create(null)
+}
+
+function stepFrame(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  switch (frame.phase) {
+    case "array":
+      stepArray(frame, frames, path, box)
+      return
+    case "intersection":
+      stepIntersection(frame, frames, path, box)
+      return
+    case "object":
+      stepObject(frame, frames, path, box)
+      return
+    case "record":
+      stepRecord(frame, frames, path, box)
+      return
+    case "tuple":
+      stepTuple(frame, frames, path, box)
+      return
+    case "union":
+      stepUnion(frame, frames, path, box)
+      return
+  }
+}
+
+function stepUnion(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as UnionDefinition
+  if (frame.waiting) {
+    frame.waiting = false
+    if (box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    frame.index += 1
+  }
+  const option = definition.options[frame.index] as RuntimeStruct | undefined
+  if (option === undefined) {
+    finish(
+      frames,
+      path,
+      box,
+      reject(frame.reportIssues, path, "invalid_union", definition.expected, frame.input)
+    )
+    return
+  }
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      option,
+      frame.input,
+      "value",
+      frame.useAliases,
+      frame.reportIssues && hasErrorMap(),
+      undefined,
+      "value",
+      undefined
+    )
+  )
+}
+
+function stepObject(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const fields = frame.fields as readonly ResolvedStructField[]
+  if (frame.waiting) {
+    frame.waiting = false
+    if (!box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    if (box.result.value !== OMIT) {
+      const field = fields[frame.index] as ResolvedStructField
+      const output = frame.output as { [key: string]: unknown }
+      // A failed merge drops this union candidate. Outside a union it stays a StructError.
+      try {
+        output[field.key] = mergePlainObjects(output[field.key], box.result.value)
+      } catch (error) {
+        if (error instanceof StructError && unionIsWaiting(frames)) {
+          finish(frames, path, box, QUIET_FAILURE)
+          return
+        }
+        throw error
+      }
+    }
+    frame.index += 1
+  }
+  if (frame.index >= fields.length) {
+    finish(frames, path, box, success(frame.output))
+    return
+  }
+  const field = fields[frame.index] as ResolvedStructField
+  const input = frame.input as { [key: string]: unknown }
+  const inputKey = frame.useAliases ? field.wireKey : field.key
+  const inputValue =
+    frame.cached !== undefined && frame.cached.inputKey === inputKey
+      ? frame.cached.value
+      : hasOwnKey(input, inputKey)
+        ? input[inputKey]
+        : undefined
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      field.struct,
+      inputValue,
+      "field",
+      frame.useAliases,
+      frame.reportIssues,
+      field.key,
+      "value",
+      undefined
+    )
+  )
+}
+
+function stepArray(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as ArrayDefinition
+  const input = frame.input as unknown[]
+  const output = frame.output as unknown[]
+  if (frame.waiting) {
+    frame.waiting = false
+    if (!box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    output.push(box.result.value)
+    frame.index += 1
+  }
+  if (frame.index >= input.length) {
+    finish(frames, path, box, success(output))
+    return
+  }
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      definition.item as RuntimeStruct,
+      input[frame.index],
+      "value",
+      frame.useAliases,
+      frame.reportIssues,
+      frame.index,
+      "value",
+      undefined
+    )
+  )
+}
+
+function stepTuple(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as TupleDefinition
+  const input = frame.input as unknown[]
+  const output = frame.output as unknown[]
+  if (frame.waiting) {
+    frame.waiting = false
+    if (!box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    output.push(box.result.value)
+    frame.index += 1
+  }
+  if (frame.index >= definition.items.length) {
+    finish(frames, path, box, success(output))
+    return
+  }
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      definition.items[frame.index] as RuntimeStruct,
+      input[frame.index],
+      "value",
+      frame.useAliases,
+      frame.reportIssues,
+      frame.index,
+      "value",
+      undefined
+    )
+  )
+}
+
+function stepRecord(frame: ParseFrame, frames: ParseFrame[], path: Path, box: ParseBox): void {
+  const definition = frame.struct[DEFINITION] as RecordDefinition
+  const input = frame.input as { [key: string]: unknown }
+  const keys = frame.keys as readonly string[]
+  const output = frame.output as { [key: string]: unknown }
+  if (frame.waiting) {
+    frame.waiting = false
+    if (!box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    if (box.result.value !== OMIT) output[keys[frame.index] as string] = box.result.value
+    frame.index += 1
+  }
+  if (frame.index >= keys.length) {
+    finish(frames, path, box, success(output))
+    return
+  }
+  const key = keys[frame.index] as string
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      definition.value as RuntimeStruct,
+      input[key],
+      "field",
+      frame.useAliases,
+      frame.reportIssues,
+      key,
+      "value",
+      undefined
+    )
+  )
+}
+
+function stepIntersection(
+  frame: ParseFrame,
+  frames: ParseFrame[],
   path: Path,
-  mode: ParseMode
-): ParseResult<unknown> {
-  return success(resolveMissingValue(struct, path, mode))
+  box: ParseBox
+): void {
+  const definition = frame.struct[DEFINITION] as IntersectionDefinition
+  if (frame.waiting) {
+    frame.waiting = false
+    if (!box.result.ok) {
+      finish(frames, path, box, box.result)
+      return
+    }
+    if (!frame.objectSides) frame.sides?.push(box.result.value)
+    frame.index += 1
+  }
+  if (frame.index >= definition.options.length) {
+    if (frame.objectSides) {
+      finish(frames, path, box, success(frame.output))
+      return
+    }
+    try {
+      finish(
+        frames,
+        path,
+        box,
+        success(foldIntersectionResults(frame.sides ?? [], frame.input, frame.useAliases))
+      )
+    } catch (error) {
+      if (error instanceof StructError && unionIsWaiting(frames)) {
+        finish(frames, path, box, QUIET_FAILURE)
+        return
+      }
+      throw error
+    }
+    return
+  }
+  const option = definition.options[frame.index] as RuntimeStruct
+  frame.waiting = true
+  frames.push(
+    parseFrame(
+      option,
+      frame.input,
+      "value",
+      frame.useAliases,
+      frame.reportIssues,
+      undefined,
+      frame.objectSides ? "object" : "value",
+      frame.objectSides ? (frame.output as { [key: string]: unknown }) : undefined
+    )
+  )
 }
 
 function parsePrimitiveValue(
   definition: PrimitiveDefinition<PrimitiveKind, unknown, unknown>,
   input: unknown,
-  path: Path
-): ParseResult<unknown> {
+  path: Path,
+  reportIssues: boolean
+): InternalParseResult<unknown> {
   if (!definition.is(input)) {
-    return failure(issue(path, "invalid_type", definition.expected, input))
+    return reportIssues
+      ? failure(issue([...path], "invalid_type", definition.expected, input))
+      : QUIET_FAILURE
   }
 
-  return definition.decode ? definition.decode(input, path) : success(input)
+  return definition.decode ? definition.decode(input, [...path]) : success(input)
 }
 
 function parseEnumValue(
   definition: EnumDefinition<string | number>,
   input: unknown,
-  path: Path
-): ParseResult<unknown> {
+  path: Path,
+  reportIssues: boolean
+): InternalParseResult<unknown> {
   // Type boundary: enum structs are defined with string or number literals; by the time we reach this
   // parser the input has already been validated as non-null/undefined and only enum members can match.
-  return definition.values.includes(input as string | number)
+  return matchesEnum(definition, input)
     ? success(input)
-    : failure(issue(path, "invalid_enum", definition.expected, input))
+    : reportIssues
+      ? failure(issue([...path], "invalid_enum", definition.expected, input))
+      : QUIET_FAILURE
 }
 
 function parseLiteralValue(
   definition: LiteralDefinition<LiteralValue>,
   input: unknown,
-  path: Path
-): ParseResult<unknown> {
+  path: Path,
+  reportIssues: boolean
+): InternalParseResult<unknown> {
   return Object.is(input, definition.value)
     ? success(input)
-    : failure(issue(path, "invalid_literal", definition.expected, input))
+    : reportIssues
+      ? failure(issue([...path], "invalid_literal", definition.expected, input))
+      : QUIET_FAILURE
 }
 
-function finishParse<T>(issues: StructIssue[], output: T): ParseResult<T> {
-  return issues.length > 0 ? failure(...issues) : success(output)
-}
-
-function parseArrayValue(
-  definition: ArrayDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<unknown[]> {
-  if (!Array.isArray(input)) {
-    return failure(issue(path, "invalid_type", "array", input))
-  }
-
-  const output: unknown[] = []
-  const issues: StructIssue[] = []
-
-  for (let index = 0; index < input.length; index += 1) {
-    const result = parseValue(
-      definition.item as RuntimeStruct,
-      input[index],
-      [...path, index],
-      "value"
-    )
-    if (result.ok) {
-      output[index] = result.value
-    } else {
-      issues.push(...result.issues)
-    }
-  }
-
-  return finishParse(issues, output)
-}
-
-function parseObjectValue(
-  struct: RuntimeStruct,
-  definition: ObjectDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<{ [key: string]: unknown }> {
-  if (!isPlainObject(input)) {
-    return failure(issue(path, "invalid_type", "object", input))
-  }
-
-  const shape = resolveObjectShape(struct, definition)
-  const output: { [key: string]: unknown } = Object.create(null)
-  const issues: StructIssue[] = []
-
-  for (const [key, itemStruct] of Object.entries(shape)) {
-    const hasOwnInput = hasOwnKey(input, key)
-    const result = parseValue(
-      itemStruct as RuntimeStruct,
-      hasOwnInput ? input[key] : undefined,
-      [...path, key],
-      "field"
-    )
-
-    if (result.ok) {
-      if (result.value !== OMIT) {
-        output[key] = result.value
-      }
-    } else {
-      issues.push(...result.issues)
-    }
-  }
-
-  return finishParse(issues, output)
-}
-
-export function isFieldRequired(itemDefinition: StructDefinition): boolean {
-  return !itemDefinition.flags.optional && !itemDefinition.flags.nullable
-}
-
-function parseRecordValue(
-  definition: RecordDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<{ [key: string]: unknown }> {
-  if (!isPlainObject(input)) {
-    return failure(issue(path, "invalid_type", "record", input))
-  }
-
-  const output: { [key: string]: unknown } = Object.create(null)
-  const issues: StructIssue[] = []
-
-  for (const [key, value] of Object.entries(input)) {
-    const result = parseValue(definition.value as RuntimeStruct, value, [...path, key], "field")
-    if (result.ok) {
-      if (result.value !== OMIT) {
-        output[key] = result.value
-      }
-    } else {
-      issues.push(...result.issues)
-    }
-  }
-
-  return finishParse(issues, output)
-}
-
-function parseTupleValue(
-  definition: TupleDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<unknown[]> {
-  if (!Array.isArray(input)) {
-    return failure(issue(path, "invalid_type", "tuple", input))
-  }
-
-  const output: unknown[] = []
-  const issues: StructIssue[] = []
-
-  for (let index = 0; index < definition.items.length; index += 1) {
-    const result = parseValue(
-      definition.items[index] as RuntimeStruct,
-      input[index],
-      [...path, index],
-      "value"
-    )
-    if (result.ok) {
-      output[index] = result.value
-    } else {
-      issues.push(...result.issues)
-    }
-  }
-
-  return finishParse(issues, output)
-}
-
-function parseUnionValue(
-  definition: UnionDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<unknown> {
-  for (const option of definition.options) {
-    const result = parseValue(option as RuntimeStruct, input, path, "value")
-    if (result.ok) {
-      return result
-    }
-  }
-
-  return failure(issue(path, "invalid_union", expectedType(definition), input))
-}
-
-function parseDiscriminatedUnionValue(
+/** Resolves a discriminated target without parsing it, so the caller can parse after this frame returns. */
+function resolveDiscriminatedTarget(
   definition: DiscriminatedUnionDefinition,
   input: unknown,
-  path: Path
-): ParseResult<unknown> {
+  path: Path,
+  useAliases: boolean,
+  reportIssues: boolean
+):
+  | InternalParseResult<unknown>
+  | {
+      matched: true
+      runtime: RuntimeStruct
+      definition: ObjectDefinition
+      cached: { inputKey: string; value: unknown }
+    } {
   if (!isPlainObject(input)) {
-    return failure(issue(path, "invalid_type", "object", input))
+    return reportIssues ? failure(issue([...path], "invalid_type", "object", input)) : QUIET_FAILURE
   }
 
-  const value = input[definition.discriminator]
-  const target = definition.map.get(value)
-  if (!target) {
-    return failure(
-      issue([...path, definition.discriminator], "invalid_union", definition.expected, value)
-    )
+  const discriminatorPath = [...path, definition.discriminator]
+  if (!useAliases) {
+    const value = hasOwnKey(input, definition.discriminator)
+      ? input[definition.discriminator]
+      : undefined
+    if (value === undefined) {
+      return reportIssues
+        ? failure(issue(discriminatorPath, "missing_key", definition.expected, undefined))
+        : QUIET_FAILURE
+    }
+    const target = definition.map.get(value)
+    if (!target) {
+      return reportIssues
+        ? failure(issue(discriminatorPath, "invalid_union", definition.expected, value))
+        : QUIET_FAILURE
+    }
+    const runtime = target as RuntimeStruct
+    return {
+      matched: true,
+      runtime,
+      definition: runtime[DEFINITION] as ObjectDefinition,
+      cached: { inputKey: definition.discriminator, value }
+    }
   }
 
-  return parseValue(target as RuntimeStruct, input, path, "value")
-}
-
-function parseIntersectionValue(
-  definition: IntersectionDefinition,
-  input: unknown,
-  path: Path
-): ParseResult<unknown> {
-  const leftResult = parseValue(definition.left as RuntimeStruct, input, path, "value")
-  if (!leftResult.ok) {
-    return leftResult
-  }
-
-  const rightResult = parseValue(definition.right as RuntimeStruct, input, path, "value")
-  if (!rightResult.ok) {
-    return rightResult
-  }
-
-  const merged =
-    isPlainObject(leftResult.value) && isPlainObject(rightResult.value)
-      ? { ...leftResult.value, ...rightResult.value }
-      : rightResult.value
-
-  return success(merged)
-}
-
-export function safeZeroValue(struct: RuntimeStruct): unknown {
-  return resolveMissingValue(struct, [], "value")
-}
-
-export function buildZeroValue(struct: RuntimeStruct, path: Path): unknown {
-  const definition = struct[DEFINITION]
-
-  switch (definition.kind) {
-    case "any":
-    case "unknown":
-      return undefined
-
-    case "array":
-      return []
-
-    case "arrayBuffer":
-    case "bigint":
-    case "blob":
-    case "boolean":
-    case "date":
-    case "file":
-    case "null":
-    case "number":
-    case "string":
-      return definition.zero()
-
-    case "enum":
-      return definition.values[0]
-
-    case "intersection": {
-      const leftZero = buildZeroValue(definition.left as RuntimeStruct, path)
-      const rightZero = buildZeroValue(definition.right as RuntimeStruct, path)
-      return isPlainObject(leftZero) && isPlainObject(rightZero)
-        ? { ...leftZero, ...rightZero }
-        : rightZero
+  for (const wireKey of definition.discriminatorWireKeys ?? []) {
+    if (!hasOwnKey(input, wireKey)) {
+      continue
     }
 
-    case "literal":
-      return definition.value
-
-    case "object": {
-      const output: { [key: string]: unknown } = Object.create(null)
-      const shape = resolveObjectShape(struct, definition)
-
-      for (const [key, itemStruct] of Object.entries(shape)) {
-        const value = resolveMissingValue(itemStruct as RuntimeStruct, [...path, key], "field")
-        if (value !== OMIT) {
-          output[key] = value
-        }
-      }
-
-      return output
+    const value = input[wireKey]
+    if (value === undefined) {
+      return reportIssues
+        ? failure(issue(discriminatorPath, "missing_key", definition.expected, undefined))
+        : QUIET_FAILURE
     }
-
-    case "or":
-      return resolveMissingValue(definition.options[0] as RuntimeStruct, path, "value")
-
-    case "discriminatedUnion":
-      return resolveMissingValue(definition.options[0] as RuntimeStruct, path, "value")
-
-    case "record":
-      return {}
-
-    case "tuple":
-      return buildTupleZeroValue(definition, path)
+    const target = definition.map.get(value) as RuntimeStruct | undefined
+    if (!target || definition.wireKeyByValue?.get(value) !== wireKey) {
+      return reportIssues
+        ? failure(issue(discriminatorPath, "invalid_union", definition.expected, value))
+        : QUIET_FAILURE
+    }
+    return {
+      matched: true,
+      runtime: target,
+      definition: target[DEFINITION] as ObjectDefinition,
+      cached: { inputKey: wireKey, value }
+    }
   }
-}
-
-function buildTupleZeroValue(definition: TupleDefinition, path: Path): unknown[] {
-  const output: unknown[] = []
-  for (let index = 0; index < definition.items.length; index += 1) {
-    output[index] = resolveMissingValue(
-      definition.items[index] as RuntimeStruct,
-      [...path, index],
-      "value"
-    )
-  }
-  return output
-}
-
-function resolveMissingValue(struct: RuntimeStruct, path: Path, mode: ParseMode): unknown {
-  const definition = struct[DEFINITION]
-
-  if (definition.flags.nullable || definition.kind === "null") {
-    return null
-  }
-
-  if (mode === "field" && definition.flags.optional) {
-    return OMIT
-  }
-
-  if (definition.flags.optional) {
-    return undefined
-  }
-
-  return buildZeroValue(struct, path)
+  return reportIssues
+    ? failure(issue(discriminatorPath, "missing_key", definition.expected, undefined))
+    : QUIET_FAILURE
 }

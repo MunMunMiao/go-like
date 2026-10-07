@@ -13,34 +13,34 @@
 
 ## Место в стеке
 
-| Инструмент | Основная задача                                  | Что обычно находится в его ответственности                                                                                                                                        | Что go-like может дополнить, но не заменить                                                                                |
-| ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| NestJS     | Конвенциональный Node-фреймворк приложения       | Modules, providers, controllers, decorators, application context, lifecycle фреймворка, HTTP- или microservice-adapter                                                            | Структурную границу жизненного цикла или контракт внутреннего вызова вокруг нативного приложения, если написать явный мост |
-| Fastify    | Node HTTP-сервер и pipeline запросов             | Таблица маршрутов, hooks, plugins, encapsulation, Node listener, объекты request/reply                                                                                            | Адаптер жизненного цикла или провайдера вокруг ресурса, которым владеет Fastify                                            |
-| Hono       | Маршрутизация и middleware на Web Standards      | Routes, middleware, sub-apps, `app.fetch`, выбор runtime-адаптера                                                                                                                 | Core App, явный lifecycle ресурсов, внутренние Client/Transport, discovery                                                 |
-| Elysia     | Типизированный Web-фреймворк с фокусом на Bun    | Дерево маршрутов, композиция схем, decorators, hooks, Bun- или Web Standard-адаптер                                                                                               | Блоки Core для жизненного цикла и внутренних сервисов при сохранении нативного поведения Elysia                            |
-| Koa        | Минимальное Node-ядро middleware                 | Цепочка middleware и Node listener; роутер обычно внешний                                                                                                                         | Жизненный цикл и внутренние сервисные контракты без добавления ещё одного роутера                                          |
-| tRPC       | Типобезопасный слой процедур                     | Пути router/procedure, парсеры input/output, context factory, HTTP/Fetch/WS-адаптеры                                                                                              | Владение провайдерами, политика обнаружения сервисов, явный lifecycle App                                                  |
-| go-micro   | Go-экосистема микросервисов и агентов            | Go Context, абстракции service/client/transport/registry/broker, экосистема провайдеров и дополнительная область agent/flow/MCP/A2A                                               | go-like заимствует часть словаря, но не Go ABI, goroutine и совместимость транспортов                                      |
-| go-kratos  | Go-фреймворк для cloud-native-сервисов           | Жизненный цикл App, Go Context, HTTP/gRPC-транспорты, middleware, registry, config, генерация кода Protobuf                                                                       | Код Context-first на основе Protobuf-ES; Стандартный gRPC: четыре вида вызовов через `/native`                             |
-| go-like    | Явные строительные блоки для TypeScript-сервисов | Context, lifecycle App/Server, стандартный Fetch-край, внутренний unary Message transport, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adapters | Приложение по-прежнему владеет маршрутами фреймворка, нативными плоскостями данных, бизнес-политикой, auth и deployment    |
+| Инструмент | Основная задача                                  | Что обычно находится в его ответственности                                                                                                                                 | Что go-like может дополнить, но не заменить                                                                                |
+| ---------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| NestJS     | Конвенциональный Node-фреймворк приложения       | Modules, providers, controllers, decorators, application context, lifecycle фреймворка, HTTP- или microservice-adapter                                                     | Структурную границу жизненного цикла или контракт внутреннего вызова вокруг нативного приложения, если написать явный мост |
+| Fastify    | Node HTTP-сервер и pipeline запросов             | Таблица маршрутов, hooks, plugins, encapsulation, Node listener, объекты request/reply                                                                                     | Адаптер жизненного цикла или провайдера вокруг ресурса, которым владеет Fastify                                            |
+| Hono       | Маршрутизация и middleware на Web Standards      | Routes, middleware, sub-apps, `app.fetch`, выбор runtime-адаптера                                                                                                          | Core App, явный lifecycle ресурсов, внутренние Client/Transport, discovery                                                 |
+| Elysia     | Типизированный Web-фреймворк с фокусом на Bun    | Дерево маршрутов, композиция схем, decorators, hooks, Bun- или Web Standard-адаптер                                                                                        | Блоки Core для жизненного цикла и внутренних сервисов при сохранении нативного поведения Elysia                            |
+| Koa        | Минимальное Node-ядро middleware                 | Цепочка middleware и Node listener; роутер обычно внешний                                                                                                                  | Жизненный цикл и внутренние сервисные контракты без добавления ещё одного роутера                                          |
+| tRPC       | Типобезопасный слой процедур                     | Пути router/procedure, парсеры input/output, context factory, HTTP/Fetch/WS-адаптеры                                                                                       | Владение провайдерами, политика обнаружения сервисов, явный lifecycle App                                                  |
+| go-micro   | Go-экосистема микросервисов и агентов            | Go Context, абстракции service/client/transport/registry/broker, экосистема провайдеров и дополнительная область agent/flow/MCP/A2A                                        | go-like заимствует часть словаря, но не Go ABI, goroutine и совместимость транспортов                                      |
+| go-kratos  | Go-фреймворк для cloud-native-сервисов           | Жизненный цикл App, Go Context, HTTP/gRPC-транспорты, middleware, registry, config, генерация кода Protobuf                                                                | Код Context-first на основе Protobuf-ES; Стандартный gRPC: четыре вида вызовов через `/native`                             |
+| go-like    | Явные строительные блоки для TypeScript-сервисов | Context, lifecycle App/Server, стандартный Fetch-край, внутренний Fetch JSON и SSE, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adapters | Приложение по-прежнему владеет маршрутами фреймворка, нативными плоскостями данных, бизнес-политикой, auth и deployment    |
 
 Проект не пытается выиграть сравнение «самый большой фреймворк». Вопрос в том, нужны ли приложению явные и компонуемые границы.
 
 ## Матрица ответственности
 
-| Область                   | NestJS                                           | Fastify                            | Hono / Elysia / Koa                                     | tRPC                                          | go-like                                                                                   |
-| ------------------------- | ------------------------------------------------ | ---------------------------------- | ------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Внешняя таблица маршрутов | Controllers и decorators                         | Fastify instance                   | Экземпляр фреймворка или внешний роутер                 | Procedure router, а не обычные REST-маршруты  | Внешний фреймворк или приложение                                                          |
-| Web handler ABI           | Абстракция request/reply, принадлежащая адаптеру | Node request/reply                 | Стандартный Fetch в центре Hono и Web Standard adapters | Fetch/Node/Express/Fastify adapters           | Стандартный `(Request) => Response \| Promise<Response>`                                  |
-| Жизненный цикл приложения | Application context и hooks                      | `ready`, `listen`, `close`, hooks  | Зависит от runtime adapter и фреймворка                 | Ответственность host/adapter                  | `newApp`, `App.run`, `App.stop`, hooks, структурные Servers                               |
-| Жизненный цикл ресурсов   | Hooks контейнера/фреймворка                      | Hooks плагинов и сервера           | Ответственность приложения/runtime                      | Ответственность приложения/adapter            | Явные контракты `Server.start(ctx)` / `stop(ctx)` и владение адаптера                     |
-| Композиция зависимостей   | Nest container/providers                         | Plugin decoration и encapsulation  | Context/env и композиция; общего DI-контейнера нет      | Явный context factory и композиция router     | Явные конструкторы и functional options; DI-контейнера нет                                |
-| Внутренний transport      | Microservice transports и framework adapters     | Не абстракция обнаружения сервисов | Не абстракция обнаружения сервисов                      | Procedure adapters и необязательный WebSocket | `Transport`, `Client`, `Listener`, `Socket`, `Message`                                    |
-| Discovery и selection     | Зависит от транспорта или внешний                | Внешний                            | Внешние                                                 | Внешние                                       | `Registry`, `Discovery`, `Watcher`, Filters, пять политик Selector                        |
-| Retry                     | Зависит от фреймворка или провайдера             | Зависит от приложения/плагина      | Зависит от приложения                                   | Зависит от middleware/adapter                 | По умолчанию одна попытка; `withRetry` требует разрешения и общего числа попыток          |
-| Streaming                 | Зависит от фреймворка/провайдера                 | Node/Web stream choices            | Нативные Web Streams и API фреймворка                   | Зависит от HTTP/WS adapter                    | Web Streams; Message unary; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Глобальная инструментация | Интеграция фреймворка/провайдера                 | Plugin ecosystem                   | Middleware ecosystem                                    | Middleware/adapters                           | Явные wrappers; глобальные providers не устанавливаются                                   |
+| Область                   | NestJS                                           | Fastify                            | Hono / Elysia / Koa                                     | tRPC                                          | go-like                                                                                               |
+| ------------------------- | ------------------------------------------------ | ---------------------------------- | ------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Внешняя таблица маршрутов | Controllers и decorators                         | Fastify instance                   | Экземпляр фреймворка или внешний роутер                 | Procedure router, а не обычные REST-маршруты  | Внешний фреймворк или приложение                                                                      |
+| Web handler ABI           | Абстракция request/reply, принадлежащая адаптеру | Node request/reply                 | Стандартный Fetch в центре Hono и Web Standard adapters | Fetch/Node/Express/Fastify adapters           | Стандартный `(Request) => Response \| Promise<Response>`                                              |
+| Жизненный цикл приложения | Application context и hooks                      | `ready`, `listen`, `close`, hooks  | Зависит от runtime adapter и фреймворка                 | Ответственность host/adapter                  | `newApp`, `App.run`, `App.stop`, hooks, структурные Servers                                           |
+| Жизненный цикл ресурсов   | Hooks контейнера/фреймворка                      | Hooks плагинов и сервера           | Ответственность приложения/runtime                      | Ответственность приложения/adapter            | Явные контракты `Server.start(ctx)` / `stop(ctx)` и владение адаптера                                 |
+| Композиция зависимостей   | Nest container/providers                         | Plugin decoration и encapsulation  | Context/env и композиция; общего DI-контейнера нет      | Явный context factory и композиция router     | Явные конструкторы и functional options; DI-контейнера нет                                            |
+| Внутренний transport      | Microservice transports и framework adapters     | Не абстракция обнаружения сервисов | Не абстракция обнаружения сервисов                      | Procedure adapters и необязательный WebSocket | `Transport`, `Client`, `Listener`, `defineService`, SSE `ServerStream`                                |
+| Discovery и selection     | Зависит от транспорта или внешний                | Внешний                            | Внешние                                                 | Внешние                                       | `Registry`, `Discovery`, `Watcher`, Filters, пять политик Selector                                    |
+| Retry                     | Зависит от фреймворка или провайдера             | Зависит от приложения/плагина      | Зависит от приложения                                   | Зависит от middleware/adapter                 | По умолчанию одна попытка; `withRetry` требует разрешения и общего числа попыток                      |
+| Streaming                 | Зависит от фреймворка/провайдера                 | Node/Web stream choices            | Нативные Web Streams и API фреймворка                   | Зависит от HTTP/WS adapter                    | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
+| Глобальная инструментация | Интеграция фреймворка/провайдера                 | Plugin ecosystem                   | Middleware ecosystem                                    | Middleware/adapters                           | Явные wrappers; глобальные providers не устанавливаются                                               |
 
 Подписи в первых пяти строках описывают архитектурную позицию, а не рейтинг качества. Владение таблицей маршрутов полезно, когда именно композиция маршрутов является задачей. Это просто другой выбор ответственности по сравнению с go-like, который оставляет маршруты приложению.
 
@@ -79,13 +79,13 @@ Client
   -> Selector.select
   -> opaque ServiceEndpoint URL
   -> Transport.dial or resident logical owner
-  -> send(Message)
+  -> fetch(Request)
   -> @go-like/server route and unary handler
-  -> recv(Message)
+  -> read Response
   -> feedback and owner release
 ```
 
-Типизированный `Endpoint` связывает проверку request и response через `Struct` с существующей границей `Message`. Это не IDL и не сгенерированный протокол. `withAddress(...addresses)` выбирает прямой снимок при создании; прямые и полученные через Discovery снимки используют один и тот же Selector. Путь с in-process Memory Transport остаётся удобным первым тестом.
+Типизированный `Endpoint` связывает проверку request и response через `Struct` с телом JSON Fetch. Это не IDL и не сгенерированный протокол. `withEndpoint(...)` выбирает прямой снимок при создании; прямые и полученные через Discovery снимки используют один и тот же Selector. Путь с in-process Memory Transport остаётся удобным первым тестом.
 
 Транспортные опции NestJS для microservice, procedure adapters tRPC и транспорты Go-фреймворков не являются взаимозаменяемыми с этим DAG. У них могут отличаться identity маршрута, модель сериализации, пул соединений или слой retry. В сравнении нужно фиксировать эти различия, а не считать все варианты «RPC» одинаковыми.
 
@@ -108,8 +108,8 @@ Web framework or Fetch Handler
   -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
 
 go-like internal Client/Transport
-  -> one unary Message request and one unary Message response
-  -> no full-duplex RPC Stream SPI
+  -> one JSON body, or one SSE server stream when `stream: true`
+  -> not a bidirectional multi-frame protocol
 
 @go-like/transport-grpc-buf
   -> Fetch: Connect/gRPC-Web unary and server-streaming
@@ -158,7 +158,7 @@ Koa — небольшое Node-ядро middleware без встроенног�
 
 ### tRPC
 
-tRPC владеет типобезопасным procedure router и middleware процедур. Он может использовать Fetch, Node, Express, Fastify или WebSocket adapters, но не является Registry, Selector, connection pool или менеджером жизненного цикла приложения. Типизированный `Endpoint` go-like — это меньшая runtime-привязка `Struct` к унарным `Message`, а не конкурирующий procedure DSL или сгенерированный IDL.
+tRPC владеет типобезопасным procedure router и middleware процедур. Он может использовать Fetch, Node, Express, Fastify или WebSocket adapters, но не является Registry, Selector, connection pool или менеджером жизненного цикла приложения. Типизированный `Endpoint` go-like — это меньшая runtime-привязка `Struct` к телам JSON Fetch, а не конкурирующий procedure DSL или сгенерированный IDL.
 
 ### go-micro и go-kratos
 
@@ -166,7 +166,7 @@ tRPC владеет типобезопасным procedure router и middleware 
 
 - Go `context.Context` и go-like `Context` разделяют намерение явной отмены, но их runtime-представления различаются.
 - Модель Registry watcher в go-micro и полные снимки-замены go-like не следует описывать как одинаковые потоки событий.
-- `@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от unary Transport SPI.
+- `@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
 - Значения по умолчанию провайдеров go-micro и go-kratos, retry loops, half-close streams и default selectors зависят от версии. Используйте таблицу зафиксированных upstream commit в исследовательской записи и проверяйте её заново перед публикацией новой сравнительной версии.
 
 ## Что выбрать
@@ -193,7 +193,7 @@ tRPC владеет типобезопасным procedure router и middleware 
 - `packages/web/src/context.ts` — стандартный Handler и мост Context;
 - `packages/client/src/index.ts` — опции Client, pooling, retry и pipeline попытки;
 - `packages/server/src/index.ts` — внутренние унарные handlers и dispatch маршрутов;
-- `packages/transport/src/types.ts` и `packages/transport/src/endpoint.ts` — границы Message и Endpoint;
+- `packages/transport/src/types.ts` и `packages/transport/src/endpoint.ts` — границы Fetch Request/Response и defineService;
 - `packages/registry/src/types.ts` и `packages/registry/src/selector.ts` — snapshots, filters, selectors и feedback.
 
 В исследовательской записи также сохранены следующие зафиксированные внешние входные данные для сравнения:

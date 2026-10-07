@@ -1,12 +1,19 @@
 import { expect, test } from "bun:test"
 
-import { background, canceled, withCancel, withCancelCause, type Context } from "@go-like/context"
 import {
+  background,
+  canceled,
+  cause,
+  withCancel,
+  withCancelCause,
+  type Context
+} from "@go-like/context"
+import {
+  fromServerContext,
   logger,
   secure,
   tlsConfig,
   withConnClose,
-  type Message,
   type TransportLogLevel
 } from "@go-like/transport"
 import {
@@ -155,12 +162,9 @@ function hostFixture(
   })
 }
 
-/** Creates one immutable transport Message response. */
-function message(value: string): Message {
-  return Object.freeze({
-    header: Object.freeze({ "X-Go-Like-Result": "ok" }),
-    body: new TextEncoder().encode(value)
-  })
+/** Returns an idle Response for serve loops that are not dispatched. */
+function idle(): Response {
+  return new Response(null)
 }
 
 /** Completes a callable Fetch executor with optional runtime statics. */
@@ -273,7 +277,7 @@ async function expectServeFirstOwnerCleanup(
   const listener = newHTTPListener("127.0.0.1:43125", fixture.handle, baselineCapabilities())
   const baselineListeners = parent.listenerCount()
   const accepted = listener.accepted()
-  const accepting = listener.accept(parent.context, function noop(): void {})
+  const accepting = listener.serve(parent.context, idle)
   expect(parent.listenerCount()).toBeGreaterThan(baselineListeners)
 
   if (phase === "running") {
@@ -424,10 +428,7 @@ function readyThrowRace(kind: "cancel" | "close"): ReadyThrowRace {
   listener = newHTTPListener("127.0.0.1:43127", handle, baselineCapabilities())
   const activeListener = listener
   const accepted = activeListener.accepted()
-  const accepting = activeListener.accept(
-    kind === "cancel" ? acceptContext : background(),
-    function noop(): void {}
-  )
+  const accepting = activeListener.serve(kind === "cancel" ? acceptContext : background(), idle)
   return Object.freeze({
     listener: activeListener,
     accepted,
@@ -454,13 +455,13 @@ test("listen binds, accepts once, dispatches unary wire, and closes cleanly", as
   ])
   expect(listener.accepted()).toBe(listener.accepted())
 
-  const accept = listener.accept(background(), async function echo(ctx, socket): Promise<void> {
-    const incoming = await socket.recv(ctx)
-    expect(new TextDecoder().decode(incoming.body)).toBe("ping")
-    expect(socket.local()).toBe("127.0.0.1:43123")
-    expect(socket.remote()).toBe("127.0.0.1:54321")
-    await socket.send(ctx, message("pong"))
-  })
+  const accept = listener.serve(
+    background(),
+    async function echo(_ctx, request): Promise<Response> {
+      expect(await request.text()).toBe("ping")
+      return new Response("pong", { headers: { "X-Go-Like-Result": "ok" } })
+    }
+  )
   fixture.ready.resolve(undefined)
   await listener.accepted()
   const dispatcher = fixture.requests[0]
@@ -478,7 +479,7 @@ test("listen binds, accepts once, dispatches unary wire, and closes cleanly", as
 
   await listener.close(background())
   await expect(accept).resolves.toBeUndefined()
-  await expect(listener.accept(background(), function noop(): void {})).rejects.toMatchObject({
+  await expect(listener.serve(background(), idle)).rejects.toMatchObject({
     code: "GO_LIKE_TRANSPORT_STATE"
   })
 })
@@ -542,7 +543,7 @@ test("handler failures and missing send return secret-safe 500 responses", async
     )
   )
   const listener = await transport.listen(background(), "127.0.0.1:0", host(fixture.host))
-  const accept = listener.accept(background(), function fail(): never {
+  const accept = listener.serve(background(), function fail(): never {
     throw handlerFailure
   })
   fixture.ready.resolve(undefined)
@@ -566,7 +567,9 @@ test("handler failures and missing send return secret-safe 500 responses", async
 
   const second = hostFixture()
   const noSend = await newHTTPTransport().listen(background(), "127.0.0.1:0", host(second.host))
-  const noSendAccept = noSend.accept(background(), function returnWithoutSend(): void {})
+  const noSendAccept = noSend.serve(background(), function returnWithoutSend(): Response {
+    return undefined as unknown as Response
+  })
   second.ready.resolve(undefined)
   await noSend.accepted()
   const noSendDispatcher = second.requests[0]
@@ -586,40 +589,71 @@ test("handler failures and missing send return secret-safe 500 responses", async
   await noSendAccept
 })
 
-test("pre-canceled Socket close preserves its cause without closing the exchange", async () => {
-  const [ctx, cancel] = withCancelCause(background())
-  const marker = new Error("socket close caller expired")
-  cancel(marker)
-  let closeFailure: unknown = null
-  let received = ""
-
+test("dispatch passes the Request through and maps abort onto the handler Context", async () => {
+  const request = new Request("http://127.0.0.1/orders/get", { method: "POST", body: "request" })
+  let seen = null as Request | null
+  let openError = null as Error | null
   const response = await dispatchHTTPHostRequest(
     background(),
-    async function close(_handlerContext, socket): Promise<void> {
-      closeFailure = await socket.close(ctx).then(
-        function fulfilled(): unknown {
-          return null
-        },
-        function rejected(error: unknown): unknown {
-          return error
-        }
-      )
-      const incoming = await socket.recv(background())
-      received = new TextDecoder().decode(incoming.body)
-      await socket.send(background(), message("open"))
+    async function handle(ctx, incoming): Promise<Response> {
+      seen = incoming
+      openError = ctx.err()
+      const info = fromServerContext(ctx)
+      expect(info?.operation()).toBe("orders/get")
+      expect(info?.peerIdentity()).toBe("spiffe://example/node")
+      expect(incoming.headers.get("Go-Like-Peer-Identity")).toBeNull()
+      return new Response(incoming.body, { status: 200 })
     },
     Object.freeze({
-      request: new Request("http://127.0.0.1/rpc", { method: "POST", body: "request" }),
-      localAddress: "",
-      remoteAddress: ""
-    }),
-    false
+      request,
+      localAddress: "127.0.0.1:1",
+      remoteAddress: "127.0.0.1:2",
+      peerIdentity: "spiffe://example/node"
+    })
   )
-
+  expect(seen).toBe(request)
+  expect(openError).toBeNull()
   expect(response.status).toBe(200)
-  expect(closeFailure).toBe(marker)
-  expect(received).toBe("request")
-  expect(await response.text()).toBe("open")
+  expect(await response.text()).toBe("request")
+
+  const controller = new AbortController()
+  const marker = new Error("request aborted")
+  const aborted = new Request("http://127.0.0.1/orders/get", {
+    method: "POST",
+    signal: controller.signal
+  })
+  controller.abort(marker)
+  let abortedError = null as Error | null
+  let abortedCause = null as Error | null
+  let emptyIdentity: string | null = "present"
+  const abortedResponse = await dispatchHTTPHostRequest(
+    background(),
+    function handle(ctx): Response {
+      abortedError = ctx.err()
+      abortedCause = cause(ctx)
+      emptyIdentity = fromServerContext(ctx)?.peerIdentity() ?? null
+      return new Response(null, { status: 204 })
+    },
+    Object.freeze({ request: aborted, localAddress: "", remoteAddress: "", peerIdentity: "" })
+  )
+  expect(abortedError).toBe(canceled)
+  expect(abortedCause).toBe(marker)
+  expect(emptyIdentity).toBeNull()
+  expect(abortedResponse.status).toBe(204)
+
+  const stringAbort = new AbortController()
+  const stringRequest = new Request("http://127.0.0.1/orders/get", { signal: stringAbort.signal })
+  stringAbort.abort("stop")
+  let stringError = null as Error | null
+  await dispatchHTTPHostRequest(
+    background(),
+    function handle(ctx): Response {
+      stringError = ctx.err()
+      return new Response(null, { status: 204 })
+    },
+    Object.freeze({ request: stringRequest, localAddress: "", remoteAddress: "" })
+  )
+  expect(stringError).toBe(canceled)
 })
 
 test("pending listen keeps its option snapshot while later listeners use new options", async () => {
@@ -673,7 +707,7 @@ test("pending listen keeps its option snapshot while later listeners use new opt
 
   const firstListener = await listening
   const firstFailure = new Error("first snapshot handler failed")
-  const firstAccept = firstListener.accept(background(), function fail(): never {
+  const firstAccept = firstListener.serve(background(), function fail(): never {
     throw firstFailure
   })
   first.ready.resolve(undefined)
@@ -699,7 +733,7 @@ test("pending listen keeps its option snapshot while later listeners use new opt
   const later = hostFixture()
   const laterListener = await transport.listen(background(), "127.0.0.1:0", host(later.host))
   const laterFailure = new Error("later snapshot handler failed")
-  const laterAccept = laterListener.accept(background(), function fail(): never {
+  const laterAccept = laterListener.serve(background(), function fail(): never {
     throw laterFailure
   })
   later.ready.resolve(undefined)
@@ -750,7 +784,7 @@ test("capability admission happens before bind and force claims are verified aft
 test("normal serve exit is an unexpected terminal error after readiness", async () => {
   const fixture = hostFixture()
   const listener = await newHTTPTransport().listen(background(), "127.0.0.1:0", host(fixture.host))
-  const accept = listener.accept(background(), function noop(): void {})
+  const accept = listener.serve(background(), idle)
   fixture.ready.resolve(undefined)
   await listener.accepted()
   fixture.serveDone.resolve(undefined)
@@ -767,7 +801,7 @@ test("done settlement observed before ready wins the admission race", async () =
   const fixture = hostFixture()
   const listener = await newHTTPTransport().listen(background(), "127.0.0.1:0", host(fixture.host))
   const accepted = listener.accepted()
-  const accept = listener.accept(background(), function noop(): void {})
+  const accept = listener.serve(background(), idle)
   fixture.serveDone.resolve(undefined)
   fixture.ready.resolve(undefined)
 
@@ -848,7 +882,7 @@ test("accept cancellation during serve admission starts owned cleanup", async ()
   })
   const listener = await newHTTPTransport().listen(background(), "127.0.0.1:0", host(runtimeHost))
   const accepted = listener.accepted()
-  const accepting = listener.accept(acceptContext, function noop(): void {})
+  const accepting = listener.serve(acceptContext, idle)
 
   await expect(accepting).rejects.toBe(canceled)
   expect(closeCalls).toBe(1)
@@ -871,7 +905,7 @@ test("accept cancellation wins over a later synchronous serve failure", async ()
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(acceptContext, function noop(): void {})
+  const accepting = listener.serve(acceptContext, idle)
 
   await expect(accepted).rejects.toBe(canceled)
   await expect(accepting).rejects.toBe(canceled)
@@ -898,7 +932,7 @@ test("accept cancellation wins over a later invalid serve handle", async () => {
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(acceptContext, function noop(): void {})
+  const accepting = listener.serve(acceptContext, idle)
 
   await expect(accepted).rejects.toBe(canceled)
   await expect(accepting).rejects.toBe(canceled)
@@ -928,7 +962,7 @@ test("listener close wins admission before a later synchronous serve failure", a
   })
   listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
 
   /** Reads callback-owned close state without assuming synchronous assignment. */
   function observedReentrantClose(): Promise<void> | null {
@@ -971,7 +1005,7 @@ test("ready failure remains primary and secondary terminal failures stay ordered
   const hostFailure = new Error("host cleanup failed")
   const closeFailure = new Error("close failed")
   const accepted = listener.accepted()
-  const accepting = listener.accept(withCancel(background())[0], function noop(): void {})
+  const accepting = listener.serve(withCancel(background())[0], idle)
 
   fixture.ready.reject(primary)
   await expect(accepted).rejects.toBe(primary)
@@ -998,7 +1032,7 @@ test("normal close reports one original cleanup failure", async () => {
   const fixture = arbiterFixture()
   const listener = newHTTPListener("127.0.0.1:43125", fixture.handle, baselineCapabilities())
   const cleanupFailure = new Error("close rejected")
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   fixture.ready.resolve(undefined)
   await listener.accepted()
   const closing = listener.close(background())
@@ -1023,7 +1057,7 @@ test("deduplicates one terminal Promise observed as serve and host", async () =>
     close: () => Promise.resolve()
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   await listener.accepted()
   const closing = listener.close(background())
   const failure = new Error("shared terminal failure")
@@ -1040,7 +1074,7 @@ test("normal close freezes multiple cleanup failures in observation order", asyn
   const serveFailure = new Error("serve close failed")
   const hostFailure = new Error("host close failed")
   const closeFailure = new Error("close call failed")
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   fixture.ready.resolve(undefined)
   await listener.accepted()
   const closing = listener.close(background())
@@ -1064,7 +1098,7 @@ test("normal close freezes multiple cleanup failures in observation order", asyn
 test("host-first normal exit cancels the serve owner without redundant host close", async () => {
   const fixture = arbiterFixture()
   const listener = newHTTPListener("127.0.0.1:43125", fixture.handle, baselineCapabilities())
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   fixture.ready.resolve(undefined)
   await listener.accepted()
   fixture.hostDone.resolve(undefined)
@@ -1094,7 +1128,7 @@ test("synchronous serve failure rolls back and preserves the original Error", as
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   await expect(accepted).rejects.toBe(original)
   fixture.hostDone.resolve(undefined)
   fixture.closeDone.resolve(undefined)
@@ -1116,7 +1150,7 @@ test("invalid serve handle is an admission failure with owned rollback", async (
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   await expect(accepted).rejects.toBeInstanceOf(TypeError)
   fixture.hostDone.resolve(undefined)
   fixture.closeDone.resolve(undefined)
@@ -1154,7 +1188,7 @@ test("serve handles with non-callable lifecycle members roll back admission", as
   })
   const listener = newHTTPListener("127.0.0.1:43125", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   await expect(accepted).rejects.toBeInstanceOf(TypeError)
   fixture.hostDone.resolve(undefined)
   fixture.closeDone.resolve(undefined)
@@ -1185,7 +1219,7 @@ test("synchronous serve done and ready failures enter the same terminal arbiter"
   })
   const doneListener = newHTTPListener("127.0.0.1:43125", doneHandle, baselineCapabilities())
   const doneAccepted = doneListener.accepted()
-  const doneAccepting = doneListener.accept(background(), function noop(): void {})
+  const doneAccepting = doneListener.serve(background(), idle)
   await expect(doneAccepted).rejects.toBe(doneFailure)
   doneFixture.hostDone.resolve(undefined)
   doneFixture.closeDone.resolve(undefined)
@@ -1213,7 +1247,7 @@ test("synchronous serve done and ready failures enter the same terminal arbiter"
   })
   const readyListener = newHTTPListener("127.0.0.1:43125", readyHandle, baselineCapabilities())
   const readyAccepted = readyListener.accepted()
-  const readyAccepting = readyListener.accept(background(), function noop(): void {})
+  const readyAccepting = readyListener.serve(background(), idle)
   await expect(readyAccepted).rejects.toBe(readyFailure)
   readyFixture.serveDone.resolve(undefined)
   readyFixture.hostDone.resolve(undefined)
@@ -1254,7 +1288,7 @@ test("synchronous host done and close failures are normalized by the owner", asy
   })
   const listener = newHTTPListener("127.0.0.1:43126", handle, baselineCapabilities())
   const accepted = listener.accepted()
-  const accepting = listener.accept(background(), function noop(): void {})
+  const accepting = listener.serve(background(), idle)
   await expect(accepted).rejects.toBe(hostFailure)
   serveDone.resolve(undefined)
 
@@ -1892,7 +1926,7 @@ test("throwing serve-handle lifecycle getters enter admission rollback", async (
     })
     const listener = await newHTTPTransport().listen(background(), "127.0.0.1:0", host(runtimeHost))
     const accepted = listener.accepted()
-    const accepting = listener.accept(background(), function noop(): void {})
+    const accepting = listener.serve(background(), idle)
     await expect(accepted).rejects.toBe(getterFailure)
     await expect(accepting).rejects.toBe(getterFailure)
     expect(getterReads).toBe(1)

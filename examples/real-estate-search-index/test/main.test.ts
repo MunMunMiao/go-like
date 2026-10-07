@@ -13,7 +13,7 @@ import {
 } from "../src/service"
 
 /** Runs one assertion against an isolated service instance. */
-async function withService(run: () => Promise<void>): Promise<void> {
+async function withIsolatedService(run: () => Promise<void>): Promise<void> {
   await run()
 }
 
@@ -55,7 +55,7 @@ function search(
 describe("real estate search index", () => {
   test("returns only active listings that satisfy every query bound", async () => {
     const service = newRealEstateSearchService()
-    await withService(async function verify(): Promise<void> {
+    await withIsolatedService(async function verify(): Promise<void> {
       await indexListing(service, "cheap", "Shanghai", 2_000, 2, true, 1)
       await indexListing(service, "expensive", "Shanghai", 5_000, 3, true, 1)
       await indexListing(service, "over-limit", "Shanghai", 7_000, 3, true, 1)
@@ -87,7 +87,7 @@ describe("real estate search index", () => {
 
   test("ignores stale revisions instead of replacing a newer projection", async () => {
     const service = newRealEstateSearchService()
-    await withService(async function verify(): Promise<void> {
+    await withIsolatedService(async function verify(): Promise<void> {
       await indexListing(service, "listing-one", "Shenzhen", 3_000, 2, true, 2)
       const stale = await indexListing(service, "listing-one", "Shenzhen", 1_000, 2, true, 1)
       expect(await stale.json()).toEqual({ applied: false, affectedCities: [] })
@@ -100,7 +100,7 @@ describe("real estate search index", () => {
 
   test("rejects different listing content at the same revision", async () => {
     const service = newRealEstateSearchService()
-    await withService(async function verify(): Promise<void> {
+    await withIsolatedService(async function verify(): Promise<void> {
       expect((await indexListing(service, "conflict", "Chengdu", 2_000, 2, true, 1)).status).toBe(
         202
       )
@@ -112,7 +112,7 @@ describe("real estate search index", () => {
 
   test("serves repeated searches from cache and invalidates after an applied update", async () => {
     const service = newRealEstateSearchService()
-    await withService(async function verify(): Promise<void> {
+    await withIsolatedService(async function verify(): Promise<void> {
       await indexListing(service, "cached", "Hangzhou", 4_000, 2, true, 1)
       await search(service, "Hangzhou", 10_000, 1)
       await search(service, "Hangzhou", 10_000, 1)

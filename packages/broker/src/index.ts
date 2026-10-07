@@ -57,20 +57,6 @@ function normalizeFailure(operation: string, value: unknown): Error {
   return new Error(`subscription ${operation} rejected with a non-Error value`, { cause: value })
 }
 
-/** Reports whether a string contains no unpaired UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
-    if (code >= 0xd800 && code <= 0xdbff) {
-      if (index + 1 >= value.length) return false
-      const following = value.charCodeAt(index + 1)
-      if (following < 0xdc00 || following > 0xdfff) return false
-      index += 1
-    } else if (code >= 0xdc00 && code <= 0xdfff) return false
-  }
-  return true
-}
-
 /**
  * Adapts one subscription into the Core Server lifecycle without owning the subscriber
  * connection or inventing native acknowledgement semantics.
@@ -93,7 +79,7 @@ export function newBrokerServer<Event, Options>(
   }
   const subscribe = broker.subscribe
   if (typeof subscribe !== "function") throw new TypeError("broker subscribe must be callable")
-  if (typeof topic !== "string" || topic.length === 0 || !isWellFormed(topic)) {
+  if (typeof topic !== "string" || topic.length === 0 || !topic.isWellFormed()) {
     throw new TypeError("subscription topic must be a non-empty well-formed string")
   }
   if (typeof handler !== "function") throw new TypeError("subscription handler must be callable")

@@ -8,9 +8,11 @@ test("exports exactly the go-style internal server runtime surface", () => {
     "advertise",
     "httpRoute",
     "listenOption",
+    "maxSendMessageBytes",
     "middleware",
     "newServer",
     "rateLimitMiddleware",
+    "streamKeepAlive",
     "transport",
     "use"
   ])

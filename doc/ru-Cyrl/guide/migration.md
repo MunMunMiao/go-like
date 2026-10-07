@@ -71,8 +71,8 @@ framework route table
 | `context.Context`     | `@go-like/context` `Context`                                                                                       | `done()` — это `AbortSignal` или `null`, а не канал Go                              |
 | Жизненный цикл Server | Структурный `Server` Core                                                                                          | `start(ctx)` может длиться весь срок работы сервиса и не означает readiness         |
 | App runner            | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` не получает Context вызывающей стороны и возвращает один общий Promise |
-| RPC client            | `@go-like/client`                                                                                                  | Внутренние вызовы — унарные `Message`; retry включается явно                        |
-| Transport             | `@go-like/transport`                                                                                               | Провайдеры и заголовки Message — контракты TypeScript/Web                           |
+| RPC client            | `@go-like/client`                                                                                                  | Внутренние вызовы — JSON Fetch или SSE; retry включается явно                       |
+| Transport             | `@go-like/transport`                                                                                               | Провайдеры и заголовки Fetch — контракты TypeScript/Web                             |
 | Registry              | `@go-like/registry`                                                                                                | Watcher возвращает полные снимки-замены                                             |
 | Selector              | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Feedback синхронен и зависит от политики                                            |
 | Protobuf/IDL          | `@go-like/protoc-gen-like`                                                                                         | Код Context-first на основе Protobuf-ES                                             |
@@ -81,14 +81,33 @@ framework route table
 Первым постепенным шагом может быть типизированный вызов по прямому адресу через Memory Transport:
 
 ```ts
-// Composition excerpt: quote and pricingQuoteHandler are application-owned.
-// Admit this server through App before calling; close client during shutdown.
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const quoteService = defineService("pricing", {
+  quote: {
+    request: struct.object({ sku: struct.string() }),
+    response: struct.object({ amount: struct.number() })
+  }
+})
+
 const transport = newMemoryTransport()
 const server = newServer(serverTransport(transport), address("memory://pricing"))
-server.registerHandler(quote, pricingQuoteHandler)
+quoteService.registerHandler(server, {
+  quote(_ctx, request) {
+    return { amount: request.sku.length }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://pricing"))
-const result = await client.call(ctx, quote, request)
+const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
+const caller = quoteService.newClient(client)
+const ctx: Context = background()
+const result = await caller.quote(ctx, { sku: "a" })
+void result
 ```
 
 Только после проверки этой границы вводите Discovery, настоящий Registry provider или HTTP transport. Так вы сохраняете доменный контракт, меняя лишь назначение и схему владения ресурсами.
@@ -103,7 +122,7 @@ const result = await client.call(ctx, quote, request)
 - EndpointSlice — это не Kubernetes Service DNS и он не предоставляет универсальный TTL регистрации;
 - необязательные owner references Pod и явная deregistration имеют разную семантику отказов.
 
-Начните с health и configuration, прежде чем выбирать узлы напрямую из EndpointSlice. Если у приложения уже есть стабильное DNS-имя Service, `withAddress(...)` вместе с HTTP transport может быть проще и честнее, чем добавление Registry provider.
+Начните с health и configuration, прежде чем выбирать узлы напрямую из EndpointSlice. Если у приложения уже есть стабильное DNS-имя Service, `withEndpoint(...)` вместе с HTTP transport может быть проще и честнее, чем добавление Registry provider.
 
 ## Внедрение брокеров и задач
 
@@ -162,7 +181,7 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 ## Текущая граница поддержки
 
-`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от unary Transport SPI.
+`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
 
 Это не включает стандартный gRPC в браузере, request-streaming/bidi через Fetch, официальные health/reflection, универсальную аутентификацию, Event Store/replay, ORM или оркестрацию кластера.
 

@@ -1,5 +1,7 @@
 # dest 学习报告（2026-08）
 
+> 文中 `Go-Like-Service` / `Go-Like-Endpoint` 是战役证据里的旧路由头。当前内部 RPC 按 path `/<service>/<endpoint>` 路由，见 [service-call](../../doc/guide/service-call.md)。
+
 本文是 dest 学习结论，不是 40/40 战役完成声明。证据来自收获快照 `docs/dogfood-2026-08/` 与 `go-like-dogfood` 战役目录。本轮不修改 `packages/`、不启动 dest、不 compose、不提交 git。
 
 结论先行：P0 `NW-020` / `NW-009` / `NW-006` 已在生产者 `a6d266718ac322fcb7cc4f5c87a3be46bfe53aff` 与 `43abe749cb9e05c56c99b07a3595dbdb8c2121a0` 落地。关闭 dest `fw-r252` / `fw-r253` / `fw-r254` 上 go-like 与 competitor 在同一产品阶段均通过。当前没有 go-like 失败且 competitor 通过的新证据。`docs-dx` 与 dest 样本 workaround 不得提升为库缺陷。

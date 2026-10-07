@@ -1,13 +1,4 @@
-import { snapshotMessage } from "./message"
-import type {
-  DialOption,
-  Message,
-  MessageCodec,
-  Option,
-  TLSConfig,
-  TLSEncodedBytes,
-  TransportLogger
-} from "./types"
+import type { DialOption, Option, TLSConfig, TLSEncodedBytes, TransportLogger } from "./types"
 
 const PromiseThen = Promise.prototype.then
 
@@ -77,30 +68,6 @@ function snapshotLogger(value: TransportLogger | null): TransportLogger | null {
   })
 }
 
-/** Wraps a borrowed codec with detached Message and byte boundaries. */
-function snapshotCodec(value: MessageCodec | null): MessageCodec | null {
-  if (value === null) return null
-  const marshal = value.marshal
-  const unmarshal = value.unmarshal
-  if (typeof marshal !== "function") throw new TypeError("codec marshal must be a function")
-  if (typeof unmarshal !== "function") throw new TypeError("codec unmarshal must be a function")
-  return Object.freeze({
-    /** Marshals one defensive Message snapshot and detaches the resulting bytes. */
-    marshal(message: Message): Uint8Array {
-      const encoded = marshal.call(value, snapshotMessage(message))
-      if (!(encoded instanceof Uint8Array))
-        throw new TypeError("codec marshal must return Uint8Array")
-      return new Uint8Array(encoded)
-    },
-    /** Detaches input bytes and snapshots the Message returned by the codec. */
-    unmarshal(bytes: Uint8Array): ReturnType<MessageCodec["unmarshal"]> {
-      if (!(bytes instanceof Uint8Array))
-        throw new TypeError("codec unmarshal input must be Uint8Array")
-      return snapshotMessage(unmarshal.call(value, new Uint8Array(bytes)))
-    }
-  })
-}
-
 /** Copies one encoded TLS material value and protects its retained bytes with a getter. */
 function snapshotTLSEncodedBytes(value: TLSEncodedBytes | null): TLSEncodedBytes | null {
   if (value === null) return null
@@ -133,23 +100,10 @@ function snapshotTLSConfig(value: TLSConfig | null): TLSConfig | null {
   })
 }
 
-/** Replaces the optional Message codec with a safely wrapped structural implementation. */
-export function codec(value: MessageCodec | null): Option {
-  return (options) =>
-    Object.freeze({
-      codec: snapshotCodec(value),
-      logger: options.logger,
-      timeoutMs: options.timeoutMs,
-      secure: options.secure,
-      tlsConfig: options.tlsConfig
-    })
-}
-
 /** Replaces the optional diagnostic logger with a failure-isolating structural wrapper. */
 export function logger(value: TransportLogger | null): Option {
   return (options) =>
     Object.freeze({
-      codec: options.codec,
       logger: snapshotLogger(value),
       timeoutMs: options.timeoutMs,
       secure: options.secure,
@@ -162,7 +116,6 @@ export function timeout(timeoutMs: number): Option {
   const validated = duration(timeoutMs, "transport timeoutMs")
   return (options) =>
     Object.freeze({
-      codec: options.codec,
       logger: options.logger,
       timeoutMs: validated,
       secure: options.secure,
@@ -175,7 +128,6 @@ export function secure(enabled: boolean): Option {
   const validated = flag(enabled, "transport secure")
   return (options) =>
     Object.freeze({
-      codec: options.codec,
       logger: options.logger,
       timeoutMs: options.timeoutMs,
       secure: validated,
@@ -187,7 +139,6 @@ export function secure(enabled: boolean): Option {
 export function tlsConfig(value: TLSConfig | null): Option {
   return (options) =>
     Object.freeze({
-      codec: options.codec,
       logger: options.logger,
       timeoutMs: options.timeoutMs,
       secure: options.secure,

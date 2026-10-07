@@ -2,7 +2,9 @@
 
 `@go-like/protoc-gen-like` 是 project-local Node 22+ build-time Buf protoc plugin，用于生成 go-like portable
 RPC 代码。它不是 provider package，也不是 portable application runtime 的依赖；Bun 只用于本仓库内部
-build/package。
+build/package。生成的 `MessageShape` / `MessageInitShape` 是 Protobuf-ES 类型。Struct HTTP 契约使用
+`@go-like/transport` 的 `defineService`；托管标准 gRPC Client 用 `withEndpoint` 选择根 URL 或
+`discovery:///<name>`。`withAddress` 与 `withService` 已删除。
 
 生成代码直接 import 的 runtime dependencies 必须由 Node/npm consumer 声明：
 

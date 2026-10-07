@@ -6,9 +6,9 @@ import { expect, test } from "bun:test"
 
 import { background } from "@go-like/context"
 import {
+  fromServerContext,
   secure,
   tlsConfig,
-  type Message,
   type TLSConfig,
   type TLSEncodedBytes
 } from "@go-like/transport"
@@ -21,7 +21,6 @@ const serverCertificate = readFileSync(new URL("fixtures/tls/server.pem", import
 const serverKey = readFileSync(new URL("fixtures/tls/server-key.pem", import.meta.url))
 const clientKey = readFileSync(new URL("fixtures/tls/client-key.pem", import.meta.url))
 
-const PeerIdentityHeader = "Go-Like-Peer-Identity"
 const DestPeerIdentity = "spiffe://ms020/machine/alpha"
 
 /** Self-signed SPIFFE leaf for the existing fixtures/tls/client-key.pem. */
@@ -92,18 +91,6 @@ function port(address: string): number {
   return Number(address.slice(address.lastIndexOf(":") + 1))
 }
 
-/** Reads one header name case-insensitively. */
-function headerValue(header: Readonly<Record<string, string>>, name: string): string | undefined {
-  const expected = name.toLowerCase()
-  let found: string | undefined
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() !== expected) continue
-    if (found !== undefined) throw new Error(`duplicate ${name} header`)
-    found = header[key]
-  }
-  return found
-}
-
 /** Returns the sole URI SAN from one PEM certificate. */
 function uriSAN(value: Uint8Array): string {
   const altName = new X509Certificate(value).subjectAltName ?? ""
@@ -168,25 +155,19 @@ function requestHTTP2(
   })
 }
 
-test("clientAuth require exposes the verified URI SAN as Go-Like-Peer-Identity", async () => {
+test("clientAuth require exposes the verified URI SAN on TransportInfo", async () => {
   expect(uriSAN(spiffeClientCertificate)).toBe(DestPeerIdentity)
 
   const transport = newNodeHTTPTransport(clientAuth("require"), allowHTTP1(false))
   transport.init(secure(true), tlsConfig(serverTLS()))
   const listener = (await transport.listen(background(), "127.0.0.1:0")) as HTTPListener
-  const dispatched: Message[] = []
-  const serving = listener.accept(background(), async function inspect(ctx, socket): Promise<void> {
-    const request = await socket.recv(ctx)
-    dispatched.push(request)
-    await socket.send(ctx, {
-      header: Object.freeze({ "Content-Type": "application/json" }),
-      body: new TextEncoder().encode(
-        JSON.stringify(
-          Object.freeze({
-            peerIdentity: headerValue(request.header, PeerIdentityHeader) ?? ""
-          })
-        )
-      )
+  let peerIdentity = null as string | null
+  let peerHeader: string | null = "present"
+  const serving = listener.serve(background(), function inspect(ctx, request): Response {
+    peerIdentity = fromServerContext(ctx)?.peerIdentity() ?? null
+    peerHeader = request.headers.get("Go-Like-Peer-Identity")
+    return new Response(JSON.stringify(Object.freeze({ peerIdentity: peerIdentity ?? "" })), {
+      headers: Object.freeze({ "content-type": "application/json" })
     })
   })
   let session: ClientHttp2Session | null = null
@@ -198,9 +179,8 @@ test("clientAuth require exposes the verified URI SAN as Go-Like-Peer-Identity",
       "/v1/machine-commands",
       JSON.stringify(Object.freeze({ command: "reboot" }))
     )
-    const request = dispatched[0]
-    if (request === undefined) throw new Error("listener did not dispatch the mTLS request")
-    expect(headerValue(request.header, PeerIdentityHeader)).toBe(DestPeerIdentity)
+    expect(peerIdentity).toBe(DestPeerIdentity)
+    expect(peerHeader).toBeNull()
     expect(JSON.parse(reply.body)).toEqual(Object.freeze({ peerIdentity: DestPeerIdentity }))
   } finally {
     if (session !== null && !session.destroyed) session.destroy()

@@ -4,7 +4,7 @@ import {
   address,
   newClient,
   newServer,
-  withAddress,
+  withEndpoint,
   withSelector,
   type Client,
   type Server,
@@ -359,7 +359,7 @@ async function runManagedLifecycleTest(identity: NativeRuntimeIdentity) {
       ]
     }
   }
-  const client = newClient(withAddress(owner.endpoint), withSelector(selector))
+  const client = newClient(withEndpoint(owner.endpoint), withSelector(selector))
   const orders = newOrderServiceClient(client)
   const bidiGate = deferred<void>()
   const forcedGate = deferred<void>()
@@ -545,7 +545,7 @@ export async function runManagedSelfTest(identity: NativeRuntimeIdentity) {
   let result: NativeCardinalityResult | null = null
   let primary: unknown = null
   try {
-    client = newClient(withAddress(owner.endpoint))
+    client = newClient(withEndpoint(owner.endpoint))
     result = await exercise(client)
     if (JSON.stringify(result) !== JSON.stringify(ExpectedResult)) {
       throw new Error(`${identity.runtime} managed gRPC result mismatch`)

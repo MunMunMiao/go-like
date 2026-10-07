@@ -10,6 +10,6 @@ Registry provider 的完整名稱是 `@go-like/registry-mdns`、`@go-like/regist
 
 請從真正擁有契約的最小套件匯入。Node 等 runtime host 也有獨立入口。公開命名沒有含糊的 `adapters` 大桶，自訂 HTTP header 統一使用 `Go-Like-` 前綴。
 
-`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 的 Fetch 入口支援 Connect/gRPC-Web unary 與 server-streaming；`/native` 提供標準 gRPC 的四種呼叫形態，包含 client-streaming 與 bidi。這是獨立於 unary Transport SPI 的路徑。
+`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 的 Fetch 入口支援 Connect/gRPC-Web unary 與 server-streaming；`/native` 提供標準 gRPC 的四種呼叫形態，包含 client-streaming 與 bidi。這是獨立於內部 Fetch/SSE 路徑。
 
 [取消與停機的已知限制](/reference/claims#stream-cancellation-limits)：Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

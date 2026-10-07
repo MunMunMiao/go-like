@@ -127,20 +127,6 @@ function contextFailure(ctx: Context): Error | null {
   return failure === null ? null : (cause(ctx) ?? failure)
 }
 
-/** Reports whether a string contains no unpaired UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
-    if (code >= 0xd800 && code <= 0xdbff) {
-      if (index + 1 >= value.length) return false
-      const following = value.charCodeAt(index + 1)
-      if (following < 0xdc00 || following > 0xdfff) return false
-      index += 1
-    } else if (code >= 0xdc00 && code <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Encodes UTF-8 text using the base64 representation required by the etcd JSON gateway. */
 function encodeBase64(text: string): string {
   const bytes = new TextEncoder().encode(text)
@@ -364,7 +350,7 @@ export function etcdSource(options: EtcdSourceOptions): ConfigSource {
   if (typeof fetch !== "function") throw new TypeError("etcd Fetch capability must be callable")
   if (typeof address !== "string") throw new TypeError("etcd address must be a string")
   const origin = etcdOrigin(address)
-  if (typeof key !== "string" || key.length === 0 || !isWellFormed(key)) {
+  if (typeof key !== "string" || key.length === 0 || !key.isWellFormed()) {
     throw new TypeError("etcd key must be a non-empty well-formed string")
   }
   if (typeof name !== "string" || name.length === 0) {

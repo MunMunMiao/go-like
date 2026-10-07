@@ -1,11 +1,16 @@
 export type { ErrorMap } from "./errors"
-export { StructError, setErrorMap } from "./errors"
+export { StructError } from "./errors"
 export { struct } from "./facade"
 export type {
   AnyStruct,
   FlattenedStructError,
   FormattedStructError,
   Infer,
+  ObjectStruct,
+  ParseResult,
   Struct,
-  StructIssue
+  StructInput,
+  StructIssue,
+  StructLike,
+  StructMethods
 } from "./types"

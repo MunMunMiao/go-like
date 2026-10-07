@@ -20,22 +20,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-/** Reports whether a string contains no unmatched UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates one exact Store string without normalizing provider-owned text. */
 function exactString(value: unknown, name: string, nonEmpty: boolean): string {
-  if (typeof value !== "string" || (nonEmpty && value.length === 0) || !isWellFormed(value)) {
+  if (typeof value !== "string" || (nonEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new TypeError(`${name} must be a well-formed string`)
   }
   return value

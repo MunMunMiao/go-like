@@ -3,8 +3,8 @@ import { expect, test } from "bun:test"
 import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
 import type { CallOption, CallRequest, Client } from "@go-like/client"
 import { background, withCancelCause, type Context } from "@go-like/context"
-import type { Message } from "@go-like/transport"
-import { endpoint, request as service } from "@go-like/transport/headers"
+import { newMetadata } from "@go-like/metadata"
+import { newServerContext, type TransportInfo } from "@go-like/transport"
 import { Registry } from "prom-client"
 
 import {
@@ -16,8 +16,25 @@ import {
   type RequestMetrics
 } from "../src/index"
 
-const emptyBody = new Uint8Array()
-const emptyMessage: Message = Object.freeze({ header: Object.freeze({}), body: emptyBody })
+const response = new Response(null, { status: 204 })
+
+/** Builds TransportInfo whose operation is independent of request headers. */
+function transportInfo(operation: string): TransportInfo {
+  const headers = newMetadata()
+  return {
+    kind: () => "http",
+    endpoint: () => "",
+    operation: () => operation,
+    requestHeaders: () => headers,
+    replyHeaders: () => headers,
+    peerIdentity: () => null
+  }
+}
+
+/** Attaches one server operation to a parent Context. */
+function serverContext(operation: string, parent: Context = background()): Context {
+  return newServerContext(parent, transportInfo(operation))
+}
 
 async function scrape(registry: Registry): Promise<string> {
   return await registry.metrics()
@@ -74,10 +91,7 @@ test("creates fixed application-owned collectors and rejects malformed instrumen
 test("measures each logical Client call once and preserves receiver, options, results, and failures", async () => {
   const registry = new Registry()
   const metrics = newRequestMetrics(registry)
-  const result: Message = Object.freeze({
-    header: Object.freeze({ native: "response" }),
-    body: new Uint8Array([1])
-  })
+  const result = new Response("native")
   const failure = new Error("secret client failure")
   const cancellation = new Error("caller canceled")
   let calls = 0
@@ -88,7 +102,7 @@ test("measures each logical Client call once and preserves receiver, options, re
       _ctx: Context,
       request: CallRequest,
       ...options: readonly CallOption[]
-    ): Promise<Message> {
+    ): Promise<Response> {
       expect(this).toBe(native)
       calls += 1
       optionSeen = options[0] ?? null
@@ -106,15 +120,18 @@ test("measures each logical Client call once and preserves receiver, options, re
   const request: CallRequest = {
     service: "catalog",
     endpoint: "Get",
-    message: emptyMessage
+    headers: {},
+    body: null
   }
 
-  expect(await measured.call(background(), request, option)).toBe(result)
+  const delivered = await measured.call(background(), request, option)
+  expect(delivered.status).toBe(200)
+  expect(await delivered.text()).toBe("native")
   expect(calls).toBe(1)
   expect(optionSeen === option).toBe(true)
   expect(measured.close(background())).toBe(closed)
   await expect(
-    measured.call(background(), { service: "catalog", endpoint: "Fail", message: emptyMessage })
+    measured.call(background(), { service: "catalog", endpoint: "Fail", headers: {}, body: null })
   ).rejects.toBe(failure)
   const [canceledContext, cancel] = withCancelCause(background())
   cancel(cancellation)
@@ -122,7 +139,8 @@ test("measures each logical Client call once and preserves receiver, options, re
     measured.call(canceledContext, {
       service: "catalog",
       endpoint: "Cancel",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).rejects.toBe(cancellation)
 
@@ -152,13 +170,15 @@ test("keeps metrics and hostile Context failures from replacing application outc
       }
     }
   } as unknown as RequestMetrics
-  const response = emptyMessage
   const failure = new Error("application failure")
   let selectedFailure: Error | null = null
   const client: Client = {
-    async call(): Promise<Message> {
+    async call(): Promise<Response> {
       if (selectedFailure !== null) throw selectedFailure
       return response
+    },
+    async stream(): Promise<never> {
+      throw new Error("unused")
     },
     async close(): Promise<void> {}
   }
@@ -168,14 +188,16 @@ test("keeps metrics and hostile Context failures from replacing application outc
     measured.call(background(), {
       service: "catalog",
       endpoint: "Get",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).resolves.toBe(response)
   await expect(
     measured.call(background(), {
       service: "catalog",
       endpoint: "List",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).resolves.toBe(response)
 
@@ -192,47 +214,59 @@ test("keeps metrics and hostile Context failures from replacing application outc
     measured.call(hostile, {
       service: "catalog",
       endpoint: "Fail",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).rejects.toBe(failure)
 })
 
-test("measures unary Server operations from reserved route headers", async () => {
+test("measures unary Server operations from TransportInfo instead of request headers", async () => {
   const registry = new Registry()
   const metrics = newRequestMetrics(registry)
   const failure = new Error("secret server failure")
   const cancellation = new Error("server caller canceled")
   const middleware = measureUnaryMiddleware(metrics)
-  const success = middleware(async (_ctx, message) => message)
+  const ok = new Response(null, { status: 204 })
+  const success = middleware(async () => ok)
   const fail = middleware(() => {
     throw failure
   })
   const cancelHandler = middleware(() => {
     throw cancellation
   })
-  const routed: Message = {
-    header: {
-      [service.toLowerCase()]: "payments",
-      [endpoint.toUpperCase()]: "Authorize"
-    },
-    body: emptyBody
-  }
-  const duplicateRoute: Message = {
-    header: {
-      [service]: "attacker-controlled-tenant-9817",
-      [service.toLowerCase()]: "payments",
-      [endpoint]: "Authorize"
-    },
-    body: emptyBody
-  }
+  const routed = new Request("https://service.test/payments/Authorize", {
+    method: "POST",
+    headers: {
+      "Go-Like-Service": "attacker-controlled-tenant-9817",
+      "Go-Like-Endpoint": "Authorize"
+    }
+  })
+  const missing = new Request("https://service.test/healthz", { method: "GET" })
+  const leadingSlash = new Request("https://service.test/Authorize", { method: "POST" })
+  const trailingSlash = new Request("https://service.test/payments/", { method: "POST" })
+  const singleSegment = new Request("https://service.test/healthz", { method: "GET" })
 
-  expect(await success(background(), routed)).toBe(routed)
-  await expect(fail(background(), routed)).rejects.toBe(failure)
+  expect(await success(serverContext("payments/Authorize"), routed)).toBe(ok)
+  await expect(fail(serverContext("payments/Authorize"), routed)).rejects.toBe(failure)
   const [canceledContext, cancel] = withCancelCause(background())
   cancel(cancellation)
-  await expect(cancelHandler(canceledContext, routed)).rejects.toBe(cancellation)
-  expect(await success(background(), emptyMessage)).toBe(emptyMessage)
-  expect(await success(background(), duplicateRoute)).toBe(duplicateRoute)
+  await expect(
+    cancelHandler(serverContext("payments/Authorize", canceledContext), routed)
+  ).rejects.toBe(cancellation)
+  expect(await success(background(), missing)).toBe(ok)
+  expect(await success(serverContext("/Authorize"), leadingSlash)).toBe(ok)
+  expect(await success(serverContext("payments/"), trailingSlash)).toBe(ok)
+  expect(await success(serverContext("healthz"), singleSegment)).toBe(ok)
+  const root = background()
+  const exploding: Context = {
+    deadline: root.deadline,
+    done: root.done,
+    err: root.err,
+    value(): never {
+      throw new Error("transport info unavailable")
+    }
+  }
+  await expect(fail(exploding, routed)).rejects.toBe(failure)
 
   const body = await scrape(registry)
   expect(body).toContain(countLine(body, "server", "payments/Authorize", "success"))
@@ -240,6 +274,9 @@ test("measures unary Server operations from reserved route headers", async () =>
   expect(body).toContain(countLine(body, "server", "payments/Authorize", "canceled"))
   expect(body).toContain(countLine(body, "server", "unknown/unknown", "success"))
   expect(body).toContain(countLine(body, "server", "unknown/Authorize", "success"))
+  expect(body).toContain(countLine(body, "server", "payments/unknown", "success"))
+  expect(body).toContain(countLine(body, "server", "healthz/unknown", "success"))
+  expect(body).toContain(countLine(body, "server", "unknown/unknown", "failure"))
   expect(body).not.toContain("attacker-controlled-tenant-9817")
   expect(body).not.toContain(failure.message)
 })
@@ -252,15 +289,18 @@ test("preserves synchronous and asynchronous Web semantics with method-only oper
   const syncResult = sync(
     new Request("https://service.test/orders/customer-123?token=secret", { method: "POST" })
   )
-  expect(syncResult).toBe(syncResponse)
+  if (syncResult instanceof Promise) throw new Error("Web handler became asynchronous")
+  expect(syncResult.status).toBe(201)
+  expect(await syncResult.text()).toBe("created")
 
   const serverFailure = new Response("unavailable", { status: 503 })
-  expect(
-    measureWebHandler(
-      () => serverFailure,
-      metrics
-    )(new Request("https://service.test/orders", { method: "GET" }))
-  ).toBe(serverFailure)
+  const failedResult = measureWebHandler(
+    () => serverFailure,
+    metrics
+  )(new Request("https://service.test/orders", { method: "GET" }))
+  if (failedResult instanceof Promise) throw new Error("Web handler became asynchronous")
+  expect(failedResult.status).toBe(503)
+  expect(await failedResult.text()).toBe("unavailable")
 
   const asyncResponse = new Response(null, { status: 204 })
   const asyncHandler = measureWebHandler(async () => asyncResponse, metrics)
@@ -286,17 +326,17 @@ test("preserves synchronous and asynchronous Web semantics with method-only oper
 
   const abort = new AbortController()
   abort.abort(new Error("request canceled"))
-  expect(
-    measureWebHandler(
-      () => new Response("late"),
-      metrics
-    )(
-      new Request("https://service.test/private/canceled", {
-        method: "OPTIONS",
-        signal: abort.signal
-      })
-    )
-  ).toBeInstanceOf(Response)
+  const canceledResult = measureWebHandler(
+    () => new Response("late"),
+    metrics
+  )(
+    new Request("https://service.test/private/canceled", {
+      method: "OPTIONS",
+      signal: abort.signal
+    })
+  )
+  if (canceledResult instanceof Promise) throw new Error("Web handler became asynchronous")
+  expect(await canceledResult.text()).toBe("late")
 
   const body = await scrape(registry)
   expect(body).toContain(countLine(body, "web", "POST", "success"))

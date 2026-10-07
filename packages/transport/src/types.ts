@@ -17,6 +17,15 @@ export interface Transport {
   string(): string
 }
 
+/**
+ * Handles one request and returns its standard Fetch response.
+ *
+ * ctx is the per-request handler Context owned by Listener.serve: the Listener cancels it once the
+ * delivered Response body reaches a terminal state, and not before. A Context derived from ctx,
+ * such as a deadline, is therefore released at that point through normal parent propagation.
+ */
+export type TransportHandler = (ctx: Context, request: Request) => Response | Promise<Response>
+
 /** Exposes provider-neutral transport details carried through one operation Context. */
 export interface TransportInfo {
   /** Returns the stable provider kind, such as http or nats. */
@@ -29,12 +38,8 @@ export interface TransportInfo {
   requestHeaders(): Metadata
   /** Returns an immutable current reply-header snapshot. */
   replyHeaders(): Metadata
-}
-
-/** Carries one immutable header snapshot and one defensively copied binary body. */
-export interface Message {
-  readonly header: Readonly<Record<string, string>>
-  readonly body: Uint8Array
+  /** Returns the verified peer identity, or null when the provider did not authenticate one. */
+  peerIdentity(): string | null
 }
 
 /** Describes one immutable provider-neutral service failure. */
@@ -45,45 +50,30 @@ export interface ServiceError extends Error {
   readonly metadata: Readonly<Record<string, string>>
 }
 
-/** Carries one canonical ServiceError across a concrete transport boundary. */
-export interface ServiceErrorEnvelope {
-  readonly serviceStatus: number
-  readonly carrierStatus: number
-  readonly header: Readonly<Record<string, string>>
-  readonly body: Uint8Array
-}
-
-/** Selects the canonical internal unary ServiceError wire. */
-export type ServiceErrorWireKind = "unary"
-
-/** Exchanges Messages over one owned transport connection or request slot. */
-export interface Socket {
-  /** Receives one Message while ctx remains active. */
-  recv(ctx: Context): Promise<Message>
-  /** Sends one Message while ctx remains active. */
-  send(ctx: Context, message: Message): Promise<void>
-  /** Idempotently closes this Socket while ctx bounds only the caller's wait. */
+/** Represents one reusable Fetch connection. */
+export interface Client {
+  /** Sends one Request and returns its Response without consuming the body. */
+  fetch(ctx: Context, request: Request): Promise<Response>
+  /** Idempotently closes this Client while ctx bounds only the caller's wait. */
   close(ctx: Context): Promise<void>
-  /** Returns the opaque local address, or an empty string when unavailable. */
-  local(): string
-  /** Returns the opaque remote address, or an empty string when unavailable. */
-  remote(): string
 }
 
-/** Represents a structural transport Socket reusable for sequential exchanges until close. */
-export interface Client extends Socket {}
-
-/** Handles one accepted Socket with a Context derived from the accept operation. */
-export type AcceptHandler = (ctx: Context, socket: Socket) => void | Promise<void>
-
-/** Owns one bound transport endpoint and one one-shot accept loop. */
+/** Owns one bound transport endpoint and one one-shot serve loop. */
 export interface Listener {
   /** Returns the actual bound opaque address. */
   addr(): string
   /** Idempotently closes the listener while ctx bounds only the caller's wait. */
   close(ctx: Context): Promise<void>
-  /** Runs the one-shot accept loop until close, cancellation, or host failure. */
-  accept(ctx: Context, handler: AcceptHandler): Promise<void>
+  /**
+   * Serves Fetch requests until close, cancellation, or host failure.
+   *
+   * serve MUST call handler with a cancelable Context derived from ctx, one per request. It MUST
+   * cancel that Context once the delivered Response body reaches a terminal state (end, error or
+   * cancel; a null body is terminal at delivery), and MUST NOT cancel it before. Only request
+   * abort, listener close or failure, and cancellation of ctx may end it earlier. Handlers rely
+   * on this to release Contexts derived from it without wrapping the Response body.
+   */
+  serve(ctx: Context, handler: TransportHandler): Promise<void>
 }
 
 /** Enumerates diagnostic levels accepted by a structural TransportLogger. */
@@ -93,14 +83,6 @@ export type TransportLogLevel = "debug" | "info" | "warn" | "error"
 export interface TransportLogger {
   /** Records one diagnostic event; implementations must isolate sink failures. */
   log(level: TransportLogLevel, message: string, fields?: Readonly<Record<string, unknown>>): void
-}
-
-/** Converts Messages to and from one implementation-specific binary representation. */
-export interface MessageCodec {
-  /** Marshals a defensive Message snapshot into detached bytes. */
-  marshal(message: Message): Uint8Array
-  /** Unmarshals detached bytes into a defensive Message snapshot. */
-  unmarshal(bytes: Uint8Array): Message
 }
 
 /** Identifies the encoding used by portable TLS material. */
@@ -122,7 +104,6 @@ export interface TLSConfig {
 
 /** Contains common immutable Transport configuration. */
 export interface Options {
-  readonly codec: MessageCodec | null
   readonly logger: TransportLogger | null
   readonly timeoutMs: number
   readonly secure: boolean

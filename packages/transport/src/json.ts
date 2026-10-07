@@ -1,5 +1,5 @@
 import type { Infer, Struct } from "@go-like/struct"
-import { decodeJson, encodeJson } from "@go-like/struct/codec"
+import { decodeJson, encodeParsedJson } from "@go-like/struct/codec"
 import { parseStructValue } from "@go-like/struct/runtime"
 
 const encoder = new TextEncoder()
@@ -8,7 +8,7 @@ export const jsonContentType = "application/json"
 
 /** Validates and encodes one Struct output as UTF-8 JSON. */
 export function encodeJsonBody<S extends Struct>(schema: S, value: NoInfer<Infer<S>>): Uint8Array {
-  const json = JSON.stringify(encodeJson(schema, parseStructValue(schema, value)))
+  const json = JSON.stringify(encodeParsedJson(schema, parseStructValue(schema, value)))
   if (json === undefined) throw new TypeError("json body is not serializable")
   return encoder.encode(json)
 }

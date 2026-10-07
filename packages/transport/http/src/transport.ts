@@ -423,6 +423,10 @@ function createHTTPTransport(
         httpOptions.maxMessageBytes
       )
     },
+    /** Returns the configured per-message receive ceiling. */
+    maxMessageBytes(): number {
+      return httpOptions.maxMessageBytes
+    },
     /** Returns the stable implementation name. */
     string(): string {
       return "http"

@@ -50,9 +50,9 @@ Internal unary call
   @go-like/client
     -> Discovery, Filter, Selector, or direct address
     -> @go-like/transport Client
-    -> Message send / recv
-    -> @go-like/server unary handler
-    -> response Message
+    -> Client.fetch POST /<service>/<endpoint>
+    -> @go-like/server handler
+    -> JSON body or SSE ServerStream
 ```
 
 ## ما الذي لا تتولاه go-like عمداً؟
@@ -73,7 +73,7 @@ Internal unary call
 
 ## الجرد العام
 
-تحتوي manifests المصدر الحالية على **45 حزمة `@go-like/*` غير خاصة**، وكلها بالإصدار `0.0.1` في هذا checkout، إضافة إلى **25 مسار source عاماً**. وتدخل `@go-like/struct` في هذا الجرد العام، وهي عقد وقت التشغيل الذي تستخدمه استدعاءات `Endpoint` typed. ولا تعد exports metadata من `dist/package.json` حزم إضافية أو APIs مصدرية.
+تحتوي manifests المصدر الحالية على **45 حزمة `@go-like/*` غير خاصة**، وكلها بالإصدار `0.0.1` في هذا checkout، إضافة إلى **28 مسار source عاماً**. وتدخل `@go-like/struct` في هذا الجرد العام، وهي عقد وقت التشغيل الذي تستخدمه استدعاءات `Endpoint` typed. ولا تعد exports metadata من `dist/package.json` حزم إضافية أو APIs مصدرية.
 
 استخدم [مرجع الحزم](/ar-Arab/reference/packages) لاختيار عقد أو مزوّد، ثم [مرجع المزوّدات](/ar-Arab/reference/providers) لمقارنة backend ودلالات بيئة التشغيل. يسجّل [الترحيل والتبنّي](/ar-Arab/guide/migration) مسارات التبنّي العملية ويذكّر بما لا يثبته المستودع.
 

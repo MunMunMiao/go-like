@@ -250,10 +250,9 @@ const serverTransport = newNodeHTTPTransport(clientAuth("require"), allowHTTP1(t
 serverTransport.init(secure(true), withTLSConfig(tlsConfig))
 const listener = await serverTransport.listen(background(), "127.0.0.1:0")
 let dispatched = 0
-const served = listener.accept(background(), async function echo(ctx, socket): Promise<void> {
+const served = listener.serve(background(), function echo(_ctx, request): Response {
   dispatched += 1
-  const request = await socket.recv(ctx)
-  await socket.send(ctx, Object.freeze({ header: Object.freeze({}), body: request.body }))
+  return new Response(request.body)
 })
 
 const session = openHTTP2(listener.addr(), true)
@@ -294,43 +293,33 @@ const clientServerTransport = newNodeHTTPTransport(clientAuth("require"), allowH
 clientServerTransport.init(secure(true), withTLSConfig(tlsConfig))
 const clientListener = await clientServerTransport.listen(background(), "127.0.0.1:0")
 let clientRequests = 0
-const clientServed = clientListener.accept(
-  background(),
-  async function echo(ctx, socket): Promise<void> {
-    clientRequests += 1
-    const request = await socket.recv(ctx)
-    await socket.send(ctx, Object.freeze({ header: Object.freeze({}), body: request.body }))
-  }
-)
+const clientServed = clientListener.serve(background(), function echo(_ctx, request): Response {
+  clientRequests += 1
+  return new Response(request.body)
+})
 const clientTransport = newNodeHTTPTransport()
 clientTransport.init(secure(true), withTLSConfig(clientTLSConfig))
 /** Exchanges one go-like unary request through an already-owned client. */
 async function exchangeGoLike(
   client: Awaited<ReturnType<typeof clientTransport.dial>>,
+  address: string,
   body: string
 ): Promise<string> {
-  await client.send(background(), {
-    header: { "Go-Like-Service": "secure", "Go-Like-Endpoint": "call" },
-    body: new TextEncoder().encode(body)
-  })
-  return new TextDecoder().decode((await client.recv(background())).body)
+  const response = await client.fetch(
+    background(),
+    new Request(new URL("/secure/call", `https://${address}/`), {
+      method: "POST",
+      body
+    })
+  )
+  return await response.text()
 }
 const goLikeClient = await clientTransport.dial(background(), clientListener.addr())
-await bounded(
-  goLikeClient.send(background(), {
-    header: { "Go-Like-Service": "secure", "Go-Like-Endpoint": "call" },
-    body: new TextEncoder().encode("go-like-mtls-h2")
-  }),
-  "go-like mTLS HTTP/2 send timed out"
-)
 const goLikeReply = await bounded(
-  goLikeClient.recv(background()),
-  "go-like mTLS HTTP/2 receive timed out"
+  exchangeGoLike(goLikeClient, clientListener.addr(), "go-like-mtls-h2"),
+  "go-like mTLS HTTP/2 exchange timed out"
 )
-verify(
-  new TextDecoder().decode(goLikeReply.body) === "go-like-mtls-h2",
-  "go-like mTLS HTTP/2 response changed"
-)
+verify(goLikeReply === "go-like-mtls-h2", "go-like mTLS HTTP/2 response changed")
 verify(clientRequests === 1, `go-like HTTP/2 client dispatched ${clientRequests} requests`)
 await goLikeClient.close(background())
 await clientListener.close(background())
@@ -365,14 +354,14 @@ const goLikeHTTP1Address = nativeAddress(goLikeHTTP1Server)
 const goLikeHTTP1Client = await clientTransport.dial(background(), goLikeHTTP1Address)
 verify(
   (await bounded(
-    exchangeGoLike(goLikeHTTP1Client, "go-like-mtls-http1-one"),
+    exchangeGoLike(goLikeHTTP1Client, goLikeHTTP1Address, "go-like-mtls-http1-one"),
     "first go-like mTLS HTTP/1.1 exchange timed out"
   )) === "go-like-mtls-http1-one",
   "first go-like mTLS HTTP/1.1 response changed"
 )
 verify(
   (await bounded(
-    exchangeGoLike(goLikeHTTP1Client, "go-like-mtls-http1-two"),
+    exchangeGoLike(goLikeHTTP1Client, goLikeHTTP1Address, "go-like-mtls-http1-two"),
     "second go-like mTLS HTTP/1.1 exchange timed out"
   )) === "go-like-mtls-http1-two",
   "second go-like mTLS HTTP/1.1 response changed"
@@ -384,9 +373,10 @@ verify(
 )
 const goLikeHTTP1ClientConnections = goLikeHTTP1Connections
 await goLikeHTTP1Client.close(background())
-const directHTTP1URL = `https://${goLikeHTTP1Address}/internal`
+const directHTTP1Root = `https://${goLikeHTTP1Address}/`
+const directHTTP1URL = `${directHTTP1Root}internal`
 const directHTTP1Owner = newNodeHTTPExecutor(
-  normalizeHTTPDialTarget(directHTTP1URL, true),
+  normalizeHTTPDialTarget(directHTTP1Root, true),
   applyHTTPCommonOptions(defaultHTTPCommonOptions(), [
     secure(true),
     withTLSConfig(clientTLSConfig)
@@ -496,14 +486,14 @@ const goLikePoolAddress = nativeAddress(goLikePoolServer)
 const goLikePoolClient = await clientTransport.dial(background(), goLikePoolAddress)
 verify(
   (await bounded(
-    exchangeGoLike(goLikePoolClient, "go-like-h2-one"),
+    exchangeGoLike(goLikePoolClient, goLikePoolAddress, "go-like-h2-one"),
     "first pooled go-like HTTP/2 exchange timed out"
   )) === "go-like-h2-one",
   "first pooled go-like HTTP/2 response changed"
 )
 verify(
   (await bounded(
-    exchangeGoLike(goLikePoolClient, "go-like-h2-two"),
+    exchangeGoLike(goLikePoolClient, goLikePoolAddress, "go-like-h2-two"),
     "second pooled go-like HTTP/2 exchange timed out"
   )) === "go-like-h2-two",
   "second pooled go-like HTTP/2 response changed"
@@ -531,7 +521,7 @@ await bounded(
 )
 verify(
   (await bounded(
-    exchangeGoLike(goLikePoolClient, "go-like-h2-after-goaway"),
+    exchangeGoLike(goLikePoolClient, goLikePoolAddress, "go-like-h2-after-goaway"),
     "go-like HTTP/2 replacement exchange timed out"
   )) === "go-like-h2-after-goaway",
   "go-like HTTP/2 replacement response changed"
@@ -562,14 +552,14 @@ const connectionCloseClient = await clientTransport.dial(
 )
 verify(
   (await bounded(
-    exchangeGoLike(connectionCloseClient, "go-like-close-one"),
+    exchangeGoLike(connectionCloseClient, goLikePoolAddress, "go-like-close-one"),
     "first go-like connection-close exchange timed out"
   )) === "go-like-close-one",
   "first go-like connection-close response changed"
 )
 verify(
   (await bounded(
-    exchangeGoLike(connectionCloseClient, "go-like-close-two"),
+    exchangeGoLike(connectionCloseClient, goLikePoolAddress, "go-like-close-two"),
     "second go-like connection-close exchange timed out"
   )) === "go-like-close-two",
   "second go-like connection-close response changed"

@@ -1,21 +1,21 @@
 # Service calls
 
-go-like's internal call path is a unary `Message` exchange. It is intentionally separate from the public Fetch Handler path. The client may use a typed `Endpoint` and `Struct` boundary, or it may use the raw `CallRequest` shape when the application owns its own bytes and validation.
+go-like's internal call path is one Fetch `Request` and one Fetch `Response`. It is intentionally separate from the public Web Handler path. Unary calls exchange one JSON body. Server streams, declared with `stream: true`, use SSE after the same POST. The client may use `defineService` or a single `endpoint(...)`, or it may use the raw `CallRequest` shape when the application owns its own bytes.
 
 The canonical pipeline is:
 
 ```text
 Context + operation
   -> Client middleware
-  -> direct address OR Discovery snapshot
+  -> direct root URL OR Discovery snapshot
   -> Filters
   -> Selector
   -> Transport Client acquire or dial
-  -> send(Message)
+  -> fetch(Request) at /<service>/<endpoint>
   -> Server route and middleware
-  -> handler(ctx, Message) or typed handler(ctx, value)
-  -> response Message
-  -> recv and decode
+  -> handler(ctx, Request) or typed handler(ctx, value)
+  -> Response
+  -> decode JSON or read the SSE stream
   -> selection feedback
   -> logical owner reuse or close
 ```
@@ -32,48 +32,53 @@ A destination has a transport identity:
 
 ```text
 memory://bank-transfer-gateway
-https://pricing.internal.example
-127.0.0.1:9000
+https://pricing.internal.example/
+discovery:///pricing
 ```
 
-`endpoint(...)` creates the first kind of object. Construction-time `withAddress(...)` supplies the second kind of value. A Registry `ServiceInstance` contains service identity and an `endpoints` array of opaque transport addresses. go-like does not infer a protocol or operation from a URL scheme.
+`defineService` or `endpoint(...)` creates the operation. Construction-time `withEndpoint(...)` supplies the node. A Registry `ServiceInstance` contains the application name and an `endpoints` array of opaque transport addresses. `discovery:///<name>` selects that Registry application name and is not dialed. Every other scheme is a direct address interpreted by the Transport. The scheme does not name the operation. After a node is chosen, the Fetch request path is `/<service>/<endpoint>`. Client node addresses, and HTTP dial URLs that include a scheme, must be absolute root URLs because that path is the route. `withAddress` and `withService` have been removed.
 
 ## Typed Memory Transport first
 
 The typed form is useful when both sides agree on runtime `Struct` validation and JSON encoding. The following uses only current public exports:
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { address, newServer, transport as serverTransport } from "@go-like/server"
 import { struct } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { defineService } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-const AddRequest = struct.object({
-  left: struct.number(),
-  right: struct.number()
+const math = defineService("math", {
+  add: {
+    request: struct.object({
+      left: struct.number(),
+      right: struct.number()
+    }),
+    response: struct.object({
+      sum: struct.number()
+    })
+  }
 })
-const AddResponse = struct.object({
-  sum: struct.number()
-})
-
-const Add = endpoint("math", "Add", AddRequest, AddResponse)
 const transport = newMemoryTransport()
 
 const rpc = newServer(serverTransport(transport), address("memory://math"))
-rpc.registerHandler(Add, (_ctx, request) => ({
-  sum: request.left + request.right
-}))
+math.registerHandler(rpc, {
+  add(_ctx, request) {
+    return { sum: request.left + request.right }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://math"))
+const client = newClient(withTransport(transport), withEndpoint("memory://math"))
+const api = math.newClient(client)
 const app = newApp(name("math-example"), server(rpc))
 const running = app.run()
 await rpc.endpoint(background())
 
 try {
-  const result = await client.call(background(), Add, { left: 2, right: 3 })
+  const result = await api.add(background(), { left: 2, right: 3 })
   console.log(result.sum)
 } finally {
   await client.close(background())
@@ -85,69 +90,66 @@ try {
 In a real application, prefer one composition root that starts and stops the server. The important details are:
 
 - the Client and Server use the same `newMemoryTransport()` instance;
-- `server.registerHandler(endpoint, fn)` registers a typed internal unary handler before start; it is not a Fetch handler;
-- `client.call(ctx, endpoint, value)` validates the request and response through the Endpoint's Structs, while the destination stays on the Client owner;
+- `service.registerHandler(server, handler)` registers each typed handler before start;
+- `service.newClient(client).add(ctx, value)` validates the request and response through the Structs, while the destination stays on the Client owner;
 - `client.close(ctx)` is explicit application cleanup;
 - Memory Transport is instance-private and process-local. It does not fall back to a network transport.
 
-The repository's `examples/bank-transfer-gateway` demonstrates this pattern with the `transferQuoteEndpoint` contract. The current `healthcare-appointments` example uses the same Client, Server, and Memory Transport boundary with raw JSON; it is a useful bridge when you need to inspect the lower layer.
+`examples/healthcare-appointments` uses this shape: `defineService("appointment-policy.v1", { check })`, `withEndpoint("memory://appointment-policy.v1")`, and `serviceError(..., 409)`. Server streams are covered in [Streaming](/guide/streaming).
 
-## Raw `Message` calls
+## Raw calls
 
-The lower-level `CallRequest` shape is:
-
-```ts
-interface CallRequest {
-  readonly service: string
-  readonly endpoint: string
-  readonly message: Message
-}
-```
-
-A raw call can be composed without a typed `Endpoint`:
+The lower-level `CallRequest` shape is `{ service, endpoint, headers, body }`. `call` returns a Fetch `Response`. The caller must read the body or cancel it. Every internal RPC, including a raw handler, requires `POST` and `content-type: application/json`:
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import { background } from "@go-like/context"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-const client = newClient(withTransport(newMemoryTransport()), withAddress("memory://orders"))
-const reply = await client.call(background(), {
+const client = newClient(withTransport(newMemoryTransport()), withEndpoint("memory://orders"))
+const response = await client.call(background(), {
   service: "orders",
-  endpoint: "Orders.Get",
-  message: {
-    header: { "content-type": "application/json" },
-    body: new TextEncoder().encode(JSON.stringify({ orderId: "order-1" }))
-  }
+  endpoint: "get",
+  headers: { "content-type": "application/json" },
+  body: new TextEncoder().encode(JSON.stringify({ orderId: "order-1" }))
 })
+await response.body?.cancel()
+await client.close(background())
 ```
 
-This raw example only describes the Client call shape. A server must be listening on the same Transport instance and address; raw calls do not create a handler automatically. Raw handlers also do not receive Struct validation unless the application adds it.
+This raw example only describes the Client call shape. A server must be listening on the same Transport instance and address; raw calls do not create a handler automatically. Raw handlers also do not receive Struct validation unless the application adds it. A typed `call` rejects a `stream: true` endpoint; use `stream`.
 
 The Transport package provides JSON helpers when you want the same codecs without a typed Client endpoint:
 
 ```ts
+import { struct } from "@go-like/struct"
 import { decodeJsonBody, encodeJsonBody } from "@go-like/transport/json"
 
-const request = decodeJsonBody(RequestStruct, message.body)
-const body = encodeJsonBody(ResponseStruct, response)
+const RequestStruct = struct.object({ orderId: struct.string() })
+const ResponseStruct = struct.object({ orderId: struct.string() })
+const request = decodeJsonBody(
+  RequestStruct,
+  new TextEncoder().encode(JSON.stringify({ orderId: "order-1" }))
+)
+const body = encodeJsonBody(ResponseStruct, request)
+void body
 ```
 
 The helpers validate UTF-8, JSON syntax, and the supplied Struct. They do not define an IDL or generate code.
 
 ## One attempt in detail
 
-The Client snapshots the outbound Message before a call. An admitted attempt does the following:
+The Client copies the outbound body before a call. When the caller Context has a deadline, it writes the remaining milliseconds, rounded up, to `Go-Like-Timeout-Ms`. An admitted attempt does the following:
 
 1. Read the construction-time direct-address snapshot, or ask Discovery for a complete snapshot.
 2. Apply `withFilter(...)` filters in declaration order.
-3. Ask the Selector for one opaque transport URL and a synchronous feedback callback.
+3. Ask the Selector for one opaque root URL and a synchronous feedback callback.
 4. Reuse an idle logical Transport Client for that address, or call `Transport.dial(...)`.
-5. Send the Message with routing headers and any permitted client metadata.
-6. Receive one response Message.
-7. Snapshot and decode the response, including `ServiceError` and typed response validation.
+5. `fetch` a `POST` whose path is `/<service>/<endpoint>`, with `content-type: application/json` and any permitted `Go-Like-Metadata`.
+6. Receive one `Response`. `bytesSent` is set just before `fetch`; `bytesReceived` is set when the `Response` arrives.
+7. Decode the response, including a non-2xx `ServiceError` JSON body and typed response validation.
 8. Report selection feedback with sent/received facts and reply metadata.
-9. Return the logical owner to the idle pool after a successful exchange, or close it after a failed exchange.
+9. Return the logical owner to the idle pool after a successful exchange, or close it after a failed exchange. A server stream holds that owner until the body ends.
 
 The Client pool is a logical `Transport.Client` pool, not a socket limit. The defaults are `poolSize(100)` idle owners across all addresses and `poolTtl(60_000)` milliseconds. Physical connection reuse belongs to the selected Transport and runtime. Use `closeTimeout(...)` to bound each logical Transport Client close; a timeout remains a cleanup boundary, not proof of native terminal state.
 
@@ -157,13 +159,13 @@ Typed Client.call(ctx, Endpoint, input)
   +-- validate Endpoint and encode JSON body
   +-- client middleware
   |     exact operation > longest trailing wildcard > global
-  +-- snapshot routing headers and body
+  +-- copy JSON body and optional Go-Like-Timeout-Ms
   +-- one attempt by default
-  |     +-- direct address OR Discovery -> Filter -> Selector
+  |     +-- direct root URL OR Discovery -> Filter -> Selector
   |     +-- acquire resident Transport Client or dial
-  |     +-- send(ctx, Message)
-  |     +-- server recv -> route -> middleware -> handler -> send
-  |     +-- recv(ctx, Message)
+  |     +-- fetch POST /<service>/<endpoint>
+  |     +-- server route -> middleware -> handler
+  |     +-- Response
   |     +-- ServiceError decode and typed response validation
   |     +-- SelectionDone feedback
   |     +-- reuse idle owner or close
@@ -276,14 +278,14 @@ const reply = await client.call(
 
 `maxAttempts` is the total number of attempts, not the number of extra retries. `authorization` is a caller declaration, not a proof that a business mutation is safe to replay. go-like does not generate idempotency keys, deduplicate external side effects, or inspect your database transaction.
 
-Each admitted retry re-enters the attempt pipeline and may select a different endpoint from the latest snapshot. The outbound Message snapshot is reused. If a response has already been received but selection feedback or Transport Client cleanup fails, the Client returns a branded completed-call failure and refuses to replay it:
+Each admitted retry re-enters the attempt pipeline and may select a different node from the latest snapshot. The copied request body is reused. Retry stops once the SSE handshake has been sent. If a response has already been received but selection feedback or Transport Client cleanup fails, the Client returns a completed-call `AggregateError` and refuses to replay it:
 
 ```text
-Attempt 1: send -> no response -> predicate authorizes replay
-  -> backoff -> latest discovery -> select another endpoint -> Attempt 2
+Attempt 1: fetch -> no response -> predicate authorizes replay
+  -> backoff -> latest discovery -> select another node -> Attempt 2
 
 Attempt 2: response received -> cleanup fails
-  -> CompletedCallFailure(response in cause)
+  -> AggregateError("client exchange completed but cleanup failed; do not retry")
   -> no Attempt 3
 ```
 
@@ -297,7 +299,7 @@ import {
   newClient,
   type ClientMiddleware,
   use,
-  withAddress,
+  withEndpoint,
   withTransport
 } from "@go-like/client"
 
@@ -312,10 +314,11 @@ const observe: ClientMiddleware =
     }
   }
 
-const serviceAddress = "memory://orders"
+declare const transport: Parameters<typeof withTransport>[0]
+
 const client = newClient(
   withTransport(transport),
-  withAddress(serviceAddress),
+  withEndpoint("memory://orders"),
   middleware(observe),
   use("orders/*", observe)
 )

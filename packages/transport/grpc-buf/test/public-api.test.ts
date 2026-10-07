@@ -14,11 +14,10 @@ test("native exports only the managed standard-gRPC client and server API", () =
     "newClient",
     "newServer",
     "tlsConfig",
-    "withAddress",
     "withBlock",
     "withDiscovery",
+    "withEndpoint",
     "withSelector",
-    "withService",
     "withTLSConfig"
   ])
 })

@@ -73,8 +73,8 @@ framework route table
 | `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` 回傳的是 `AbortSignal` 或 null，不是 Go channel  |
 | Server lifecycle  | Core 結構式 `Server`                                                                                               | `start(ctx)` 可能長時間維持執行，不等於 readiness         |
 | App runner        | `newApp`、`App.run`、`App.stop`                                                                                    | `App.stop()` 沒有呼叫端 Context，並回傳一個共用的 Promise |
-| RPC client        | `@go-like/client`                                                                                                  | 內部呼叫是 unary `Message`；retry 預設關閉                |
-| Transport         | `@go-like/transport`                                                                                               | Provider 與 Message headers 都是 TypeScript/Web 契約      |
+| RPC client        | `@go-like/client`                                                                                                  | 內部呼叫是 JSON Fetch；retry 預設關閉                     |
+| Transport         | `@go-like/transport`                                                                                               | Provider 與 Fetch headers 都是 TypeScript/Web 契約        |
 | Registry          | `@go-like/registry`                                                                                                | Watcher 回傳完整替換後的 snapshot                         |
 | Selector          | `newRoundRobinSelector`、`newRandomSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | feedback 是同步的，而且取決於具體策略                     |
 | Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | 基於 Protobuf-ES 嘅 Context-first 程式碼                  |
@@ -83,14 +83,33 @@ framework route table
 一個適合漸進遷移的第一步，是用 Memory Transport 做一次直連位址的 typed call：
 
 ```ts
-// Composition excerpt: quote and pricingQuoteHandler are application-owned.
-// Admit this server through App before calling; close client during shutdown.
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const quoteService = defineService("pricing", {
+  quote: {
+    request: struct.object({ sku: struct.string() }),
+    response: struct.object({ amount: struct.number() })
+  }
+})
+
 const transport = newMemoryTransport()
 const server = newServer(serverTransport(transport), address("memory://pricing"))
-server.registerHandler(quote, pricingQuoteHandler)
+quoteService.registerHandler(server, {
+  quote(_ctx, request) {
+    return { amount: request.sku.length }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://pricing"))
-const result = await client.call(ctx, quote, request)
+const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
+const caller = quoteService.newClient(client)
+const ctx: Context = background()
+const result = await caller.quote(ctx, { sku: "a" })
+void result
 ```
 
 先把這個邊界測通，再引入 Discovery、真正的 Registry provider 或 HTTP transport。這樣替換的是目的地和所有權接線，領域契約仍然保持穩定。
@@ -105,7 +124,7 @@ Kubernetes 的原生能力繼續由 Kubernetes 負責：
 - EndpointSlice 不是 Kubernetes Service DNS，也不會提供通用的註冊 TTL；
 - 可選的 Pod owner reference 與明確註銷具有不同的故障語意。
 
-先導入 health 和 configuration，再處理直接的 EndpointSlice selection。如果應用程式已有穩定的 Service DNS 名稱，`withAddress(...)` 加上 HTTP transport 可能比引入 Registry provider 更簡單，也更符合實際。
+先導入 health 和 configuration，再處理直接的 EndpointSlice selection。如果應用程式已有穩定的 Service DNS 名稱，`withEndpoint(...)` 加上 HTTP transport 可能比引入 Registry provider 更簡單，也更符合實際。
 
 ## 訊息代理與工作導入
 
@@ -164,7 +183,7 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 ## 目前支援邊界
 
-`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於 unary Transport SPI。
+`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於內部 Fetch/SSE 路徑。
 
 呢啲能力唔包括瀏覽器標準 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用認證、Event Store/replay、ORM 或叢集編排。
 

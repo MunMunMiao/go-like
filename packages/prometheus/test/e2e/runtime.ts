@@ -18,7 +18,11 @@ counter.inc()
 const metrics = newRequestMetrics(registry)
 const measuredWeb = measureWebHandler(() => new Response("ok"), metrics)
 const measured = measuredWeb(new Request("https://service.test/ready", { method: "POST" }))
-if (!(measured instanceof Response) || measured.status !== 200) {
+if (
+  !(measured instanceof Response) ||
+  measured.status !== 200 ||
+  (await measured.text()) !== "ok"
+) {
   throw new Error("request metrics did not preserve the synchronous Web Handler contract")
 }
 const response = await createPrometheusHandler(registry)(

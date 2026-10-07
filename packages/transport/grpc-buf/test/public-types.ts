@@ -23,11 +23,10 @@ import type {
   newClient as newNativeClient,
   newServer as newNativeServer,
   tlsConfig as nativeTLSConfig,
-  withAddress as withNativeAddress,
   withBlock as withNativeBlock,
   withDiscovery as withNativeDiscovery,
+  withEndpoint as withNativeEndpoint,
   withSelector as withNativeSelector,
-  withService as withNativeService,
   withTLSConfig as withNativeTLSConfig
 } from "../src/native"
 
@@ -64,11 +63,8 @@ type CarrierStaysPrivate = Expect<
 type NativeClientSignature = Expect<
   Matches<typeof newNativeClient, (...options: readonly NativeClientOption[]) => NativeClient>
 >
-type NativeAddressSignature = Expect<
-  Matches<typeof withNativeAddress, (...addresses: readonly string[]) => NativeClientOption>
->
-type NativeServiceSignature = Expect<
-  Matches<typeof withNativeService, (service: string) => NativeClientOption>
+type NativeEndpointSignature = Expect<
+  Matches<typeof withNativeEndpoint, (endpoint: string | readonly string[]) => NativeClientOption>
 >
 type NativeDiscoverySignature = Expect<
   Matches<typeof withNativeDiscovery, (discovery: Discovery) => NativeClientOption>
@@ -125,8 +121,7 @@ export type PublicTypeAssertions = [
   CarrierStaysPrivate,
   NewHandlerIsNotTransport,
   NativeClientSignature,
-  NativeAddressSignature,
-  NativeServiceSignature,
+  NativeEndpointSignature,
   NativeDiscoverySignature,
   NativeSelectorSignature,
   NativeBlockSignature,

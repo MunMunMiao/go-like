@@ -1,8 +1,13 @@
 import type { Context } from "@go-like/context"
 import { contextHandler, type Handler } from "@go-like/web"
 
-import type { ProvisionServiceCommand, TelecomPlan } from "./service"
-import type { TelecomProvisioningClient } from "./transport"
+import type { ProvisionedService, ProvisionServiceCommand, TelecomPlan } from "./service"
+
+/** Activates one admitted provisioning command. */
+export type ProvisionTelecomOperation = (
+  ctx: Context,
+  command: ProvisionServiceCommand
+) => Promise<ProvisionedService>
 
 /** Decodes one untrusted public provisioning request. */
 function commandFrom(value: unknown): ProvisionServiceCommand {
@@ -26,7 +31,7 @@ function commandFrom(value: unknown): ProvisionServiceCommand {
 }
 
 /** Creates the public Fetch adapter that calls the internal provisioning service. */
-export function newTelecomProvisioningHandler(client: TelecomProvisioningClient): Handler {
+export function newTelecomProvisioningHandler(provision: ProvisionTelecomOperation): Handler {
   return contextHandler(async function telecomProvisioningHandler(
     ctx: Context,
     request: Request
@@ -36,7 +41,7 @@ export function newTelecomProvisioningHandler(client: TelecomProvisioningClient)
       return Response.json({ code: "not_found" }, { status: 404 })
     }
     try {
-      return Response.json(await client.provision(ctx, commandFrom(await request.json())), {
+      return Response.json(await provision(ctx, commandFrom(await request.json())), {
         status: 201
       })
     } catch (error) {

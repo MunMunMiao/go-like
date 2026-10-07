@@ -2,7 +2,7 @@ import type { CallOption, Client } from "@go-like/client"
 import { background, withCancel } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
-import { transferQuoteEndpoint } from "../src/contract"
+import { bankTransfer } from "../src/contract"
 import { newBankTransferHandler } from "../src/http"
 import {
   buildTransferQuote,
@@ -10,7 +10,7 @@ import {
   newQuoteTransfer,
   validateTransferQuote
 } from "../src/service"
-import { newBankTransferClient, newBankTransferMicroservice } from "../src/transport"
+import { newBankTransferMicroservice } from "../src/transport"
 
 function quoteTransfer() {
   return newQuoteTransfer(newMemoryTransferNetworkDirectory(["DE", "FR", "NL"]))
@@ -110,10 +110,14 @@ describe("bank transfer gateway", () => {
       },
       async close(): Promise<void> {}
     }) as unknown as Client
-    const { quote: callQuote } = newBankTransferClient(client)
+    expect(bankTransfer.endpoints.quote).toMatchObject({
+      service: "bank-transfer-routing.v1",
+      endpoint: "quote"
+    })
+    const callQuote = bankTransfer.newClient(client).quote
 
     expect(await callQuote(ctx, command, option)).toBe(quote)
-    expect(observed).toEqual([ctx, transferQuoteEndpoint, command, option])
+    expect(observed).toEqual([ctx, bankTransfer.endpoints.quote, command, option])
     rejected = true
     await expect(callQuote(ctx, command)).rejects.toBe(failure)
   })
@@ -169,6 +173,11 @@ describe("bank transfer gateway", () => {
       beneficiaryBic: "BOFAUS3NXXX"
     }
     expect(validateTransferQuote(valid)).toBeUndefined()
+    const { beneficiaryBic: _omitted, ...withoutBic } = valid
+    expect(validateTransferQuote(withoutBic)).toBeUndefined()
+    expect(() => buildTransferQuote(withoutBic, false, false)).toThrow(
+      "beneficiaryBic is required for SWIFT"
+    )
     for (const [field, value, message] of [
       ["requestId", "", "invalid requestId"],
       ["sourceCountry", "D", "invalid sourceCountry"],

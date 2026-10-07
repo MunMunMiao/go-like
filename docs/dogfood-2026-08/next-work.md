@@ -1,5 +1,7 @@
 # 生产者下一轮 backlog
 
+> 文中 `Go-Like-Service` / `Go-Like-Endpoint` 是 2026-08 战役观察到的旧路由头。当前内部 RPC 按 path `/<service>/<endpoint>` 路由，见 [service-call](../../doc/guide/service-call.md)。
+
 只列入**已有 dest 证据**的项。收获快照冻结 SHA 为 `cd15313d50e6804cfe34a7e7291cb65a861dec1c`。本表不授权修改 `packages/`、不启动 dest、不提交 git。
 
 **状态（2026-08-24）：** P0 `NW-020` / `NW-006` / `NW-009` 已在 `a6d266718ac322fcb7cc4f5c87a3be46bfe53aff` 与 `43abe749cb9e05c56c99b07a3595dbdb8c2121a0` 落地。关闭 dest `fw-r252` / `fw-r253` / `fw-r254` 上 go-like 与 competitor 同一产品阶段均通过。详见 [dest-learn-report.md](dest-learn-report.md)。下文 P0 章节保留为历史授权记录，不再当作未完成库工作。docs-dx（冻结 lock 摊平、Compose DNS）不是库缺陷票。

@@ -1,4 +1,6 @@
 import { background, type Context } from "@go-like/context"
+import { newMetadata } from "@go-like/metadata"
+import { newServerContext, type TransportInfo } from "@go-like/transport"
 import {
   newOtelServer,
   traceBroker,
@@ -19,34 +21,49 @@ const server = newOtelServer({ tracerProvider, meterProvider })
 const running = server.start(background())
 await Promise.resolve()
 
-const response = Object.freeze({ header: Object.freeze({}), body: new Uint8Array([2]) })
+const response = new Response(new Uint8Array([2]))
+const metadataHeaders = newMetadata()
+const info: TransportInfo = {
+  kind: () => "http",
+  endpoint: () => "",
+  operation: () => "runtime/read",
+  requestHeaders: () => metadataHeaders,
+  replyHeaders: () => metadataHeaders,
+  peerIdentity: () => null
+}
 const client = traceClient(
   {
     async call() {
       return response
     },
+    async stream() {
+      throw new Error("unused")
+    },
     async close() {}
   },
   tracer
 )
-if (
-  (await client.call(background(), {
-    service: "runtime",
-    endpoint: "read",
-    message: { header: {}, body: new Uint8Array([1]) }
-  })) !== response
-) {
-  throw new Error("traced Client did not preserve its response")
+const traced = await client.call(background(), {
+  service: "runtime",
+  endpoint: "read",
+  headers: {},
+  body: new Uint8Array([1])
+})
+if (!(traced instanceof Response) || new Uint8Array(await traced.arrayBuffer())[0] !== 2) {
+  throw new Error("traced Client did not preserve its response bytes")
 }
 
-const unary = traceUnaryMiddleware(tracer)(async (_ctx, message) => message)
-if ((await unary(background(), response)) !== response) {
+const request = new Request("https://runtime.example.test/runtime/read", { method: "POST" })
+const unaryResponse = new Response(null, { status: 204 })
+const unary = traceUnaryMiddleware(tracer)(async () => unaryResponse)
+if ((await unary(newServerContext(background(), info), request)) !== unaryResponse) {
   throw new Error("traced unary middleware did not preserve its response")
 }
 
 const webResponse = new Response("web")
 const web = traceWebHandler(() => webResponse, tracer)
-if (web(new Request("https://runtime.example.test/web")) !== webResponse) {
+const webResult = web(new Request("https://runtime.example.test/web"))
+if (!(webResult instanceof Response) || (await webResult.text()) !== "web") {
   throw new Error("traced Web handler changed its synchronous response")
 }
 

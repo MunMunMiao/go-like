@@ -33,7 +33,7 @@ import {
   queryIndexedRows,
   type MutationMode
 } from "./http"
-import { captureOptions, isWellFormed, type CapturedOptions } from "./options"
+import { captureOptions, type CapturedOptions } from "./options"
 import type { ConsulStore, ConsulStoreOptions } from "./types"
 
 const MaximumKeyBytes = 1_024
@@ -58,7 +58,7 @@ function checkContext(ctx: Context): void {
 
 /** Validates one Store key or list prefix against Consul provider bounds. */
 function storeKey(value: string, allowEmpty: boolean): string {
-  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !isWellFormed(value)) {
+  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new TypeError("Consul Store key must be a well-formed string")
   }
   if (new TextEncoder().encode(value).byteLength > MaximumKeyBytes) {

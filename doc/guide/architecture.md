@@ -22,7 +22,7 @@ Application composition root
   |
   +--> Internal call plane
   |      Client -> Discovery -> Filter -> Selector -> Transport -> Server
-  |      one unary Message exchange
+  |      one JSON Fetch exchange or one SSE server stream
   |
   +--> State and control plane
   |      Config snapshots, Registry reachability, Store records, Cache values
@@ -38,19 +38,19 @@ The arrows are composition dependencies, not global service lookups. A package c
 
 ## Ownership map
 
-| Boundary                               | go-like owns                                                                                      | The application or provider still owns                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `@go-like/core` App                    | Startup admission, hooks, registration calls, stop coordination, lifecycle result                 | Construction, dependency graph, business policy, native resources not handed to a Server |
-| Structural `Server`                    | One `start(ctx)` / `stop(ctx)` contract                                                           | The actual resource and its terminal semantics                                           |
-| `@go-like/web`                         | Standard Handler type and request Context bridge                                                  | URL routes, framework middleware, authentication, authorization, Web Streams, upgrades   |
-| `@go-like/client`                      | Logical call middleware, discovery watchers, logical Transport Client owners, explicit retry loop | Business idempotency, provider connection reuse, credentials, deployment policy          |
-| `@go-like/server`                      | Internal unary route table, Message dispatch, route validation, operation middleware              | External HTTP routes, business validation, transport listener implementation             |
-| `@go-like/registry`                    | Snapshot, filter, selector, feedback contracts                                                    | Backend leases, TTL, sessions, revisions, consistency, authentication                    |
-| `@go-like/config`                      | Immutable merged snapshots, accepted source watchers, last-good publication                       | Source credentials, backend watch model, application schema and rollout policy           |
-| `@go-like/store`                       | Context-first records, revisions, CAS options, pages                                              | Durability, transaction scope, multi-process guarantees, backend limits                  |
-| `@go-like/cache`                       | Disposable values and TTL option                                                                  | Cache invalidation policy, authority, persistence, cross-process semantics               |
-| `@go-like/broker` and `@go-like/event` | Byte boundary, optional codec, accepted subscription stop, native delivery identity               | Ack/nack/term, redelivery, durable consumers, DLQ, connection and stream                 |
-| Observability adapters                 | Explicit wrapper and admitted shutdown boundary                                                   | Logger, exporter, provider, registry, labels, redaction, global setup                    |
+| Boundary                               | go-like owns                                                                                                     | The application or provider still owns                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `@go-like/core` App                    | Startup admission, hooks, registration calls, stop coordination, lifecycle result                                | Construction, dependency graph, business policy, native resources not handed to a Server |
+| Structural `Server`                    | One `start(ctx)` / `stop(ctx)` contract                                                                          | The actual resource and its terminal semantics                                           |
+| `@go-like/web`                         | Standard Handler type and request Context bridge                                                                 | URL routes, framework middleware, authentication, authorization, Web Streams, upgrades   |
+| `@go-like/client`                      | Logical call middleware, discovery watchers, logical Transport Client owners, explicit retry loop                | Business idempotency, provider connection reuse, credentials, deployment policy          |
+| `@go-like/server`                      | Internal POST `/<service>/<endpoint>` route table, JSON and SSE dispatch, route validation, operation middleware | External HTTP routes, business validation, transport listener implementation             |
+| `@go-like/registry`                    | Snapshot, filter, selector, feedback contracts                                                                   | Backend leases, TTL, sessions, revisions, consistency, authentication                    |
+| `@go-like/config`                      | Immutable merged snapshots, accepted source watchers, last-good publication                                      | Source credentials, backend watch model, application schema and rollout policy           |
+| `@go-like/store`                       | Context-first records, revisions, CAS options, pages                                                             | Durability, transaction scope, multi-process guarantees, backend limits                  |
+| `@go-like/cache`                       | Disposable values and TTL option                                                                                 | Cache invalidation policy, authority, persistence, cross-process semantics               |
+| `@go-like/broker` and `@go-like/event` | Byte boundary, optional codec, accepted subscription stop, native delivery identity                              | Ack/nack/term, redelivery, durable consumers, DLQ, connection and stream                 |
+| Observability adapters                 | Explicit wrapper and admitted shutdown boundary                                                                  | Logger, exporter, provider, registry, labels, redaction, global setup                    |
 
 A resource may be borrowed at construction and transferred into a go-like lifecycle adapter only after successful admission. The adapter must document that transfer. A timeout while waiting for an owner does not automatically mean that the native object has stopped.
 
@@ -178,17 +178,17 @@ Internal unary
     -> ordered Filters
     -> Selector.select
     -> Transport.dial or resident owner
-    -> send(Message)
-    -> Server recv and route validation
+    -> fetch(Request) at /<service>/<endpoint>
+    -> Server route validation
     -> operation middleware
     -> typed decode, business handler, typed encode
-    -> send(response Message)
-    -> Client recv, ServiceError decode, typed validation
+    -> Response
+    -> Client reads the body, ServiceError decode, typed validation
     -> SelectionDone feedback
     -> owner reuse or close
 ```
 
-The internal operation identity is `service/endpoint`, for example `orders/Orders.Get`. A `ServiceInstance.endpoints` value is an opaque transport address, for example `http://10.0.0.4:8080` or `memory://orders`. Do not use one in place of the other.
+The internal operation identity is `service/endpoint`, for example `appointment-policy.v1/check`. A `ServiceInstance.endpoints` value is an opaque transport address, for example `http://10.0.0.4:8080` or `memory://orders`. Do not use one in place of the other.
 
 ## Runtime portability
 
@@ -212,11 +212,31 @@ The TypeScript `DOM` library setting supplies types. It is not a runtime polyfil
 A composition root should make ownership visible:
 
 ```ts
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { afterStop, name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+import { newNodeServer, port } from "@go-like/web/node"
+
+const policy = defineService("policy", {
+  check: {
+    request: struct.object({ ok: struct.boolean() }),
+    response: struct.object({ ok: struct.boolean() })
+  }
+})
+
 const transport = newMemoryTransport()
 const policyServer = newServer(serverTransport(transport), address("memory://policy"))
-policyServer.registerHandler(policyEndpoint, policyHandler)
-const policyClient = newClient(withTransport(transport), withAddress("memory://policy"))
-const webServer = newNodeServer(webHandler, port(3000))
+policy.registerHandler(policyServer, {
+  check() {
+    return { ok: true }
+  }
+})
+const policyClient = newClient(withTransport(transport), withEndpoint("memory://policy"))
+const webServer = newNodeServer((_request: Request) => new Response("ok"), port(3000))
 
 const app = newApp(
   name("appointments"),
@@ -226,6 +246,7 @@ const app = newApp(
   }),
   signal()
 )
+void app
 ```
 
 The example is a composition pattern. It does not make `newApp` a DI container, and it does not make a memory transport distributed. The application still chooses credentials, provider factories, authentication, data ownership, and shutdown ordering.

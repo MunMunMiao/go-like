@@ -1,7 +1,13 @@
 import process from "node:process"
 
 import { newRedisCache } from "@go-like/cache-redis"
-import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withDiscovery,
+  withEndpoint,
+  withSelector,
+  withTransport
+} from "@go-like/client"
 import {
   afterStart,
   id,
@@ -23,7 +29,8 @@ import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { hostname, newNodeServer, port } from "@go-like/web/node"
 
 import { newCatalogHandler } from "./http"
-import { newPricingClient, newPricingHandler, registerPricingHandler } from "./pricing"
+import { pricing as pricingService } from "./contract"
+import { newPricingClient, newPricingHandler } from "./pricing"
 
 const host = process.env.HOST ?? "127.0.0.1"
 const portNumber = Number(process.env.PORT ?? "3000")
@@ -51,17 +58,17 @@ const cache = newRedisCache({
 })
 const client = newClient(
   withDiscovery(registry),
-  withService("pricing"),
+  withEndpoint("discovery:///pricing.v1"),
   withSelector(newRoundRobinSelector()),
   withTransport(newHTTPTransport())
 )
 const pricing = newPricingClient(client)
 const pricingServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
-registerPricingHandler(pricingServer, newPricingHandler())
+pricingService.registerHandler(pricingServer, { get: newPricingHandler() })
 const pricingApp = newApp(
   signal(),
   id(instanceId),
-  name("pricing"),
+  name("pricing.v1"),
   version("v1"),
   metadata({ application: "commerce-catalog" }),
   registrar(registry),

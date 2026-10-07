@@ -2,23 +2,28 @@ import { describe, expect, test } from "bun:test"
 import { isStruct } from "../src/guards"
 import { StructError, struct } from "../src/index"
 import { getStructFields, parseStructTuple as parse } from "../src/introspection"
-import { resolveObjectShape } from "../src/shape"
 import { DEFINITION } from "../src/symbols"
 import type { RuntimeStruct } from "../src/types"
 
 describe("runtime.ts chain methods", () => {
-  test("null, nullish and optional only adjust missing value behavior", () => {
+  test("nullable stays required while optional and nullish may be omitted", () => {
     const testStruct = struct.object({
       a: struct.string().optional(),
       b: struct.string().null(),
       c: struct.string().nullish()
     })
 
-    const [err, val] = parse(testStruct, {})
+    const [missingError, missingValue] = parse(testStruct, {})
+    expect(missingError).toBeInstanceOf(StructError)
+    expect(missingError?.issues[0]?.code).toBe("missing_key")
+    expect(missingError?.issues[0]?.path).toEqual(["b"])
+    expect(missingValue).toBeUndefined()
+
+    const [err, val] = parse(testStruct, { b: null })
     if (err) {
       throw err
     }
-    expect(val).toEqual({ b: null, c: null })
+    expect(val).toEqual({ b: null })
   })
 
   test("alias stores wire names without changing parse output", () => {
@@ -111,54 +116,31 @@ describe("runtime.ts chain methods", () => {
     expect(nullishDefinition.cache.fields).toBe(cachedFields)
   })
 
-  test("uses a non-empty alias as the dominant field over a natural wire key", () => {
-    const User = struct.object({
-      name: struct.string(),
-      displayName: struct.string().alias("name")
-    })
-
-    expect(getStructFields(User).map((field) => field.key)).toEqual(["displayName"])
+  test("rejects duplicate wire keys in the same object shape", () => {
+    expect(() =>
+      struct.object({
+        name: struct.string(),
+        displayName: struct.string().alias("name")
+      })
+    ).toThrow('duplicate wire key "name"')
   })
 
-  test("excludes both fields when duplicate non-empty aliases have no dominant field", () => {
-    const User = struct.object({
-      firstName: struct.string().alias("name"),
-      displayName: struct.string().alias("name")
-    })
-
-    expect(getStructFields(User)).toEqual([])
+  test("rejects duplicate aliases in the same object shape", () => {
+    expect(() =>
+      struct.object({
+        firstName: struct.string().alias("name"),
+        displayName: struct.string().alias("name")
+      })
+    ).toThrow('duplicate wire key "name"')
   })
 
-  test("treats empty aliases as natural field names", () => {
-    const User = struct.object({
-      firstName: struct.string().alias(""),
-      secondName: struct.string().alias("")
-    })
-
-    expect(getStructFields(User).map((field) => ({ alias: field.alias, key: field.key }))).toEqual([
-      { alias: undefined, key: "firstName" },
-      { alias: undefined, key: "secondName" }
-    ])
-  })
-
-  test("caches an empty dominant field set for duplicate aliases", () => {
-    const User = struct.object({
-      firstName: struct.string().alias("name"),
-      displayName: struct.string().alias("name")
-    })
-    const runtime = User as unknown as RuntimeStruct
-    const definition = runtime[DEFINITION]
-
-    if (definition.kind !== "object") {
-      throw new Error("expected object definition")
-    }
-
-    const shape = resolveObjectShape(runtime, definition)
-    expect(resolveObjectShape(runtime, definition)).toBe(shape)
-    expect(getStructFields(User)).toEqual([])
-    const cachedFields = definition.cache.fields
-    expect(getStructFields(User)).toEqual([])
-    expect(definition.cache.fields).toBe(cachedFields)
+  test("rejects duplicate empty wire keys", () => {
+    expect(() =>
+      struct.object({
+        firstName: struct.string().alias(""),
+        secondName: struct.string().alias("")
+      })
+    ).toThrow('duplicate wire key ""')
   })
 
   test("does not accept inherited struct definition brand", () => {
@@ -174,10 +156,19 @@ describe("runtime.ts chain methods", () => {
     expect(isStruct(fake)).toBe(false)
   })
 
-  test("invalid primitive parse returns StructError and zero value", () => {
+  test("invalid primitive parse returns StructError and undefined", () => {
     const [err, val] = parse(struct.string(), 42)
 
     expect(err).toBeInstanceOf(StructError)
-    expect(val).toBe("")
+    expect(val).toBeUndefined()
+  })
+
+  test("runtime structs do not carry an own _struct property", () => {
+    const value = struct.string()
+
+    expect(Object.hasOwn(value, "_struct")).toBe(false)
+    expect("_struct" in value).toBe(false)
+    expect(isStruct(value)).toBe(true)
+    expect(Object.getOwnPropertySymbols(value)).toEqual([DEFINITION])
   })
 })

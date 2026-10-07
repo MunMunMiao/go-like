@@ -317,24 +317,9 @@ function isIntentionalStopFailure(error: unknown, identity: Error): boolean {
   return error instanceof Error && error.cause === identity
 }
 
-/** Reports whether one string contains only paired UTF-16 surrogate code units. */
-function isWellFormedKey(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      return false
-    }
-  }
-  return true
-}
-
 /** Captures one Kratos-style dotted key while retaining go-like's unsafe-key boundary. */
 function capturePath(key: string): readonly string[] {
-  if (typeof key !== "string" || key.length === 0 || !isWellFormedKey(key)) {
+  if (typeof key !== "string" || key.length === 0 || !key.isWellFormed()) {
     throw new TypeError("invalid configuration key")
   }
   const path = key.split(".")

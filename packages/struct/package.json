@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@go-like/struct",
   "version": "0.0.1",
-  "description": "Portable Go-style runtime structs for go-like service contracts.",
+  "description": "Portable runtime structs for go-like service contracts.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",

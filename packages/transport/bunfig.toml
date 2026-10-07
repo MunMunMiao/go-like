@@ -4,4 +4,4 @@ coverageSkipTestFiles = true
 coverageReporter = ["text", "lcov"]
 coverageDir = ".artifacts/coverage"
 coverageThreshold = { lines = 1.0, functions = 1.0 }
-coveragePathIgnorePatterns = ["../**", "test/**"]
+coveragePathIgnorePatterns = ["../**", "test/**", "memory/**", "http/**", "grpc-buf/**"]

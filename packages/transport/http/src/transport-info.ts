@@ -1,7 +1,6 @@
 import type { Context } from "@go-like/context"
 import { newMetadata, type Metadata } from "@go-like/metadata"
 import { newServerContext, type TransportInfo } from "@go-like/transport"
-import { endpoint as endpointHeader, request as serviceHeader } from "@go-like/transport/headers"
 
 const EmptyMetadata = newMetadata()
 
@@ -20,15 +19,10 @@ function headerMetadata(headers: Headers): Metadata {
   }
 }
 
-/** Reads the internal service operation carried by the HTTP routing headers. */
-function operation(headers: Headers): string {
-  try {
-    const service = headers.get(serviceHeader)
-    const endpoint = headers.get(endpointHeader)
-    return service === null || endpoint === null ? "" : `${service}/${endpoint}`
-  } catch {
-    return ""
-  }
+/** Returns the request pathname without one leading slash. */
+function operation(url: string): string {
+  const path = new URL(url).pathname
+  return path.startsWith("/") ? path.slice(1) : path
 }
 
 /** Adds truthful HTTP server transport facts when they satisfy the public observation contract. */
@@ -36,9 +30,12 @@ export function withHTTPServerTransportInfo(
   ctx: Context,
   endpoint: string,
   request: Request,
-  response: () => Response | null
+  response: () => Response | null,
+  peerIdentity: string | null
 ): Context {
-  const requestMetadata = headerMetadata(request.headers)
+  // Snapshot the dispatch-time headers; project them to Metadata only when observed.
+  const dispatchHeaders = new Headers(request.headers)
+  let requestMetadata: Metadata | null = null
   const info: TransportInfo = Object.freeze({
     /** Returns the provider-neutral protocol kind. */
     kind(): string {
@@ -48,18 +45,23 @@ export function withHTTPServerTransportInfo(
     endpoint(): string {
       return endpoint
     },
-    /** Returns the internal service operation carried on this request. */
+    /** Returns the pathname operation, without a leading slash. */
     operation(): string {
-      return operation(request.headers)
+      return operation(request.url)
     },
     /** Returns the request headers visible at dispatch. */
     requestHeaders(): Metadata {
+      requestMetadata ??= headerMetadata(dispatchHeaders)
       return requestMetadata
     },
     /** Returns response headers produced so far, if any. */
     replyHeaders(): Metadata {
       const current = response()
       return current === null ? EmptyMetadata : headerMetadata(current.headers)
+    },
+    /** Returns the verified URI SAN captured for this connection, or null. */
+    peerIdentity(): string | null {
+      return peerIdentity
     }
   })
   try {

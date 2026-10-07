@@ -16,6 +16,7 @@
     "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
     "@go-like/server": "workspace:*",
+    "@go-like/struct": "workspace:*",
     "@go-like/transport": "workspace:*",
     "@go-like/transport-memory": "workspace:*",
     "@go-like/web": "workspace:*"

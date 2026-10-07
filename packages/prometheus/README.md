@@ -45,7 +45,8 @@ const broker = measureBroker(applicationBroker, metrics)
 
 operation 采用稳定的低基数名称：
 
-- Client 与内部 Server：`service/endpoint`。
+- Client 与内部 Server：`service/endpoint`。Client 来自 `CallRequest`，Server 来自 `TransportInfo.operation()`，不读取路由头。
+  服务端流在 body 结束时把 `messageCount` 计入 `go_like_stream_messages_total`，label 含 `direction`。
 - Web：仅 HTTP method，不包含 URL。
 - Broker：仅 `publish` 或 `consume`。
 

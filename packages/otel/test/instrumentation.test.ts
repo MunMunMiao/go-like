@@ -5,8 +5,14 @@ import type { CallOption, Client, CallRequest } from "@go-like/client"
 import { background, withCancelCause, type Context as GoLikeContext } from "@go-like/context"
 import { newMetadata, newServerContext } from "@go-like/metadata"
 import { struct } from "@go-like/struct"
-import { endpoint as typedEndpoint, serviceError, type Message } from "@go-like/transport"
-import { contentType, endpoint, metadata, request as service } from "@go-like/transport/headers"
+import {
+  endpoint as typedEndpoint,
+  newServerContext as newTransportServerContext,
+  serviceError,
+  type TransportInfo
+} from "@go-like/transport"
+import { metadata } from "@go-like/transport/headers"
+import { jsonContentType } from "@go-like/transport/json"
 import { decodeMetadataHeader } from "@go-like/transport/provider"
 import {
   ROOT_CONTEXT,
@@ -34,7 +40,27 @@ import {
   traceWebHandler,
   type RequestMetrics
 } from "../src/index"
-import type { HeaderCarrier } from "../src/instrumentation"
+import { extractHeaders, type HeaderCarrier } from "../src/instrumentation"
+
+/** Builds TransportInfo whose operation is independent of request headers. */
+function transportInfo(operation: string): TransportInfo {
+  const headers = newMetadata()
+  return {
+    kind: () => "http",
+    endpoint: () => "memory://loopback",
+    operation: () => operation,
+    requestHeaders: () => headers,
+    replyHeaders: () => headers,
+    peerIdentity: () => null
+  }
+}
+
+/** Copies bytes into a Fetch body the DOM lib accepts. */
+function copiedBody(body: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(body.byteLength)
+  new Uint8Array(copy).set(body)
+  return copy
+}
 import { newLoopbackClient } from "./client-fixture"
 
 interface NativeEvent {
@@ -131,7 +157,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       publishedMessage: BrokerMessage | null
       deliveredEvent: BrokerEvent<NativeEvent> | null
       transported: CallRequest | null
-      response: Message | null
+      response: Response | null
     } = {
       delivery: null,
       publishedMessage: null,
@@ -189,10 +215,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
     ).toBe(nativeSubscription)
 
     const brokerBody = new Uint8Array([4, 2])
-    const serverResponse: Message = Object.freeze({
-      header: Object.freeze({ result: "ok" }),
-      body: new Uint8Array([9])
-    })
+    const serverResponse = new Response(new Uint8Array([9]), { headers: { result: "ok" } })
     const serverHandler = traceUnaryMiddleware(tracer)(async (requestContext, incoming) => {
       const result = await broker.publish(
         requestContext,
@@ -204,17 +227,15 @@ describe("explicit OpenTelemetry instrumentation", () => {
         { durable: true }
       )
       expect(result).toBe(nativePublishResult)
-      expect(incoming.header.caller).toBe("kept")
+      expect(incoming.headers.get("caller")).toBe("kept")
       return serverResponse
     })
     const inputBody = new Uint8Array([1, 2, 3])
     const input: CallRequest = {
       service: "catalog",
       endpoint: "CreateOrder",
-      message: {
-        header: { caller: "kept", TraceParent: "stale", tracestate: "stale" },
-        body: inputBody
-      }
+      headers: { caller: "kept", TraceParent: "stale", tracestate: "stale" },
+      body: inputBody
     }
     const rawClient = {
       marker: "native-client",
@@ -225,15 +246,14 @@ describe("explicit OpenTelemetry instrumentation", () => {
       ) {
         expect(this.marker).toBe("native-client")
         captured.transported = request
+        const headers = new Headers(request.headers)
+        const init: RequestInit = { method: "POST", headers }
+        if (request.body !== null) init.body = copiedBody(request.body)
         return await context.with(ROOT_CONTEXT, async () => {
-          return await serverHandler(requestContext, {
-            header: {
-              ...request.message.header,
-              [service]: request.service,
-              [endpoint]: request.endpoint
-            },
-            body: request.message.body
-          })
+          return await serverHandler(
+            newTransportServerContext(requestContext, transportInfo("catalog/CreateOrder")),
+            new Request("https://service.test/catalog/CreateOrder", init)
+          )
         })
       },
       async close(this: { readonly marker: string }) {
@@ -241,9 +261,13 @@ describe("explicit OpenTelemetry instrumentation", () => {
       }
     } as unknown as Client & { readonly marker: string }
     const client = traceClient(rawClient, tracer)
+    let deliveredBytes = new Uint8Array()
     await tracer.startActiveSpan("root", async (root) => {
       try {
         captured.response = await client.call(ctx, input)
+        if (captured.response instanceof Response) {
+          deliveredBytes = new Uint8Array(await captured.response.arrayBuffer())
+        }
       } finally {
         root.end()
       }
@@ -254,15 +278,18 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const transported = required(captured.transported, "transported request")
     const publishedMessage = required(captured.publishedMessage, "published message")
     const deliveredEvent = required(captured.deliveredEvent, "delivered event")
-    expect(captured.response).toBe(serverResponse)
+    expect(captured.response).toBeInstanceOf(Response)
+    expect((captured.response as Response).headers.get("result")).toBe("ok")
+    expect(deliveredBytes).toEqual(new Uint8Array([9]))
     expect(transported.service).toBe("catalog")
     expect(transported.endpoint).toBe("CreateOrder")
-    expect(transported.message.body).toBe(inputBody)
-    expect(transported.message.header.caller).toBe("kept")
-    expect(transported.message.header.TraceParent).toBeUndefined()
-    expect(transported.message.header.tracestate).toBeUndefined()
-    expect(transported.message.header.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/)
-    expect(input.message.header).toEqual({
+    const transportedHeaders = transported.headers as Readonly<Record<string, string>>
+    expect(transported.body).toBe(inputBody)
+    expect(transportedHeaders.caller).toBe("kept")
+    expect(transportedHeaders.TraceParent).toBeUndefined()
+    expect(transportedHeaders.tracestate).toBeUndefined()
+    expect(transportedHeaders.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/)
+    expect(input.headers).toEqual({
       caller: "kept",
       TraceParent: "stale",
       tracestate: "stale"
@@ -350,17 +377,23 @@ describe("explicit OpenTelemetry instrumentation", () => {
         record(): void {}
       } as RequestMetrics["requestDurationSeconds"]
     }
-    const server = traceUnaryMiddleware(tracer)(async (_ctx, request) => ({
-      header: { [contentType]: "application/json; charset=utf-8" },
-      body:
-        request.header[endpoint] === "TypedFail"
-          ? new TextEncoder().encode('{"id":"invalid"}')
-          : new TextEncoder().encode('{"id":42}')
-    }))
+    const server = traceUnaryMiddleware(tracer)(async (_ctx, request) => {
+      const failing = new URL(request.url).pathname.endsWith("/TypedFail")
+      return new Response(failing ? '{"id":"invalid"}' : '{"id":42}', {
+        headers: { "content-type": "application/json; charset=utf-8" }
+      })
+    })
     const subject = newLoopbackClient((request) => {
-      const propagated = decodeMetadataHeader(request.header[metadata] ?? null)
+      const propagated = decodeMetadataHeader(request.headers.get(metadata))
       if (propagated === null) throw new Error("typed request metadata is missing")
-      return server(newServerContext(background(), propagated), request)
+      const operation = new URL(request.url).pathname.replace(/^\//, "")
+      return server(
+        newTransportServerContext(
+          newServerContext(background(), propagated),
+          transportInfo(operation)
+        ),
+        request
+      )
     })
     const client = traceClient(measureClient(subject.client, metrics), tracer)
     const contract = typedEndpoint("catalog", "TypedRead", payload, payload)
@@ -384,10 +417,10 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const typedRequest = required(subject.sent[0] ?? null, "typed request")
     expect(result).toEqual({ id: 42 })
     expect(subject.sent).toHaveLength(2)
-    expect(new TextDecoder().decode(typedRequest.body)).toBe('{"id":7}')
-    expect(typedRequest.header[contentType]).toBe("application/json")
-    expect(typedRequest.header.traceparent).toBeUndefined()
-    expect(decodeMetadataHeader(typedRequest.header[metadata] ?? null)?.traceparent?.[0]).toMatch(
+    expect(new TextDecoder().decode(await typedRequest.arrayBuffer())).toBe('{"id":7}')
+    expect(typedRequest.headers.get("content-type")).toBe(jsonContentType)
+    expect(typedRequest.headers.get("traceparent")).toBeNull()
+    expect(decodeMetadataHeader(typedRequest.headers.get(metadata))?.traceparent?.[0]).toMatch(
       /^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/
     )
     const spans = exporter.getFinishedSpans()
@@ -428,7 +461,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       ) {
         expect(this.marker).toBe("option-client")
         observed.push({ argumentCount: arguments.length, options })
-        return request.message
+        return new Response(request.body === null ? null : copiedBody(request.body))
       },
       async close(this: { readonly marker: string }) {
         expect(this.marker).toBe("option-client")
@@ -438,11 +471,12 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const request: CallRequest = {
       service: "catalog",
       endpoint: "Read",
-      message: { header: {}, body: new Uint8Array([1]) }
+      headers: {},
+      body: new Uint8Array([1])
     }
 
-    await client.call(background(), request)
-    await client.call(background(), request, first, second)
+    await (await client.call(background(), request)).arrayBuffer()
+    await (await client.call(background(), request, first, second)).arrayBuffer()
 
     expect(observed).toHaveLength(2)
     expect(observed[0]?.argumentCount).toBe(2)
@@ -459,8 +493,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
       spanProcessors: [new SimpleSpanProcessor({ exporter })]
     })
     const tracer = provider.getTracer("go-like-web-status-test")
-    const responseBody = new ReadableStream<Uint8Array>({ pull(): void {} })
-    const ok = new Response(responseBody, { status: 200 })
+    const okBytes = new Uint8Array([7])
+    const ok = new Response(okBytes, { status: 200 })
     const missing = new Response(null, { status: 404 })
     const failed = new Response(null, { status: 500 })
     const asynchronous = new Response(null, { status: 201 })
@@ -486,9 +520,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
       const synchronous = handler(getRequest)
       expect(synchronous).not.toBeInstanceOf(Promise)
       if (synchronous instanceof Promise) throw new Error("Web handler became asynchronous")
-      expect(synchronous).toBe(ok)
-      expect(Object.is(synchronous.body, responseBody)).toBe(true)
-      expect(synchronous.body?.locked).toBe(false)
+      expect(synchronous.status).toBe(200)
+      expect(new Uint8Array(await synchronous.arrayBuffer())).toEqual(okBytes)
       expect(handler(postRequest)).toBe(missing)
       expect(handler(putRequest)).toBe(failed)
       const asyncHandler = traceWebHandler(async () => asynchronous, tracer)
@@ -529,10 +562,10 @@ describe("explicit OpenTelemetry instrumentation", () => {
         "http.response.status_code": 201,
         "go-like.outcome": "ok"
       })
-      expect(okSpan.status.code).toBe(SpanStatusCode.UNSET)
+      expect(okSpan.status.code).toBe(SpanStatusCode.OK)
       expect(missingSpan.status.code).toBe(SpanStatusCode.UNSET)
       expect(failedSpan.status.code).toBe(SpanStatusCode.ERROR)
-      expect(asyncSpan.status.code).toBe(SpanStatusCode.UNSET)
+      expect(asyncSpan.status.code).toBe(SpanStatusCode.OK)
       expect(spans.map((span) => span.name)).not.toContain("/orders/123")
       expect(spans.map((span) => span.name).join(" ")).not.toContain("secret=value")
     } finally {
@@ -676,7 +709,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
           throw failure
         },
         async close() {}
-      },
+      } as unknown as Client,
       tracer
     )
 
@@ -685,7 +718,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
         client.call(hostileContext, {
           service: "catalog",
           endpoint: "Read",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: null
         })
       ).rejects.toBe(failure)
       await provider.forceFlush()
@@ -739,7 +773,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const request: CallRequest = {
       service: "catalog",
       endpoint: "Read",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: null
     }
     for (const [ctx, failure] of [
       [background(), serviceFailure],
@@ -751,7 +786,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
             throw failure
           },
           async close() {}
-        },
+        } as unknown as Client,
         tracer
       )
       await expect(client.call(ctx, request)).rejects.toBe(failure)
@@ -764,7 +799,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
           throw canceledFailure
         },
         async close() {}
-      },
+      } as unknown as Client,
       tracer
     )
     await expect(canceledClient.call(canceledContext, request)).rejects.toBe(canceledFailure)
@@ -774,10 +809,13 @@ describe("explicit OpenTelemetry instrumentation", () => {
       throw applicationFailure
     })
     await expect(
-      failingHandler(background(), {
-        header: { [service]: "catalog", [endpoint]: "Write" },
-        body: new Uint8Array()
-      })
+      failingHandler(
+        newTransportServerContext(background(), transportInfo("catalog/Write")),
+        new Request("https://service.test/catalog/Write", {
+          method: "POST",
+          headers: { "x-caller": "kept" }
+        })
+      )
     ).rejects.toBe(applicationFailure)
 
     const brokerFailure = new Error("publish failed")
@@ -841,8 +879,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
     const captured: HeaderCarrier[] = []
     const client = {
       async call(_ctx: GoLikeContext, request: CallRequest) {
-        captured.push(request.message.header)
-        return request.message
+        captured.push(request.headers as HeaderCarrier)
+        return new Response()
       },
       async close() {}
     } as unknown as Client
@@ -858,10 +896,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
     await traceClient(client, tracer, passthrough).call(background(), {
       service: "service",
       endpoint: "copy",
-      message: {
-        header: Object.fromEntries([["__proto__", "copied"]]),
-        body: new Uint8Array()
-      }
+      headers: Object.fromEntries([["__proto__", "copied"]]),
+      body: null
     })
 
     const injecting: TextMapPropagator<HeaderCarrier> = {
@@ -878,7 +914,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
     await traceClient(client, tracer, injecting).call(background(), {
       service: "service",
       endpoint: "inject",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: null
     })
 
     let serverCarrier: HeaderCarrier | null = null
@@ -892,10 +929,13 @@ describe("explicit OpenTelemetry instrumentation", () => {
         return []
       }
     }
-    const server = traceUnaryMiddleware(tracer, serverPropagator)(async (_ctx, message) => message)
+    const server = traceUnaryMiddleware(
+      tracer,
+      serverPropagator
+    )(async () => new Response(null, { status: 204 }))
     await server(
       newServerContext(background(), newMetadata(Object.fromEntries([["__proto__", "metadata"]]))),
-      { header: {}, body: new Uint8Array() }
+      new Request("https://service.test/catalog/copy", { headers: { "x-kept": "yes" } })
     )
 
     let webCarrier: HeaderCarrier | null = null
@@ -940,7 +980,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       },
       extract(otelContext, carrier, getter) {
         expect(getter.keys(carrier)).toContain("x-trace")
-        expect(getter.get(carrier, "X-Trace")).toEqual(["explicit", "second"])
+        expect(getter.get(carrier, "X-Trace")).toBe("explicit")
         return otelContext
       },
       fields() {
@@ -952,7 +992,7 @@ describe("explicit OpenTelemetry instrumentation", () => {
       {
         async call(_ctx: GoLikeContext, request: CallRequest) {
           captured.clientRequest = request
-          return request.message
+          return new Response()
         },
         async close() {}
       } as unknown as Client,
@@ -962,18 +1002,38 @@ describe("explicit OpenTelemetry instrumentation", () => {
     await client.call(background(), {
       service: "service",
       endpoint: "endpoint",
-      message: { header: { "X-Trace": "stale", keep: "yes" }, body: new Uint8Array() }
+      headers: new Headers([
+        ["X-Trace", "stale"],
+        ["keep", "yes"]
+      ]),
+      body: null
     })
-    expect(required(captured.clientRequest, "client request").message.header).toEqual({
+    expect(required(captured.clientRequest, "client request").headers).toEqual({
       keep: "yes",
       "x-trace": "explicit"
     })
     expect(propagationInjections).toBe(1)
-    const handler = traceUnaryMiddleware(tracer, propagator)(async (_ctx, message) => message)
-    await handler(background(), {
-      header: { "x-trace": "explicit", "X-Trace": "second" },
-      body: new Uint8Array()
-    })
+    const handler = traceUnaryMiddleware(
+      tracer,
+      propagator
+    )(async () => new Response(null, { status: 204 }))
+    await handler(
+      newTransportServerContext(background(), transportInfo("service/endpoint")),
+      new Request("https://service.test/service/endpoint", {
+        headers: { "x-trace": "explicit" }
+      })
+    )
+    const duplicatePropagator: TextMapPropagator<HeaderCarrier> = {
+      inject() {},
+      extract(otelContext, carrier, getter) {
+        expect(getter.get(carrier, "X-Trace")).toEqual(["explicit", "second"])
+        return otelContext
+      },
+      fields() {
+        return []
+      }
+    }
+    extractHeaders({ "x-trace": "explicit", "X-Trace": "second" }, duplicatePropagator)
 
     let requestExtractions = 0
     const requestPropagator: TextMapPropagator<HeaderCarrier> = {
@@ -1054,7 +1114,8 @@ describe("explicit OpenTelemetry instrumentation", () => {
       invalidClient.call(background(), {
         service: "service",
         endpoint: "endpoint",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: null
       })
     ).rejects.toThrow("non-empty strings")
   })

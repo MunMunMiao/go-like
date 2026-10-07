@@ -13,11 +13,11 @@
 ## 架构与职责
 
 `src/main.ts` 是直接入口；`src/http.ts` 处理标准 Web API；`src/service.ts` 放置路由规则、用例和内存网络目录；
-`src/contract.ts` 以 `endpoint` 直接绑定 request/response Struct，并由 `Infer` 推导唯一的共享类型；`src/transport.ts` 组合真实 Client、Server 与 Memory Transport。
+`src/contract.ts` 用 `defineService("bank-transfer-routing.v1", { quote })` 声明契约，调用写成 `client.quote(ctx, req)`，并由 `Infer` 推导唯一的共享类型；`src/transport.ts` 组合真实 Client、Server 与 Memory Transport。
 
 ## go-like 能力
 
-主要演示 `@go-like/struct` 契约、`@go-like/transport` 的类型化 `endpoint`、`@go-like/server` 与 `@go-like/client`。`src/transport.ts` 定义本地包装函数 `registerTransferQuoteHandler(server, handler)` 和 `newBankTransferClient(client)`。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 消息交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
+主要演示 `@go-like/struct` 契约、`defineService`、`@go-like/server` 与 `@go-like/client` 的 `withEndpoint`。`bankTransfer.registerHandler` 和 `bankTransfer.newClient` 取代手写注册与客户端包装。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
 
 ## 验证矩阵
 

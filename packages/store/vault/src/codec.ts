@@ -25,19 +25,6 @@ function own(value: object, name: string): unknown {
   return Object.getOwnPropertyDescriptor(value, name)?.value
 }
 
-/** Reports whether one string contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Encodes detached bytes as canonical standard base64. */
 export function encodeBase64(value: Uint8Array): string {
   let binary = ""
@@ -67,7 +54,7 @@ export function decodeBase64(value: unknown, operation: VaultStoreOperation): Ui
 
 /** Encodes one logical key into a canonical single-segment UTF-8 base64url name. */
 export function physicalKey(value: string): string {
-  if (typeof value !== "string" || value.length === 0 || !isWellFormed(value)) {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
     throw new TypeError("Vault Store key must be a non-empty well-formed string")
   }
   const bytes = utf8.encode(value)

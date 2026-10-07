@@ -133,45 +133,51 @@ H3 2.x 直接提供 `app.fetch`，H3 1.x 使用官方 `toWebHandler(app)`；应�
 
 ## 内部 Transport
 
-`@go-like/transport` 定义与 go-micro 同角色的公共 `Transport`、`Client`、`Listener`、`Socket`、`Message`、
-`TransportInfo` 和 options。`TransportInfo` 通过独立的 client/server Context 域暴露 kind、endpoint、operation
-及请求/响应 metadata。`endpoint(...)` 可在同一 Message 边界上声明类型化 unary contract；
-在这条 unary Message 边界上，request/response `Struct` 是唯一契约，`@go-like/transport/json` 统一完成
-UTF-8 JSON 编解码与 Struct 校验，不引入 IDL 或生成代码。
-canonical `service/endpoint` 的两段 route token 只能使用 U+0021–U+007E 可见 ASCII，并且禁止 `/`、`*`，
-以保证 Client、Server 和 operation middleware 不会把不同路由折叠为同一个名称。
+`@go-like/transport` 定义公共 `Transport`、`Client`、`Listener`、`TransportInfo` 和 options。wire 是标准 Fetch
+`Request` / `Response`。`Client` 提供 `fetch` 与 `close`，`Listener` 提供 `addr`、`serve` 与 `close`。
+`TransportInfo` 通过独立的 client/server Context 域暴露 kind、endpoint、operation、请求/响应 metadata 和
+`peerIdentity()`。`defineService(...)` 声明 Client 与 Server 共用的契约；`endpoint(...)` 仍可声明单个 operation。
+request/response `Struct` 是 JSON 契约，`@go-like/transport/json` 统一完成 UTF-8 JSON 编解码与 Struct 校验，不引入 IDL 或生成代码。
+`stream: true` 把该 endpoint 变成 SSE 服务端流，不是通用双向多帧协议。
+canonical `service/endpoint` 的两段 route token 必须匹配 `^[A-Za-z0-9._~-]+$`，且不能恰好是 `.` 或 `..`。
+保留头只有 `Go-Like-Metadata` 和 `Go-Like-Timeout-Ms`。`Go-Like-Service` 与 `Go-Like-Endpoint` 不再是路由头；
+operation 写在请求 path `/<service>/<endpoint>`。
 当前提供两个明确 provider：
 
 - `@go-like/transport-http` 同时实现真实网络 client/server；portable client 使用标准 `fetch` 执行 HTTP I/O；
-- `@go-like/transport-memory` 实现进程内 unary `Message` 传输，地址空间归每个 Transport 实例私有持有，不注册
+- `@go-like/transport-memory` 在进程内传递同一个 `Request` / `Response`，地址空间归每个 Transport 实例私有持有，不注册
   全局 handler、不回退网络，也不绕过 Discovery、Selector 或 Client middleware。
 
 HTTP provider 的主要入口如下：
 
-- `newHTTPTransport().dial(...)` 创建基于标准 Fetch 的 unary client；
+- `newHTTPTransport().dial(...)` 创建基于标准 Fetch 的 client；带 scheme 的 dial 地址必须是根 URL；
 - `@go-like/transport-http/node` 的 `newNodeHTTPTransport()` 同时提供 Node listener 与原生 client；Client
-  支持 CA/mTLS/SNI，并通过 ALPN 优先使用 HTTP/2、回退 HTTP/1.1；
+  支持 CA/mTLS/SNI，并通过 ALPN 优先使用 HTTP/2、回退 HTTP/1.1；已验证的对端身份在 `TransportInfo.peerIdentity()`；
 - `@go-like/server` 的 `newServer(transport(...))` 把 Transport listener、内部路由和 Core `Server`
-  生命周期组合起来；命名 service 使用 `registerXHandler(server, handler)` 在启动前注册；
-- 直接使用底层 Transport 时，`listener.accept(...)` 承接内部 `Message` request/response。
+  生命周期组合起来；契约使用 `defineService(...).registerHandler(server, handler)` 在启动前注册；
+- 直接使用底层 Transport 时，`listener.serve(ctx, handler)` 承接 Fetch request/response。
 
 ```ts
 import { background } from "@go-like/context"
 import { newHTTPTransport } from "@go-like/transport-http"
 
 const ctx = background()
-const client = await newHTTPTransport().dial(ctx, "http://127.0.0.1:8081/internal")
-
-await client.send(ctx, {
-  header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get" },
-  body: new TextEncoder().encode("request")
-})
-const response = await client.recv(ctx)
+const client = await newHTTPTransport().dial(ctx, "http://127.0.0.1:8081/")
+const response = await client.fetch(
+  ctx,
+  new Request("http://127.0.0.1:8081/orders/get", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "order-1" })
+  })
+)
+await response.body?.cancel()
 await client.close(ctx)
 ```
 
 `@go-like/transport` 只描述内部服务通信，不承接外部 Web Handler。标准 `Request` / `Response` 的外部 HTTP
-接入始终归 `@go-like/web`；两条边界不通过名称相似的 Fetch transport 混在一起。
+接入始终归 `@go-like/web`。公开 Web 流不是内部 RPC；内部服务端流是 SSE。客户端流和双向流留在
+`@go-like/transport-grpc-buf/native`。
 
 ## Buf / Connect generated RPC
 
@@ -192,6 +198,10 @@ portable Fetch 入口：
 
 ```ts
 import { newHandler } from "@go-like/transport-grpc-buf"
+import { registerOrderServiceHandler } from "./gen/order_like.js"
+import type { OrderServiceHandler } from "./gen/order_like.js"
+
+declare const orderService: OrderServiceHandler
 
 const handler = newHandler((server) => {
   registerOrderServiceHandler(server, orderService)
@@ -203,13 +213,24 @@ const handler = newHandler((server) => {
 托管的后端标准 gRPC 使用 capability subpath：
 
 ```ts
-import { newClient, withAddress } from "@go-like/transport-grpc-buf/native"
+import { background } from "@go-like/context"
+import { newClient, withEndpoint } from "@go-like/transport-grpc-buf/native"
 
-const client = newClient(withAddress("https://orders.internal"))
+declare function newOrderServiceClient(client: {
+  close(ctx: ReturnType<typeof background>): Promise<void>
+}): {
+  getOrder(ctx: ReturnType<typeof background>, request: { id: string }): Promise<{ id: string }>
+}
+
+const client = newClient(withEndpoint("https://orders.internal"))
 const orders = newOrderServiceClient(client)
+const ctx = background()
 const order = await orders.getOrder(ctx, { id: "order-1" })
+void order
 await client.close(ctx)
 ```
+
+真实生成代码从 `./gen/order_like.js` 导入 `newOrderServiceClient`。`withAddress` 与 `withService` 已删除。
 
 `/native` 的标准 gRPC unary、server-streaming、client-streaming、bidi 的既有物理发布包记录包含 Node 26.7.0、
 Bun 1.4.0、Deno 2.9.5；Node 是 Connect-ES 上游支持的 runtime，Bun/Deno 由 LikeGo 兼容性 lane 记录实际
@@ -284,10 +305,10 @@ NATS 生命周期入口可以接收应用直接持有的原生资源，也可以
 
 ## 内部服务调用
 
-`@go-like/client` 是 go-micro 风格的内部 unary `Message` 调用层。配置 Discovery 后，`newClient` 会按服务名
+`@go-like/client` 是内部 Fetch 调用层，覆盖 unary JSON 与 SSE 服务端流。配置 Discovery 后，`newClient` 会按应用名
 懒加载常驻 watcher 并缓存完整替换快照；首次接纳先建立 watcher，再用一次 fresh get 对齐当前状态，避免
-watch/get 竞态。后续空快照同样是权威替换，会使该服务 fail closed；每次 `call` 从当前快照选择端点，再执行
-`dial/send/recv` 和 selection feedback。应用不再使用 Client 时调用 `client.close(ctx)` 停止 watcher
+watch/get 竞态。后续空快照同样是权威替换，会使该服务 fail closed；每次 `call` 或 `stream` 从当前快照选择节点，再执行
+`dial` / `fetch` 和 selection feedback。应用不再使用 Client 时调用 `client.close(ctx)` 停止 watcher
 并关闭所持连接。
 默认空 discovery 快照立即 fail closed；显式加入 `withBlock()` 时，只在该服务历史上首次出现原始 endpoint
 之前等待，调用方 Context 仅限制自己的等待。首次就绪后的空快照仍立即 fail closed。
@@ -300,20 +321,21 @@ idle pool 默认全 Client 最多 100 个 owner、60,000ms 过期；`poolSize(..
 可调整边界，其中 `poolSize(0)` 禁用 idle reuse，`poolTtl(0)` 只禁用时间过期。
 `client.close(ctx)` 关闭空闲、活跃和迟到连接。
 
-`newClient(...)` 在构造时选择一个地址来源：`withAddress(...addresses)` 直连，或
-`withService(service)` / `withDiscovery(discovery)` 使用服务发现。两种来源都进入同一个 `Selector`；
-`withSelector(...)` 只覆盖默认 round robin。调用期只保留 `withFilter(...)`、`withRetry(...)` 等行为 option，
-不能临时覆盖地址或 service。
-只有显式传入 `withRetry(...)` 才允许重放请求。`closeTimeout(...)` 只限制逻辑 Transport Client 的关闭等待，
+`newClient(...)` 在构造时选择一个地址来源：`withEndpoint(url | urls)` 直连绝对根 URL，或
+`withEndpoint("discovery:///<name>")` / `withDiscovery(discovery)` 使用服务发现。`withAddress` 与 `withService` 已删除。
+两种来源互斥，都进入同一个 `Selector`；`withSelector(...)` 只覆盖默认 round robin。调用期只保留 `withFilter(...)`、
+`withRetry(...)` 等行为 option，不能临时覆盖地址或应用名。
+只有显式传入 `withRetry(...)` 才允许重放请求，并且只在 SSE 握手前。`closeTimeout(...)` 只限制逻辑 Transport Client 的关闭等待，
 不冒充业务超时。`circuitBreakerMiddleware(...)` 按 canonical `service/endpoint` 隔离 breaker，并把显式 retry
 的多个 attempt 作为一个逻辑 outcome；open operation 在 Discovery 和 Transport I/O 前拒绝。
 `use(selector, ...middleware)` 可按精确 operation、最长尾部 `*` 前缀和 `*` fallback 安装 Client middleware；
-类型化调用直接使用 `client.call(ctx, contract, value)`，原始 Message 调用继续保留。
-两种调用的 `service`/`endpoint` 都使用同一 route-token 约束：只能使用 U+0021–U+007E 可见 ASCII，
-并且禁止 `/`、`*`。
+类型化 unary 使用 `client.call(ctx, contract, value)`，服务端流使用 `client.stream(...)`。原始 `call` 的
+`CallRequest` 是 `{ service, endpoint, headers, body }`，并返回 `Response`；内部 RPC 必须带
+`content-type: application/json`。
+两种调用的 `service`/`endpoint` 都使用同一 route-token 约束：`^[A-Za-z0-9._~-]+$`，且不能恰好是 `.` 或 `..`。
 
-`@go-like/server` 提供 go-micro 风格的内部 unary Server：先用 `transport(...)` 选择底层传输，再通过命名
-`registerXHandler(server, handler)` 或 `server.registerHandler(...)` 在启动前注册 raw/typed route；
+`@go-like/server` 提供内部 Fetch Server：先用 `transport(...)` 选择底层传输，再通过
+`defineService(...).registerHandler(server, handler)` 或 `server.registerHandler(...)` 在启动前注册 raw/typed/stream route；
 `listenOption(...)` 原样传递 provider 的 Transport listen option。`middleware(...)` 安装全局链，
 `use(selector, ...middleware)` 按精确 operation、最长尾部
 `*` 前缀和全局 `*` fallback 选择一条 operation 链；同 selector 后声明覆盖，空链可屏蔽宽规则。
@@ -371,7 +393,7 @@ JavaScript 可观察语义映射。具体差异和边界见 [`@go-like/context` 
 `@go-like/metadata` 在 Context 上提供大小写归一、不可变的多值 metadata 和显式 set/remove，并严格隔离
 client/server 域；公共层不施加属于具体协议的任意数量或字节配额。
 Client/Server 使用保留的 `Go-Like-Metadata` envelope 做 16 KiB 有界、可逆的 wire 映射，Transport provider 只需
-无损承载 Message header。`propagateToClientContext(...)` 默认不传播任何 server metadata，只有显式
+无损承载该 Fetch header。`propagateToClientContext(...)` 默认不传播任何 server metadata，只有显式
 `exact`/`prefix` allowlist 才会复制到下游 client 域。Core 还会把同一个冻结 `AppInfo` 注入 startup/drain hook 与 child Server
 启停 Context，调用方可用 `fromContext(ctx)` 读取；`AppInfo` 包含 id、name、version、metadata 与 endpoints，默认 id
 由标准 `crypto.randomUUID()` 生成，也可用 functional option 显式覆盖。

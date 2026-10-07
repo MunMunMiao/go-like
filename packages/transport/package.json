@@ -18,7 +18,8 @@
     ".": "./src/index.ts",
     "./headers": "./src/headers.ts",
     "./json": "./src/json.ts",
-    "./provider": "./src/provider.ts"
+    "./provider": "./src/provider.ts",
+    "./sse": "./src/sse/index.ts"
   },
   "scripts": {
     "build": "bun x --bun tsdown --config-loader native",

@@ -78,6 +78,13 @@ describe("encode.ts", () => {
     expect(bEncoded.payload).toBe("42")
   })
 
+  test("struct.intersection encodes a primitive intersection as the value", () => {
+    const schema = struct.intersection(struct.string(), struct.literal("ok"))
+
+    expect(encode(schema, "ok")).toBe("ok")
+    expect(encode(struct.intersection(struct.unknown(), struct.any()), { a: 1 })).toEqual({ a: 1 })
+  })
+
   test("struct.intersection encodes both object sides", () => {
     const named = struct.object({ name: struct.string() })
     const dated = struct.object({ when: struct.date() })
@@ -244,6 +251,24 @@ describe("encode.ts", () => {
     )
   })
 
+  test("encodeObject receives each present field through encodeChild", () => {
+    const schema = struct.object({ name: struct.string() }) as unknown as RuntimeStruct
+    let seen = ""
+    const encoded = encodeValue(
+      schema,
+      { name: "Miao" },
+      {
+        encodeObject(_struct, value, encodeChild): unknown {
+          seen = String(value.name)
+          return { name: encodeChild(struct.string() as unknown as RuntimeStruct, value.name) }
+        }
+      }
+    )
+
+    expect(seen).toBe("Miao")
+    expect(encoded).toEqual({ name: "Miao" })
+  })
+
   test("encode uses injected selectUnionOptions as the union branch source", () => {
     const union = struct.or(struct.date(), struct.string()) as unknown as RuntimeStruct
     const mockSelect = mock(() => {
@@ -271,23 +296,14 @@ describe("encode.ts", () => {
     expect(encode(union, 42)).toBe(42)
   })
 
+  test("struct.tuple encode returns a non-array as-is", () => {
+    expect(encode(struct.tuple([struct.string()]), "no")).toBe("no")
+  })
+
   test("struct.record encode returns non-plain-object as-is", () => {
     const s = struct.record(struct.string())
     expect(encode(s, 42)).toBe(42)
     expect(encode(s, null)).toBeNull()
-  })
-
-  test("struct.record encode sorts non-index string keys by UTF-8 bytes", () => {
-    const s = struct.record(struct.number())
-    const encoded = encode(s, {
-      zeta: 1,
-      Alpha: 2,
-      beta: 3,
-      "\uE000": 4,
-      "😀": 5
-    }) as Record<string, number>
-
-    expect(Object.keys(encoded)).toEqual(["Alpha", "beta", "zeta", "\uE000", "😀"])
   })
 
   test("struct.record retains JavaScript array-index key enumeration", () => {

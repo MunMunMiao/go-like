@@ -1,5 +1,7 @@
 import { resolveObjectShape } from "./shape"
 import { DEFINITION } from "./symbols"
+import { hasOwnKey } from "./utils"
+import { mergePlainObjects } from "./value-graph"
 import type { ObjectDefinition, RuntimeStruct } from "./types"
 
 export interface ResolvedStructField {
@@ -7,10 +9,6 @@ export interface ResolvedStructField {
   readonly key: string
   readonly struct: RuntimeStruct
   readonly wireKey: string
-}
-
-export function getWireKey(fieldKey: string, alias: string | undefined): string {
-  return alias || fieldKey
 }
 
 export function resolveStructFields(
@@ -23,43 +21,63 @@ export function resolveStructFields(
   }
 
   const shape = definition.cache.resolvedShape ?? resolveObjectShape(struct, definition)
-  const candidates = Object.freeze(
+  const fields = Object.freeze(
     Object.entries(shape).map(([key, field]) => {
       const runtime = field as unknown as RuntimeStruct
-      const alias = runtime[DEFINITION].alias || undefined
+      const alias = runtime[DEFINITION].alias
       return Object.freeze({
         alias,
         key,
         struct: runtime,
-        wireKey: getWireKey(key, alias)
+        wireKey: alias ?? key
       })
     })
   )
-  const fields = Object.freeze(selectDominantFields(candidates))
 
+  assertUniqueWireKeys(fields)
   definition.cache.fields = fields
   return fields
 }
 
-function selectDominantFields(
-  fields: readonly ResolvedStructField[]
-): readonly ResolvedStructField[] {
-  const groups = new Map<string, ResolvedStructField[]>()
+function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
+  const seen = new Map<string, string>()
   for (const field of fields) {
-    const group = groups.get(field.wireKey)
-    if (group) {
-      group.push(field)
-    } else {
-      groups.set(field.wireKey, [field])
+    if (seen.has(field.wireKey)) {
+      const previous = seen.get(field.wireKey) as string
+      throw new TypeError(
+        `duplicate wire key "${field.wireKey}" for object fields "${previous}" and "${field.key}"`
+      )
     }
+    seen.set(field.wireKey, field.key)
+  }
+}
+
+export function mapAliasedObjectFields(
+  struct: RuntimeStruct,
+  value: { [key: string]: unknown },
+  encodeChild: (struct: RuntimeStruct, value: unknown) => unknown,
+  output: { [key: string]: unknown } = Object.create(null)
+): { [key: string]: unknown } {
+  const definition = struct[DEFINITION]
+  if (definition.kind !== "object") {
+    throw new TypeError("json encode expects object struct")
   }
 
-  return fields.filter((field) => {
-    const group = groups.get(field.wireKey) as ResolvedStructField[]
-    if (group.length === 1) {
-      return true
+  for (const field of resolveStructFields(struct, definition)) {
+    if (!hasOwnKey(value, field.key)) {
+      continue
     }
-    const tagged = group.filter((candidate) => candidate.alias !== undefined)
-    return tagged.length === 1 && tagged[0] === field
-  })
+
+    const fieldValue = value[field.key]
+    if (typeof fieldValue === "undefined") {
+      continue
+    }
+
+    output[field.wireKey] = mergePlainObjects(
+      output[field.wireKey],
+      encodeChild(field.struct, fieldValue)
+    )
+  }
+
+  return output
 }

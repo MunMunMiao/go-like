@@ -1,6 +1,12 @@
 import process from "node:process"
 
-import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
+import {
+  newClient,
+  withDiscovery,
+  withEndpoint,
+  withSelector,
+  withTransport
+} from "@go-like/client"
 import { newConfig, schema, source } from "@go-like/config"
 import { vaultSource } from "@go-like/config-vault"
 import { background, withoutCancel } from "@go-like/context"
@@ -42,7 +48,8 @@ import pino from "pino"
 import { Counter, Registry } from "prom-client"
 
 import { runtimeConfigSchema } from "./config"
-import { echoServiceName, newEchoClient, newEchoHandler, registerEchoHandler } from "./echo"
+import { echoService } from "./contract"
+import { echoServiceName, newEchoHandler } from "./echo"
 import { newManagementHandler } from "./management"
 import { registerRuntimeProbes } from "./probes"
 import { newPlatformRuntimeState } from "./runtime-state"
@@ -149,7 +156,7 @@ try {
     address("127.0.0.1:0"),
     middleware(traceUnaryMiddleware(tracer, propagator))
   )
-  registerEchoHandler(
+  echoService.registerHandler(
     echoServer,
     newEchoHandler(runtimeConfig, function recordCall(): void {
       requests.inc({ result: "ok" })
@@ -161,7 +168,7 @@ try {
   const client = traceClient(
     newClient(
       withDiscovery(registry),
-      withService(echoServiceName),
+      withEndpoint(`discovery:///${echoServiceName}`),
       withSelector(newRoundRobinSelector()),
       withTransport(newHTTPTransport())
     ),
@@ -175,7 +182,7 @@ try {
   const management = newManagementHandler(
     health,
     metrics,
-    newEchoClient(client),
+    echoService.newClient(client),
     function logCallError(error) {
       logger.error({ error }, "internal call failed")
     }

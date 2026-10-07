@@ -7,6 +7,7 @@
 > 本文是历史实施设计，其中 Handle、ResidentClient、Fetch Transport、ServiceDeclaration、自动注册
 > 组合器不再是当前公共契约。当前已经包含独立的 `@go-like/struct` 和 Buf/gRPC 实现，不能沿用下文早期排除项。当前上游对齐基线见
 > [`../../developer-experience-alignment.md`](../../developer-experience-alignment.md)。
+> `Go-Like-Service-Error*` 头已被非 2xx JSON `ServiceError` body 取代。
 
 ## 1. 决策范围
 

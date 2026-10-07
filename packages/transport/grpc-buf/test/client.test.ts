@@ -23,10 +23,9 @@ import { callOptions } from "../src/index"
 import { newClientForTest, type ClientFactories } from "../src/client"
 import {
   newClient,
-  withAddress,
+  withEndpoint,
   withDiscovery,
   withSelector,
-  withService,
   withBlock,
   withTLSConfig
 } from "../src/native"
@@ -119,7 +118,7 @@ test("direct unary delegates through one Selector snapshot containing every addr
   const created: string[] = []
   const client = newClientForTest(
     runtime(transport, created),
-    withAddress("https://one.example.test", "https://two.example.test/"),
+    withEndpoint(["https://one.example.test", "https://two.example.test/"]),
     withSelector(selector)
   )
 
@@ -146,7 +145,7 @@ test("raw unary preserves zero and negative timeout values without a fallback de
       }),
       created
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   for (const timeoutMs of [0, -1]) {
@@ -216,7 +215,7 @@ test("Discovery refresh permits an explicit unary retry and never replays a part
         )
       }
     },
-    withService("orders"),
+    withEndpoint("discovery:///orders"),
     withDiscovery(discovery),
     withSelector({
       select(ctx, instances, ...options) {
@@ -274,7 +273,7 @@ test("an already-aborted raw signal preserves its Error before selection", async
       }),
       created
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   await expect(
@@ -299,7 +298,7 @@ test("raw stream preserves zero and negative timeout values without a fallback d
       ),
       created
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   for (const timeoutMs of [0, -1]) {
@@ -330,15 +329,12 @@ test("invalid construction states and URL forms fail before manager creation", (
   }
 
   expect(() => newClientForTest(factories)).toThrow()
-  expect(() => newClientForTest(factories, withService("order.v1.OrderService"))).toThrow()
+  expect(() =>
+    newClientForTest(factories, withEndpoint("discovery:///order.v1.OrderService"))
+  ).toThrow()
   expect(() => newClientForTest(factories, withDiscovery(discovery))).toThrow()
   expect(() =>
-    newClientForTest(
-      factories,
-      withAddress("https://one.example.test"),
-      withDiscovery(discovery),
-      withService("order.v1.OrderService")
-    )
+    newClientForTest(factories, withEndpoint("https://one.example.test"), withDiscovery(discovery))
   ).toThrow()
   for (const address of [
     "ftp://one.example.test/",
@@ -347,9 +343,11 @@ test("invalid construction states and URL forms fail before manager creation", (
     "https://one.example.test/?query=yes",
     "https://one.example.test/#fragment"
   ]) {
-    expect(() => newClientForTest(factories, withAddress(address))).toThrow()
+    expect(() => newClientForTest(factories, withEndpoint(address))).toThrow()
   }
-  expect(() => withAddress("HTTPS://ONE.EXAMPLE.TEST:443", "https://one.example.test/")).toThrow()
+  expect(() =>
+    withEndpoint(["HTTPS://ONE.EXAMPLE.TEST:443", "https://one.example.test/"])
+  ).toThrow()
   expect(created).toEqual([])
 })
 
@@ -379,7 +377,7 @@ test("canonical equivalent Discovery roots share one address owner", async () =>
   const client = newClientForTest(
     runtime(transport, created),
     withDiscovery(discovery),
-    withService("order.v1.OrderService"),
+    withEndpoint("discovery:///order.v1.OrderService"),
     withSelector(selector)
   )
 
@@ -439,7 +437,7 @@ test("uses orders-grpc construction service while preserving the protobuf wire s
       created
     ),
     withDiscovery(discovery),
-    withService("orders-grpc"),
+    withEndpoint("discovery:///orders-grpc"),
     withSelector(selector)
   )
 
@@ -471,7 +469,7 @@ test("concurrent unary calls to one canonical address share one owner", async ()
       }),
       created
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   const first = client.unary(unaryMethod, undefined, undefined, undefined, { id: "first" })
@@ -487,7 +485,7 @@ test("concurrent unary calls to one canonical address share one owner", async ()
 })
 
 test("the public constructor exists independently of the private test seam", () => {
-  const client = newClient(withAddress("https://rpc.example.test"))
+  const client = newClient(withEndpoint("https://rpc.example.test"))
   expect(client).toHaveProperty("unary")
   expect(client).toHaveProperty("stream")
   expect(client).toHaveProperty("close")
@@ -513,7 +511,7 @@ test("distinct selections create distinct owners and unary feedback settles once
   const created: string[] = []
   const client = newClientForTest(
     runtime(transport, created),
-    withAddress("https://one.example.test", "https://two.example.test"),
+    withEndpoint(["https://one.example.test", "https://two.example.test"]),
     withSelector(selector)
   )
 
@@ -548,7 +546,7 @@ test("malformed selected URLs complete unary and stream admission exactly once",
       }),
       created
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -586,7 +584,7 @@ test("http selections with TLS complete unary and stream admission exactly once"
       }),
       created
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector),
     withTLSConfig({
       serverName: null,
@@ -632,7 +630,7 @@ test("unary preserves upstream and feedback failures in order", async () => {
         throw upstreamFailure
       })
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -670,7 +668,7 @@ test("stream delegation preserves response fields and reports terminal done or r
   )
   const client = newClientForTest(
     runtime(transport),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -728,7 +726,7 @@ test("stream return and throw abort before delegating and complete before first 
   )
   const client = newClientForTest(
     runtime(transport),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -771,7 +769,7 @@ test("caller cancellation and owner close complete active streams exactly once",
   )
   const client = newClientForTest(
     runtime(transport),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   const [ctx, cancel] = withCancelCause(background())
@@ -834,7 +832,7 @@ test("stream caller cancellation preserves feedback failure for pending next", a
   )
   const client = newClientForTest(
     runtime(transport),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   const [ctx, cancel] = withCancelCause(background())
@@ -892,7 +890,7 @@ test("caller cancellation during pending stream setup settles one ordered feedba
         }
       )
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   const [ctx, cancel] = withCancelCause(background())
@@ -958,7 +956,7 @@ test("close during pending stream setup owns one ordered feedback failure", asyn
         }
       )
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   const call = client.stream(streamMethod, undefined, undefined, undefined, emptyInput())
@@ -1022,7 +1020,7 @@ test("owner close reports an unconsumed stream feedback failure", async () => {
         async () => streamReply(emptyInput())
       )
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -1046,7 +1044,7 @@ test("an already canceled stream call cannot create an owner or reach upstream",
       ),
       created
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   await expect(
@@ -1087,7 +1085,7 @@ test("an already canceled unary call cannot select or create an owner", async ()
       }),
       created
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -1129,7 +1127,7 @@ test("idempotent close aborts every owner, rejects future calls, and closes Disc
       createTransport: () => transport
     },
     withDiscovery(discovery),
-    withService("order.v1.OrderService")
+    withEndpoint("discovery:///order.v1.OrderService")
   )
 
   await client.unary(unaryMethod, undefined, undefined, undefined, { id: "one" })
@@ -1169,7 +1167,7 @@ test("TLS is validated, copied, and mapped only into manager construction", asyn
       },
       createTransport: () => asTransport(async () => unaryReply("secure"))
     },
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withTLSConfig(tls)
   )
   ca.fill(0)
@@ -1190,7 +1188,7 @@ test("TLS is validated, copied, and mapped only into manager construction", asyn
   expect(() =>
     newClientForTest(
       runtime(asTransport(async () => unaryReply("unused"))),
-      withAddress("http://rpc.example.test"),
+      withEndpoint("http://rpc.example.test"),
       withTLSConfig(tls)
     )
   ).toThrow()
@@ -1206,7 +1204,7 @@ test("TLS is validated, copied, and mapped only into manager construction", asyn
         Object.freeze([serviceInstance("order.v1.OrderService", "http://rpc.example.test")])
       )
     ),
-    withService("order.v1.OrderService"),
+    withEndpoint("discovery:///order.v1.OrderService"),
     withTLSConfig({
       serverName: null,
       caCertificate: null,
@@ -1222,14 +1220,14 @@ test("TLS is validated, copied, and mapped only into manager construction", asyn
   expect(() =>
     newClientForTest(
       runtime(asTransport(async () => unaryReply("unused"))),
-      withAddress("https://rpc.example.test"),
+      withEndpoint("https://rpc.example.test"),
       withTLSConfig({ ...tls, privateKey: null })
     )
   ).toThrow()
   expect(() =>
     newClientForTest(
       runtime(asTransport(async () => unaryReply("unused"))),
-      withAddress("https://rpc.example.test"),
+      withEndpoint("https://rpc.example.test"),
       withTLSConfig({ ...tls, caCertificate: { encoding: "der", bytes: new Uint8Array([1]) } })
     )
   ).toThrow()
@@ -1282,7 +1280,7 @@ test("blocking Discovery and Selector observe the carried Like Context", async (
       blockedCreated
     ),
     withDiscovery(discovery),
-    withService("order.v1.OrderService"),
+    withEndpoint("discovery:///order.v1.OrderService"),
     withBlock(),
     withSelector(selector)
   )
@@ -1306,7 +1304,7 @@ test("blocking Discovery and Selector observe the carried Like Context", async (
   const readyClient = newClientForTest(
     runtime(asTransport(async () => unaryReply("raw"))),
     withDiscovery(readyDiscovery),
-    withService("order.v1.OrderService"),
+    withEndpoint("discovery:///order.v1.OrderService"),
     withSelector(selector)
   )
   const valued = withValue(background(), key, "carried")
@@ -1348,7 +1346,7 @@ test.each([
           return []
         }
       }),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withBlock()
     )
     const parent = withValue(background(), "request", "carried")
@@ -1416,7 +1414,7 @@ test("call bounds preserve carried values and the parent's cancellation cause", 
         })
       })
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector({
       select(ctx, instances) {
         observed.push(ctx.value("request"))
@@ -1467,7 +1465,7 @@ test("a canceled close waiter cannot abandon background cleanup or resurrect an 
       created
     ),
     withDiscovery(discovery),
-    withService("order.v1.OrderService")
+    withEndpoint("discovery:///order.v1.OrderService")
   )
   await client.unary(unaryMethod, undefined, undefined, undefined, { id: "one" })
   const [waiter, cancelWaiter] = withCancelCause(background())
@@ -1508,7 +1506,7 @@ test("late manager request settlement closes its stream and re-aborts the raw ma
     })
   const client = newClientForTest(
     { createManager: () => raw, createTransport: transportFactory },
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
   const pending = client.unary(unaryMethod, undefined, undefined, undefined, { id: "one" })
   await requested.promise
@@ -1553,7 +1551,7 @@ test("late manager request rejection re-aborts before cleanup settles", async ()
           return unaryReply("late")
         })
     },
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
   const pending = client.unary(unaryMethod, undefined, undefined, undefined, { id: "one" })
   await requested.promise
@@ -1581,7 +1579,7 @@ test("a transport factory failure owns rollback without replacing the primary fa
         throw factoryFailure
       }
     },
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   await expect(
@@ -1608,7 +1606,7 @@ test("a transport factory failure owns rollback without replacing the primary fa
         throw factoryFailure
       }
     },
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   await expect(
@@ -1626,7 +1624,7 @@ test("hostile Context and non-Error failures are normalized at the client bounda
         throw rejected
       })
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   let observed: unknown
@@ -1657,7 +1655,7 @@ test("hostile Context and non-Error failures are normalized at the client bounda
         return unaryReply("never")
       })
     ),
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 
   await expect(
@@ -1776,7 +1774,7 @@ test("plain JavaScript Selector results are validated before manager creation", 
       asTransport(async () => unaryReply("never")),
       created
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   const cases: readonly { readonly selected: unknown; readonly message: string }[] = [
@@ -1818,7 +1816,7 @@ test("an asynchronous Selector completion is rejected and its rejection is consu
   }
   const client = newClientForTest(
     runtime(asTransport(async () => unaryReply("resolved"))),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -1870,7 +1868,7 @@ test("stream iterator terminal methods preserve abort-first settlement", async (
         }
       )
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -1912,7 +1910,7 @@ test("stream selection preserves selected-address and feedback failures in order
   }
   const client = newClientForTest(
     runtime(asTransport(async () => unaryReply("never"))),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
 
@@ -1949,7 +1947,7 @@ test("close racing asynchronous Discovery or synchronous selection creates no ow
       created
     ),
     withDiscovery(discovery),
-    withService("order.v1.OrderService")
+    withEndpoint("discovery:///order.v1.OrderService")
   )
   const pending = client.unary(unaryMethod, undefined, undefined, undefined, { id: "one" })
   await discoveryStarted.promise
@@ -1983,7 +1981,7 @@ test("close racing asynchronous Discovery or synchronous selection creates no ow
       asTransport(async () => unaryReply("never")),
       selectingCreated
     ),
-    withAddress("https://rpc.example.test"),
+    withEndpoint("https://rpc.example.test"),
     withSelector(selector)
   )
   await expect(
@@ -2042,6 +2040,6 @@ function clientUsingManager(manager: ReturnType<ClientFactories["createManager"]
           return unaryReply("manager")
         })
     },
-    withAddress("https://rpc.example.test")
+    withEndpoint("https://rpc.example.test")
   )
 }

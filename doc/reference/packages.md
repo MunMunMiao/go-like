@@ -29,9 +29,9 @@ Count check: 6 + 6 + 5 + 6 + 9 + 5 + 2 + 4 + 2 = 45.
 | Process signals             | `@go-like/core/node`                        | `signal`                                                      |
 | Web handler                 | `@go-like/web`                              | `Handler`, `contextHandler`                                   |
 | Node Web host               | `@go-like/web/node`                         | `newNodeServer`, `hostname`, `port`                           |
-| Internal unary contract     | `@go-like/transport`                        | `Message`, `Endpoint`, `endpoint`, `serviceError`             |
+| Internal unary contract     | `@go-like/transport`                        | `defineService`, `endpoint`, `serviceError`, `ServerStream`   |
 | Typed runtime validation    | `@go-like/struct`                           | `struct`, `Infer`, `StructError`                              |
-| Internal Client             | `@go-like/client`                           | `newClient`, `withTransport`, `withAddress`, `withService`    |
+| Internal Client             | `@go-like/client`                           | `newClient`, `withTransport`, `withEndpoint`                  |
 | Shared Discovery resolver   | `@go-like/client/discovery`                 | `newDiscoveryResolver`, `DiscoveryResolver`                   |
 | Internal Server             | `@go-like/server`                           | `newServer`, `Server.registerHandler`, `address`, `advertise` |
 | In-process transport        | `@go-like/transport-memory`                 | `newMemoryTransport`                                          |
@@ -49,35 +49,38 @@ Count check: 6 + 6 + 5 + 6 + 9 + 5 + 2 + 4 + 2 = 45.
 | Health                      | `@go-like/health` and `@go-like/web/health` | `newProbeRegistry`, `createHealthHandler`                     |
 | Retry/circuit/rate limit    | `@go-like/resilience`                       | `retry`, `newCircuitBreaker`, `newTokenBucketLimiter`         |
 
-## All 25 public source subpaths
+## All 28 public source subpaths
 
-|   # | Public entrypoint                    | Main exports                                                 |
-| --: | ------------------------------------ | ------------------------------------------------------------ |
-|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`           |
-|   2 | `@go-like/cache/provider`            | `putOptions`                                                 |
-|   3 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                  |
-|   4 | `@go-like/config/env`                | `envSource`                                                  |
-|   5 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                              |
-|   6 | `@go-like/config/node`               | `newNodeFileCapability`                                      |
-|   7 | `@go-like/config/yaml`               | `decodeYaml`                                                 |
-|   8 | `@go-like/core/lifecycle`            | `waitForContext`                                             |
-|   9 | `@go-like/core/node`                 | `signal`                                                     |
-|  10 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                          |
-|  11 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`        |
-|  12 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                     |
-|  13 | `@go-like/registry/provider`         | provider options, snapshot helpers, registration diagnostics |
-|  14 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                            |
-|  15 | `@go-like/store/provider`            | Store option and snapshot helpers                            |
-|  16 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                       |
-|  17 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                   |
-|  18 | `@go-like/struct/runtime`            | Struct introspection and parsing helpers                     |
-|  19 | `@go-like/transport/headers`         | `Go-Like-*` and `Content-Type` constants                     |
-|  20 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`        |
-|  21 | `@go-like/transport/provider`        | metadata, Message, ServiceError codecs and errors            |
-|  22 | `@go-like/transport-grpc-buf/native` | managed standard-gRPC `newClient`, `newServer`, options      |
-|  23 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`           |
-|  24 | `@go-like/web/health`                | `createHealthHandler`                                        |
-|  25 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`   |
+|   # | Public entrypoint                    | Main exports                                                                         |
+| --: | ------------------------------------ | ------------------------------------------------------------------------------------ |
+|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`                                   |
+|   2 | `@go-like/cache/provider`            | `putOptions`                                                                         |
+|   3 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                                          |
+|   4 | `@go-like/config/env`                | `envSource`                                                                          |
+|   5 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                                                      |
+|   6 | `@go-like/config/node`               | `newNodeFileCapability`                                                              |
+|   7 | `@go-like/config/yaml`               | `decodeYaml`                                                                         |
+|   8 | `@go-like/core/lifecycle`            | `waitForContext`                                                                     |
+|   9 | `@go-like/core/node`                 | `signal`                                                                             |
+|  10 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                                                  |
+|  11 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`                                |
+|  12 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                                             |
+|  13 | `@go-like/registry/provider`         | provider options, snapshot helpers, registration diagnostics                         |
+|  14 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                                                    |
+|  15 | `@go-like/store/provider`            | Store option and snapshot helpers                                                    |
+|  16 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                                               |
+|  17 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                                           |
+|  18 | `@go-like/struct/runtime`            | Struct introspection and parsing helpers                                             |
+|  19 | `@go-like/transport/headers`         | `Go-Like-Metadata` and `Go-Like-Timeout-Ms`                                          |
+|  20 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`                                |
+|  21 | `@go-like/transport/provider`        | metadata, ServiceError codecs, transport errors, and `observeCall`                   |
+|  22 | `@go-like/transport-grpc-buf/native` | managed standard-gRPC `newClient`, `newServer`, options                              |
+|  23 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                   |
+|  24 | `@go-like/web/health`                | `createHealthHandler`                                                                |
+|  25 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                           |
+|  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` |
+|  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             |
+|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           |
 
 Generated `dist/package.json` files add a metadata-only `./package.json` export. That generated export is not a package and is not counted above.
 
@@ -91,6 +94,8 @@ Runtime selection is explicit in package names. Current Node-oriented subpaths i
 - `@go-like/store-file/node`;
 - `@go-like/transport-http/node`;
 - `@go-like/web/node`.
+- `@go-like/web/bun`;
+- `@go-like/web/deno`.
 
 `@go-like/transport-grpc-buf/native` is capability-specific rather than runtime-named: Node is supported by upstream
 Connect-ES, while Bun 1.4.0 and Deno 2.9.5 are pinned LikeGo compatibility targets using the same public API.

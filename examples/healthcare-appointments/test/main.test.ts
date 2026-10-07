@@ -1,25 +1,21 @@
 import {
   newClient,
-  withAddress,
+  withEndpoint,
   withTransport,
   type CallOption,
-  type CallRequest,
   type Client
 } from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, spyOn, test } from "bun:test"
+import { appointmentPolicy } from "../src/contract"
 import { newAppointmentHandler } from "../src/http"
 import {
   newBookAppointment,
   newCancelAppointment,
   newMemoryAppointmentRepository
 } from "../src/service"
-import {
-  newAppointmentPolicyClient,
-  newAppointmentPolicyService,
-  newValidatedBookAppointment
-} from "../src/transport"
+import { newAppointmentPolicyService, newValidatedBookAppointment } from "../src/transport"
 
 describe("healthcare appointments", () => {
   test("rejects overlapping active slots for the same doctor", () => {
@@ -192,27 +188,21 @@ describe("healthcare appointments", () => {
     let rejected = false
     let observed: readonly unknown[] = Object.freeze([])
     const client = Object.freeze({
-      async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
-        observed = [ctxValue, request, ...options]
+      async call(...args: readonly unknown[]) {
+        observed = args
         if (rejected) throw failure
-        return {
-          header: Object.freeze({ "content-type": "application/json" }),
-          body: new TextEncoder().encode('{"allowed":true}')
-        }
+        return { allowed: true as const }
       },
       async close(): Promise<void> {}
     }) as unknown as Client
-    const { validate } = newAppointmentPolicyClient(client)
+    expect(appointmentPolicy.endpoints.check).toMatchObject({
+      service: "appointment-policy.v1",
+      endpoint: "check"
+    })
+    const validate = appointmentPolicy.newClient(client).check
 
     await validate(ctx, command, option)
-    expect(observed[0]).toBe(ctx)
-    expect(observed[1]).toMatchObject({
-      service: "appointment-policy",
-      endpoint: "AppointmentPolicy.Check"
-    })
-    const request = observed[1] as CallRequest
-    expect(JSON.parse(new TextDecoder().decode(request.message.body))).toEqual(command)
-    expect(observed.slice(2)).toEqual([option])
+    expect(observed).toEqual([ctx, appointmentPolicy.endpoints.check, command, option])
     rejected = true
     await expect(validate(ctx, command)).rejects.toBe(failure)
   })
@@ -226,21 +216,19 @@ describe("healthcare appointments", () => {
     if (transport === null) throw new Error("policy server did not retain its transport")
     const rawClient = newClient(
       withTransport(transport),
-      withAddress("memory://appointment-policy")
+      withEndpoint("memory://appointment-policy.v1")
     )
     const call = (body: string) =>
       rawClient.call(background(), {
-        service: "appointment-policy",
-        endpoint: "AppointmentPolicy.Check",
-        message: {
-          header: Object.freeze({ "content-type": "application/json" }),
-          body: new TextEncoder().encode(body)
-        }
+        service: "appointment-policy.v1",
+        endpoint: "check",
+        headers: { "content-type": "application/json" },
+        body: new TextEncoder().encode(body)
       })
     try {
-      await expect(call("null")).rejects.toThrow("internal service error")
+      await expect(call("null")).rejects.toThrow("invalid request body")
       await expect(call(JSON.stringify({ appointmentId: "only-id" }))).rejects.toThrow(
-        "internal service error"
+        "invalid request body"
       )
     } finally {
       await rawClient.close(background())
@@ -271,7 +259,7 @@ describe("healthcare appointments", () => {
           startsAt: 2_000,
           endsAt: 3_000
         })
-      ).rejects.toThrow("appointment policy returned an invalid response")
+      ).rejects.toThrow("client typed response is invalid")
     } finally {
       parse.mockRestore()
       await app.stop()

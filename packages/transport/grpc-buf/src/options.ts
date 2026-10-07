@@ -135,10 +135,10 @@ export function clientOptions(options: readonly ClientOption[]): ClientOptions {
     throw new TypeError("newClient cannot combine direct addresses with discovery")
   }
   if (current.discovery !== null && current.service === null) {
-    throw new TypeError("newClient discovery requires a service option")
+    throw new TypeError("newClient requires a discovery endpoint when withDiscovery is configured")
   }
   if (current.discovery === null && current.service !== null) {
-    throw new TypeError("newClient service option requires discovery")
+    throw new TypeError("newClient discovery endpoint requires withDiscovery")
   }
   if (current.addresses.length === 0 && current.discovery === null) {
     throw new TypeError("newClient requires direct addresses or discovery")
@@ -181,22 +181,82 @@ export function validateTLSConfig(value: TLSConfig | null): void {
   ])
 }
 
-/** Configures one or more construction-time direct gRPC addresses. */
-export function withAddress(...addresses: readonly string[]): ClientOption {
-  if (addresses.length === 0) throw new TypeError("withAddress requires at least one address")
-  const captured = Object.freeze(addresses.map(canonicalAddress))
-  if (new Set(captured).size !== captured.length) {
-    throw new TypeError("withAddress must not contain duplicate addresses")
+const discoveryScheme = /^discovery:/iu
+const discoveryTripleSlash = /^discovery:\/\/\//iu
+
+/** Parses one discovery:/// target and leaves every other scheme untouched. */
+function discoveryTarget(value: string): string | null {
+  if (!discoveryScheme.test(value)) return null
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch (cause) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name", { cause })
   }
-  return (options) => Object.freeze({ ...options, addresses: captured })
+  if (
+    url.protocol !== "discovery:" ||
+    url.host.length !== 0 ||
+    url.username.length !== 0 ||
+    url.password.length !== 0
+  ) {
+    throw new TypeError("withEndpoint discovery authority must be empty")
+  }
+  if (
+    !discoveryTripleSlash.test(value) ||
+    url.search.length !== 0 ||
+    url.hash.length !== 0 ||
+    !url.pathname.startsWith("/")
+  ) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name")
+  }
+  let target: string
+  try {
+    target = decodeURIComponent(url.pathname.slice(1))
+  } catch (cause) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name", { cause })
+  }
+  if (target.length === 0) throw new TypeError("withEndpoint discovery target must be non-empty")
+  return target
 }
 
-/** Configures the construction-time Discovery service identity. */
-export function withService(service: string): ClientOption {
-  if (typeof service !== "string" || service.length === 0) {
-    throw new TypeError("withService requires a non-empty service")
+/** Rejects one array entry that is not a direct, well-formed address string. */
+function directEndpoint(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
+    throw new TypeError("withEndpoint entry must be a non-empty well-formed string")
   }
-  return (options) => Object.freeze({ ...options, service })
+  if (discoveryScheme.test(value)) {
+    throw new TypeError("withEndpoint arrays only accept direct addresses")
+  }
+  return value
+}
+
+/** Resolves one withEndpoint argument into canonical addresses or one discovery name. */
+function endpointSource(value: unknown): {
+  readonly addresses: readonly string[]
+  readonly service: string | null
+} {
+  if (Array.isArray(value)) {
+    if (value.length === 0) throw new TypeError("withEndpoint requires at least one endpoint")
+    const addresses = Object.freeze(value.map(directEndpoint).map(canonicalAddress))
+    if (new Set(addresses).size !== addresses.length) {
+      throw new TypeError("withEndpoint must not contain duplicate addresses")
+    }
+    return Object.freeze({ addresses, service: null })
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError("withEndpoint requires a non-empty endpoint")
+  }
+  if (!value.isWellFormed()) throw new TypeError("withEndpoint endpoint must be well-formed")
+  const service = discoveryTarget(value)
+  if (service !== null) return Object.freeze({ addresses: Object.freeze([]), service })
+  return Object.freeze({ addresses: Object.freeze([canonicalAddress(value)]), service: null })
+}
+
+/** Configures one direct address list or one discovery:/// target. */
+export function withEndpoint(endpoint: string | readonly string[]): ClientOption {
+  const source = endpointSource(endpoint)
+  return (options) =>
+    Object.freeze({ ...options, addresses: source.addresses, service: source.service })
 }
 
 /** Configures the shared public Discovery implementation. */

@@ -1,7 +1,7 @@
 import { createServer, type RequestListener, type Server } from "node:http"
 import { connect, type Socket } from "node:net"
 
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import { background, withCancel, withCancelCause } from "@go-like/context"
 import { address as serverAddress, newServer, transport as serverTransport } from "@go-like/server"
 import { struct } from "@go-like/struct"
@@ -33,7 +33,6 @@ interface MetadataEvidence {
 
 const listenOptions: HTTPHostListenOptions = Object.freeze({ secure: false, tlsConfig: null })
 const encoder = new TextEncoder()
-const decoder = new TextDecoder()
 const nodeHostModule =
   process.env.GO_LIKE_TRANSPORT_HTTP_NODE_HOST_E2E_MODULE ??
   new URL("../../src/node-host.ts", import.meta.url).href
@@ -185,36 +184,33 @@ const transport = newNodeHTTPTransport()
 const unaryListener = (await transport.listen(background(), "127.0.0.1:0")) as HTTPListener
 let unaryRequestBody = ""
 let unaryRequestHeader = ""
-const unaryAccept = unaryListener.accept(
+const unaryAccept = unaryListener.serve(
   background(),
-  async function echo(ctx, socket): Promise<void> {
-    const request = await socket.recv(ctx)
-    unaryRequestBody = decoder.decode(request.body)
-    unaryRequestHeader =
-      request.header["go-like-loopback"] ?? request.header["Go-Like-Loopback"] ?? ""
-    await socket.send(ctx, {
-      header: Object.freeze({ "Go-Like-Reply": "node" }),
-      body: encoder.encode("unary-response")
-    })
+  async function echo(_ctx, request): Promise<Response> {
+    unaryRequestBody = await request.text()
+    unaryRequestHeader = request.headers.get("go-like-loopback") ?? ""
+    return new Response("unary-response", { headers: { "Go-Like-Reply": "node" } })
   }
 )
 await unaryListener.accepted()
 acceptedServers += 1
 const unaryClient = await transport.dial(background(), unaryListener.addr())
-await unaryClient.send(background(), {
-  header: Object.freeze({ "Go-Like-Loopback": "loopback" }),
-  body: encoder.encode("unary-request")
-})
-const unaryResponse = await unaryClient.recv(background())
+const unaryResponse = await unaryClient.fetch(
+  background(),
+  new Request(new URL("/echo/call", `http://${unaryListener.addr()}/`), {
+    method: "POST",
+    headers: { "Go-Like-Loopback": "loopback" },
+    body: "unary-request"
+  })
+)
+const unaryResponseBody = await unaryResponse.text()
+const unaryResponseHeader = unaryResponse.headers.get("go-like-reply") ?? ""
 await unaryClient.close(background())
 await unaryListener.close(background())
 await unaryAccept
 terminalServers += 1
 const unaryAddress = unaryListener.addr()
 await provePortReleased(unaryAddress)
-const unaryResponseBody = decoder.decode(unaryResponse.body)
-const unaryResponseHeader =
-  unaryResponse.header["go-like-reply"] ?? unaryResponse.header["Go-Like-Reply"] ?? ""
 verify(unaryRequestBody === "unary-request", "unary request body changed")
 verify(unaryRequestHeader === "loopback", "unary request header changed")
 verify(unaryResponseBody === "unary-response", "unary response body changed")
@@ -440,8 +436,11 @@ function observedPoolConnections(): number {
 const poolClient = await transport.dial(background(), poolAddress)
 /** Performs one complete unary pool probe. */
 async function poolExchange(client: Awaited<ReturnType<typeof transport.dial>>): Promise<string> {
-  await client.send(background(), { header: {}, body: new Uint8Array() })
-  return decoder.decode((await client.recv(background())).body)
+  const response = await client.fetch(
+    background(),
+    new Request(new URL("/pool/call", `http://${poolAddress}/`), { method: "POST" })
+  )
+  return await response.text()
 }
 verify((await poolExchange(poolClient)) === "pool-1", "first pooled response changed")
 verify((await poolExchange(poolClient)) === "pool-2", "second pooled response changed")
@@ -449,13 +448,18 @@ verify(
   observedPoolConnections() === 1,
   `HTTP/1 pool opened ${poolConnections} connections for two requests`
 )
-await poolClient.send(background(), { header: {}, body: new Uint8Array() })
 const [poolCancelContext, cancelPoolReceive] = withCancel(background())
-const canceledPoolReceive = poolClient.recv(poolCancelContext)
+const canceledPoolResponse = await poolClient.fetch(
+  poolCancelContext,
+  new Request(new URL("/pool/call", `http://${poolAddress}/`), { method: "POST" })
+)
 cancelPoolReceive()
-await rejection(canceledPoolReceive)
-await poolClient.send(background(), { header: {}, body: new Uint8Array() })
-await rejection(poolClient.recv(background()))
+await rejection(canceledPoolResponse.arrayBuffer())
+const truncatedPoolResponse = await poolClient.fetch(
+  background(),
+  new Request(new URL("/pool/call", `http://${poolAddress}/`), { method: "POST" })
+)
+await rejection(truncatedPoolResponse.arrayBuffer())
 verify((await poolExchange(poolClient)) === "pool-5", "pool recovery response changed")
 verify(
   observedPoolConnections() === 3,
@@ -510,7 +514,7 @@ typedServer.registerHandler(typedContract, (_ctx, request) => ({
 }))
 const typedRunning = typedServer.start(background())
 const typedAddress = await typedServer.endpoint(background())
-const typedClient = newClient(withTransport(transport), withAddress(typedAddress))
+const typedClient = newClient(withTransport(transport), withEndpoint(typedAddress))
 const requestedAt = new Date("2026-08-03T12:00:00.000Z")
 const typedResult = await typedClient.call(background(), typedContract, { id: 41n, requestedAt })
 verify(typedResult.id === 42n, "typed HTTP bigint response changed")

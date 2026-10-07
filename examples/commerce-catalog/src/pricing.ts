@@ -2,8 +2,6 @@ import { withFilter, withRetry, type CallOption, type Client } from "@go-like/cl
 import type { Context } from "@go-like/context"
 import { filterVersion } from "@go-like/registry"
 import { exponentialBackoff } from "@go-like/resilience"
-import type { Handler, HandlerRegistrar } from "@go-like/server"
-import type { Message } from "@go-like/transport"
 
 import {
   findAmountMinor,
@@ -12,8 +10,8 @@ import {
   maximumCacheTtlMs,
   type PriceQuote
 } from "./catalog"
+import { pricing } from "./contract"
 
-const jsonMediaType = "application/json"
 const jsonEncoder = new TextEncoder()
 const jsonDecoder = new TextDecoder("utf-8", { fatal: true })
 
@@ -28,37 +26,10 @@ export interface PricingClient {
   ): Promise<PriceQuote | null>
 }
 
-/** Decodes and validates one Pricing request body. */
-export function decodePricingRequest(bytes: Uint8Array): {
+/** Decodes one Pricing request accepted by the service handler. */
+export interface PricingRequest {
   readonly productId: string
   readonly currency: string
-} {
-  let value: unknown
-  try {
-    value = JSON.parse(jsonDecoder.decode(bytes))
-  } catch {
-    throw new TypeError("invalid Pricing.Get request")
-  }
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    !Object.hasOwn(value, "productId") ||
-    !Object.hasOwn(value, "currency")
-  ) {
-    throw new TypeError("invalid Pricing.Get request")
-  }
-  const productId = Reflect.get(value, "productId")
-  const currency = Reflect.get(value, "currency")
-  if (
-    typeof productId !== "string" ||
-    typeof currency !== "string" ||
-    !isProductId(productId) ||
-    !isSupportedCurrency(currency)
-  ) {
-    throw new TypeError("invalid Pricing.Get request")
-  }
-  return Object.freeze({ productId, currency })
 }
 
 /** Decodes and validates one Pricing response or cache payload. */
@@ -102,24 +73,9 @@ export function encodePrice(value: PriceQuote): Uint8Array {
   return jsonEncoder.encode(JSON.stringify(value))
 }
 
-/** Encodes one Pricing response into a transport Message. */
-export function pricingResponseMessage(value: PriceQuote): Message {
-  return Object.freeze({
-    header: Object.freeze({ "Content-Type": jsonMediaType }),
-    body: encodePrice(value)
-  })
-}
-
-/** Encodes one Pricing request into a transport Message. */
-function requestMessage(productId: string, currency: string): Message {
-  return Object.freeze({
-    header: Object.freeze({ "Content-Type": jsonMediaType }),
-    body: jsonEncoder.encode(JSON.stringify({ productId, currency }))
-  })
-}
-
 /** Creates the typed Pricing caller with its existing filter and retry policy. */
 export function newPricingClient(client: Client): PricingClient {
+  const caller = pricing.newClient(client)
   return Object.freeze({
     async fetchPrice(
       ctx: Context,
@@ -127,13 +83,9 @@ export function newPricingClient(client: Client): PricingClient {
       currency: string,
       ...options: readonly CallOption[]
     ): Promise<PriceQuote | null> {
-      const response = await client.call(
+      const quote = await caller.get(
         ctx,
-        {
-          service: "pricing",
-          endpoint: "Pricing.Get",
-          message: requestMessage(productId, currency)
-        },
+        { productId, currency },
         withFilter(filterVersion("v1")),
         withRetry({
           authorization: "idempotent",
@@ -145,32 +97,27 @@ export function newPricingClient(client: Client): PricingClient {
         }),
         ...options
       )
-      return decodePrice(response.body, productId, currency)
+      return decodePrice(encodePrice(quote), productId, currency)
     }
   })
 }
 
-export const pricingMediaType = jsonMediaType
-
-/** Registers the Pricing implementation on one Server owner. */
-export function registerPricingHandler(server: HandlerRegistrar, handler: Handler): void {
-  server.registerHandler("pricing", "Pricing.Get", handler)
-}
-
-/** Creates the Pricing.Get handler registered directly on a go-like Server. */
-export function newPricingHandler(onCall?: () => void): Handler {
-  return function pricing(_ctx: Context, message: Message): Message {
-    const request = decodePricingRequest(message.body)
+/** Creates the pricing.v1 get handler registered directly on a go-like Server. */
+export function newPricingHandler(
+  onCall: () => void = () => {}
+): (ctx: Context, request: PricingRequest) => PriceQuote {
+  return function pricingHandler(_ctx: Context, request: PricingRequest): PriceQuote {
+    if (!isProductId(request.productId) || !isSupportedCurrency(request.currency)) {
+      throw new TypeError("invalid pricing request")
+    }
     const amountMinor = findAmountMinor(request.productId, request.currency)
     if (amountMinor === null) throw new TypeError("price is unavailable")
-    onCall?.()
-    return pricingResponseMessage(
-      Object.freeze({
-        productId: request.productId,
-        currency: request.currency,
-        amountMinor,
-        validUntil: Date.now() + maximumCacheTtlMs
-      })
-    )
+    onCall()
+    return Object.freeze({
+      productId: request.productId,
+      currency: request.currency,
+      amountMinor,
+      validUntil: Date.now() + maximumCacheTtlMs
+    })
   }
 }

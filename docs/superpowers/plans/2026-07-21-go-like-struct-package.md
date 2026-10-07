@@ -3,6 +3,7 @@
 状态：历史计划，不能用作当前 API 说明。当前工作区已包含 `@go-like/struct`，其公共契约见
 [Struct README](../../../packages/struct/README.md)；早期删除该包的决策已被后续实现取代。
 `@go-like/event` 仍使用独立的实例级 `Codec<T>` 契约，下文保留原实施记录。
+全局 `setErrorMap` 未交付；`errorMap` 只存在于单次 `struct.parse`。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

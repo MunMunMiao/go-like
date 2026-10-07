@@ -2,7 +2,7 @@ import {
   newClient,
   withDiscovery,
   withSelector,
-  withService,
+  withEndpoint,
   withTransport,
   type CallRequest,
   type Client
@@ -12,7 +12,7 @@ import type { Server as LifecycleServer } from "@go-like/core"
 import { traceClient, traceUnaryMiddleware, traceWebHandler } from "@go-like/otel"
 import { newRandomSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
 import { address as serverAddress, middleware, newServer, transport } from "@go-like/server"
-import type { Message } from "@go-like/transport"
+
 import { newHTTPTransport } from "@go-like/transport-http"
 import { newNodeHTTPTransport } from "@go-like/transport-http/node"
 import { context, propagation, SpanStatusCode, type TextMapSetter } from "@opentelemetry/api"
@@ -217,12 +217,11 @@ try {
   })
   const tracer = provider.getTracer("go-like-e2e")
 
-  const endpointHandler = async (_ctx: Context, request: Message): Promise<Message> => {
-    ensure(request.header["x-go-like-e2e"] === "kept", "HTTP request lost the caller header")
-    return {
-      header: { "x-go-like-e2e-response": "ok" },
-      body: Encoder.encode("response")
-    }
+  const endpointHandler = async (_ctx: Context, request: Request): Promise<Response> => {
+    ensure(request.headers.get("x-go-like-e2e") === "kept", "HTTP request lost the caller header")
+    return new Response(Encoder.encode("response"), {
+      headers: { "x-go-like-e2e-response": "ok" }
+    })
   }
   httpServer = newServer(
     transport(newNodeHTTPTransport()),
@@ -269,7 +268,7 @@ try {
   const activeClient = traceClient(
     newClient(
       withDiscovery(discovery),
-      withService(serviceName),
+      withEndpoint(`discovery:///${serviceName}`),
       withSelector(newRandomSelector(() => 0)),
       withTransport(newHTTPTransport())
     ),
@@ -279,9 +278,10 @@ try {
   const request: CallRequest = {
     service: serviceName,
     endpoint: endpointName,
-    message: { header: { "x-go-like-e2e": "kept" }, body: Encoder.encode("request") }
+    headers: { "x-go-like-e2e": "kept", "content-type": "application/json" },
+    body: Encoder.encode(JSON.stringify({ probe: "request" }))
   }
-  const captured: { response: Message | null } = { response: null }
+  const captured: { response: Response | null } = { response: null }
   await tracer.startActiveSpan(rootSpanName, async (rootSpan) => {
     try {
       captured.response = await activeClient.call(background(), request)
@@ -291,11 +291,11 @@ try {
   })
   ensure(captured.response !== null, "HTTP Client returned no response")
   ensure(
-    Decoder.decode(captured.response.body) === "response",
+    Decoder.decode(await captured.response.arrayBuffer()) === "response",
     "HTTP response body was not preserved"
   )
   ensure(
-    captured.response.header["x-go-like-e2e-response"] === "ok",
+    captured.response.headers.get("x-go-like-e2e-response") === "ok",
     "HTTP response header was not preserved"
   )
 

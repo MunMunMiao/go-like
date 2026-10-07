@@ -7,7 +7,8 @@
 
 - `service.ts`：预约模型、输入校验、预约与取消用例，以及带时段冲突检查的内存仓储。
 - `transport.ts`：使用 `@go-like/client`、`@go-like/server` 与
-  `@go-like/transport-memory` 完成进程内预约策略 unary 调用。
+  `@go-like/transport-memory` 完成进程内预约策略 unary 调用。契约是
+  `defineService("appointment-policy.v1", { check })`，调用写成 `client.check(ctx, req)`。
 - `http.ts`：标准 Fetch API 入口。
 - `main.ts`：唯一可执行入口，组合内部策略服务、HTTP Server 和进程生命周期。
 
@@ -17,7 +18,7 @@
 - `DELETE /v1/appointments/{appointmentId}`：取消预约。
 
 本示例使用进程内仓储验证业务不变量，不声明数据库、消息系统或分布式锁已经接入。
-程序和测试都由 Core App 管理策略 Server，并实际经过 Client `withAddress` →
+程序和测试都由 Core App 管理策略 Server，并实际经过 Client `withEndpoint` →
 Memory Transport → Server unary dispatch。`memory:` 是 transport-opaque 地址，因此显式绕过只接受
 HTTP(S) URL 的 Discovery/Selector 便利层；策略拒绝发生在写入预约仓储之前，不存在手工启动的第二生命周期。
 

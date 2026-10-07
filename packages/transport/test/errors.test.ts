@@ -1,30 +1,40 @@
 import { describe, expect, test } from "bun:test"
 
 import { isServiceError, serviceError, type ServiceError } from "../src/index"
-import { decodeServiceError, encodeServiceError, internalServiceError } from "../src/provider"
-import * as Headers from "../src/headers"
+import {
+  decodeServiceErrorResponse,
+  internalServiceError,
+  serviceErrorResponse
+} from "../src/provider"
 
 const Encoder = new TextEncoder()
-const Decoder = new TextDecoder()
 
-/** Returns one canonical header carrier for malformed-wire tests. */
-function serviceHeaders(code = "denied", status = "403"): Readonly<Record<string, string>> {
-  return Object.freeze({
-    [Headers.serviceError]: "v1",
-    [Headers.serviceErrorCode]: code,
-    [Headers.serviceErrorStatus]: status,
-    [Headers.contentType]: "application/json; charset=utf-8"
-  })
-}
-
-/** Returns one canonical ServiceError JSON body for malformed-wire tests. */
+/** Returns one JSON error body with the exact Fetch key set. */
 function serviceBody(
   code = "denied",
   message = "request denied",
-  status = 403,
   metadata: Readonly<Record<string, string>> = {}
 ): Uint8Array {
-  return Encoder.encode(JSON.stringify({ code, message, status, metadata }))
+  return Encoder.encode(JSON.stringify({ code, message, metadata }))
+}
+
+/** Copies encoded bytes into an ArrayBuffer Fetch will accept as a body. */
+function responseBytes(body: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(body.byteLength)
+  new Uint8Array(copy).set(body)
+  return copy
+}
+
+/** Returns one non-2xx JSON response for wire rejection cases. */
+function serviceResponse(
+  body: Uint8Array,
+  status = 403,
+  contentType = "application/json"
+): Response {
+  return new Response(responseBytes(body), {
+    status,
+    headers: { "content-type": contentType }
+  })
 }
 
 describe("ServiceError", () => {
@@ -110,25 +120,18 @@ describe("ServiceError", () => {
     ).toThrow(RangeError)
   })
 
-  test("encodes the canonical unary carrier with detached body reads", () => {
+  test("encodes status and the exact JSON key set without carrier headers", async () => {
     const failure = serviceError("orders.denied", "request denied", 403, { z: "last", a: "first" })
-    const unary = encodeServiceError("unary", failure)
+    const response = serviceErrorResponse(failure)
     const expectedBody =
-      '{"code":"orders.denied","message":"request denied","status":403,"metadata":{"a":"first","z":"last"}}'
+      '{"code":"orders.denied","message":"request denied","metadata":{"a":"first","z":"last"}}'
 
-    expect(unary).toMatchObject({ serviceStatus: 403, carrierStatus: 200 })
-    expect(unary.header).toEqual({
-      [Headers.serviceError]: "v1",
-      [Headers.serviceErrorCode]: "orders.denied",
-      [Headers.serviceErrorStatus]: "403",
-      [Headers.contentType]: "application/json; charset=utf-8"
-    })
-    expect(Decoder.decode(unary.body)).toBe(expectedBody)
-    const first = unary.body
-    first[0] = 0
-    expect(Decoder.decode(unary.body)).toBe(expectedBody)
-    expect(Object.isFrozen(unary)).toBe(true)
-    expect(Object.isFrozen(unary.header)).toBe(true)
+    expect(response.status).toBe(403)
+    expect(response.headers.get("content-type")).toBe("application/json")
+    expect(response.headers.get("go-like-service-error")).toBeNull()
+    expect(response.headers.get("go-like-service-error-code")).toBeNull()
+    expect(response.headers.get("go-like-service-error-status")).toBeNull()
+    expect(await response.text()).toBe(expectedBody)
 
     const forged = Object.assign(new Error("forged"), {
       name: "ServiceError",
@@ -136,21 +139,12 @@ describe("ServiceError", () => {
       status: 500,
       metadata: Object.freeze({})
     }) as ServiceError
-    expect(() => encodeServiceError("unary", forged)).toThrow(TypeError)
-    expect(() => Reflect.apply(encodeServiceError, undefined, ["other", failure])).toThrow(
-      TypeError
-    )
+    expect(() => serviceErrorResponse(forged)).toThrow(TypeError)
   })
 
-  test("decodes header names case-insensitively into a fresh branded error", () => {
+  test("decodes a JSON error into a fresh branded ServiceError", async () => {
     const source = serviceError("orders.denied", "request denied", 403, { tenant: "one" })
-    const envelope = encodeServiceError("unary", source)
-    const lowerHeaders = Object.freeze(
-      Object.fromEntries(
-        Object.entries(envelope.header).map(([key, value]) => [key.toLowerCase(), value])
-      )
-    )
-    const decoded = decodeServiceError("unary", 200, lowerHeaders, envelope.body)
+    const decoded = await decodeServiceErrorResponse(serviceErrorResponse(source))
 
     expect(decoded).not.toBe(source)
     expect(decoded).toMatchObject({
@@ -163,92 +157,102 @@ describe("ServiceError", () => {
     expect(isServiceError(decoded)).toBe(true)
     expect(Object.isFrozen(decoded)).toBe(true)
     expect(Object.isFrozen(decoded?.metadata)).toBe(true)
-    expect(decodeServiceError("unary", 200, {}, new Uint8Array())).toBeNull()
+
+    const success = serviceResponse(serviceBody(), 200)
+    expect(await decodeServiceErrorResponse(success)).toBeNull()
+    expect(success.bodyUsed).toBe(false)
+    const html = new Response("<html>", {
+      status: 502,
+      headers: { "content-type": "text/html" }
+    })
+    expect(await decodeServiceErrorResponse(html)).toBeNull()
+    expect(html.bodyUsed).toBe(false)
   })
 
-  test("round-trips metadata keys that are special on Object.prototype", () => {
+  test("rejects metadata whose prototype is not a plain object", async () => {
+    const parsed = JSON.parse
+    JSON.parse = function leakedPrototype(_text: string): unknown {
+      return {
+        code: "not_found",
+        message: "missing",
+        metadata: Object.assign(Object.create({ leaked: true }), { tenant: "a" })
+      }
+    } as typeof JSON.parse
+    try {
+      expect(
+        await decodeServiceErrorResponse(
+          new Response("{}", {
+            status: 404,
+            headers: { "content-type": "application/json" }
+          })
+        )
+      ).toBeNull()
+    } finally {
+      JSON.parse = parsed
+    }
+  })
+
+  test("round-trips metadata keys that are special on Object.prototype", async () => {
     const metadata = Object.fromEntries([
       ["__proto__", "prototype"],
       ["constructor", "constructor"]
     ])
-    const envelope = encodeServiceError(
-      "unary",
-      serviceError("metadata.special", "special metadata", 500, metadata)
+    const decoded = await decodeServiceErrorResponse(
+      serviceErrorResponse(serviceError("metadata.special", "special metadata", 500, metadata))
     )
-    const decoded = decodeServiceError("unary", 200, envelope.header, envelope.body)
 
     expect(decoded?.metadata).toEqual(metadata)
     expect(Object.hasOwn(decoded?.metadata ?? {}, "__proto__")).toBe(true)
   })
 
-  test("enforces unary carrier status and every strict wire component", () => {
-    const unary = encodeServiceError("unary", serviceError("denied", "request denied", 403))
-    expect(decodeServiceError("unary", 200, unary.header, unary.body)?.status).toBe(403)
-    expect(() => decodeServiceError("unary", 403, unary.header, unary.body)).toThrow(
-      /ServiceError wire/
+  test("accepts only a strict JSON body and takes status from the response", async () => {
+    const spaced = serviceResponse(
+      Encoder.encode('{ "code":"denied","message":"request denied","metadata":{} }'),
+      403
     )
+    expect(await decodeServiceErrorResponse(spaced)).toMatchObject({
+      code: "denied",
+      status: 403,
+      metadata: {}
+    })
+    const reordered = serviceResponse(
+      Encoder.encode('{"metadata":{},"message":"request denied","code":"denied"}'),
+      404
+    )
+    expect((await decodeServiceErrorResponse(reordered))?.status).toBe(404)
+    const charset = serviceResponse(serviceBody(), 403, "application/json; charset=utf-8")
+    expect((await decodeServiceErrorResponse(charset))?.code).toBe("denied")
 
-    const malformed: readonly [Readonly<Record<string, string>>, Uint8Array][] = [
-      [{ ...serviceHeaders(), [Headers.serviceError]: "v2" }, serviceBody()],
-      [
-        {
-          ...serviceHeaders(),
-          [Headers.serviceError.toLowerCase()]: "v1"
-        },
-        serviceBody()
-      ],
-      [
-        {
-          ...serviceHeaders(),
-          [Headers.serviceErrorCode.toLowerCase()]: "denied"
-        },
-        serviceBody()
-      ],
-      [{ ...serviceHeaders(), [Headers.serviceErrorCode]: "other" }, serviceBody()],
-      [{ ...serviceHeaders(), [Headers.serviceErrorStatus]: "0403" }, serviceBody()],
-      [
-        Object.freeze({
-          [Headers.serviceError]: "v1",
-          [Headers.serviceErrorCode]: "denied",
-          [Headers.serviceErrorStatus]: "403"
+    const rejected = [
+      serviceResponse(serviceBody(), 399),
+      serviceResponse(serviceBody(), 301),
+      serviceResponse(serviceBody(), 403, "application/json, text/plain"),
+      serviceResponse(new Uint8Array([0xc3, 0x28])),
+      serviceResponse(
+        Encoder.encode('{"code":"denied","message":"request denied","metadata":{},"status":403}')
+      ),
+      serviceResponse(Encoder.encode('{"code":1,"message":"request denied","metadata":{}}')),
+      serviceResponse(
+        Encoder.encode('{"code":"denied","message":"request denied","metadata":{"key":1}}')
+      ),
+      serviceResponse(Encoder.encode('{"code":"denied","message":"request denied"}')),
+      serviceResponse(Encoder.encode('["denied"]')),
+      serviceResponse(Encoder.encode("null")),
+      serviceResponse(new Uint8Array(8_193)),
+      new Response(
+        new ReadableStream({
+          pull(controller): void {
+            controller.error(new Error("broken body"))
+          }
         }),
-        serviceBody()
-      ],
-      [{ ...serviceHeaders(), [Headers.contentType]: "application/json" }, serviceBody()],
-      [serviceHeaders(), new Uint8Array([0xc3, 0x28])],
-      [
-        serviceHeaders(),
-        Encoder.encode('{ "code":"denied","message":"request denied","status":403,"metadata":{} }')
-      ],
-      [
-        serviceHeaders(),
-        Encoder.encode(
-          '{"code":"denied","message":"request denied","status":403,"metadata":{},"extra":true}'
-        )
-      ],
-      [
-        serviceHeaders(),
-        Encoder.encode('{"code":1,"message":"request denied","status":403,"metadata":{}}')
-      ],
-      [
-        serviceHeaders(),
-        Encoder.encode(
-          '{"code":"denied","message":"request denied","status":403,"metadata":{"key":1}}'
-        )
-      ],
-      [serviceHeaders(), serviceBody("denied", "request denied", 404)],
-      [serviceHeaders(), new Uint8Array(8_193)]
+        { status: 500, headers: { "content-type": "application/json" } }
+      ),
+      serviceResponse(Encoder.encode('{"code":"BAD","message":"request denied","metadata":{}}')),
+      new Response(responseBytes(serviceBody()), { status: 403 })
     ]
-    for (const [header, body] of malformed) {
-      expect(() => decodeServiceError("unary", 200, header, body)).toThrow(/ServiceError wire/)
+    for (const response of rejected) {
+      expect(await decodeServiceErrorResponse(response)).toBeNull()
     }
-    expect(() =>
-      decodeServiceError(
-        "unary",
-        200,
-        Object.assign(Object.create({ inherited: "value" }), unary.header),
-        unary.body
-      )
-    ).toThrow(/ServiceError wire/)
+    expect(await decodeServiceErrorResponse(null as never)).toBeNull()
   })
 })

@@ -55,9 +55,9 @@ Internal unary call
   @go-like/client
     -> Discovery, Filter, Selector, or direct address
     -> @go-like/transport Client
-    -> Message send / recv
-    -> @go-like/server unary handler
-    -> response Message
+    -> Client.fetch POST /<service>/<endpoint>
+    -> @go-like/server handler
+    -> JSON body or SSE ServerStream
 ```
 
 Generated RPC is a separate optional path: project-local `@go-like/protoc-gen-like` uses upstream Protobuf-ES descriptors/codecs to generate ctx-first `registerXHandler(server, handler)` and `newXClient(client)` glue. `@go-like/transport-grpc-buf` adapts upstream Connect and gRPC-Web handlers to a standard `Request`/`Response` Fetch handler, while its `/native` subpath owns a managed standard-gRPC Client and Server. These packages are not Transport SPI providers. Portable Fetch evidence covers unary and server-streaming only; `/native` covers all four cardinalities in the pinned Node 26.7.0, Bun 1.4.0, and Deno 2.9.5 physical-package matrix.
@@ -80,7 +80,7 @@ Public Web streaming remains standard Fetch `Request`/`Response` and Web Streams
 
 ## Public inventory
 
-The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **25 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
+The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **28 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
 
 Use the [package reference](/reference/packages) to choose a contract or provider, and the [provider reference](/reference/providers) to compare backend and runtime semantics. The [claims ledger](/reference/claims) records the evidence level behind public wording.
 

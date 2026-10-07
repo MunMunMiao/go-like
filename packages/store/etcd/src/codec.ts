@@ -60,19 +60,6 @@ function hasKeys(value: Record<string, unknown>, expected: readonly string[]): b
   return true
 }
 
-/** Reports whether one string contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates one decimal signed int64 carrier without precision loss. */
 export function decimal(value: unknown, allowZero: boolean, operation: EtcdStoreOperation): string {
   if (typeof value !== "string" || !/^-?(?:0|[1-9][0-9]*)$/.test(value)) {
@@ -185,7 +172,7 @@ function decodeText(value: unknown, maximumBytes: number, operation: EtcdStoreOp
 
 /** Validates one Store key or prefix against etcd provider bounds. */
 export function storeKey(value: string, allowEmpty: boolean): string {
-  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !isWellFormed(value)) {
+  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new TypeError("etcd Store key must be a well-formed string")
   }
   if (encoder.encode(value).byteLength > maximumKeyBytes) {
@@ -226,7 +213,7 @@ function decodeMetadata(
   const entries: [string, string][] = []
   for (const key of Object.keys(value)) {
     const item = own(value, key)
-    if (!isWellFormed(key) || typeof item !== "string" || !isWellFormed(item)) {
+    if (!key.isWellFormed() || typeof item !== "string" || !item.isWellFormed()) {
       throw newEtcdStoreProtocolError(operation)
     }
     entries.push([key, item])
@@ -261,7 +248,7 @@ function decodePayload(
     candidate.version !== 1 ||
     typeof marker !== "string" ||
     marker.length === 0 ||
-    !isWellFormed(marker) ||
+    !marker.isWellFormed() ||
     (expiresAt !== null &&
       (typeof expiresAt !== "number" || !Number.isSafeInteger(expiresAt) || expiresAt < 0)) ||
     (expiresAt === null) !== (lease === "0")
@@ -350,7 +337,7 @@ export function decodeCursor(value: string, prefix: string): EtcdCursor {
     candidate.prefix !== prefix ||
     typeof candidate.lastKey !== "string" ||
     candidate.lastKey.length === 0 ||
-    !isWellFormed(candidate.lastKey) ||
+    !candidate.lastKey.isWellFormed() ||
     typeof candidate.revision !== "string"
   ) {
     throw new TypeError("etcd Store cursor is invalid")

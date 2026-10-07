@@ -2,7 +2,7 @@
 
 这是一条从 0 到 1 的引导项目路径，通过真实业务不变量（无论请求从哪里来都必须保持的规则）学习 go-like，而不是再做一个泛化 Todo list。页面描述目标结构和可执行 checkpoint，不声称目标目录已经作为可复制运行的完整应用提交。项目是一个诊所预约服务，包含进程内 policy service（负责校验预约规则的内部服务）、作为权威来源的预约 repository、可丢弃的 availability cache、health endpoints，以及一个明确的 application lifecycle。
 
-仓库里已经有 `examples/healthcare-appointments`，本指南以它为起点。它当前使用 raw JSON `Message` 处理 policy service。下面的 typed `Endpoint` 和 `Struct` 版本，是基于当前 public exports 写出的升级路径；本次文档阶段没有把它加入示例。描述验证结果时要把这两件事分开。
+仓库里已经有 `examples/healthcare-appointments`，本指南以它为起点。它的 policy service 使用 `defineService("appointment-policy.v1")` 的 `check`、`withEndpoint("memory://appointment-policy.v1")`，以及 `serviceError(..., 409)`。下面的片段与该示例一致。
 
 ## 业务不变量
 
@@ -44,7 +44,7 @@ examples/healthcare-appointments/
 |-- README.md
 |-- src/
 |   |-- service.ts
-|   |-- transport.ts      # current raw JSON policy boundary
+|   |-- transport.ts      # defineService appointment-policy.v1
 |   |-- http.ts
 |   `-- main.ts
 `-- test/main.test.ts
@@ -175,15 +175,15 @@ test("rejects an overlapping active slot", () => {
 
 ## M1：一个 typed internal policy service
 
-typed internal contract 使用 `@go-like/struct` 和 `@go-like/transport`。这是 unary Message 边界上的 runtime validation，不是 IDL 或 generated RPC service。
+typed internal contract 使用 `@go-like/struct` 和 `@go-like/transport` 的 `defineService`。这是 JSON Fetch body 上的 runtime Struct validation，不是 IDL 或 generated Protobuf service。
 
 ### `src/contract.ts`
 
 ```ts
-import { struct, type Infer } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
 
-const CheckRequest = struct.object({
+const appointmentPolicyCommand = struct.object({
   appointmentId: struct.string(),
   doctorId: struct.string(),
   patientId: struct.string(),
@@ -191,72 +191,107 @@ const CheckRequest = struct.object({
   endsAt: struct.number()
 })
 
-const CheckResponse = struct.object({
-  allowed: struct.boolean()
+const appointmentPolicyDecision = struct.object({
+  allowed: struct.literal(true)
 })
 
-export type CheckRequest = Infer<typeof CheckRequest>
-export type CheckResponse = Infer<typeof CheckResponse>
-
-export const checkAppointment = endpoint(
-  "appointment-policy",
-  "AppointmentPolicy.Check",
-  CheckRequest,
-  CheckResponse
-)
+export const appointmentPolicy = defineService("appointment-policy.v1", {
+  check: {
+    request: appointmentPolicyCommand,
+    response: appointmentPolicyDecision
+  }
+})
 ```
 
-route tokens 使用可见 ASCII，并且不能包含 `/` 或 `*`。`Endpoint` 包含 request 和 response Struct 实例，以及两个 route token。它不描述网络地址，也不代表生成式 client。
+路由 token 匹配 `^[A-Za-z0-9._~-]+$`（URL unreserved），且不能恰好是 `.` 或 `..`。`defineService` 的服务名和每个 endpoint 键组成 URL 路径 `/<service>/<endpoint>`。它们不是网络地址。节点地址由 `withEndpoint` 提供。
 
 ### `src/transport.ts`
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
-import { checkAppointment, type CheckRequest, type CheckResponse } from "./contract"
+import { appointmentPolicy } from "./contract"
 
-const policyAddress = "memory://appointment-policy"
+const policyAddress = "memory://appointment-policy.v1"
 
 export interface AppointmentPolicy {
   readonly server: Server
-  validate(ctx: Context, request: CheckRequest): Promise<CheckResponse>
+  validate(
+    ctx: Context,
+    command: {
+      readonly appointmentId: string
+      readonly doctorId: string
+      readonly patientId: string
+      readonly startsAt: number
+      readonly endsAt: number
+    }
+  ): Promise<void>
   close(ctx: Context): Promise<void>
 }
 
 export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
   const transport = newMemoryTransport()
-  const client = newClient(withTransport(transport), withAddress(policyAddress))
   const server = newServer(serverTransport(transport), address(policyAddress))
-  server.registerHandler(checkAppointment, (_ctx, request) => {
-    if (request.endsAt - request.startsAt > maximumDurationMs) {
-      throw new Error("appointment duration exceeds policy")
+  appointmentPolicy.registerHandler(server, {
+    check(_ctx, command) {
+      if (command.endsAt - command.startsAt > maximumDurationMs) {
+        throw serviceError(
+          "appointment_policy_rejected",
+          "appointment duration exceeds policy",
+          409
+        )
+      }
+      return { allowed: true }
     }
-    return { allowed: true }
   })
-
-  return Object.freeze({
+  const client = newClient(withTransport(transport), withEndpoint(policyAddress))
+  const caller = appointmentPolicy.newClient(client)
+  const policy: AppointmentPolicy = {
     server,
-    async validate(ctx: Context, request: CheckRequest): Promise<CheckResponse> {
-      return await client.call(ctx, checkAppointment, request)
+    async validate(ctx, command) {
+      await caller.check(ctx, command)
     },
-    close(ctx: Context): Promise<void> {
+    close(ctx) {
       return client.close(ctx)
     }
-  })
+  }
+  return Object.freeze(policy)
 }
 ```
 
-当前已提交的示例使用 raw `Message` policy handler，以及 status 为 `409` 的 `serviceError(...)`。这是有效的低层边界。上面的 typed 版本改变的是 request 和 response codec，不是核心所有权模型：一个 Memory Transport 实例、一个内部 Server、一个 Client，以及显式 close。
+已提交的示例用 `appointmentPolicy.registerHandler` 登记 `check`，超时预约以 `serviceError(..., 409)` 拒绝。所有权不变：一个 Memory Transport 实例、一个内部 Server、一个 Client，以及对该 Client 的显式 close。
 
 ### 继续传递 Context
 
 预约 use case 应该把同一个 request Context 传给 policy Client 和 repository：
 
 ```ts
-async function validatedBook(ctx: Context, command: CheckRequest): Promise<Appointment> {
+import type { Context } from "@go-like/context"
+
+interface BookCommand {
+  readonly appointmentId: string
+  readonly doctorId: string
+  readonly patientId: string
+  readonly startsAt: number
+  readonly endsAt: number
+}
+
+interface Appointment {
+  readonly id: string
+}
+
+declare const policy: {
+  validate(ctx: Context, command: BookCommand): Promise<void>
+}
+declare const repository: {
+  book(ctx: Context, command: BookCommand): Promise<Appointment>
+}
+
+async function validatedBook(ctx: Context, command: BookCommand): Promise<Appointment> {
   await policy.validate(ctx, command)
   return repository.book(ctx, command)
 }

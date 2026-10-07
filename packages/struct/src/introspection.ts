@@ -1,15 +1,19 @@
 import { encodeValue } from "./encode"
-import { issue, StructError } from "./errors"
+import {
+  callStackStructError,
+  isCallStackOverflow,
+  issue,
+  runWithErrorMap,
+  StructError,
+  type ErrorMap
+} from "./errors"
 import { resolveStructFields } from "./fields"
 import { isStruct } from "./guards"
-import { parseValue, safeZeroValue } from "./parse"
+import { parseRootValue } from "./parse"
 import { assertStruct } from "./shape"
 import { DEFINITION } from "./symbols"
-import type { ObjectStruct, ObjectShape, ParseTuple, RuntimeStruct, StructLike } from "./types"
-import { assertPortableValueGraph, portableValueGraphError } from "./value-graph"
-
-export { isStruct } from "./guards"
-export { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "./value-graph"
+import type { ObjectStruct, ObjectShape, ParseResult, RuntimeStruct, StructLike } from "./types"
+import { assertPortableValueGraph, portableValueGraphError, withEncodeGraph } from "./value-graph"
 
 export interface StructField {
   readonly alias: string | undefined
@@ -20,6 +24,9 @@ export interface StructField {
 export function isObjectStruct(value: unknown): value is ObjectStruct<ObjectShape> {
   return isStruct(value) && (value as RuntimeStruct)[DEFINITION].kind === "object"
 }
+
+export { isStruct } from "./guards"
+export { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "./value-graph"
 
 export function getStructFields(
   struct: StructLike<unknown, unknown, boolean>
@@ -48,38 +55,55 @@ export function encodeStructValue(
 ): unknown {
   assertStruct(struct, "struct")
   assertPortableValueGraph(value)
-  return encodeValue(struct as unknown as RuntimeStruct, value)
+  try {
+    return withEncodeGraph(value, () => encodeValue(struct as unknown as RuntimeStruct, value))
+  } catch (error) {
+    if (isCallStackOverflow(error)) throw callStackStructError(value)
+    throw error
+  }
 }
 
+/** Parses one value, stopping at the first issue, and returns `[error, value]`. */
 export function parseStructTuple<S extends StructLike<unknown, unknown, boolean>>(
   struct: S,
-  value: unknown
-): ParseTuple<S["_struct"]["output"]> {
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap }
+): ParseResult<S["_struct"]["output"]> {
   assertStruct(struct, "struct")
   const runtime = struct as unknown as RuntimeStruct
-  const graphError = portableValueGraphError(value)
-  if (graphError) {
-    return [
-      new StructError([issue([], "custom", "safe struct value graph", value, graphError)]),
-      safeZeroValue(runtime) as unknown as S["_struct"]["output"]
-    ]
-  }
-  const result = parseValue(runtime, value, [], "value")
-  if (result.ok) {
-    return [null, result.value as unknown as S["_struct"]["output"]]
-  }
-  return [
-    new StructError(result.issues),
-    safeZeroValue(runtime) as unknown as S["_struct"]["output"]
-  ]
+  return runWithErrorMap(options?.errorMap, () => {
+    const graphError = portableValueGraphError(value)
+    if (graphError) {
+      return [
+        new StructError([issue([], "custom", "safe struct value graph", value, graphError)]),
+        undefined
+      ]
+    }
+    try {
+      const result = parseRootValue(runtime, value, "value", options?.aliases === true)
+      if (result.ok) {
+        return [null, result.value as unknown as S["_struct"]["output"]]
+      }
+      return [new StructError([result.issue]), undefined]
+    } catch (error) {
+      if (error instanceof StructError) return [error, undefined]
+      if (isCallStackOverflow(error)) return [callStackStructError(value), undefined]
+      throw error
+    }
+  })
 }
 
 export function parseStructValue(
   struct: StructLike<unknown, unknown, boolean>,
-  value: unknown
+  value: unknown,
+  options?: { useAliases?: boolean }
 ): unknown {
   assertStruct(struct, "struct")
-  const [error, output] = parseStructTuple(struct, value)
+  const [error, output] = parseStructTuple(
+    struct,
+    value,
+    options?.useAliases === true ? { aliases: true } : undefined
+  )
   if (error) {
     throw error
   }

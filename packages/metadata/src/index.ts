@@ -17,6 +17,7 @@ export interface PropagationOptions {
   readonly prefix?: readonly string[]
 }
 
+/** Marks snapshots created here: each has a frozen, sorted record whose value arrays are frozen. */
 const MetadataBrand = new WeakSet<object>()
 const EmptyValues: readonly string[] = Object.freeze([])
 const clientContextKey = Object.freeze({})
@@ -36,22 +37,9 @@ function isRecord(value: unknown): value is object {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-/** Returns whether value contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates and lower-cases one provider-neutral metadata key. */
 function normalizeKey(value: unknown): string {
-  if (typeof value !== "string" || value.length === 0 || !isWellFormed(value)) {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
     throw new TypeError("metadata key must be a non-empty well-formed string")
   }
   return value.toLowerCase()
@@ -59,7 +47,7 @@ function normalizeKey(value: unknown): string {
 
 /** Validates one provider-neutral metadata value. */
 function metadataValue(value: unknown): string {
-  if (typeof value !== "string" || !isWellFormed(value)) {
+  if (typeof value !== "string" || !value.isWellFormed()) {
     throw new TypeError("metadata value must be a well-formed string")
   }
   return value
@@ -172,7 +160,7 @@ function contextMetadata(ctx: Context, key: object): Metadata | null {
 
 /** Validates and lower-cases one explicit propagation rule. */
 function propagationRule(value: unknown, kind: "exact" | "prefix"): string {
-  if (typeof value !== "string" || value.length === 0 || !isWellFormed(value)) {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
     throw new TypeError(`metadata propagation ${kind} rule must be a non-empty well-formed string`)
   }
   return value.toLowerCase()
@@ -245,8 +233,14 @@ export function newMetadata(input: MetadataInput = Object.freeze({})): Metadata 
   return freezeBuilder(builderFromInput(input))
 }
 
-/** Returns a detached immutable copy of metadata. */
+/** Returns an immutable copy; only package-created snapshots reuse their frozen value arrays. */
 export function clone(metadata: Metadata): Metadata {
+  const candidate: unknown = metadata
+  if (isStoredMetadata(candidate)) {
+    const copy: Metadata = Object.freeze({ ...candidate })
+    MetadataBrand.add(copy)
+    return copy
+  }
   return freezeBuilder(builderFromMetadata(metadata))
 }
 
@@ -257,7 +251,9 @@ export function get(metadata: Metadata, key: string): string | null {
 
 /** Returns every ordered value for key, or a shared empty immutable array. */
 export function values(metadata: Metadata, key: string): readonly string[] {
-  return validated(metadata)[normalizeKey(key)] ?? EmptyValues
+  const snapshot = validated(metadata)
+  const name = normalizeKey(key)
+  return Object.hasOwn(snapshot, name) ? (snapshot[name] ?? EmptyValues) : EmptyValues
 }
 
 /** Returns normalized keys in deterministic order. */

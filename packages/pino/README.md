@@ -52,8 +52,9 @@ const brokerWithLogs = logBroker(broker, logger)
 `^[A-Z0-9_.-]{1,64}$` 的 `errorCode`。非法、过长或读取失败的字段会被省略。成功与取消使用 Pino
 `info`，失败使用 Pino `error`。操作名保持有限边界：
 
-- Client 和内部 Server：`service/endpoint`；Server 只读取 `Go-Like-Service` 与
-  `Go-Like-Endpoint` 保留路由头。
+- Client 和内部 Server：`service/endpoint`。Client 读 `CallRequest.service` 与 `CallRequest.endpoint`；
+  Server 读 `TransportInfo.operation()`。路由不使用 `Go-Like-Service` 或 `Go-Like-Endpoint` 头。
+  服务端流在 response body 结束时记录，并增加 `messageCount` 与 `handshakeMs`。
 - Web：HTTP method，不包含 URL 或 path。
 - Broker：`publish topic` 或 `consume topic`。
 

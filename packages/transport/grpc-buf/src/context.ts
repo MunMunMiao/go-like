@@ -87,7 +87,8 @@ export function fromHandlerContext(rpc: HandlerContext): Context {
         responseValues["set-cookie"] = responseCookies
       }
       return newMetadata(responseValues)
-    }
+    },
+    peerIdentity: () => null
   }
   const base = Object.freeze({
     deadline: () =>

@@ -1,16 +1,15 @@
 import type { Context } from "@go-like/context"
 
 import type {
-  AcceptHandler,
+  Client,
   DialOption,
   DialOptions,
   Listener,
   ListenOption,
   ListenOptions,
-  Message,
   Options,
-  Socket,
-  Transport
+  Transport,
+  TransportHandler
 } from "../src/index"
 import type { TransportConformanceFaultHarness } from "../src/testing"
 
@@ -35,17 +34,16 @@ type TransportListenParameters = Assert<
     [ctx: Context, address: string, ...options: readonly ListenOption[]]
   >
 >
-type SocketRecvParameters = Assert<Equal<Parameters<Socket["recv"]>, [ctx: Context]>>
-type SocketSendParameters = Assert<
-  Equal<Parameters<Socket["send"]>, [ctx: Context, message: Message]>
+type ClientFetchParameters = Assert<
+  Equal<Parameters<Client["fetch"]>, [ctx: Context, request: Request]>
 >
-type SocketCloseParameters = Assert<Equal<Parameters<Socket["close"]>, [ctx: Context]>>
+type ClientCloseParameters = Assert<Equal<Parameters<Client["close"]>, [ctx: Context]>>
 type ListenerCloseParameters = Assert<Equal<Parameters<Listener["close"]>, [ctx: Context]>>
-type ListenerAcceptParameters = Assert<
-  Equal<Parameters<Listener["accept"]>, [ctx: Context, handler: AcceptHandler]>
+type ListenerServeParameters = Assert<
+  Equal<Parameters<Listener["serve"]>, [ctx: Context, handler: TransportHandler]>
 >
-type AcceptHandlerParameters = Assert<
-  Equal<Parameters<AcceptHandler>, [ctx: Context, socket: Socket]>
+type TransportHandlerParameters = Assert<
+  Equal<Parameters<TransportHandler>, [ctx: Context, request: Request]>
 >
 type FaultHarnessParameters = Assert<
   Equal<
@@ -60,11 +58,10 @@ export type ContextBoundaryProof = readonly [
   ListenOptionsHaveNoHiddenContext,
   TransportDialParameters,
   TransportListenParameters,
-  SocketRecvParameters,
-  SocketSendParameters,
-  SocketCloseParameters,
+  ClientFetchParameters,
+  ClientCloseParameters,
   ListenerCloseParameters,
-  ListenerAcceptParameters,
-  AcceptHandlerParameters,
+  ListenerServeParameters,
+  TransportHandlerParameters,
   FaultHarnessParameters
 ]

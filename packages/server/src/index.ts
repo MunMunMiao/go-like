@@ -1,4 +1,12 @@
-import { background, canceled, cause, withCancelCause, type Context } from "@go-like/context"
+import {
+  background,
+  canceled,
+  cause,
+  withCancelCause,
+  withDeadline,
+  type CancelFunc,
+  type Context
+} from "@go-like/context"
 import type { Endpointer, Server as LifecycleServer } from "@go-like/core"
 import { waitForContext } from "@go-like/core/lifecycle"
 import { newServerContext } from "@go-like/metadata"
@@ -7,36 +15,30 @@ import type { Infer, Struct } from "@go-like/struct"
 import {
   endpoint as endpointContract,
   isServiceError,
+  observeResponseBody,
   serviceError,
-  type AcceptHandler,
   type Endpoint,
   type ListenOption,
   type Listener,
-  type Message,
-  type Socket,
-  type Transport
+  type Transport,
+  type TransportHandler
 } from "@go-like/transport"
-import {
-  contentType as contentTypeHeader,
-  endpoint as endpointHeader,
-  metadata as metadataHeader,
-  method as methodHeader,
-  request as serviceHeader,
-  target as targetHeader
-} from "@go-like/transport/headers"
+import { metadata as metadataHeader, timeout as timeoutHeader } from "@go-like/transport/headers"
 import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@go-like/transport/json"
 import {
   decodeMetadataHeader,
-  encodeServiceError,
   internalServiceError,
-  snapshotMessage
+  serviceErrorResponse
 } from "@go-like/transport/provider"
 
+import { maxSendMessageBytesValue, streamKeepAliveValue, typedStreamHandler } from "./stream"
+
 const DefaultAddress = "127.0.0.1:0"
-const HTTPCarrierStatusHeader = "Go-Like-HTTP-Status"
+const RouteTokenPattern = /^[A-Za-z0-9._~-]+$/
+const TimeoutHeaderPattern = /^(?:0|[1-9][0-9]*)$/
 
 /** Handles one internal unary request. */
-export type Handler = (ctx: Context, request: Message) => Message | Promise<Message>
+export type Handler = (ctx: Context, request: Request) => Response | Promise<Response>
 
 /** Handles one typed internal unary request. */
 export type TypedHandler<Request extends Struct, Response extends Struct> = (
@@ -65,19 +67,37 @@ export interface ServerOptions {
   readonly operationMiddleware: ReadonlyMap<string, readonly Middleware[]>
   readonly listenOptions: readonly ListenOption[]
   readonly httpRoutes: readonly HTTPRoute[]
+  /** Idle SSE comment interval in milliseconds. Zero sends only the initial comment. */
+  readonly streamKeepAliveMs: number
+  /** Maximum UTF-8 size of one encoded SSE event, including its framing. */
+  readonly maxSendMessageBytes: number
 }
 
 /** Applies one Go-style server option. */
 export type ServerOption = (options: ServerOptions) => ServerOptions
 
+/** One typed endpoint binding installed by a single batch registration. */
+export interface HandlerRegistration {
+  readonly endpoint: Endpoint
+  readonly handler: (ctx: Context, request: unknown) => unknown
+}
+
 /** Registers raw or typed handlers before the Server lifecycle begins. */
 export interface HandlerRegistrar {
   registerHandler<Request extends Struct, Response extends Struct>(
-    endpoint: Endpoint<Request, Response>,
+    endpoint: Endpoint<Request, Response, false>,
     handler: TypedHandler<Request, Response>
   ): void
 
+  registerHandler<Request extends Struct, Response extends Struct>(
+    endpoint: Endpoint<Request, Response, true>,
+    handler: (ctx: Context, request: Infer<Request>) => AsyncIterable<Infer<Response>>
+  ): void
+
   registerHandler(service: string, endpoint: string, handler: Handler): void
+
+  /** Installs every typed handler only after the whole list validates. */
+  registerHandlers(handlers: readonly HandlerRegistration[]): void
 }
 
 /** Runs one internal transport listener under the application lifecycle. */
@@ -145,15 +165,17 @@ function advertiseValue(value: unknown): string {
   return selected
 }
 
-/** Reports whether a value is one canonical service or endpoint route token. */
+/** Reports whether a value is one URL-unreserved service or endpoint route token. */
 function isRouteToken(value: unknown): value is string {
-  return typeof value === "string" && /^[\x21-\x7e]+$/u.test(value) && !/[/*]/u.test(value)
+  return (
+    typeof value === "string" && RouteTokenPattern.test(value) && value !== "." && value !== ".."
+  )
 }
 
 /** Validates one unambiguous service or endpoint route token. */
 function routeToken(value: unknown, field: string): string {
   if (!isRouteToken(value)) {
-    throw new TypeError(`server ${field} must be a visible ASCII route token`)
+    throw new TypeError(`server ${field} must be a URL unreserved route token`)
   }
   return value
 }
@@ -265,8 +287,14 @@ function snapshotHttpRoutes(value: unknown): readonly HTTPRoute[] {
   return Object.freeze(routes)
 }
 
+/** Accepts a construction snapshot whose stream limits may still be defaulted. */
+type ServerOptionsDraft = Omit<ServerOptions, "streamKeepAliveMs" | "maxSendMessageBytes"> & {
+  readonly streamKeepAliveMs?: number
+  readonly maxSendMessageBytes?: number
+}
+
 /** Returns a defensive immutable server option snapshot. */
-function snapshotOptions(value: ServerOptions): ServerOptions {
+function snapshotOptions(value: ServerOptionsDraft): ServerOptions {
   const middlewareValues: Middleware[] = []
   for (const wrapper of value.middleware) middlewareValues.push(middlewareValue(wrapper))
   const operationMiddleware = new Map<string, readonly Middleware[]>()
@@ -287,7 +315,9 @@ function snapshotOptions(value: ServerOptions): ServerOptions {
     middleware: Object.freeze(middlewareValues),
     operationMiddleware,
     listenOptions: Object.freeze(listenValues),
-    httpRoutes: snapshotHttpRoutes(value.httpRoutes)
+    httpRoutes: snapshotHttpRoutes(value.httpRoutes),
+    streamKeepAliveMs: streamKeepAliveValue(value.streamKeepAliveMs),
+    maxSendMessageBytes: maxSendMessageBytesValue(value.maxSendMessageBytes)
   })
 }
 
@@ -328,7 +358,9 @@ export function transport(value: Transport): ServerOption {
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyTransport
@@ -346,7 +378,9 @@ export function address(value: string): ServerOption {
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyAddress
@@ -368,21 +402,12 @@ export function advertise(value: string): ServerOption {
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyAdvertise
-}
-
-/** Reads one case-insensitive Content-Type header and rejects duplicates. */
-function messageContentType(header: Readonly<Record<string, string>>): string | null {
-  let found: string | null = null
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() !== contentTypeHeader.toLowerCase()) continue
-    if (found !== null) throw new TypeError("duplicate Content-Type header")
-    found = header[key] ?? ""
-  }
-  return found
 }
 
 /** Returns one comparable media type without optional parameters. */
@@ -390,10 +415,16 @@ function mediaType(value: string): string {
   return (value.split(";", 1)[0] ?? "").trim().toLowerCase()
 }
 
-/** Adapts one typed endpoint handler to the raw Message boundary. */
-function typedHandler<Request extends Struct, Response extends Struct>(
-  contract: Endpoint<Request, Response>,
-  value: TypedHandler<Request, Response>
+/** Reports whether the request media type is JSON, ignoring parameters. */
+function jsonRequest(request: Request): boolean {
+  const raw = request.headers.get("content-type")
+  return raw !== null && mediaType(raw) === jsonContentType
+}
+
+/** Adapts one typed endpoint handler to the raw Fetch boundary. */
+function typedHandler<RequestStruct extends Struct, ResponseStruct extends Struct>(
+  contract: Endpoint<RequestStruct, ResponseStruct>,
+  value: TypedHandler<RequestStruct, ResponseStruct>
 ): Handler {
   const selected = endpointContract(
     contract.service,
@@ -402,26 +433,23 @@ function typedHandler<Request extends Struct, Response extends Struct>(
     contract.response
   )
 
-  /** Decodes one typed request and encodes its typed response. */
-  async function handle(ctx: Context, request: Message): Promise<Message> {
-    let input: Infer<Request>
+  /** Decodes one typed JSON request and encodes its typed JSON response. */
+  async function handle(ctx: Context, request: Request): Promise<Response> {
+    let input: Infer<RequestStruct>
     try {
-      const contentType = messageContentType(request.header)
-      if (contentType === null || mediaType(contentType) !== jsonContentType) {
-        throw new TypeError("unexpected request Content-Type")
-      }
-      input = decodeJsonBody(selected.request, request.body)
-    } catch {
+      if (!jsonRequest(request)) throw new TypeError("unexpected request Content-Type")
+      input = decodeJsonBody(selected.request, new Uint8Array(await request.arrayBuffer()))
+    } catch (error) {
+      if (isServiceError(error)) throw error
       throw serviceError("invalid_request", "invalid request body", 400)
     }
 
     const response = await value(ctx, input)
     try {
-      const body = encodeJsonBody(selected.response, response)
-      return {
-        header: { [contentTypeHeader]: jsonContentType },
-        body
-      }
+      return new Response(encodeJsonBody(selected.response, response) as Uint8Array<ArrayBuffer>, {
+        status: 200,
+        headers: { "content-type": jsonContentType }
+      })
     } catch {
       throw serviceError("internal", "internal service error", 500)
     }
@@ -445,7 +473,9 @@ export function middleware(
       middleware: Object.freeze(options.middleware.concat(selected)),
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyMiddleware
@@ -468,7 +498,7 @@ export function rateLimitMiddleware(limiter: RateLimiter): Middleware {
     const selected = handlerValue(next)
 
     /** Admits one request or rejects it with the canonical service error. */
-    async function limited(ctx: Context, request: Message): Promise<Message> {
+    async function limited(ctx: Context, request: Request): Promise<Response> {
       const decision = limiter.allow(ctx)
       if (!decision.allowed) {
         throw serviceError("rate_limited", "rate limit exceeded", 429, {
@@ -501,7 +531,9 @@ export function use(
       middleware: options.middleware,
       operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyUse
@@ -525,7 +557,9 @@ export function listenOption(
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: Object.freeze(options.listenOptions.concat(selected)),
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyListenOptions
@@ -557,55 +591,52 @@ export function httpRoute(
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: options.listenOptions,
-      httpRoutes: Object.freeze(options.httpRoutes.concat(selected))
+      httpRoutes: Object.freeze(options.httpRoutes.concat(selected)),
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     })
   }
   return applyHttpRoute
 }
 
-/** Reads one routing header without requiring it to be present. */
-function optionalRouteHeader(
-  header: Readonly<Record<string, string>>,
-  name: string
-): string | null {
-  const expected = name.toLowerCase()
-  let found: string | null = null
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() !== expected) continue
-    if (found !== null) throw serviceError("invalid_request", `duplicate ${name} header`, 400)
-    found = header[key] ?? ""
+/** Sets the idle SSE comment interval. Zero keeps only the initial comment. */
+export function streamKeepAlive(intervalMs: number): ServerOption {
+  const selected = streamKeepAliveValue(intervalMs)
+  /** Replaces the stream heartbeat interval. */
+  function applyStreamKeepAlive(options: ServerOptions): ServerOptions {
+    return snapshotOptions({
+      address: options.address,
+      advertise: options.advertise,
+      transport: options.transport,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: selected,
+      maxSendMessageBytes: options.maxSendMessageBytes
+    })
   }
-  if (found === null || found.length === 0) return null
-  return found
+  return applyStreamKeepAlive
 }
 
-/** Reads one required routing header. */
-function routeHeader(header: Readonly<Record<string, string>>, name: string): string {
-  const found = optionalRouteHeader(header, name)
-  if (found === null) throw serviceError("invalid_request", `missing ${name} header`, 400)
-  try {
-    return routeToken(found, name)
-  } catch {
-    throw serviceError("invalid_request", `invalid ${name} header`, 400)
+/** Sets the maximum UTF-8 size of one encoded SSE event. */
+export function maxSendMessageBytes(bytes: number): ServerOption {
+  const selected = maxSendMessageBytesValue(bytes)
+  /** Replaces the per-event send ceiling. */
+  function applyMaxSendMessageBytes(options: ServerOptions): ServerOptions {
+    return snapshotOptions({
+      address: options.address,
+      advertise: options.advertise,
+      transport: options.transport,
+      middleware: options.middleware,
+      operationMiddleware: options.operationMiddleware,
+      listenOptions: options.listenOptions,
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: selected
+    })
   }
-}
-
-/** Overwrites one header name, dropping case variants so routeHeader cannot see duplicates. */
-function writeHeader(header: Record<string, string>, name: string, value: string): void {
-  const expected = name.toLowerCase()
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() === expected) delete header[key]
-  }
-  header[name] = value
-}
-
-/** Returns the pathname of one Go-Like-Target value without query or fragment. */
-function requestPathname(value: string): string {
-  try {
-    return new URL(value, "http://go-like.invalid").pathname
-  } catch {
-    return value
-  }
+  return applyMaxSendMessageBytes
 }
 
 /** Finds one exact method+path route, or whether the pathname exists with another method. */
@@ -623,73 +654,73 @@ function lookupHttpRoute(
   return pathMatched ? "method" : null
 }
 
-/** Encodes one non-envelope HTTP carrier failure without the unary ServiceError body. */
-function httpCarrierMessage(status: number, body: string): Message {
-  return snapshotMessage({
-    header: {
-      [HTTPCarrierStatusHeader]: String(status),
-      [contentTypeHeader]: "text/plain; charset=utf-8"
-    },
-    body: new TextEncoder().encode(body)
-  })
+/** Lists the HTTP methods registered for one pathname, in declaration order. */
+function allowedMethods(path: string, routes: readonly HTTPRoute[]): string {
+  const methods: string[] = []
+  for (const route of routes) {
+    if (route.path === path && !methods.includes(route.method)) methods.push(route.method)
+  }
+  return methods.join(", ")
 }
 
-/** Copies the path-route success carrier onto one handler Message. */
-function withHttpCarrierStatus(message: Message, status: number): Message {
-  const header: Record<string, string> = { ...message.header }
-  writeHeader(header, HTTPCarrierStatusHeader, String(status))
-  return snapshotMessage({ header, body: message.body })
+/** Reads Go-Like-Timeout-Ms, or returns null when the caller set no deadline. */
+function timeoutMilliseconds(headers: Headers): number | null {
+  const value = headers.get(timeoutHeader)
+  if (value !== null && !TimeoutHeaderPattern.test(value)) {
+    throw serviceError("invalid_request", "invalid timeout header", 400)
+  }
+  if (value === null) return null
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw serviceError("invalid_request", "invalid timeout header", 400)
+  }
+  return parsed
 }
 
-/** Injects envelope routing headers from an exact httpRoute, or returns an HTTP carrier response. */
-function routeHttpRequest(
-  request: Message,
-  routes: readonly HTTPRoute[]
-):
-  | { readonly kind: "routed"; readonly request: Message; readonly successStatus: number | null }
-  | { readonly kind: "http-ok" }
-  | { readonly kind: "http-failure"; readonly status: number } {
-  if (optionalRouteHeader(request.header, serviceHeader) !== null) {
-    return { kind: "routed", request, successStatus: null }
-  }
-  const method = optionalRouteHeader(request.header, methodHeader)
-  const target = optionalRouteHeader(request.header, targetHeader)
-  if (method === null || target === null) {
-    return { kind: "routed", request, successStatus: null }
-  }
-  const token = method.toUpperCase()
-  const path = requestPathname(target)
-  const matched = lookupHttpRoute(token, path, routes)
-  if (matched === "method") return { kind: "http-failure", status: 405 }
-  if (matched === null) {
-    if ((token === "GET" || token === "HEAD") && path === "/healthz") {
-      return { kind: "http-ok" }
-    }
-    return { kind: "http-failure", status: 404 }
-  }
-  const header: Record<string, string> = { ...request.header }
-  writeHeader(header, serviceHeader, matched.service)
-  writeHeader(header, endpointHeader, matched.endpoint)
-  return {
-    kind: "routed",
-    request: snapshotMessage({ header, body: request.body }),
-    successStatus: matched.successStatus
-  }
-}
-
-/** Builds the request Context from the transport metadata header. */
-function requestContext(ctx: Context, request: Message): Context {
-  let value: string | null = null
-  for (const key of Object.keys(request.header)) {
-    if (key.toLowerCase() !== metadataHeader.toLowerCase()) continue
-    if (value !== null) throw serviceError("invalid_metadata", "duplicate metadata header", 400)
-    value = request.header[key] ?? ""
-  }
+/**
+ * Builds the request Context from metadata and the propagated deadline.
+ *
+ * cancel is non-null only when the Server must release the deadline itself: a cancelable ctx is
+ * canceled by Listener.serve once the Response body ends, which releases the deadline through
+ * parent propagation.
+ */
+function requestContext(
+  ctx: Context,
+  request: Request,
+  timeoutMs: number | null
+): { readonly ctx: Context; readonly cancel: CancelFunc | null } {
+  let next: Context
   try {
-    return newServerContext(ctx, decodeMetadataHeader(value))
+    next = newServerContext(ctx, decodeMetadataHeader(request.headers.get(metadataHeader)))
   } catch {
     throw serviceError("invalid_metadata", "invalid request metadata", 400)
   }
+  if (timeoutMs === null) return { ctx: next, cancel: null }
+  const [timed, cancel] = withDeadline(next, new Date(Date.now() + timeoutMs))
+  return { ctx: timed, cancel: ctx.done() === null ? cancel : null }
+}
+
+/** Returns one Fetch ServiceError response, optionally advertising Allow. */
+function errorResponse(failure: ReturnType<typeof serviceError>, allow?: string): Response {
+  const response = serviceErrorResponse(failure)
+  if (allow !== undefined) response.headers.set("allow", allow)
+  return response
+}
+
+/** Returns the canonical not-found ServiceError response. */
+function notFoundResponse(message = "not found"): Response {
+  return errorResponse(serviceError("not_found", message, 404))
+}
+
+/** Splits an internal RPC pathname into exactly two non-empty segments. */
+function rpcPath(path: string): readonly [string, string] | null {
+  const matched = /^\/([^/]+)\/([^/]+)$/.exec(path)
+  if (matched === null) return null
+  const service = matched[1]
+  const endpoint = matched[2]
+  if (service === undefined || endpoint === undefined) return null
+  if (!isRouteToken(service) || !isRouteToken(endpoint)) return null
+  return [service, endpoint]
 }
 
 /** Composes middleware around one handler. */
@@ -722,20 +753,36 @@ function middlewareFor(
   return selected
 }
 
-/** Encodes one safe service failure as a transport Message. */
-function failureMessage(value: unknown): Message {
-  const failure = isServiceError(value) ? value : internalServiceError()
-  const envelope = encodeServiceError("unary", failure)
-  return snapshotMessage({ header: envelope.header, body: envelope.body })
+/** Encodes one safe service failure as a Fetch response. */
+function failureResponse(value: unknown): Response {
+  return serviceErrorResponse(isServiceError(value) ? value : internalServiceError())
 }
 
-/** Creates the transport accept handler for one immutable route table. */
+/** Releases a deadline the transport cannot release once the delivered Response body ends. */
+function releaseDeadline(response: Response, cancel: CancelFunc | null): Response {
+  if (cancel === null) return response
+  return observeResponseBody(response, function ended(): void {
+    cancel()
+  })
+}
+
+/** Replaces a successful httpRoute status without reading the body twice. */
+function withSuccessStatus(response: Response, status: number): Response {
+  if (response.status < 200 || response.status > 299 || response.status === status) return response
+  return new Response(response.body, {
+    status,
+    statusText: response.statusText,
+    headers: response.headers
+  })
+}
+
+/** Creates the Fetch handler for one immutable route table. */
 function dispatcher(
   handlers: ReadonlyMap<string, ReadonlyMap<string, Handler>>,
   middlewareValues: readonly Middleware[],
   operationMiddleware: ReadonlyMap<string, readonly Middleware[]>,
   httpRoutes: readonly HTTPRoute[]
-): (ctx: Context, socket: Socket) => Promise<void> {
+): TransportHandler {
   const routes = new Map<string, ReadonlyMap<string, Handler>>()
   for (const [service, endpoints] of handlers) {
     const endpointHandlers = new Map<string, Handler>()
@@ -746,44 +793,85 @@ function dispatcher(
     routes.set(service, endpointHandlers)
   }
 
-  /** Dispatches one unary request and always sends one response. */
-  async function dispatch(ctx: Context, socket: Socket): Promise<void> {
-    const request = snapshotMessage(await socket.recv(ctx))
-    let response: Message
-    let httpPathRoute = false
+  /** Runs one registered endpoint and releases its deadline when the transport cannot. */
+  async function callEndpoint(
+    ctx: Context,
+    request: Request,
+    service: string,
+    endpoint: string,
+    successStatus: number | null,
+    timeoutMs: number | null
+  ): Promise<Response> {
+    const handle = routes.get(service)?.get(endpoint) as Handler
+    const opened = requestContext(ctx, request, timeoutMs)
     try {
-      const routed = routeHttpRequest(request, httpRoutes)
-      httpPathRoute = routed.kind !== "routed" || routed.successStatus !== null
-      if (routed.kind === "http-ok") {
-        response = httpCarrierMessage(200, "")
-      } else if (routed.kind === "http-failure") {
-        response = httpCarrierMessage(
-          routed.status,
-          routed.status === 405 ? "Method Not Allowed" : "Not Found"
-        )
-      } else {
-        const service = routeHeader(routed.request.header, serviceHeader)
-        const endpoint = routeHeader(routed.request.header, endpointHeader)
-        const handle = routes.get(service)?.get(endpoint)
-        if (handle === undefined) {
-          throw serviceError("not_found", `unknown service endpoint: ${service}/${endpoint}`, 404)
-        }
-        response = snapshotMessage(
-          await handle(requestContext(ctx, routed.request), routed.request)
-        )
-        if (routed.successStatus !== null) {
-          response = withHttpCarrierStatus(response, routed.successStatus)
-        }
-      }
+      const produced = await handle(opened.ctx, request)
+      if (!(produced instanceof Response)) throw internalServiceError()
+      const response =
+        successStatus === null ? produced : withSuccessStatus(produced, successStatus)
+      return releaseDeadline(response, opened.cancel)
     } catch (value) {
-      response = failureMessage(value)
-      if (httpPathRoute && isServiceError(value)) {
-        response = withHttpCarrierStatus(response, value.status)
-      }
+      return releaseDeadline(failureResponse(value), opened.cancel)
     }
-    await socket.send(ctx, response)
+  }
+
+  /** Dispatches one Fetch request by httpRoute, internal RPC path, health, then 404. */
+  async function dispatch(ctx: Context, request: Request): Promise<Response> {
+    try {
+      const timeoutMs = timeoutMilliseconds(request.headers)
+      const url = new URL(request.url)
+      const path = url.pathname
+      const method = request.method.toUpperCase()
+      const matched = lookupHttpRoute(method, path, httpRoutes)
+      if (typeof matched === "object" && matched !== null) {
+        return await callEndpoint(
+          ctx,
+          request,
+          matched.service,
+          matched.endpoint,
+          matched.successStatus,
+          timeoutMs
+        )
+      }
+      if (matched === "method") {
+        return errorResponse(
+          serviceError("method_not_allowed", "method not allowed", 405),
+          allowedMethods(path, httpRoutes)
+        )
+      }
+      const rpc = rpcPath(path)
+      if (rpc !== null) {
+        const [service, endpoint] = rpc
+        if (routes.get(service)?.has(endpoint) !== true) {
+          return notFoundResponse(`unknown service endpoint: ${service}/${endpoint}`)
+        }
+        if (method !== "POST") {
+          return errorResponse(
+            serviceError("method_not_allowed", "method not allowed", 405),
+            "POST"
+          )
+        }
+        if (!jsonRequest(request)) {
+          return errorResponse(serviceError("invalid_request", "invalid request content type", 400))
+        }
+        return await callEndpoint(ctx, request, service, endpoint, null, timeoutMs)
+      }
+      if ((method === "GET" || method === "HEAD") && path === "/healthz") {
+        return new Response(null, { status: 200 })
+      }
+      return notFoundResponse()
+    } catch (value) {
+      return failureResponse(value)
+    }
   }
   return dispatch
+}
+
+/** One handler held until a single or batch registration commits. */
+interface PreparedRegistration {
+  readonly serviceName: string
+  readonly endpointName: string
+  readonly handler: Handler
 }
 
 /** Creates one go-micro-style internal service Server. */
@@ -798,7 +886,7 @@ export function newServer(
   const selectedTransport = requiredTransport(options.transport)
   const registrations = new Map<string, Map<string, Handler>>()
   let sealed = false
-  let sealedDispatcher: AcceptHandler | null = null
+  let sealedDispatcher: TransportHandler | null = null
   let sealFailed = false
   let sealFailure: unknown
 
@@ -811,10 +899,16 @@ export function newServer(
   let started = false
   let stopping = false
 
-  /** Registers one typed endpoint contract. */
+  /** Registers one typed unary endpoint contract. */
   function registerHandler<Request extends Struct, Response extends Struct>(
-    contract: Endpoint<Request, Response>,
+    contract: Endpoint<Request, Response, false>,
     value: TypedHandler<Request, Response>
+  ): void
+
+  /** Registers one typed server-streaming endpoint contract. */
+  function registerHandler<Request extends Struct, Response extends Struct>(
+    contract: Endpoint<Request, Response, true>,
+    value: (ctx: Context, request: Infer<Request>) => AsyncIterable<Infer<Response>>
   ): void
 
   /** Registers one raw service endpoint. */
@@ -822,42 +916,160 @@ export function newServer(
 
   /** Validates and stores one typed or raw handler while registration remains open. */
   function registerHandler<Request extends Struct, Response extends Struct>(
-    serviceOrContract: string | Endpoint<Request, Response>,
-    endpointOrHandler: string | TypedHandler<Request, Response>,
+    serviceOrContract: string | Endpoint<Request, Response, boolean>,
+    endpointOrHandler:
+      | string
+      | TypedHandler<Request, Response>
+      | ((ctx: Context, request: Infer<Request>) => AsyncIterable<Infer<Response>>),
     value?: Handler
   ): void {
     if (sealed) throw new TypeError("server registration is sealed")
-    let serviceName: string
-    let endpointName: string
-    let selected: Handler
-    if (typeof serviceOrContract === "string") {
-      serviceName = routeToken(serviceOrContract, "service")
-      endpointName = routeToken(endpointOrHandler, "endpoint")
-      if (typeof value !== "function") throw new TypeError("server handler must be a function")
-      selected = handlerValue(value)
-    } else {
-      if (typeof endpointOrHandler !== "function") {
-        throw new TypeError("server typed handler must be a function")
-      }
-      const contract = endpointContract(
-        serviceOrContract.service,
-        serviceOrContract.endpoint,
-        serviceOrContract.request,
-        serviceOrContract.response
-      )
-      serviceName = contract.service
-      endpointName = contract.endpoint
-      selected = typedHandler(contract, endpointOrHandler)
+    const prepared =
+      typeof serviceOrContract === "string"
+        ? prepareRaw(serviceOrContract, endpointOrHandler, value)
+        : prepareTyped(
+            typeof serviceOrContract === "object" && serviceOrContract !== null
+              ? endpointFields(serviceOrContract)
+              : serviceOrContract,
+            endpointOrHandler
+          )
+    if (sealed) throw new TypeError("server registration is sealed")
+    rejectDuplicate(prepared.serviceName, prepared.endpointName)
+    commitRegistrations([prepared])
+  }
+
+  /** Installs every typed handler only after the whole list validates. */
+  function registerHandlers(handlers: readonly HandlerRegistration[]): void {
+    if (sealed) throw new TypeError("server registration is sealed")
+    if (!Array.isArray(handlers)) {
+      throw new TypeError("server handler registrations must be an array")
     }
-    let endpoints = registrations.get(serviceName)
-    if (endpoints?.has(endpointName) === true) {
+    const snapshots: Array<{ readonly endpoint: Endpoint; readonly handler: unknown }> = []
+    for (const entry of handlers) {
+      snapshots.push(registrationSnapshot(entry))
+    }
+    const prepared: PreparedRegistration[] = []
+    const pending = new Map<string, Set<string>>()
+    for (const binding of snapshots) {
+      const item = prepareTyped(binding.endpoint, binding.handler)
+      const names = pending.get(item.serviceName) ?? new Set<string>()
+      if (names.has(item.endpointName)) {
+        throw new TypeError(
+          `server handler is duplicated: ${item.serviceName}/${item.endpointName}`
+        )
+      }
+      names.add(item.endpointName)
+      pending.set(item.serviceName, names)
+      prepared.push(item)
+    }
+    if (sealed) throw new TypeError("server registration is sealed")
+    for (const item of prepared) {
+      rejectDuplicate(item.serviceName, item.endpointName)
+    }
+    commitRegistrations(prepared)
+  }
+
+  /** Validates one raw route and handler without touching the registry. */
+  function prepareRaw(
+    service: string,
+    endpointName: unknown,
+    value: unknown
+  ): PreparedRegistration {
+    return {
+      serviceName: routeToken(service, "service"),
+      endpointName: routeToken(endpointName, "endpoint"),
+      handler: handlerValue(value as Handler)
+    }
+  }
+
+  /** Validates one typed contract and adapts its handler without touching the registry. */
+  function prepareTyped<Request extends Struct, Response extends Struct>(
+    contract: Endpoint<Request, Response, boolean>,
+    value: unknown
+  ): PreparedRegistration {
+    if (typeof value !== "function") {
+      throw new TypeError("server typed handler must be a function")
+    }
+    if (contract.stream === true) {
+      const selected = endpointContract(
+        contract.service,
+        contract.endpoint,
+        contract.request,
+        contract.response,
+        true
+      )
+      return {
+        serviceName: selected.service,
+        endpointName: selected.endpoint,
+        handler: typedStreamHandler(
+          selected,
+          value as (ctx: Context, request: Infer<Request>) => unknown,
+          options.streamKeepAliveMs,
+          options.maxSendMessageBytes
+        )
+      }
+    }
+    const selected = endpointContract(
+      contract.service,
+      contract.endpoint,
+      contract.request,
+      contract.response
+    )
+    return {
+      serviceName: selected.service,
+      endpointName: selected.endpoint,
+      handler: typedHandler(selected, value as TypedHandler<Request, Response>)
+    }
+  }
+
+  /** Copies one batch entry so later validation does not re-read its getters. */
+  function registrationSnapshot(value: unknown): {
+    readonly endpoint: Endpoint
+    readonly handler: unknown
+  } {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new TypeError("server handler registration must be an object")
+    }
+    const endpointValue: unknown = Reflect.get(value, "endpoint")
+    if (
+      typeof endpointValue !== "object" ||
+      endpointValue === null ||
+      Array.isArray(endpointValue)
+    ) {
+      throw new TypeError("server handler registration endpoint must be an object")
+    }
+    const handler: unknown = Reflect.get(value, "handler")
+    return { endpoint: endpointFields(endpointValue), handler }
+  }
+
+  /** Copies endpoint contract fields into ordinary data properties. */
+  function endpointFields(value: object): Endpoint {
+    return {
+      service: Reflect.get(value, "service"),
+      endpoint: Reflect.get(value, "endpoint"),
+      request: Reflect.get(value, "request"),
+      response: Reflect.get(value, "response"),
+      stream: Reflect.get(value, "stream")
+    } as Endpoint
+  }
+
+  /** Rejects a route that is already installed. */
+  function rejectDuplicate(serviceName: string, endpointName: string): void {
+    if (registrations.get(serviceName)?.has(endpointName) === true) {
       throw new TypeError(`server handler is duplicated: ${serviceName}/${endpointName}`)
     }
-    if (endpoints === undefined) {
-      endpoints = new Map()
-      registrations.set(serviceName, endpoints)
+  }
+
+  /** Writes one fully validated batch into the registry. */
+  function commitRegistrations(prepared: readonly PreparedRegistration[]): void {
+    for (const item of prepared) {
+      let endpoints = registrations.get(item.serviceName)
+      if (endpoints === undefined) {
+        endpoints = new Map()
+        registrations.set(item.serviceName, endpoints)
+      }
+      endpoints.set(item.endpointName, item.handler)
     }
-    endpoints.set(endpointName, selected)
   }
 
   /** Returns the selected Transport protocol discriminator. */
@@ -870,7 +1082,7 @@ export function newServer(
   }
 
   /** Validates registration and composes exactly one terminal dispatcher or failure. */
-  function seal(): AcceptHandler {
+  function seal(): TransportHandler {
     if (sealedDispatcher !== null) return sealedDispatcher
     if (sealFailed) throw sealFailure
     sealed = true
@@ -994,7 +1206,7 @@ export function newServer(
       return
     }
     try {
-      await accepted.accept(ctx, dispatch)
+      await accepted.serve(ctx, dispatch)
     } finally {
       listener = null
     }
@@ -1032,6 +1244,7 @@ export function newServer(
     start,
     stop,
     registerHandler,
+    registerHandlers,
     protocol,
     endpoint,
     /** Returns the immutable construction snapshot. */

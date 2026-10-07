@@ -9,13 +9,10 @@ import { newTransportProtocolError } from "./errors"
 
 const WirePrefix = "v1."
 const MaximumMetadataHeaderBytes = 16_384
+const emptyMetadata: Metadata = newMetadata()
 
-/** Encodes one canonical Metadata snapshot into a portable ASCII header or null when empty. */
-export function encodeMetadataHeader(metadata: Metadata): string | null {
-  const keys = metadataKeys(metadata)
-  if (keys.length === 0) return null
-  const entries: [string, readonly string[]][] = []
-  for (const key of keys) entries.push([key, metadataValues(metadata, key)])
+/** Serializes ordered entries into the one canonical bounded ASCII header value. */
+function encodeEntries(entries: readonly [string, readonly string[]][]): string {
   const serialized = JSON.stringify(entries)
   if (typeof serialized !== "string") throw new TypeError("metadata could not be serialized")
   const encoded = `${WirePrefix}${encodeURIComponent(serialized)}`
@@ -23,6 +20,15 @@ export function encodeMetadataHeader(metadata: Metadata): string | null {
     throw new RangeError("encoded metadata header exceeds 16384 bytes")
   }
   return encoded
+}
+
+/** Encodes one canonical Metadata snapshot into a portable ASCII header or null when empty. */
+export function encodeMetadataHeader(metadata: Metadata): string | null {
+  const keys = metadataKeys(metadata)
+  if (keys.length === 0) return null
+  const entries: [string, readonly string[]][] = []
+  for (const key of keys) entries.push([key, metadataValues(metadata, key)])
+  return encodeEntries(entries)
 }
 
 /** Copies one parsed value array after validating its exact string-only shape. */
@@ -68,15 +74,19 @@ function decodePresentMetadataHeader(value: string): Metadata {
     entries.push([key, parsedValues(entry[1])])
   }
   const decoded = newMetadata(Object.fromEntries(entries))
-  if (encodeMetadataHeader(decoded) !== value) {
-    throw new TypeError("metadata wire header is not canonical")
+  const ordered = metadataKeys(decoded)
+  for (let index = 0; index < entries.length; index += 1) {
+    if (entries[index]?.[0] !== ordered[index]) {
+      throw new TypeError("metadata wire header is not canonical")
+    }
   }
+  if (encodeEntries(entries) !== value) throw new TypeError("metadata wire header is not canonical")
   return decoded
 }
 
-/** Decodes one canonical Metadata header, treating null as an empty snapshot. */
+/** Decodes one canonical Metadata header, treating null as the shared immutable empty snapshot. */
 export function decodeMetadataHeader(value: string | null): Metadata {
-  if (value === null) return newMetadata()
+  if (value === null) return emptyMetadata
   if (typeof value !== "string") throw new TypeError("metadata header must be a string or null")
   try {
     return decodePresentMetadataHeader(value)

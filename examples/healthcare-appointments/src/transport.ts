@@ -1,106 +1,31 @@
-import {
-  newClient,
-  withAddress,
-  withTransport,
-  type CallOption,
-  type Client
-} from "@go-like/client"
+import { newClient, withEndpoint, withTransport, type CallOption } from "@go-like/client"
 import type { Context } from "@go-like/context"
-import {
-  address,
-  newServer,
-  transport as serverTransport,
-  type Handler,
-  type HandlerRegistrar,
-  type Server
-} from "@go-like/server"
-import { serviceError, type Message } from "@go-like/transport"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
+import { serviceError } from "@go-like/transport"
 import { newMemoryTransport } from "@go-like/transport-memory"
+
+import { appointmentPolicy } from "./contract"
 import type { Appointment, BookAppointment, BookAppointmentCommand } from "./service"
 
-const Encoder = new TextEncoder()
-const Decoder = new TextDecoder("utf-8", { fatal: true })
-const PolicyServiceName = "appointment-policy"
-const PolicyEndpointName = "AppointmentPolicy.Check"
-const PolicyAddress = "memory://appointment-policy"
+const PolicyAddress = "memory://appointment-policy.v1"
+
+/** Validates one booking command against the internal appointment policy. */
 export type ValidateAppointmentPolicy = (
   ctx: Context,
   command: BookAppointmentCommand,
   ...options: readonly CallOption[]
 ) => Promise<void>
 
+/** Books one appointment after the policy call succeeds. */
 export type ValidatedBookAppointment = (
   ctx: Context,
   command: BookAppointmentCommand
 ) => Promise<Appointment>
 
+/** Owns the in-process appointment-policy Server and its validating caller. */
 export interface AppointmentPolicyService {
   readonly server: Server
   readonly validate: ValidateAppointmentPolicy
-}
-
-export interface AppointmentPolicyClient {
-  readonly validate: ValidateAppointmentPolicy
-}
-
-/** Registers the appointment-policy implementation on one Server owner. */
-export function registerAppointmentPolicyHandler(server: HandlerRegistrar, handler: Handler): void {
-  server.registerHandler(PolicyServiceName, PolicyEndpointName, handler)
-}
-
-/** Decodes only the policy fields used by the internal service boundary. */
-function policyCommand(message: Message): BookAppointmentCommand {
-  const value: unknown = JSON.parse(Decoder.decode(message.body))
-  if (value === null || typeof value !== "object") {
-    throw new TypeError("invalid appointment policy request")
-  }
-  const appointmentId: unknown = Reflect.get(value, "appointmentId")
-  const doctorId: unknown = Reflect.get(value, "doctorId")
-  const patientId: unknown = Reflect.get(value, "patientId")
-  const startsAt: unknown = Reflect.get(value, "startsAt")
-  const endsAt: unknown = Reflect.get(value, "endsAt")
-  if (
-    typeof appointmentId !== "string" ||
-    typeof doctorId !== "string" ||
-    typeof patientId !== "string" ||
-    typeof startsAt !== "number" ||
-    typeof endsAt !== "number"
-  ) {
-    throw new TypeError("invalid appointment policy request")
-  }
-  return Object.freeze({ appointmentId, doctorId, patientId, startsAt, endsAt })
-}
-
-/** Creates the typed appointment-policy caller while borrowing one common Client owner. */
-export function newAppointmentPolicyClient(client: Client): AppointmentPolicyClient {
-  return Object.freeze({
-    async validate(
-      ctx: Context,
-      command: BookAppointmentCommand,
-      ...options: readonly CallOption[]
-    ): Promise<void> {
-      const response = await client.call(
-        ctx,
-        {
-          service: PolicyServiceName,
-          endpoint: PolicyEndpointName,
-          message: {
-            header: Object.freeze({ "content-type": "application/json" }),
-            body: Encoder.encode(JSON.stringify(command))
-          }
-        },
-        ...options
-      )
-      const result: unknown = JSON.parse(Decoder.decode(response.body))
-      if (
-        result === null ||
-        typeof result !== "object" ||
-        Reflect.get(result, "allowed") !== true
-      ) {
-        throw new Error("appointment policy returned an invalid response")
-      }
-    }
-  })
 }
 
 /** Composes an internal unary appointment-policy service over the memory transport. */
@@ -112,10 +37,8 @@ export function newAppointmentPolicyService(
   }
   const transport = newMemoryTransport()
   const server = newServer(serverTransport(transport), address(PolicyAddress))
-  registerAppointmentPolicyHandler(
-    server,
-    function validatePolicy(_ctx: Context, request: Message): Message {
-      const command = policyCommand(request)
+  appointmentPolicy.registerHandler(server, {
+    check(_ctx, command) {
       if (command.endsAt - command.startsAt > maximumDurationMs) {
         throw serviceError(
           "appointment_policy_rejected",
@@ -123,18 +46,21 @@ export function newAppointmentPolicyService(
           409
         )
       }
-      return Object.freeze({
-        header: Object.freeze({ "content-type": "application/json" }),
-        body: Encoder.encode('{"allowed":true}')
-      })
+      return { allowed: true as const }
     }
+  })
+  const caller = appointmentPolicy.newClient(
+    newClient(withTransport(transport), withEndpoint(PolicyAddress))
   )
-  const client = newClient(withTransport(transport), withAddress(PolicyAddress))
-  const policy = newAppointmentPolicyClient(client)
-
   return Object.freeze({
     server,
-    validate: policy.validate
+    async validate(
+      ctx: Context,
+      command: BookAppointmentCommand,
+      ...options: readonly CallOption[]
+    ): Promise<void> {
+      await caller.check(ctx, command, ...options)
+    }
   })
 }
 

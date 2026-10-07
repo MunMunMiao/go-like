@@ -1,8 +1,6 @@
 import type {
   DialOption,
   DialOptions,
-  Message,
-  MessageCodec,
   Option,
   Options,
   TLSEncodedBytes,
@@ -10,7 +8,6 @@ import type {
   TransportLogLevel,
   TransportLogger
 } from "@go-like/transport"
-import { snapshotMessage } from "@go-like/transport/provider"
 import type {
   HTTPExecutor,
   HTTPHost,
@@ -99,30 +96,6 @@ function snapshotTLSConfig(value: TLSConfig | null): TLSConfig | null {
   })
 }
 
-/** Wraps one borrowed codec at defensive Message and byte boundaries. */
-function snapshotCodec(value: MessageCodec | null): MessageCodec | null {
-  if (value === null) return null
-  const marshal = value.marshal
-  const unmarshal = value.unmarshal
-  if (typeof marshal !== "function" || typeof unmarshal !== "function") {
-    throw new TypeError("transport codec must provide marshal and unmarshal")
-  }
-  return Object.freeze({
-    /** Marshals one detached Message through the borrowed codec. */
-    marshal(message: Message): Uint8Array {
-      const bytes = marshal.call(value, snapshotMessage(message))
-      if (!(bytes instanceof Uint8Array))
-        throw new TypeError("codec marshal must return Uint8Array")
-      return new Uint8Array(bytes)
-    },
-    /** Unmarshals detached bytes through the borrowed codec. */
-    unmarshal(bytes: Uint8Array): Message {
-      if (!(bytes instanceof Uint8Array)) throw new TypeError("codec input must be Uint8Array")
-      return snapshotMessage(unmarshal.call(value, new Uint8Array(bytes)))
-    }
-  })
-}
-
 /** Wraps one borrowed logger while isolating diagnostic sink failures. */
 function snapshotLogger(value: TransportLogger | null): TransportLogger | null {
   if (value === null) return null
@@ -155,7 +128,6 @@ export function snapshotHTTPCommonOptions(value: Options): Options {
     throw new TypeError("transport options must be an object")
   if (typeof value.secure !== "boolean") throw new TypeError("transport secure must be a boolean")
   return Object.freeze({
-    codec: snapshotCodec(value.codec),
     logger: snapshotLogger(value.logger),
     timeoutMs: duration(value.timeoutMs, "transport timeoutMs"),
     secure: value.secure,
@@ -167,7 +139,6 @@ export function snapshotHTTPCommonOptions(value: Options): Options {
 export function defaultHTTPCommonOptions(): Options {
   return snapshotHTTPCommonOptions(
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,

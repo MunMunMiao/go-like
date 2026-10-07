@@ -119,29 +119,50 @@ The App registers after starting and preparing endpoints, then deregisters befor
 Filters and selectors are separate from Registry storage:
 
 ```ts
+import type { Context } from "@go-like/context"
 import {
   newClient,
   withDiscovery,
+  withEndpoint,
   withFilter,
   withSelector,
-  withService,
   withTransport
 } from "@go-like/client"
-import { filterLabel, filterVersion, newRoundRobinSelector } from "@go-like/registry"
+import { endpoint } from "@go-like/transport"
+import { struct } from "@go-like/struct"
+import {
+  filterLabel,
+  filterVersion,
+  newRoundRobinSelector,
+  type Discovery
+} from "@go-like/registry"
+import type { Transport } from "@go-like/transport"
+
+declare const ctx: Context
+declare const discovery: Discovery
+declare const transport: Transport
+
+const quote = endpoint(
+  "pricing",
+  "quote",
+  struct.object({ sku: struct.string() }),
+  struct.object({ amount: struct.number() })
+)
 
 const client = newClient(
   withTransport(transport),
-  withService("pricing"),
+  withEndpoint("discovery:///pricing"),
   withDiscovery(discovery),
   withSelector(newRoundRobinSelector())
 )
 
-await client.call(
+const priced = await client.call(
   ctx,
-  operation,
-  request,
+  quote,
+  { sku: "a" },
   withFilter(filterVersion("v2"), filterLabel("zone", "a"))
 )
+void priced
 ```
 
 Filters run in declaration order. A selector chooses one URL and returns a synchronous `SelectionDone` callback. P2C and EWMA use that feedback for endpoint-local health and load state; they are not substitutes for an operation-level circuit breaker.

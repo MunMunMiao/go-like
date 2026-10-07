@@ -5,7 +5,6 @@ export type {
   HTTPListenOption,
   HTTPListenOptions,
   HTTPListener,
-  HTTPStatusError,
   HTTPTransport,
   HTTPTransportOption,
   HTTPTransportOptions

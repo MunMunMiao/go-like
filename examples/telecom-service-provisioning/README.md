@@ -2,7 +2,7 @@
 
 该示例演示电信业务开通微服务：公共标准 Fetch API 不直接修改资源，而是通过
 `@go-like/client`、`@go-like/server` 与 `@go-like/transport-memory` 调用内部
-`Provisioning.Activate` unary 服务。
+`telecom-provisioning.v1` 的 `activate`，写成 `client.activate(ctx, req)`。
 
 ## 主要演示
 

@@ -3,8 +3,14 @@ import type { CallOption, CallRequest, Client } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import type { Middleware } from "@go-like/server"
 import type { Infer, Struct } from "@go-like/struct"
-import type { Endpoint, Message } from "@go-like/transport"
-import { endpoint, request as service } from "@go-like/transport/headers"
+import {
+  fromServerContext,
+  observeResponseBody,
+  type Endpoint,
+  type ResponseBodyEnd,
+  type ServerStream
+} from "@go-like/transport"
+import { observeCall } from "@go-like/transport/provider"
 import type { Logger } from "pino"
 
 type Outcome = "success" | "failure" | "canceled"
@@ -15,7 +21,7 @@ type RawClientCall = (
   ctx: Context,
   request: CallRequest,
   ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
-) => Promise<Message>
+) => Promise<Response>
 /** Calls one runtime-erased typed Client endpoint. */
 type UnknownTypedClientCall = (
   ctx: Context,
@@ -70,6 +76,39 @@ function webOutcome(signal: AbortSignal, failed: boolean): Outcome {
   return failed ? "failure" : "success"
 }
 
+/** Classifies one body-end or thrown completion without reading payloads. */
+function observedOutcome(
+  component: "client" | "server" | "web" | "broker",
+  ctx: Context,
+  end: ResponseBodyEnd | null,
+  failure: unknown
+): Outcome {
+  if (failure !== null) return contextOutcome(ctx, true)
+  if (end === null) return "success"
+  if (end.reason === "cancel" || end.status.kind === "canceled") return "canceled"
+  if (end.stream) return end.status.kind === "success" ? "success" : "failure"
+  if (component === "web" && end.httpStatus >= 500) return "failure"
+  return "success"
+}
+
+/** Writes one completion, adding stream counters only when the body was an event stream. */
+function writeObserved(
+  logger: Logger,
+  component: "client" | "server" | "web" | "broker",
+  operation: string,
+  ctx: Context,
+  startedAt: number,
+  httpStatus: number | null,
+  end: ResponseBodyEnd | null,
+  failure: unknown
+): void {
+  const outcome = observedOutcome(component, ctx, end, failure)
+  const diagnostic =
+    failure ??
+    (outcome === "failure" && end !== null && !end.stream ? httpFailure(end.httpStatus) : null)
+  writeCompletion(logger, component, operation, outcome, startedAt, httpStatus, diagnostic, end)
+}
+
 /** Writes exactly one low-cardinality completion record through the native Logger receiver. */
 function writeCompletion(
   logger: Logger,
@@ -78,15 +117,22 @@ function writeCompletion(
   outcome: Outcome,
   startedAt: number,
   httpStatus: number | null,
-  failure: unknown
+  failure: unknown,
+  end: ResponseBodyEnd | null = null
 ): void {
   const record: Record<string, unknown> = {
     component,
     operation,
     outcome,
-    durationMs: performance.now() - startedAt
+    durationMs: end?.durationMs ?? Math.max(0, performance.now() - startedAt)
   }
   if (httpStatus !== null) record.httpStatus = httpStatus
+  if (end?.stream === true) {
+    record.messageCount = end.messageCount
+    record.handshakeMs = end.handshakeMs
+    record.streamStatus = end.status.kind
+    if (end.status.kind === "error") record.serviceCode = end.status.code
+  }
   if (outcome === "failure") {
     const errorType = errorIdentifier(failure, "name", errorTypePattern)
     const errorCode = errorIdentifier(failure, "code", errorCodePattern)
@@ -104,21 +150,21 @@ function writeCompletion(
   }
 }
 
-/** Reads one unique case-insensitive routing field without exposing the complete header set. */
-function routeField(headers: Readonly<Record<string, string>>, expected: string): string {
-  const normalized = expected.toLowerCase()
-  let found: string | null = null
-  for (const name of Object.keys(headers)) {
-    if (name.toLowerCase() !== normalized) continue
-    if (found !== null) return "unknown"
-    found = headers[name] ?? ""
+/** Creates the server operation name from TransportInfo, never from request headers. */
+function serverOperation(ctx: Context): string {
+  let operation = ""
+  try {
+    const info = fromServerContext(ctx)
+    if (info !== null) operation = info.operation()
+  } catch {
+    operation = ""
   }
-  return found === null || found.length === 0 ? "unknown" : found
-}
-
-/** Creates the server operation name from go-like's reserved routing headers only. */
-function serverOperation(message: Message): string {
-  return `${routeField(message.header, service)}/${routeField(message.header, endpoint)}`
+  const slash = operation.indexOf("/")
+  const service = slash < 0 ? operation : operation.slice(0, slash)
+  const endpoint = slash < 0 ? "" : operation.slice(slash + 1)
+  const serviceName = operation.length === 0 || service.length === 0 ? "unknown" : service
+  const endpointName = operation.length === 0 || endpoint.length === 0 ? "unknown" : endpoint
+  return `${serviceName}/${endpointName}`
 }
 
 /** Reports whether a Web handler result is asynchronous without changing its return mode. */
@@ -177,7 +223,7 @@ export function logClient(client: Client, logger: Logger): Client {
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
-  ): Promise<Message>
+  ): Promise<Response>
 
   /** Logs either public Client call overload through the original receiver. */
   async function loggedCall(
@@ -191,51 +237,68 @@ export function logClient(client: Client, logger: Logger): Client {
     }
     const operation = `${subject.service}/${subject.endpoint}`
     const startedAt = performance.now()
-    try {
-      let result: unknown
-      if ("message" in subject) {
-        const arguments_: [Context, CallRequest, ...CallOption[]] = [ctx, subject]
-        for (const value of values) {
-          if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
-          arguments_.push(value)
+    return await observeCall(
+      ctx,
+      startedAt,
+      async function invoke(observed: Context): Promise<unknown> {
+        if ("headers" in subject && "body" in subject) {
+          const arguments_: [Context, CallRequest, ...CallOption[]] = [observed, subject]
+          for (const value of values) {
+            if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
+            arguments_.push(value)
+          }
+          return await rawCall.apply(client, arguments_)
         }
-        result = await rawCall.apply(client, arguments_)
-      } else {
         if (values.length === 0) throw new TypeError("Client typed call requires a request value")
-        const arguments_: [Context, Endpoint, unknown, ...CallOption[]] = [ctx, subject, values[0]]
+        const arguments_: [Context, Endpoint, unknown, ...CallOption[]] = [
+          observed,
+          subject,
+          values[0]
+        ]
         for (let index = 1; index < values.length; index += 1) {
           const value = values[index]
           if (!isCallOption(value)) throw new TypeError("Client call option must be a function")
           arguments_.push(value)
         }
-        result = await typedCall.apply(client, arguments_)
+        return await typedCall.apply(client, arguments_)
+      },
+      function record(end, failure): void {
+        writeObserved(selectedLogger, "client", operation, ctx, startedAt, null, end, failure)
       }
-      writeCompletion(
-        selectedLogger,
-        "client",
-        operation,
-        contextOutcome(ctx, false),
-        startedAt,
-        null,
-        null
-      )
-      return result
-    } catch (value) {
-      writeCompletion(
-        selectedLogger,
-        "client",
-        operation,
-        contextOutcome(ctx, true),
-        startedAt,
-        null,
-        value
-      )
-      throw value
-    }
+    )
+  }
+
+  /** Logs one server stream when its body ends. */
+  async function loggedStream<RequestStruct extends Struct, ResponseStruct extends Struct>(
+    ctx: Context,
+    endpoint: Endpoint<RequestStruct, ResponseStruct, true>,
+    request: NoInfer<Infer<RequestStruct>>,
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
+  ): Promise<ServerStream<Infer<ResponseStruct>>> {
+    if (typeof client.stream !== "function") throw new TypeError("client must implement stream")
+    const operation = `${endpoint.service}/${endpoint.endpoint}`
+    const startedAt = performance.now()
+    return (await observeCall(
+      ctx,
+      startedAt,
+      function invoke(observed: Context): Promise<unknown> {
+        const args: [
+          Context,
+          Endpoint<RequestStruct, ResponseStruct, true>,
+          NoInfer<Infer<RequestStruct>>,
+          ...CallOption[]
+        ] = [observed, endpoint, request, ...options]
+        return client.stream!.apply(client, args)
+      },
+      function record(end, failure): void {
+        writeObserved(selectedLogger, "client", operation, ctx, startedAt, null, end, failure)
+      }
+    )) as ServerStream<Infer<ResponseStruct>>
   }
 
   return Object.freeze({
     call: loggedCall,
+    stream: loggedStream,
     /** Closes the native Client through its original receiver without creating a log operation. */
     close(ctx: Context): Promise<void> {
       return close.call(client, ctx)
@@ -248,38 +311,31 @@ export function logUnaryMiddleware(logger: Logger): Middleware {
   const selectedLogger = loggerValue(logger)
   return (next) => {
     if (typeof next !== "function") throw new TypeError("unary handler must be a function")
-    return async (ctx, message) => {
-      const operation = serverOperation(message)
+    return async (ctx, request) => {
+      const operation = serverOperation(ctx)
       const startedAt = performance.now()
       try {
-        const result = await next(ctx, message)
-        writeCompletion(
-          selectedLogger,
-          "server",
-          operation,
-          contextOutcome(ctx, false),
-          startedAt,
-          null,
-          null
+        const result = await next(ctx, request)
+        if (!(result instanceof Response)) {
+          writeObserved(selectedLogger, "server", operation, ctx, startedAt, null, null, null)
+          return result
+        }
+        return observeResponseBody(
+          result,
+          function ended(end: ResponseBodyEnd): void {
+            writeObserved(selectedLogger, "server", operation, ctx, startedAt, null, end, null)
+          },
+          { startedAt }
         )
-        return result
       } catch (value) {
-        writeCompletion(
-          selectedLogger,
-          "server",
-          operation,
-          contextOutcome(ctx, true),
-          startedAt,
-          null,
-          value
-        )
+        writeObserved(selectedLogger, "server", operation, ctx, startedAt, null, null, value)
         throw value
       }
     }
   }
 }
 
-/** Completes one successful synchronous or asynchronous Web response unchanged. */
+/** Completes one Web response when its body ends, preserving a null body. */
 function completeWebResponse(
   logger: Logger,
   request: Request,
@@ -287,17 +343,27 @@ function completeWebResponse(
   startedAt: number,
   response: Response
 ): Response {
-  const failed = response.status >= 500
-  writeCompletion(
-    logger,
-    "web",
-    operation,
-    webOutcome(request.signal, failed),
-    startedAt,
-    response.status,
-    failed ? httpFailure(response.status) : null
+  return observeResponseBody(
+    response,
+    function ended(end: ResponseBodyEnd): void {
+      const canceled =
+        request.signal.aborted || end.reason === "cancel" || end.status.kind === "canceled"
+      const failed =
+        !canceled && (end.stream ? end.status.kind !== "success" : response.status >= 500)
+      const outcome: Outcome = canceled ? "canceled" : failed ? "failure" : "success"
+      writeCompletion(
+        logger,
+        "web",
+        operation,
+        outcome,
+        startedAt,
+        response.status,
+        failed && !end.stream ? httpFailure(response.status) : null,
+        end
+      )
+    },
+    { startedAt }
   )
-  return response
 }
 
 /** Logs one thrown Web operation and rethrows the exact original value. */

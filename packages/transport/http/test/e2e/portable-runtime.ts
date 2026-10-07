@@ -14,11 +14,17 @@ const run = Object.assign(
 )
 const transport = newHTTPTransport(executor(run))
 const client = await transport.dial(background(), "service.test:8080")
-await client.send(background(), { header: {}, body: new Uint8Array([1]) })
-const response = await client.recv(background())
+const bytes = new Uint8Array([1])
+const copy = new ArrayBuffer(bytes.byteLength)
+new Uint8Array(copy).set(bytes)
+const response = await client.fetch(
+  background(),
+  new Request("http://service.test:8080/echo/call", { method: "POST", body: copy })
+)
+const payload = new Uint8Array(await response.arrayBuffer())
 await client.close(background())
 
-if (response.body[0] !== 1) throw new Error(`${runtime} HTTP transport runtime failed`)
+if (payload[0] !== 1) throw new Error(`${runtime} HTTP transport runtime failed`)
 if (redirect !== "manual") {
   throw new Error(`${runtime} HTTP transport redirect policy is ${redirect}`)
 }

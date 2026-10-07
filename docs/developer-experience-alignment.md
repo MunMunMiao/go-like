@@ -62,7 +62,7 @@ option。采用 Kratos 风格契约的 Registry 只承担注册和发现。
   校验和转换。`onReloadError(...)` 观察可恢复重载失败，`onTerminalError(...)` 观察初次就绪后的第一次
   不可恢复后台失败；二者均不增加生命周期。
 - Protobuf-ES descriptor/codec、Connect client/protocol handler 与 ctx-first generated glue 只进入独立的
-  `@go-like/protoc-gen-like` / `@go-like/transport-grpc-buf` 边界，不改变原有 unary Message Transport。
+  `@go-like/protoc-gen-like` / `@go-like/transport-grpc-buf` 边界，不改变内部 Fetch JSON 与 SSE Transport。
 - Event Store、历史 replay 与更多 Registry provider 仍是已经批准的排除项。
 
 ## Generated RPC 形态
@@ -130,12 +130,25 @@ HTTP/internal unary 与标准 gRPC 共享 Kratos 风格的装配顺序，不共�
 `protoc-gen-like` 只生成 protobuf/Connect 胶水，不生成 Struct HTTP client。
 
 ```ts
+import { newClient, withEndpoint, withSelector, withTransport } from "@go-like/client"
+import { newRoundRobinSelector } from "@go-like/registry"
+import { address, advertise, newServer, transport, type HandlerRegistrar } from "@go-like/server"
+import { newHTTPTransport } from "@go-like/transport-http"
+import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+
+declare function newOrderServiceClient(client: ReturnType<typeof newClient>): {
+  getOrder(ctx: unknown, request: { id: string }): Promise<{ id: string }>
+}
+declare function registerOrderServiceHandler(server: HandlerRegistrar, service: object): void
+declare const orderService: object
+
 const client = newClient(
   withTransport(newHTTPTransport()),
-  withAddress("https://orders-a.internal", "https://orders-b.internal"),
+  withEndpoint(["https://orders-a.internal", "https://orders-b.internal"]),
   withSelector(newRoundRobinSelector())
 )
 const orders = newOrderServiceClient(client)
+void orders
 
 const server = newServer(
   transport(newNodeHTTPTransport()),
@@ -148,13 +161,27 @@ registerOrderServiceHandler(server, orderService)
 服务发现只替换构造时的地址来源；HTTP 使用 `orders-http`，标准 gRPC 使用 `orders-grpc`：
 
 ```ts
+import {
+  newClient,
+  withDiscovery,
+  withEndpoint,
+  withSelector,
+  withTransport
+} from "@go-like/client"
+import { newRoundRobinSelector, type Discovery } from "@go-like/registry"
+import { newHTTPTransport } from "@go-like/transport-http"
+
+declare const discovery: Discovery
+declare function newOrderServiceClient(client: ReturnType<typeof newClient>): object
+
 const client = newClient(
   withTransport(newHTTPTransport()),
-  withService("orders-http"),
+  withEndpoint("discovery:///orders-http"),
   withDiscovery(discovery),
   withSelector(newRoundRobinSelector())
 )
 const orders = newOrderServiceClient(client)
+void orders
 ```
 
 标准 gRPC 使用下面的 owner import，并搭配对应 protobuf 文件生成的 service API：
@@ -165,11 +192,19 @@ import {
   advertise,
   newClient,
   newServer,
-  withAddress
+  withEndpoint
 } from "@go-like/transport-grpc-buf/native"
 
-const client = newClient(withAddress("https://orders.internal"))
+declare function newOrderServiceClient(client: ReturnType<typeof newClient>): object
+declare function registerOrderServiceHandler(
+  server: ReturnType<typeof newServer>,
+  service: object
+): void
+declare const orderService: object
+
+const client = newClient(withEndpoint("https://orders.internal"))
 const orders = newOrderServiceClient(client)
+void orders
 
 const server = newServer(address("0.0.0.0:9000"), advertise("orders.internal:9000"))
 registerOrderServiceHandler(server, orderService)
@@ -208,7 +243,7 @@ await app.run()
 
 | 能力     | Canonical API                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Client   | `newClient(withTransport(...), withAddress(...))` 在构造时确定直连地址；服务发现改用 `withService(...)`、`withDiscovery(...)`，两者共用 `withSelector(...)`。可显式加入 `withBlock()` 等待服务第一次出现原始 endpoint，并在结束时调用 `client.close(ctx)`。调用期只保留 `withFilter(...)`、`withRetry(...)` 等行为 option。                                                                                                       |
+| Client   | `newClient(withTransport(...), withEndpoint(...))` 在构造时确定直连根 URL；服务发现改用 `withEndpoint("discovery:///<name>")`、`withDiscovery(...)`，两者共用 `withSelector(...)`。可显式加入 `withBlock()` 等待服务第一次出现原始 endpoint，并在结束时调用 `client.close(ctx)`。调用期只保留 `withFilter(...)`、`withRetry(...)` 等行为 option。                                                                                 |
 | Registry | 应用从 `@go-like/registry` 导入 `Registrar`、`Discovery`、`Registry`、`Watcher`、`ServiceInstance`、`Selector`、`Filter` 与内建 selector/filter；provider 实现从 `@go-like/registry/provider` 导入共享辅助。                                                                                                                                                                                                                      |
 | Server   | 内部 unary 服务先使用 `newServer(transport(...), address(...), advertise(...), middleware(...), use(...), listenOption(...))`，再以 `registerXHandler(server, handler)` 或 `server.registerHandler(...)` 注册。`rateLimitMiddleware(limiter)` 可作为全局或 operation middleware；`endpoint(ctx)` 暴露真实注册端点，Core App 使用 `registrar(...)` 统一注册。                                                                      |
 | Config   | `newConfig(source(...), resolver(...), schema(...), onReloadError(...))` 返回只含 `load(ctx)`、`scan(ctx, schema)`、`value(key)`、`watch(key, observer)`、`close(ctx)` 的 Config。resolver 在 merge 后、schema 与发布前按声明顺序运行；`placeholderResolver()` 只解析当前快照引用。File、Env、Consul、etcd、Vault 与 Kubernetes 都实现同一 `ConfigSource`。App 用 `beforeStart`/`afterStop` 组合 Config，不能传给 `server(...)`。 |

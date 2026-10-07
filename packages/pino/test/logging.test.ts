@@ -4,8 +4,8 @@ import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/br
 import type { CallOption, Client } from "@go-like/client"
 import { background, withCancelCause, type Context } from "@go-like/context"
 import { struct } from "@go-like/struct"
-import { endpoint, type Message } from "@go-like/transport"
-import { endpoint as endpointHeader, request as service } from "@go-like/transport/headers"
+import { endpoint, newServerContext, type TransportInfo } from "@go-like/transport"
+import { newMetadata } from "@go-like/metadata"
 import type { Logger } from "pino"
 
 import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "../src/index"
@@ -68,8 +68,17 @@ function capturedLogger(): CapturedLogger {
 }
 
 /** Creates one immutable message used at every portable byte boundary. */
-function message(header: Readonly<Record<string, string>> = Object.freeze({})): Message {
-  return Object.freeze({ header, body: new Uint8Array([1, 2, 3]) })
+/** Builds TransportInfo whose operation is independent of request headers. */
+function transportInfo(operation: string): TransportInfo {
+  const headers = newMetadata()
+  return {
+    kind: () => "http",
+    endpoint: () => "",
+    operation: () => operation,
+    requestHeaders: () => headers,
+    replyHeaders: () => headers,
+    peerIdentity: () => null
+  }
 }
 
 /** Creates one immutable broker payload without transport routing fields. */
@@ -88,7 +97,7 @@ function expectCompletion(record: LoggedRecord, expected: Readonly<Record<string
 describe("Pino Client and Server request logging", () => {
   test("preserves Client receiver, options, result, failure, and cancellation outcomes", async () => {
     const captured = capturedLogger()
-    const response = message()
+    const response = new Response(new Uint8Array([1, 2, 3]))
     const failure = new Error("client failed")
     let selectedFailure: Error | null = null
     let optionCount = 0
@@ -99,7 +108,7 @@ describe("Pino Client and Server request logging", () => {
         _ctx: Context,
         _request: Parameters<Client["call"]>[1],
         ...options: readonly CallOption[]
-      ): Promise<Message> {
+      ): Promise<Response> {
         if (this !== native) throw new Error("Client receiver changed")
         optionCount = options.length
         if (selectedFailure !== null) throw selectedFailure
@@ -113,9 +122,12 @@ describe("Pino Client and Server request logging", () => {
     const client = logClient(native as unknown as Client, captured.logger)
     const option: CallOption = (options) => options
 
-    await expect(
-      client.call(background(), { service: "catalog", endpoint: "Get", message: message() }, option)
-    ).resolves.toBe(response)
+    const delivered = await client.call(
+      background(),
+      { service: "catalog", endpoint: "Get", headers: {}, body: null },
+      option
+    )
+    expect(new Uint8Array(await delivered.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
     expect(optionCount).toBe(1)
     expectCompletion(captured.records[0]!, {
       component: "client",
@@ -125,7 +137,7 @@ describe("Pino Client and Server request logging", () => {
 
     selectedFailure = failure
     await expect(
-      client.call(background(), { service: "catalog", endpoint: "Write", message: message() })
+      client.call(background(), { service: "catalog", endpoint: "Write", headers: {}, body: null })
     ).rejects.toBe(failure)
     expectCompletion(captured.records[1]!, {
       component: "client",
@@ -137,7 +149,7 @@ describe("Pino Client and Server request logging", () => {
     const canceled = withCancelCause(background())
     canceled[1](new Error("caller left"))
     await expect(
-      client.call(canceled[0], { service: "catalog", endpoint: "Delete", message: message() })
+      client.call(canceled[0], { service: "catalog", endpoint: "Delete", headers: {}, body: null })
     ).rejects.toBe(failure)
     expect(captured.records[2]!.level).toBe("info")
     expect(captured.records[2]!.fields).not.toHaveProperty("error")
@@ -148,7 +160,7 @@ describe("Pino Client and Server request logging", () => {
     })
     selectedFailure = null
     await expect(
-      client.call(canceled[0], { service: "catalog", endpoint: "Read", message: message() })
+      client.call(canceled[0], { service: "catalog", endpoint: "Read", headers: {}, body: null })
     ).resolves.toBe(response)
     expectCompletion(captured.records[3]!, {
       component: "client",
@@ -195,18 +207,21 @@ describe("Pino Client and Server request logging", () => {
     })
   })
 
-  test("reads only reserved Server routing fields and preserves handler results", async () => {
+  test("reads the Server operation from TransportInfo and preserves handler results", async () => {
     const captured = capturedLogger()
-    const response = message()
+    const response = new Response(new Uint8Array([1, 2, 3]))
     const middleware = logUnaryMiddleware(captured.logger)
     const handled = middleware(async (_ctx, _request) => response)
-    const request = message({
-      [service.toLowerCase()]: "orders",
-      [endpointHeader.toUpperCase()]: "Create",
-      Authorization: "secret"
+    const request = new Request("https://service.test/orders/Create", {
+      method: "POST",
+      headers: { Authorization: "secret", "Go-Like-Service": "attacker-controlled-tenant-9817" }
     })
 
-    await expect(handled(background(), request)).resolves.toBe(response)
+    const handledResponse = await handled(
+      newServerContext(background(), transportInfo("orders/Create")),
+      request
+    )
+    expect(new Uint8Array(await handledResponse.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
     expectCompletion(captured.records[0]!, {
       component: "server",
       operation: "orders/Create",
@@ -217,23 +232,29 @@ describe("Pino Client and Server request logging", () => {
     const rejected = middleware(() => {
       throw failure
     })
-    await expect(
-      rejected(
-        background(),
-        message({
-          [service]: "first",
-          [service.toLowerCase()]: "second",
-          [endpointHeader]: ""
-        })
-      )
-    ).rejects.toBe(failure)
+    await expect(rejected(background(), request)).rejects.toBe(failure)
     expectCompletion(captured.records[1]!, {
       component: "server",
       operation: "unknown/unknown",
       outcome: "failure",
       errorType: "Error"
     })
+    const root = background()
+    await expect(
+      rejected(
+        {
+          deadline: root.deadline,
+          done: root.done,
+          err: root.err,
+          value(): never {
+            throw new Error("transport info unavailable")
+          }
+        },
+        request
+      )
+    ).rejects.toBe(failure)
     expect(JSON.stringify(captured.records)).not.toContain("secret")
+    expect(JSON.stringify(captured.records)).not.toContain("attacker-controlled-tenant-9817")
   })
 
   test("rejects malformed adapters before an operation starts", () => {
@@ -242,7 +263,10 @@ describe("Pino Client and Server request logging", () => {
     expect(() => logClient({ call: 1 } as never, captured.logger)).toThrow(TypeError)
     expect(() =>
       logClient(
-        { call: () => Promise.resolve(message()), close: () => Promise.resolve() } as never,
+        {
+          call: () => Promise.resolve(new Response(new Uint8Array([1, 2, 3]))),
+          close: () => Promise.resolve()
+        } as never,
         null as never
       )
     ).toThrow(TypeError)
@@ -259,11 +283,11 @@ describe("Pino Client and Server request logging", () => {
         throw new Error("logger unavailable")
       }
     } as unknown as Logger
-    const response = message()
+    const response = new Response(new Uint8Array([1, 2, 3]))
     const failure = new Error("application failure")
     let selectedFailure: Error | null = null
     const native = {
-      async call(): Promise<Message> {
+      async call(): Promise<Response> {
         if (selectedFailure !== null) throw selectedFailure
         return response
       },
@@ -271,9 +295,13 @@ describe("Pino Client and Server request logging", () => {
     }
     const client = logClient(native as unknown as Client, logger)
 
-    await expect(
-      client.call(background(), { service: "catalog", endpoint: "Get", message: message() })
-    ).resolves.toBe(response)
+    const delivered = await client.call(background(), {
+      service: "catalog",
+      endpoint: "Get",
+      headers: {},
+      body: null
+    })
+    expect(new Uint8Array(await delivered.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
     selectedFailure = failure
     const root = background()
     const hostile: Context = {
@@ -285,7 +313,7 @@ describe("Pino Client and Server request logging", () => {
       value: root.value
     }
     await expect(
-      client.call(hostile, { service: "catalog", endpoint: "Fail", message: message() })
+      client.call(hostile, { service: "catalog", endpoint: "Fail", headers: {}, body: null })
     ).rejects.toBe(failure)
   })
 })

@@ -26,7 +26,16 @@ function absoluteTarget(value: string, requireSecure: boolean): HTTPDialTarget {
   if (parsed.username !== "" || parsed.password !== "") {
     throw new TypeError("HTTP dial URL must not contain credentials")
   }
-  if (parsed.href.includes("#")) throw new TypeError("HTTP dial URL must not contain a fragment")
+  if (
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.href.includes("#") ||
+    parsed.href.includes("?")
+  ) {
+    throw new TypeError(
+      "HTTP dial address must be a root URL without a path, query, or fragment; internal RPC paths are request URLs, not dial addresses"
+    )
+  }
   return Object.freeze({ href: parsed.href, origin: parsed.origin })
 }
 

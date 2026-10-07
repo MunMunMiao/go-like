@@ -8,23 +8,21 @@ import {
   type StopFunc
 } from "@go-like/context"
 import {
-  type AcceptHandler,
+  observeResponseBody,
   type Client,
   type DialOption,
   type DialOptions,
   type ListenOption,
   type Listener,
-  type Message,
   type Option,
   type Options,
-  type Socket
+  type TransportHandler
 } from "@go-like/transport"
 import {
   newTransportClosedError,
   newTransportProtocolError,
   newTransportStateError,
-  newUnsupportedTransportCapabilityError,
-  snapshotMessage
+  newUnsupportedTransportCapabilityError
 } from "@go-like/transport/provider"
 
 import {
@@ -46,23 +44,25 @@ interface Deferred<T> {
   reject(reason: Error): void
 }
 
-interface MemoryExchange {
-  /** Settles only after the admitted handler has reached its terminal state. */
-  readonly done: Promise<void>
-  readonly response: Promise<Message>
-  /** Terminates only this exchange. */
-  close(cause: Error): void
+interface LiveExchange {
+  readonly response: Promise<Response>
+  /** Cancels the handler Context and rejects the response when it is still pending. */
+  fail(responseError: Error, ctxCause: Error): void
+  /** Drops caller ownership once, immediately if the exchange already finished. */
+  retain(release: () => void): void
 }
 
 interface MemoryClientControl {
-  /** Terminates the owned Client and every outstanding exchange. */
-  terminate(cause: Error): void
+  /** Stops admission and cancels every exchange still owned by this client. */
+  terminate(ctxCause: Error): void
+  /** Stops later fetches without canceling an exchange already handed back. */
+  retire(): void
 }
 
 interface MemoryListenerState {
   readonly listener: Listener
   /** Creates one Client owned by this listener. */
-  connect(options: DialOptions, timeoutMs: number, localAddress: string): Client
+  connect(options: DialOptions, timeoutMs: number): Client
 }
 
 const listenerFailures = new WeakMap<Listener, (cause: Error) => void>()
@@ -76,17 +76,6 @@ function isError(value: unknown): value is Error {
 /** Normalizes a rejected provider boundary without obscuring an existing Error identity. */
 function boundaryError(value: unknown, message: string): Error {
   return isError(value) ? value : new Error(message, { cause: value })
-}
-
-/** Preserves one primary failure before one later cleanup failure. */
-function combinedBoundaryError(
-  primary: Error | null,
-  cleanup: Error | null,
-  message: string
-): Error | null {
-  if (primary === null) return cleanup
-  if (cleanup === null || cleanup === primary) return primary
-  return Object.freeze(new AggregateError(Object.freeze([primary, cleanup]), message))
 }
 
 /** Marks one internal Promise handled without changing the Promise returned to callers. */
@@ -124,7 +113,8 @@ function deferred<T>(): Deferred<T> {
 /** Returns the exact recorded Context cause after terminal observation. */
 function contextError(ctx: Context): Error | null {
   const failure = ctx.err()
-  return failure === null ? null : (cause(ctx) ?? failure)
+  if (failure === null) return null
+  return cause(ctx) ?? failure
 }
 
 /** Preserves the exact Context terminal cause at every operation admission. */
@@ -133,63 +123,30 @@ function checkContext(ctx: Context): void {
   if (failure !== null) throw failure
 }
 
+/** Releases a caller cancellation callback. */
+function stopCallback(stop: StopFunc): void {
+  stop()
+}
+
 /** Waits for one internal operation while Context bounds only this caller's wait. */
 function waitForContext<T>(ctx: Context, work: Promise<T>): Promise<T> {
-  let initial: Error | null
-  try {
-    initial = contextError(ctx)
-  } catch (value) {
-    return Promise.reject(boundaryError(value, "memory wait Context inspection failed"))
-  }
+  const initial = contextError(ctx)
   if (initial !== null) return Promise.reject(initial)
   return new Promise<T>(function wait(resolve, reject): void {
-    let settled = false
-    let stop: StopFunc
-    /** Rejects with the caller's exact terminal error. */
-    function onAbort(): void {
-      if (settled) return
-      settled = true
-      try {
-        reject(contextError(ctx) ?? canceled)
-      } catch (value) {
-        reject(boundaryError(value, "memory wait cancellation observation failed"))
-      }
-    }
-    try {
-      stop = afterFunc(ctx, onAbort)
-    } catch (value) {
-      settled = true
-      let terminal: Error | null = null
-      try {
-        terminal = contextError(ctx)
-      } catch {
-        // Registration remains the first observable boundary failure.
-      }
-      reject(terminal ?? boundaryError(value, "memory wait cancellation registration failed"))
-      return
-    }
+    const stop = afterFunc(ctx, function onAbort(): void {
+      reject(contextError(ctx) ?? canceled)
+    })
     work.then(
       function resolved(value): void {
-        if (settled || !stopWithoutReplacingWinner(stop)) return
-        settled = true
+        stopCallback(stop)
         resolve(value)
       },
       function rejected(reason: unknown): void {
-        if (settled || !stopWithoutReplacingWinner(stop)) return
-        settled = true
+        stopCallback(stop)
         reject(reason)
       }
     )
   })
-}
-
-/** Releases a caller cancellation callback without allowing cleanup failure to stall settlement. */
-function stopWithoutReplacingWinner(stop: StopFunc): boolean {
-  try {
-    return stop()
-  } catch {
-    return true
-  }
 }
 
 /** Applies a resource timeout without hiding an earlier caller deadline or cancellation. */
@@ -227,195 +184,181 @@ function memoryAddress(value: string): string {
   return address.href
 }
 
-/** Rejects common capabilities that have no truthful process-local meaning. */
-function requireSupportedCommonOptions(options: Options): void {
-  if (options.codec !== null) {
-    throw newUnsupportedTransportCapabilityError("memory transport does not encode Message bytes")
-  }
+/** Rejects capabilities that have no truthful process-local meaning. */
+function requireSupported(options: Options): void {
   if (options.secure || options.tlsConfig !== null) {
     throw newUnsupportedTransportCapabilityError("memory transport does not provide TLS")
   }
 }
 
-/** Returns one already-rejected exchange without retaining caller-owned Message data. */
-function rejectedExchange(error: Error): MemoryExchange {
-  const response = Promise.reject<Message>(error)
+/** Returns one already-rejected exchange that no longer owns handler state. */
+function rejectedExchange(error: Error): LiveExchange {
+  const response = Promise.reject<Response>(error)
   observe(response)
   return Object.freeze({
-    done: Promise.resolve(),
     response,
     /** The exchange is already terminal. */
-    close(_cause: Error): void {}
+    fail(_responseError: Error, _ctxCause: Error): void {},
+    /** Ownership never starts for an exchange that was rejected before admission. */
+    retain(release: () => void): void {
+      release()
+    }
   })
 }
 
-/** Creates one independently owned listener and its accepted unary exchanges. */
+/** Maps an aborted Request signal to one Error cause. */
+function abortCause(request: Request): Error {
+  const reason: unknown = request.signal.reason
+  return isError(reason) ? reason : canceled
+}
+
+/** Creates one independently owned listener and its Fetch exchanges. */
 function newMemoryListener(address: string, releaseAddress: () => void): MemoryListenerState {
-  let acceptHandler: AcceptHandler | null = null
-  let acceptContext: Context | null = null
-  let acceptTerminal: Deferred<void> | null = null
-  let stopAcceptCancellation: (() => Error | null) | null = null
-  let acceptUsed = false
+  let serveHandler: TransportHandler | null = null
+  let serveContext: Context | null = null
+  let serveTerminal: Deferred<void> | null = null
+  let stopServeCancellation: (() => void) | null = null
+  let serveUsed = false
   let closed = false
   let cleanup: Promise<void> | null = null
-  const clients = new Set<MemoryClientControl>()
-  const exchanges = new Set<MemoryClientControl>()
   const handlers = new Set<Promise<void>>()
+  const live = new Set<LiveExchange>()
 
-  /** Starts owner cleanup once and settles accept only after every admitted handler. */
+  /** Starts owner cleanup once and settles serve only after every admitted handler. */
   function startCleanup(primary: Error | null): Promise<void> {
     if (cleanup !== null) return cleanup
     closed = true
     releaseAddress()
-    let cancellationCleanupFailure: Error | null = null
-    if (stopAcceptCancellation !== null) {
-      cancellationCleanupFailure = stopAcceptCancellation()
-    }
-    stopAcceptCancellation = null
-    const terminalFailure = combinedBoundaryError(
-      primary,
-      cancellationCleanupFailure,
-      "memory listener cleanup failed"
-    )
+    if (stopServeCancellation !== null) stopServeCancellation()
+    stopServeCancellation = null
     const childCause = primary ?? canceled
-    for (const client of clients) client.terminate(childCause)
-    clients.clear()
-    for (const exchange of exchanges) exchange.terminate(childCause)
+    const responseError = newTransportClosedError("memory listener is closed")
+    for (const exchange of live) exchange.fail(responseError, childCause)
+    live.clear()
     cleanup = Promise.all(Array.from(handlers)).then(function settleTerminal(): void {
-      if (acceptTerminal !== null) {
-        if (terminalFailure === null) acceptTerminal.resolve(undefined)
-        else acceptTerminal.reject(terminalFailure)
-      }
-      if (cancellationCleanupFailure !== null && terminalFailure !== null) throw terminalFailure
+      if (serveTerminal === null) return
+      if (primary === null) serveTerminal.resolve(undefined)
+      else serveTerminal.reject(primary)
     })
     observe(cleanup)
     return cleanup
   }
 
-  /** Dispatches one Message through a fresh handler Socket. */
-  function dispatch(
-    outgoing: Message,
-    remoteAddress: string,
-    clientOpen: () => boolean
-  ): MemoryExchange {
-    if (!clientOpen()) return rejectedExchange(newTransportClosedError("memory client is closed"))
-    if (closed) return rejectedExchange(newTransportClosedError("memory listener is closed"))
-    const request = snapshotMessage(outgoing)
-    if (!clientOpen()) return rejectedExchange(newTransportClosedError("memory client is closed"))
-    if (closed) return rejectedExchange(newTransportClosedError("memory listener is closed"))
-    const handler = acceptHandler
-    const owner = acceptContext
-    if (handler === null || owner === null) {
-      return rejectedExchange(newTransportStateError("memory listener is not accepting"))
-    }
-    const handlerOwner = withCancelCause(owner)
-    if (!clientOpen() || closed) {
-      const failure = !clientOpen()
-        ? newTransportClosedError("memory client is closed")
-        : newTransportClosedError("memory listener is closed")
-      handlerOwner[1](failure)
+  /** Delivers one Request and ends its Context when the Response body ends. */
+  function dispatch(request: Request, caller: Context): LiveExchange {
+    const handler = serveHandler
+    const owner = serveContext
+    if (closed || handler === null || owner === null) {
+      const failure = closed
+        ? newTransportClosedError("memory listener is closed")
+        : newTransportStateError("memory listener is not serving")
       return rejectedExchange(failure)
     }
-    const response = deferred<Message>()
-    let reply: Message | null = null
-    let received = false
-    let sent = false
-    let socketClosed = false
-    const exchangeControl: MemoryClientControl = Object.freeze({
-      /** Cancels this handler and rejects an exchange that has not produced a reply. */
-      terminate(terminalCause: Error): void {
-        if (socketClosed) return
-        socketClosed = true
-        handlerOwner[1](terminalCause)
-        if (!sent) response.reject(newTransportClosedError("memory socket is closed"))
-      }
-    })
-    const socket: Socket = Object.freeze({
-      /** Delivers the request exactly once. */
-      recv(ctx: Context): Promise<Message> {
-        try {
-          checkContext(ctx)
-          if (socketClosed) throw newTransportClosedError("memory socket is closed")
-          if (received) throw newTransportStateError("memory request was already received")
-          received = true
-          return Promise.resolve(snapshotMessage(request))
-        } catch (failure) {
-          return Promise.reject(failure)
+    const handlerOwner = withCancelCause(owner)
+    const response = deferred<Response>()
+    const bodyAbort = new AbortController()
+    let current: Response | null = null
+    let responseSettled = false
+    let requestFinished = false
+    let releaseOwner: (() => void) | null = null
+    let stopCaller: StopFunc = function stopBeforeRegistration(): boolean {
+      return true
+    }
+    /** Detaches this request and cancels its Context once. The first cause wins. */
+    function finishRequest(ctxCause: Error): void {
+      if (requestFinished) return
+      requestFinished = true
+      live.delete(exchange)
+      const release = releaseOwner
+      releaseOwner = null
+      release?.()
+      request.signal.removeEventListener("abort", onAbort)
+      handlerOwner[1](ctxCause)
+      stopCallback(stopCaller)
+    }
+    const exchange: LiveExchange = {
+      response: response.promise,
+      /** Cancels this request Context even after the Response has been published. */
+      fail(responseError: Error, ctxCause: Error): void {
+        finishRequest(ctxCause)
+        if (!bodyAbort.signal.aborted) bodyAbort.abort(ctxCause)
+        if (responseSettled) return
+        responseSettled = true
+        response.reject(responseError)
+      },
+      /** Removes this exchange from the client set now, or when the body later ends. */
+      retain(release: () => void): void {
+        if (requestFinished) {
+          release()
+          return
         }
-      },
-      /** Publishes the reply exactly once. */
-      send(ctx: Context, incoming: Message): Promise<void> {
-        try {
-          checkContext(ctx)
-          if (socketClosed) throw newTransportClosedError("memory socket is closed")
-          if (sent) throw newTransportStateError("memory response was already sent")
-          const snapshot = snapshotMessage(incoming)
-          checkContext(ctx)
-          if (socketClosed) throw newTransportClosedError("memory socket is closed")
-          if (sent) throw newTransportStateError("memory response was already sent")
-          reply = snapshot
-          sent = true
-          response.resolve(reply)
-          return Promise.resolve()
-        } catch (failure) {
-          return Promise.reject(failure)
-        }
-      },
-      /** Closes only this exchange after caller admission. */
-      close(ctx: Context): Promise<void> {
-        const failure = contextError(ctx)
-        if (failure !== null) return Promise.reject(failure)
-        exchangeControl.terminate(canceled)
-        return Promise.resolve()
-      },
-      /** Returns the bound listener address. */
-      local(): string {
-        return address
-      },
-      /** Returns the owning Client address. */
-      remote(): string {
-        return remoteAddress
+        releaseOwner = release
       }
+    }
+    /** Propagates Request abortion into the handler Context. */
+    function onAbort(): void {
+      const failure = abortCause(request)
+      exchange.fail(failure, failure)
+    }
+    live.add(exchange)
+    if (request.signal.aborted) {
+      onAbort()
+      return exchange
+    }
+    stopCaller = afterFunc(caller, function onCallerAbort(): void {
+      const failure = contextError(caller) ?? canceled
+      exchange.fail(failure, failure)
     })
-    exchanges.add(exchangeControl)
+    request.signal.addEventListener("abort", onAbort, { once: true })
     const handlerContext = withMemoryServerTransportInfo(
       handlerOwner[0],
       address,
       request,
-      function currentReply(): Message | null {
-        return reply
+      function currentReply(): Response | null {
+        return current
       }
     )
     let running: Promise<void>
     running = Promise.resolve()
-      .then(function invokeHandler(): void | Promise<void> {
-        return handler(handlerContext, socket)
+      .then(function invokeHandler(): Response | Promise<Response> | undefined {
+        if (responseSettled) return undefined
+        return handler(handlerContext, request)
       })
       .then(
-        function handlerResolved(): void {
-          if (!sent && !socketClosed) {
-            response.reject(newTransportStateError("memory handler returned without a response"))
+        function handlerResolved(value): void {
+          if (responseSettled) {
+            if (value instanceof Response && value.body !== null) observe(value.body.cancel())
+            return
           }
+          if (!(value instanceof Response)) {
+            const failure = newTransportProtocolError("memory handler must return a Response")
+            exchange.fail(failure, failure)
+            return
+          }
+          current = value
+          responseSettled = true
+          response.resolve(
+            observeResponseBody(
+              value,
+              function bodyEnded(): void {
+                finishRequest(canceled)
+              },
+              { signal: bodyAbort.signal }
+            )
+          )
         },
-        function handlerRejected(value: unknown): void {
-          response.reject(boundaryError(value, "memory handler rejected"))
+        function handlerRejected(reason: unknown): void {
+          if (responseSettled) return
+          const failure = boundaryError(reason, "memory handler rejected")
+          exchange.fail(failure, failure)
         }
       )
-      .finally(function releaseExchange(): void {
-        handlerOwner[1](null)
-        exchanges.delete(exchangeControl)
+      .finally(function releaseHandler(): void {
         handlers.delete(running)
       })
     handlers.add(running)
     observe(running)
-    return Object.freeze({
-      done: running,
-      response: response.promise,
-      /** Terminates only this exchange. */
-      close(terminalCause: Error): void {
-        exchangeControl.terminate(terminalCause)
-      }
-    })
+    return exchange
   }
 
   const listener: Listener = Object.freeze({
@@ -429,154 +372,86 @@ function newMemoryListener(address: string, releaseAddress: () => void): MemoryL
       if (failure !== null) return Promise.reject(failure)
       return waitForContext(ctx, startCleanup(null))
     },
-    /** Runs the one-shot accept owner until close, cancellation, or passive failure. */
-    accept(ctx: Context, handler: AcceptHandler): Promise<void> {
-      let provisionalStop: (() => Error | null) | null = null
+    /** Runs the one-shot serve owner until close, cancellation, or passive failure. */
+    serve(ctx: Context, handler: TransportHandler): Promise<void> {
+      let provisionalStop: (() => void) | null = null
       try {
         checkContext(ctx)
-        if (typeof handler !== "function")
-          throw new TypeError("memory accept handler must be a function")
-        if (acceptUsed) throw newTransportStateError("memory listener accept was already consumed")
+        if (typeof handler !== "function") {
+          throw new TypeError("memory serve handler must be a function")
+        }
+        if (serveUsed) throw newTransportStateError("memory listener serve was already consumed")
         if (closed) throw newTransportClosedError("memory listener is closed")
         const terminal = deferred<void>()
         const signal = ctx.done()
-        let cancellationPending = false
-        let committed = false
         if (signal !== null) {
-          const add = signal.addEventListener
-          const remove = signal.removeEventListener
-          if (typeof add !== "function" || typeof remove !== "function") {
-            throw new TypeError("memory accept Context signal must implement event listeners")
-          }
-          /** Converts accept-owner cancellation into listener terminal cleanup. */
+          /** Converts serve-owner cancellation into listener terminal cleanup. */
           function onAbort(): void {
-            if (!committed) {
-              cancellationPending = true
-              return
-            }
-            let failure: Error
-            try {
-              failure = contextError(ctx) ?? canceled
-            } catch (value) {
-              failure = boundaryError(value, "memory accept cancellation observation failed")
-            }
+            const failure = contextError(ctx) ?? canceled
             void startCleanup(failure)
           }
-          let listening = true
-          provisionalStop = function stop(): Error | null {
-            if (!listening) return null
-            listening = false
-            try {
-              remove.call(signal, "abort", onAbort)
-              return null
-            } catch (value) {
-              return boundaryError(value, "memory accept cancellation listener removal failed")
-            }
+          signal.addEventListener("abort", onAbort, { once: true })
+          provisionalStop = function stop(): void {
+            signal.removeEventListener("abort", onAbort)
           }
-          add.call(signal, "abort", onAbort, { once: true })
         }
-        const cancellation = contextError(ctx)
-        if (cancellation !== null) throw cancellation
-        if (cancellationPending) throw canceled
-        if (closed) throw newTransportClosedError("memory listener is closed")
-
-        acceptUsed = true
-        acceptHandler = handler
-        acceptContext = ctx
-        acceptTerminal = terminal
-        stopAcceptCancellation = provisionalStop
+        checkContext(ctx)
+        if (signal !== null && signal.aborted) throw canceled
+        serveUsed = true
+        serveHandler = handler
+        serveContext = ctx
+        serveTerminal = terminal
+        stopServeCancellation = provisionalStop
         provisionalStop = null
-        committed = true
         return terminal.promise
       } catch (failure) {
-        let primary = boundaryError(failure, "memory accept admission failed")
-        try {
-          const cancellation = contextError(ctx)
-          if (cancellation !== null) primary = cancellation
-        } catch {
-          // The first admission failure remains authoritative when Context reinspection also fails.
-        }
-        let cleanupFailure: Error | null = null
-        if (provisionalStop !== null) cleanupFailure = provisionalStop()
-        return Promise.reject(
-          combinedBoundaryError(
-            primary,
-            cleanupFailure,
-            "memory accept admission cleanup failed"
-          ) ?? primary
-        )
+        if (provisionalStop !== null) provisionalStop()
+        return Promise.reject(boundaryError(failure, "memory serve admission failed"))
       }
     }
   })
 
   /** Creates one independently closable Client bound to this listener. */
-  function connect(dial: DialOptions, timeoutMs: number, localAddress: string): Client {
-    if (closed) throw newTransportClosedError("memory listener is closed")
-    const slots: MemoryExchange[] = []
-    const active = new Set<MemoryExchange>()
-    let clientClosed = false
-    let client: MemoryClientControl
-    /** Removes this Client from its listener after terminal cleanup. */
-    function releaseClient(): void {
-      clients.delete(client)
-    }
-    client = Object.freeze({
-      /** Closes every exchange once without closing the listener. */
-      terminate(terminalCause: Error): void {
-        if (clientClosed) return
-        clientClosed = true
-        for (const exchange of active) exchange.close(terminalCause)
-        slots.length = 0
-        releaseClient()
+  function connect(dial: DialOptions, timeoutMs: number): Client {
+    const owned = new Set<LiveExchange>()
+    let admitting = true
+    let terminated = false
+    const client: MemoryClientControl = Object.freeze({
+      /** Closes every owned exchange once without closing the listener. */
+      terminate(ctxCause: Error): void {
+        admitting = false
+        if (terminated) return
+        terminated = true
+        const responseError = newTransportClosedError("memory client is closed")
+        for (const exchange of owned) exchange.fail(responseError, ctxCause)
+        owned.clear()
+      },
+      /** Records connectionClose after this fetch returns. The current body stays readable. */
+      retire(): void {
+        admitting = false
       }
     })
-    clients.add(client)
-    /** Reports whether this exact Client can still admit one handler. */
-    function clientOpen(): boolean {
-      return !clientClosed
-    }
     return Object.freeze({
-      /** Dispatches one exchange and applies backpressure until its reply exists. */
-      async send(ctx: Context, outgoing: Message): Promise<void> {
+      /** Invokes the listener handler with the original Request and returns its Response. */
+      async fetch(ctx: Context, request: Request): Promise<Response> {
         checkContext(ctx)
-        if (clientClosed) throw newTransportClosedError("memory client is closed")
-        const request = snapshotMessage(outgoing)
-        checkContext(ctx)
-        if (clientClosed) throw newTransportClosedError("memory client is closed")
-        const exchange = dispatch(request, localAddress, clientOpen)
-        if (clientClosed) {
-          exchange.close(newTransportClosedError("memory client is closed"))
-          throw newTransportClosedError("memory client is closed")
+        if (!admitting) throw newTransportClosedError("memory client is closed")
+        if (!(request instanceof Request)) {
+          throw new TypeError("memory client fetch requires a Request")
         }
-        active.add(exchange)
-        observe(
-          exchange.done.finally(function completed(): void {
-            active.delete(exchange)
-          })
-        )
-        slots.push(exchange)
+        const exchange = dispatch(request, ctx)
+        owned.add(exchange)
+        exchange.retain(function releaseOwned(): void {
+          owned.delete(exchange)
+        })
         try {
-          await waitForOperation(ctx, exchange.response, timeoutMs)
+          return await waitForOperation(ctx, exchange.response, timeoutMs)
         } catch (failure) {
-          const index = slots.indexOf(exchange)
-          if (index >= 0) slots.splice(index, 1)
-          exchange.close(boundaryError(failure, "memory send wait rejected"))
-          throw failure
-        }
-      },
-      /** Receives replies in send invocation order. */
-      async recv(ctx: Context): Promise<Message> {
-        checkContext(ctx)
-        if (clientClosed) throw newTransportClosedError("memory client is closed")
-        const exchange = slots.shift()
-        if (exchange === undefined) throw newTransportStateError("memory recv occurred before send")
-        try {
-          return snapshotMessage(await waitForOperation(ctx, exchange.response, timeoutMs))
-        } catch (failure) {
-          exchange.close(boundaryError(failure, "memory receive wait rejected"))
+          const error = boundaryError(failure, "memory fetch wait rejected")
+          exchange.fail(error, error)
           throw failure
         } finally {
-          if (dial.connectionClose) client.terminate(canceled)
+          if (dial.connectionClose) client.retire()
         }
       },
       /** Idempotently closes only this Client after caller admission. */
@@ -585,14 +460,6 @@ function newMemoryListener(address: string, releaseAddress: () => void): MemoryL
         if (failure !== null) return Promise.reject(failure)
         client.terminate(canceled)
         return Promise.resolve()
-      },
-      /** Returns this Client's instance-local diagnostic address. */
-      local(): string {
-        return localAddress
-      },
-      /** Returns the bound listener address. */
-      remote(): string {
-        return address
       }
     })
   }
@@ -609,7 +476,6 @@ function newMemoryListener(address: string, releaseAddress: () => void): MemoryL
 export function newMemoryTransport(): MemoryTransport {
   let common = snapshotMemoryOptions(defaultMemoryOptions())
   const listeners = new Map<string, MemoryListenerState>()
-  let clientSequence = 0
   const transport: MemoryTransport = Object.freeze({
     /** Returns the stable provider kind. */
     kind(): "memory" {
@@ -630,18 +496,13 @@ export function newMemoryTransport(): MemoryTransport {
         const address = memoryAddress(target)
         const dial = applyMemoryDialOptions(options)
         checkContext(ctx)
-        requireSupportedCommonOptions(common)
+        requireSupported(common)
         const listener = listeners.get(address)
         if (listener === undefined) {
           throw newTransportStateError(`memory address is not bound: ${address}`)
         }
-        clientSequence += 1
         return Promise.resolve(
-          listener.connect(
-            dial,
-            effectiveTimeout(common.timeoutMs, dial.timeoutMs),
-            `memory://client/${clientSequence}`
-          )
+          listener.connect(dial, effectiveTimeout(common.timeoutMs, dial.timeoutMs))
         )
       } catch (failure) {
         return Promise.reject(failure)
@@ -654,7 +515,7 @@ export function newMemoryTransport(): MemoryTransport {
         const address = memoryAddress(target)
         applyMemoryListenOptions(options)
         checkContext(ctx)
-        requireSupportedCommonOptions(common)
+        requireSupported(common)
         if (listeners.has(address)) {
           throw newTransportStateError(`memory address is already bound: ${address}`)
         }
@@ -681,8 +542,9 @@ export function newMemoryTransport(): MemoryTransport {
 /** Injects one passive listener failure without exposing network ownership in the public package. */
 export function failMemoryListener(ctx: Context, listener: Listener, cause: Error): void {
   checkContext(ctx)
-  if (!(cause instanceof Error))
+  if (!(cause instanceof Error)) {
     throw new TypeError("memory listener failure cause must be an Error")
+  }
   const fail = listenerFailures.get(listener)
   if (fail === undefined) {
     throw newTransportProtocolError("listener is not owned by @go-like/transport-memory")

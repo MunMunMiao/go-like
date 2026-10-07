@@ -71,8 +71,8 @@ For a Go or Kratos reader, migrate concepts rather than spelling:
 | `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` is an `AbortSignal` or null, not a Go channel                 |
 | Server lifecycle  | Core structural `Server`                                                                                           | `start(ctx)` may be long-lived and is not readiness                    |
 | App runner        | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` has no caller Context and returns one shared Promise      |
-| RPC client        | `@go-like/client`                                                                                                  | Internal calls are unary `Message`; retry is opt-in                    |
-| Transport         | `@go-like/transport`                                                                                               | Providers and Message headers are TypeScript/Web contracts             |
+| RPC client        | `@go-like/client`                                                                                                  | Internal calls are JSON Fetch; retry is opt-in                         |
+| Transport         | `@go-like/transport`                                                                                               | Providers and Fetch headers are TypeScript/Web contracts               |
 | Registry          | `@go-like/registry`                                                                                                | Watchers return complete replacement snapshots                         |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | Feedback is synchronous and policy-specific                            |
 | Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | Ctx-first glue over upstream Protobuf-ES codecs and service descriptor |
@@ -81,14 +81,33 @@ For a Go or Kratos reader, migrate concepts rather than spelling:
 An incremental first move is a direct-address typed call over Memory Transport:
 
 ```ts
-// Composition excerpt: quote and pricingQuoteHandler are application-owned.
-// Admit this server through App before calling; close client during shutdown.
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const quoteService = defineService("pricing", {
+  quote: {
+    request: struct.object({ sku: struct.string() }),
+    response: struct.object({ amount: struct.number() })
+  }
+})
+
 const transport = newMemoryTransport()
 const server = newServer(serverTransport(transport), address("memory://pricing"))
-server.registerHandler(quote, pricingQuoteHandler)
+quoteService.registerHandler(server, {
+  quote(_ctx, request) {
+    return { amount: request.sku.length }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://pricing"))
-const result = await client.call(ctx, quote, request)
+const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
+const caller = quoteService.newClient(client)
+const ctx: Context = background()
+const result = await caller.quote(ctx, { sku: "a" })
+void result
 ```
 
 Only after this boundary is tested should you introduce Discovery, a real Registry provider, or an HTTP transport. This preserves the domain contract while replacing the destination and ownership plumbing.
@@ -103,7 +122,7 @@ Keep Kubernetes native:
 - an EndpointSlice is not Kubernetes Service DNS and does not provide a universal registration TTL;
 - optional Pod owner references and explicit deregistration have different failure semantics.
 
-Start with health and configuration before direct EndpointSlice selection. If the application already has a stable Service DNS name, `withAddress(...)` plus an HTTP transport may be simpler and more honest than adding a Registry provider.
+Start with health and configuration before direct EndpointSlice selection. If the application already has a stable Service DNS name, `withEndpoint(...)` plus an HTTP transport may be simpler and more honest than adding a Registry provider.
 
 ## Broker and job adoption
 

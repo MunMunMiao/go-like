@@ -1,8 +1,8 @@
 import { background, cause, withTimeoutCause } from "@go-like/context"
-import type { Client as TransportClient, Message } from "@go-like/transport"
+import type { Client as TransportClient } from "@go-like/transport"
 
 interface CompletedCallFailure extends AggregateError {
-  readonly cause: Message
+  readonly cause: Response
 }
 
 const completedCallFailures = new WeakSet<object>()
@@ -20,7 +20,7 @@ export function isError(value: unknown): value is Error {
 
 /** Preserves a completed response and ordered cleanup failures using standard Error fields. */
 export function newCompletedCallFailure(
-  response: Message,
+  response: Response,
   failures: readonly Error[]
 ): CompletedCallFailure {
   const captured = Object.freeze(Array.from(failures))

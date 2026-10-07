@@ -66,29 +66,48 @@ framework route table
 
 إذا كنت قادماً من Go أو Kratos، فهاجر المفاهيم لا الأسماء:
 
-| مفهوم Go          | مفهوم go-like                                                                                                      | الاختلاف المهم                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| `context.Context` | `Context` من `@go-like/context`                                                                                    | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                  |
-| Server lifecycle  | `Server` البنيوي في Core                                                                                           | قد يستمر `start(ctx)` طوال عمر الخدمة، ولا يعني الجاهزية           |
-| App runner        | `newApp` و`App.run` و`App.stop`                                                                                    | لا يستقبل `App.stop()` سياق المستدعي ويعيد Promise مشتركة واحدة    |
-| RPC client        | `@go-like/client`                                                                                                  | الاستدعاءات الداخلية هي `Message` أحادية؛ وإعادة المحاولة اختيارية |
-| Transport         | `@go-like/transport`                                                                                               | المزوّدات وحقول headers في `Message` عقود TypeScript/Web           |
-| Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                 |
-| Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | الملاحظات الراجعة متزامنة وتعتمد على السياسة                       |
-| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | شيفرة Context-first فوق Protobuf-ES                                |
-| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC قياسي بالأنماط الأربعة عبر `/native`                          |
+| مفهوم Go          | مفهوم go-like                                                                                                      | الاختلاف المهم                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `context.Context` | `Context` من `@go-like/context`                                                                                    | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                   |
+| Server lifecycle  | `Server` البنيوي في Core                                                                                           | قد يستمر `start(ctx)` طوال عمر الخدمة، ولا يعني الجاهزية            |
+| App runner        | `newApp` و`App.run` و`App.stop`                                                                                    | لا يستقبل `App.stop()` سياق المستدعي ويعيد Promise مشتركة واحدة     |
+| RPC client        | `@go-like/client`                                                                                                  | الاستدعاءات الداخلية هي JSON Fetch أو SSE؛ وإعادة المحاولة اختيارية |
+| Transport         | `@go-like/transport`                                                                                               | المزوّدات وترويسات Fetch عقود TypeScript/Web                        |
+| Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                  |
+| Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | الملاحظات الراجعة متزامنة وتعتمد على السياسة                        |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | شيفرة Context-first فوق Protobuf-ES                                 |
+| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC قياسي بالأنماط الأربعة عبر `/native`                           |
 
 الخطوة التدريجية الأولى هي استدعاء typed إلى عنوان مباشر عبر Memory Transport:
 
 ```ts
-// Composition excerpt: quote and pricingQuoteHandler are application-owned.
-// Admit this server through App before calling; close client during shutdown.
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background, type Context } from "@go-like/context"
+import { address, newServer, transport as serverTransport } from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const quoteService = defineService("pricing", {
+  quote: {
+    request: struct.object({ sku: struct.string() }),
+    response: struct.object({ amount: struct.number() })
+  }
+})
+
 const transport = newMemoryTransport()
 const server = newServer(serverTransport(transport), address("memory://pricing"))
-server.registerHandler(quote, pricingQuoteHandler)
+quoteService.registerHandler(server, {
+  quote(_ctx, request) {
+    return { amount: request.sku.length }
+  }
+})
 
-const client = newClient(withTransport(transport), withAddress("memory://pricing"))
-const result = await client.call(ctx, quote, request)
+const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
+const caller = quoteService.newClient(client)
+const ctx: Context = background()
+const result = await caller.quote(ctx, { sku: "a" })
+void result
 ```
 
 لا تقدّم Discovery أو مزوّد Registry حقيقياً أو HTTP Transport إلا بعد اختبار هذا الحدّ. هكذا تحافظ على عقد المجال أثناء استبدال الوجهة وتركيب الملكية.
@@ -103,7 +122,7 @@ const result = await client.call(ctx, quote, request)
 - لا يُعدّ EndpointSlice هو DNS الخاص بـ Kubernetes Service، ولا يوفّر TTL عاماً للتسجيل؛
 - لملكية Pod الاختيارية وإلغاء التسجيل الصريح دلالات فشل مختلفة.
 
-ابدأ بالصحة والإعداد قبل الاختيار المباشر من EndpointSlice. إذا كان للتطبيق بالفعل اسم DNS ثابت لـ Service، فقد يكون `withAddress(...)` مع HTTP Transport أبسط وأكثر صدقاً من إضافة مزوّد Registry.
+ابدأ بالصحة والإعداد قبل الاختيار المباشر من EndpointSlice. إذا كان للتطبيق بالفعل اسم DNS ثابت لـ Service، فقد يكون `withEndpoint(...)` مع HTTP Transport أبسط وأكثر صدقاً من إضافة مزوّد Registry.
 
 ## اعتماد الوسطاء والمهام
 

@@ -75,8 +75,8 @@ const broker = logBroker(nativeBroker, logger)
 
 四个适配器都只在一个逻辑操作完成时写一条原生 Winston 日志：
 
-- Client operation 为 `service/endpoint`；一次包含重试的逻辑调用仍只记录一次。
-- unary Server operation 从 go-like routing header 读取 `service/endpoint`。
+- Client operation 为 `service/endpoint`，来自 `CallRequest.service` 与 `CallRequest.endpoint`；一次包含重试的逻辑调用仍只记录一次。
+- Server operation 来自 `TransportInfo.operation()`，不是 `Go-Like-Service` 或 `Go-Like-Endpoint` 头。服务端流在 response body 结束时记录，并增加 `messageCount` 与 `handshakeMs`。
 - Web operation 只记录 HTTP method，并在成功响应时增加 `httpStatus`；不记录 URL 或 path。
 - Broker operation 为 `publish <topic>` 或 `consume <topic>`；topic 应保持为稳定、低基数的业务主题。
 

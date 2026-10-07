@@ -1,7 +1,8 @@
 # @go-like/core
 
 `@go-like/core` 提供与 go-kratos 对齐的应用生命周期。应用只需要理解 `App.run()`、`App.stop()` 与结构化
-`Server.start/stop`；不需要 handle、`done()`、diagnostics 或独立 runner。
+`Server.start/stop`；不需要 handle、`done()`、diagnostics 或独立 runner。`name(...)` 是 Registry 应用名，
+Client 用 `withEndpoint("discovery:///<name>")` 选择它。它不是契约里的 service 名，也不是 endpoint 名。
 
 ## 使用方式
 

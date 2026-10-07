@@ -2,9 +2,13 @@ import { expect, test } from "bun:test"
 
 import type { CallOption, CallRequest } from "@go-like/client"
 import { background, withCancelCause, type Context } from "@go-like/context"
+import { newMetadata } from "@go-like/metadata"
 import { struct } from "@go-like/struct"
-import { endpoint as serviceEndpoint, type Message } from "@go-like/transport"
-import { contentType, endpoint, request as service } from "@go-like/transport/headers"
+import {
+  endpoint as serviceEndpoint,
+  newServerContext,
+  type TransportInfo
+} from "@go-like/transport"
 import { encodeJsonBody } from "@go-like/transport/json"
 import {
   AggregationTemporality,
@@ -23,10 +27,20 @@ import {
 } from "../src/index"
 import { newLoopbackClient } from "./client-fixture"
 
-const emptyMessage: Message = Object.freeze({
-  header: Object.freeze({}),
-  body: new Uint8Array()
-})
+const emptyResponse = new Response(null, { status: 204 })
+
+/** Builds TransportInfo whose operation is independent of request headers. */
+function transportInfo(operation: string): TransportInfo {
+  const headers = newMetadata()
+  return {
+    kind: () => "http",
+    endpoint: () => "",
+    operation: () => operation,
+    requestHeaders: () => headers,
+    replyHeaders: () => headers,
+    peerIdentity: () => null
+  }
+}
 
 /** Returns one unique metric exported by the official in-memory SDK exporter. */
 function metricNamed(exporter: InMemoryMetricExporter, name: string): MetricData {
@@ -70,10 +84,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
     ]
   })
   const metrics = newRequestMetrics(provider.getMeter("go-like-request-test"))
-  const response: Message = Object.freeze({
-    header: Object.freeze({ native: "response" }),
-    body: new Uint8Array([1])
-  })
+  const response = new Response("native")
   const clientFailure = new Error("client failed")
   const cancellation = new Error("canceled")
   let optionSeen: CallOption | null = null
@@ -81,7 +92,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
     _ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[]
-  ): Promise<Message> {
+  ): Promise<Response> {
     optionSeen = options[0] ?? null
     if (request.endpoint !== "Get") throw clientFailure
     return response
@@ -89,32 +100,35 @@ test("records Client and unary Server outcomes through the official metrics SDK"
   const measured = measureClientMiddleware(metrics)(native)
   const option: CallOption = (current) => current
 
-  expect(
-    await measured(
-      background(),
-      { service: "catalog", endpoint: "Get", message: emptyMessage },
-      option
-    )
-  ).toBe(response)
+  const delivered = await measured(
+    background(),
+    { service: "catalog", endpoint: "Get", headers: {}, body: null },
+    option
+  )
+  expect(delivered.status).toBe(200)
+  expect(await delivered.text()).toBe("native")
   expect(optionSeen === option).toBe(true)
   await expect(
     measured(background(), {
       service: "catalog",
       endpoint: "Fail",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).rejects.toBe(clientFailure)
 
   const requestStruct = struct.object({ id: struct.number() })
   const responseStruct = struct.object({ total: struct.number() })
-  const typedSubject = newLoopbackClient((request) => {
-    if (request.header[endpoint] === "TypedFail") {
-      return { header: {}, body: new Uint8Array() }
-    }
-    return {
-      header: { native: "response", [contentType]: "application/json; charset=utf-8" },
-      body: encodeJsonBody(responseStruct, { total: request.body.byteLength })
-    }
+  const typedSubject = newLoopbackClient(async (request) => {
+    const name = new URL(request.url).pathname.split("/").pop()
+    if (name === "TypedFail") return new Response(new Uint8Array())
+    const bytes = new Uint8Array(await request.arrayBuffer())
+    const encoded = encodeJsonBody(responseStruct, { total: bytes.byteLength })
+    const payload = new ArrayBuffer(encoded.byteLength)
+    new Uint8Array(payload).set(encoded)
+    return new Response(payload, {
+      headers: { "content-type": "application/json; charset=utf-8" }
+    })
   })
   const wrapped = measureClient(typedSubject.client, metrics)
   const typed = serviceEndpoint("catalog", "Typed", requestStruct, responseStruct)
@@ -138,29 +152,42 @@ test("records Client and unary Server outcomes through the official metrics SDK"
     measured(canceledClientContext, {
       service: "catalog",
       endpoint: "Cancel",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).rejects.toBe(clientFailure)
 
   const serverFailure = new Error("server failed")
   const middleware = measureUnaryMiddleware(metrics)
-  const successful = middleware(async (_ctx, message) => message)
+  const ok = new Response(null, { status: 204 })
+  const successful = middleware(async () => ok)
   const failing = middleware(() => {
     throw serverFailure
   })
-  const routed: Message = {
-    header: {
-      [service.toLowerCase()]: "payments",
-      [endpoint.toUpperCase()]: "Authorize"
-    },
-    body: new Uint8Array()
-  }
-  expect(await successful(background(), routed)).toBe(routed)
-  await expect(failing(background(), routed)).rejects.toBe(serverFailure)
+  const routed = new Request("https://service.test/payments/Authorize", {
+    method: "POST",
+    headers: { "Go-Like-Service": "attacker-controlled-tenant-9817" }
+  })
+  const routedContext = newServerContext(background(), transportInfo("payments/Authorize"))
+  expect(await successful(routedContext, routed)).toBe(ok)
+  await expect(failing(routedContext, routed)).rejects.toBe(serverFailure)
   const [canceledServerContext, cancelServer] = withCancelCause(background())
   cancelServer(cancellation)
-  await expect(failing(canceledServerContext, routed)).rejects.toBe(serverFailure)
-  expect(await successful(background(), emptyMessage)).toBe(emptyMessage)
+  await expect(
+    failing(newServerContext(canceledServerContext, transportInfo("payments/Authorize")), routed)
+  ).rejects.toBe(serverFailure)
+  const missing = new Request("https://service.test/missing")
+  expect(await successful(background(), missing)).toBe(ok)
+  const root = background()
+  const exploding: Context = {
+    deadline: root.deadline,
+    done: root.done,
+    err: root.err,
+    value(): never {
+      throw new Error("transport info unavailable")
+    }
+  }
+  await expect(failing(exploding, routed)).rejects.toBe(serverFailure)
 
   await provider.forceFlush()
   const total = metricNamed(exporter, "go-like.request.completed")
@@ -175,6 +202,7 @@ test("records Client and unary Server outcomes through the official metrics SDK"
     expect(hasAttributes(metric, "server", "payments/Authorize", "failure")).toBe(true)
     expect(hasAttributes(metric, "server", "payments/Authorize", "canceled")).toBe(true)
     expect(hasAttributes(metric, "server", "unknown/unknown", "success")).toBe(true)
+    expect(hasAttributes(metric, "server", "unknown/unknown", "failure")).toBe(true)
   }
   expect(total.dataPoints.every((point) => point.value === 1)).toBe(true)
   expect(total.descriptor.unit).toBe("{request}")
@@ -188,28 +216,19 @@ test("preserves typed Client Struct and protocol failures", async () => {
   const requestStruct = struct.object({ id: struct.number() })
   const responseStruct = struct.object({ total: struct.number() })
   const subject = newLoopbackClient((request) => {
-    if (request.header[endpoint] === "Missing") {
-      return { header: {}, body: new Uint8Array() }
+    const name = new URL(request.url).pathname.split("/").pop()
+    if (name === "Missing") return new Response(new Uint8Array())
+    if (name === "Duplicate") {
+      return new Response(new Uint8Array(), {
+        headers: { "content-type": "application/json, application/json" }
+      })
     }
-    if (request.header[endpoint] === "Duplicate") {
-      return {
-        header: {
-          "Content-Type": "application/json",
-          "content-type": "application/json"
-        },
-        body: new Uint8Array()
-      }
+    if (name === "Malformed") {
+      return new Response("{", { headers: { "content-type": "application/json" } })
     }
-    if (request.header[endpoint] === "Malformed") {
-      return {
-        header: { [contentType]: "application/json" },
-        body: new TextEncoder().encode("{")
-      }
-    }
-    return {
-      header: { [contentType]: "application/json" },
-      body: new TextEncoder().encode('{"total":"invalid"}')
-    }
+    return new Response('{"total":"invalid"}', {
+      headers: { "content-type": "application/json" }
+    })
   })
   const client = measureClient(subject.client, metrics)
 
@@ -272,7 +291,7 @@ test("preserves typed Client Struct and protocol failures", async () => {
   await expect(
     Reflect.apply(client.call, client, [
       background(),
-      { service: "catalog", endpoint: "Raw", message: emptyMessage },
+      { service: "catalog", endpoint: "Raw", headers: {}, body: null },
       1
     ])
   ).rejects.toThrow("Client call option must be a function")
@@ -314,15 +333,16 @@ test("validates instrumentation inputs and never replaces application outcomes",
   }
   const client = measureClientMiddleware(hostileMetrics)(async (_ctx, request) => {
     if (request.endpoint === "Fail") throw applicationFailure
-    return emptyMessage
+    return emptyResponse
   })
   await expect(
     client(background(), {
       service: "catalog",
       endpoint: "Get",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
-  ).resolves.toBe(emptyMessage)
+  ).resolves.toBe(emptyResponse)
   const base = background()
   const hostileContext: Context = {
     deadline: base.deadline,
@@ -336,7 +356,8 @@ test("validates instrumentation inputs and never replaces application outcomes",
     client(hostileContext, {
       service: "catalog",
       endpoint: "Fail",
-      message: emptyMessage
+      headers: {},
+      body: null
     })
   ).rejects.toBe(applicationFailure)
   await provider.shutdown()

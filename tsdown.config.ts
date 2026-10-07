@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { join, posix, resolve } from "node:path"
 
 import { defineConfig, type UserConfig } from "tsdown"
@@ -111,9 +112,11 @@ export default defineConfig(async (inlineConfig): Promise<UserConfig> => {
   const cwd = resolve(inlineConfig.cwd ?? process.cwd())
   const manifest = await Bun.file(join(cwd, "package.json")).json()
   const entry = packageEntries(manifest)
+  const copy = ["README.md", "LICENSE"]
+  if (existsSync(join(cwd, "THIRD_PARTY_NOTICES.md"))) copy.push("THIRD_PARTY_NOTICES.md")
   return {
     clean: true,
-    copy: ["README.md", "LICENSE"],
+    copy,
     cwd,
     deps: { neverBundle: [/^@go-like\//, /^node:/] },
     dts: true,

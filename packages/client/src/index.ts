@@ -1,4 +1,11 @@
-import { background, withoutCancel, withValue, type Context } from "@go-like/context"
+import {
+  background,
+  canceled,
+  deadlineExceeded,
+  withoutCancel,
+  withValue,
+  type Context
+} from "@go-like/context"
 import { waitForContext } from "@go-like/core/lifecycle"
 import { fromClientContext, newMetadata, type Metadata } from "@go-like/metadata"
 import {
@@ -11,6 +18,7 @@ import {
   type Selector,
   type ServiceInstance
 } from "@go-like/registry"
+import { snapshotServiceInstances } from "@go-like/registry/provider"
 import {
   newCircuitBreaker,
   retry,
@@ -22,30 +30,27 @@ import {
 } from "@go-like/resilience"
 import type { Infer, Struct } from "@go-like/struct"
 import {
+  applyResponseObservers,
   endpoint as endpointContract,
   fromClientContext as fromTransportClientContext,
   isServiceError,
   newClientContext as newTransportClientContext,
+  observeResponseBody,
   type Endpoint,
   type Client as TransportClient,
   type Handler,
-  type Message,
   type Middleware,
+  type ServerStream,
   type Transport,
   type TransportInfo
 } from "@go-like/transport"
-import {
-  endpoint as endpointHeader,
-  contentType as contentTypeHeader,
-  metadata as metadataHeader,
-  request as serviceHeader
-} from "@go-like/transport/headers"
+import { metadata as metadataHeader, timeout as timeoutHeader } from "@go-like/transport/headers"
 import { decodeJsonBody, encodeJsonBody, jsonContentType } from "@go-like/transport/json"
+import { defaultSSEMaxMessageBytes, eventStreamContentType } from "@go-like/transport/sse"
 import {
-  decodeServiceError,
+  decodeServiceErrorResponse,
   encodeMetadataHeader,
-  newTransportProtocolError,
-  snapshotMessage
+  newTransportProtocolError
 } from "@go-like/transport/provider"
 import {
   closeWithTimeout,
@@ -54,10 +59,10 @@ import {
   newCompletedCallFailure
 } from "./cleanup"
 import { newDiscoveryResolver, type DiscoveryResolver } from "./resolver"
+import { openServerStream } from "./stream"
 
-const serviceHeaderLower = serviceHeader.toLowerCase()
-const endpointHeaderLower = endpointHeader.toLowerCase()
 const metadataHeaderLower = metadataHeader.toLowerCase()
+const timeoutHeaderLower = timeoutHeader.toLowerCase()
 const fallbackTransportKind = "transport"
 const transportKindPattern = /^[a-z0-9][a-z0-9+._-]*$/
 const emptyMetadata = newMetadata()
@@ -65,6 +70,7 @@ const callTransportStateKey = Object.freeze({})
 const callTransportStates = new WeakSet<object>()
 const typedResponseValidatorKey = Object.freeze({})
 const typedResponseValidators = new WeakSet<object>()
+const committedExchanges = new WeakSet<object>()
 const defaultClientOptions: ClientOptions = Object.freeze({
   addresses: Object.freeze([]),
   service: null,
@@ -82,6 +88,8 @@ const defaultCallOptions: CallOptions = Object.freeze({
   filters: Object.freeze([]),
   retry: null
 })
+const publishedCallOptions = new WeakSet<object>([defaultCallOptions])
+const maximumDirectSnapshots = 1_024
 
 interface ClientOptionsCandidate {
   readonly addresses?: unknown
@@ -115,12 +123,12 @@ interface RetryOptionsCandidate {
 }
 
 interface CallTransportState {
-  readonly beginAttempt: (target: string, requestHeaders: Metadata) => void
-  readonly updateReply: (replyHeaders: Metadata) => void
+  readonly beginAttempt: (target: string, requestHeaders: () => Metadata) => void
+  readonly updateReply: (replyHeaders: () => Metadata) => void
 }
 
 interface TypedResponseValidator {
-  readonly validate: (message: Message) => Promise<void>
+  readonly validate: (response: Response) => Promise<void>
 }
 
 interface CleanupRetryResult {
@@ -130,8 +138,7 @@ interface CleanupRetryResult {
 interface ResidentTransportClient {
   readonly address: string
   readonly receiver: TransportClient
-  readonly send: TransportClient["send"]
-  readonly recv: TransportClient["recv"]
+  readonly fetch: TransportClient["fetch"]
   readonly close: TransportClient["close"]
   idleTimer: ReturnType<typeof setTimeout> | null
   closing: Promise<void> | null
@@ -159,28 +166,17 @@ function isBackoff(value: unknown): value is Backoff {
   return typeof value === "function"
 }
 
-/** Returns whether a string contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
-/** Reports whether a value is one canonical service or endpoint route token. */
+/** Reports whether a value is one URL-unreserved service or endpoint route token. */
 function isRouteToken(value: unknown): value is string {
-  return typeof value === "string" && /^[\x21-\x7e]+$/u.test(value) && !/[/*]/u.test(value)
+  return (
+    typeof value === "string" && /^[A-Za-z0-9._~-]+$/.test(value) && value !== "." && value !== ".."
+  )
 }
 
 /** Validates one unambiguous service or endpoint token before any service I/O. */
 function callName(value: unknown, field: string): string {
   if (!isRouteToken(value)) {
-    throw new TypeError(`CallRequest.${field} must be a visible ASCII route token`)
+    throw new TypeError(`CallRequest.${field} must be a URL unreserved route token`)
   }
   return value
 }
@@ -207,25 +203,30 @@ function operationSelector(value: unknown): string {
   return selector
 }
 
-/** Reads one case-insensitive Content-Type header and rejects duplicates. */
-function messageContentType(header: Readonly<Record<string, string>>): string | null {
-  let found: string | null = null
-  for (const key of Object.keys(header)) {
-    if (key.toLowerCase() !== contentTypeHeader.toLowerCase()) continue
-    if (found !== null) throw new TypeError("duplicate Content-Type header")
-    found = header[key] ?? ""
-  }
-  return found
-}
-
 /** Returns one comparable media type without optional parameters. */
 function mediaType(value: string): string {
   return (value.split(";", 1)[0] ?? "").trim().toLowerCase()
 }
 
+/** Reads a transport receive ceiling, or the SSE default when the transport has none. */
+function receiveLimit(transport: Transport): number {
+  const method: unknown = Reflect.get(transport, "maxMessageBytes")
+  if (typeof method !== "function") return defaultSSEMaxMessageBytes
+  let selected: unknown
+  try {
+    selected = Reflect.apply(method, transport, [])
+  } catch {
+    return defaultSSEMaxMessageBytes
+  }
+  if (typeof selected !== "number" || !Number.isSafeInteger(selected) || selected < 1) {
+    return defaultSSEMaxMessageBytes
+  }
+  return selected
+}
+
 /** Validates one well-formed call option string without normalizing its bytes. */
 function callText(value: unknown, field: string, nonEmpty: boolean): string {
-  if (typeof value !== "string" || (nonEmpty && value.length === 0) || !isWellFormed(value)) {
+  if (typeof value !== "string" || (nonEmpty && value.length === 0) || !value.isWellFormed()) {
     throw new TypeError(`${field} must be a${nonEmpty ? " non-empty" : ""} well-formed string`)
   }
   return value
@@ -251,38 +252,44 @@ function boundaryError(value: unknown): Error {
 }
 
 /** Creates one typed response validator whose result survives retry attempts. */
-function newTypedResponseBoundary<Response extends Struct>(
-  schema: Response
+function newTypedResponseBoundary<ResponseSchema extends Struct>(
+  schema: ResponseSchema
 ): readonly [
   validator: TypedResponseValidator,
-  result: () => readonly [Infer<Response>] | null,
-  decode: (message: Message) => Promise<Infer<Response>>
+  result: () => readonly [Infer<ResponseSchema>] | null,
+  decode: (response: Response) => Promise<Infer<ResponseSchema>>
 ] {
-  let result: readonly [Infer<Response>] | null = null
+  let result: readonly [Infer<ResponseSchema>] | null = null
 
   /** Decodes and captures the latest successful response attempt. */
-  async function decode(response: Message): Promise<Infer<Response>> {
+  async function decode(response: Response): Promise<Infer<ResponseSchema>> {
     try {
-      const value = messageContentType(response.header)
+      const value = response.headers.get("content-type")
       if (value === null || mediaType(value) !== jsonContentType) {
         throw new TypeError("unexpected response Content-Type")
       }
-      const decoded = decodeJsonBody(schema, response.body)
-      const captured: readonly [Infer<Response>] = Object.freeze([decoded])
+      const decoded = decodeJsonBody(schema, new Uint8Array(await response.arrayBuffer()))
+      const captured: readonly [Infer<ResponseSchema>] = Object.freeze([decoded])
       result = captured
       return decoded
     } catch (value) {
+      if (value === deadlineExceeded || value === canceled) throw value
       throw newTransportProtocolError("client typed response is invalid", boundaryError(value))
     }
   }
 
   /** Validates and captures one attempt for selector, retry, and middleware feedback. */
-  async function validate(response: Message): Promise<void> {
-    await decode(response)
+  async function validate(response: Response): Promise<void> {
+    try {
+      await decode(response)
+    } catch (value) {
+      abandonResponse(response)
+      throw value
+    }
   }
 
   /** Returns the latest captured response tuple without inventing a sentinel value. */
-  function capturedResult(): readonly [Infer<Response>] | null {
+  function capturedResult(): readonly [Infer<ResponseSchema>] | null {
     return result
   }
 
@@ -332,7 +339,7 @@ function publishSelectionFeedback(
   selectionFailure: () => Error | null,
   bytesSent: boolean,
   bytesReceived: boolean,
-  replyMetadata: Metadata | null
+  replyMetadata: (() => Metadata) | null
 ): Error | null {
   try {
     const feedbackContext = withoutCancel(ctx)
@@ -340,7 +347,14 @@ function publishSelectionFeedback(
     const outcome: SelectionOutcome =
       replyMetadata === null
         ? Object.freeze({ error, bytesSent, bytesReceived })
-        : Object.freeze({ error, replyMetadata, bytesSent, bytesReceived })
+        : Object.freeze({
+            error,
+            get replyMetadata(): Metadata {
+              return replyMetadata()
+            },
+            bytesSent,
+            bytesReceived
+          })
     return selectionFeedbackResult(Reflect.apply(complete, undefined, [feedbackContext, outcome]))
   } catch (value) {
     return boundaryError(value)
@@ -386,39 +400,108 @@ function transportKind(value: unknown): string {
   return fallbackTransportKind
 }
 
-/** Rejects caller ownership of routing and Context metadata headers reserved by this Client. */
-function rejectReservedHeaders(message: Message): void {
-  for (const name of Object.keys(message.header)) {
+/** Rejects caller ownership of the metadata and deadline headers reserved by this Client. */
+function rejectReservedHeaders(headers: Headers): void {
+  for (const [name] of headers) {
     const lower = name.toLowerCase()
-    if (
-      lower === serviceHeaderLower ||
-      lower === endpointHeaderLower ||
-      lower === metadataHeaderLower
-    ) {
-      throw new TypeError(`message header ${name} is reserved by @go-like/client`)
+    if (lower === metadataHeaderLower || lower === timeoutHeaderLower) {
+      throw new TypeError(`request header ${name} is reserved by @go-like/client`)
     }
   }
 }
 
-/** Projects routing and canonical client Context metadata into one detached unary header record. */
-function unaryRequestHeaders(
-  ctx: Context,
-  header: Readonly<Record<string, string>>,
-  service: string,
-  endpoint: string
-): Readonly<Record<string, string>> {
-  const entries = Object.entries(header)
-  entries.push([serviceHeader, service], [endpointHeader, endpoint])
+/** Copies caller headers before discovery so later mutation cannot change the exchange. */
+function snapshotHeaders(headers: unknown): Headers {
+  if (headers instanceof Headers) return new Headers(headers)
+  if (Array.isArray(headers) || (typeof headers === "object" && headers !== null)) {
+    try {
+      return new Headers(headers as HeadersInit)
+    } catch (value) {
+      throw new TypeError("CallRequest.headers must be a header record", { cause: value })
+    }
+  }
+  throw new TypeError("CallRequest.headers must be a header record")
+}
+
+/** Copies one replayable request body, or accepts null when the call has no body. */
+function snapshotBody(body: unknown): Uint8Array<ArrayBuffer> | null {
+  if (body === null) return null
+  if (!(body instanceof Uint8Array)) {
+    throw new TypeError("CallRequest.body must be a Uint8Array or null")
+  }
+  return new Uint8Array(body)
+}
+
+/** Returns the remaining whole milliseconds, or null when the caller set no deadline. */
+function timeoutHeaderValue(ctx: Context): string | null {
+  const deadline = ctx.deadline()
+  if (deadline[1] !== true) return null
+  const remaining = deadline[0].getTime() - Date.now()
+  if (remaining <= 0) return "0"
+  const milliseconds = Math.ceil(remaining)
+  if (!Number.isSafeInteger(milliseconds)) return null
+  return String(milliseconds)
+}
+
+/** Rejects a selected node address that is not an absolute root URL. */
+function assertRootAddress(address: string): void {
+  let url: URL
+  try {
+    url = new URL(address)
+  } catch (value) {
+    throw new TypeError(`client node address must be an absolute root URL, received ${address}`, {
+      cause: value
+    })
+  }
+  if (
+    (url.pathname !== "/" && url.pathname !== "") ||
+    url.search !== "" ||
+    url.href.includes("#") ||
+    url.href.includes("?")
+  ) {
+    throw new TypeError(`client node address must be an absolute root URL, received ${address}`)
+  }
+}
+
+/** Builds the outbound headers for one attempt, including a freshly computed timeout. */
+function outboundHeaders(headers: Headers, ctx: Context): Headers {
+  const outbound = new Headers(headers)
   const encoded = encodeMetadataHeader(fromClientContext(ctx) ?? emptyMetadata)
-  if (encoded !== null) entries.push([metadataHeader, encoded])
-  return Object.fromEntries(entries)
+  if (encoded !== null) outbound.set(metadataHeader, encoded)
+  const timeoutMs = timeoutHeaderValue(ctx)
+  if (timeoutMs !== null) outbound.set(timeoutHeader, timeoutMs)
+  return outbound
+}
+
+/** Builds one replayable POST request for the selected node. */
+function callRequest(
+  address: string,
+  service: string,
+  endpoint: string,
+  outbound: Headers,
+  body: Uint8Array<ArrayBuffer> | null,
+  ctx: Context
+): Request {
+  const timeoutMs = timeoutHeaderValue(ctx)
+  if (timeoutMs !== null) outbound.set(timeoutHeader, timeoutMs)
+  const init: RequestInit = { method: "POST", headers: outbound }
+  if (body !== null) init.body = body
+  return new Request(new URL(`/${service}/${endpoint}`, address), init)
+}
+
+/** Drops an unread response body without delaying the caller's protocol error. */
+function abandonResponse(response: Response): void {
+  if (response.body === null || response.bodyUsed) return
+  void response.body.cancel().catch(function drain(): void {
+    void response.arrayBuffer().catch(function ignored(): void {})
+  })
 }
 
 /** Projects real wire entries in one pass without making Metadata validity a protocol gate. */
 function wireHeaderMetadata(entries: readonly (readonly [string, string])[]): Metadata {
   const grouped = new Map<string, string[]>()
   for (const [key, value] of entries) {
-    if (key.length === 0 || !isWellFormed(key) || !isWellFormed(value)) continue
+    if (key.length === 0 || !key.isWellFormed() || !value.isWellFormed()) continue
     const normalized = key.toLowerCase()
     const values = grouped.get(normalized)
     if (values === undefined) grouped.set(normalized, [value])
@@ -427,9 +510,26 @@ function wireHeaderMetadata(entries: readonly (readonly [string, string])[]): Me
   return newMetadata(Object.fromEntries(grouped))
 }
 
-/** Projects one Message header record to an immutable observable snapshot. */
-function messageHeaderMetadata(headers: Readonly<Record<string, string>>): Metadata {
-  return wireHeaderMetadata(Object.entries(headers))
+function emptyMetadataReader(): Metadata {
+  return emptyMetadata
+}
+
+/** Defers header projection until observed; the entries are captured now. */
+function lazyHeadersMetadata(headers: Headers): () => Metadata {
+  let cached: Metadata | null = null
+  return function readHeadersMetadata(): Metadata {
+    cached ??= headersMetadata(headers)
+    return cached
+  }
+}
+
+/** Projects one Fetch header list to an immutable observable snapshot. */
+function headersMetadata(headers: Headers): Metadata {
+  const entries: (readonly [string, string])[] = []
+  headers.forEach(function capture(value, key): void {
+    entries.push([key, value])
+  })
+  return wireHeaderMetadata(entries)
 }
 
 /** Creates one call-scoped dynamic TransportInfo facade without making observation a call gate. */
@@ -439,8 +539,8 @@ function newCallTransportContext(
   operation: string
 ): readonly [Context, CallTransportState] {
   let target = ""
-  let requestHeaders = emptyMetadata
-  let replyHeaders = emptyMetadata
+  let requestHeaders: () => Metadata = emptyMetadataReader
+  let replyHeaders: () => Metadata = emptyMetadataReader
   const info: TransportInfo = {
     kind(): string {
       return kind
@@ -452,19 +552,22 @@ function newCallTransportContext(
       return operation
     },
     requestHeaders(): Metadata {
-      return requestHeaders
+      return requestHeaders()
     },
     replyHeaders(): Metadata {
-      return replyHeaders
+      return replyHeaders()
+    },
+    peerIdentity(): string | null {
+      return null
     }
   }
   const state: CallTransportState = Object.freeze({
-    beginAttempt(nextTarget: string, nextRequestHeaders: Metadata): void {
+    beginAttempt(nextTarget: string, nextRequestHeaders: () => Metadata): void {
       target = nextTarget
       requestHeaders = nextRequestHeaders
-      replyHeaders = emptyMetadata
+      replyHeaders = emptyMetadataReader
     },
-    updateReply(nextReplyHeaders: Metadata): void {
+    updateReply(nextReplyHeaders: () => Metadata): void {
       replyHeaders = nextReplyHeaders
     }
   })
@@ -512,7 +615,7 @@ function snapshotSelection(value: unknown): readonly [string, SelectionDone] {
     throw new TypeError("Selector.select endpoint must be an object")
   }
   const url: unknown = Reflect.get(selected, "url")
-  if (typeof url !== "string" || url.length === 0 || !isWellFormed(url)) {
+  if (typeof url !== "string" || url.length === 0 || !url.isWellFormed()) {
     throw new TypeError("Selector.select endpoint url must be a non-empty well-formed string")
   }
   if (typeof complete !== "function") {
@@ -521,24 +624,32 @@ function snapshotSelection(value: unknown): readonly [string, SelectionDone] {
   return Object.freeze([url, complete as SelectionDone])
 }
 
-/** Describes one unary service call over an opaque Transport Message. */
+/** Describes one unary service call carried by a Fetch request. */
 export interface CallRequest {
   readonly service: string
   readonly endpoint: string
-  readonly message: Message
+  readonly headers: HeadersInit
+  readonly body: Uint8Array | null
 }
 
 /** Resolves and performs one unary internal service call at a time. */
 export interface Client {
-  /** Calls one typed endpoint while preserving the raw Message API. */
-  call<Request extends Struct, Response extends Struct>(
+  /** Calls one typed endpoint while preserving the raw Fetch API. */
+  call<Request extends Struct, ResponseSchema extends Struct>(
     ctx: Context,
-    endpoint: Endpoint<Request, Response>,
+    endpoint: Endpoint<Request, ResponseSchema>,
     request: NoInfer<Infer<Request>>,
     ...options: readonly CallOption[]
-  ): Promise<Infer<Response>>
-  /** Discovers, selects, and exchanges one Message under the caller Context. */
-  call(ctx: Context, request: CallRequest, ...options: readonly CallOption[]): Promise<Message>
+  ): Promise<Infer<ResponseSchema>>
+  /** Discovers, selects, and exchanges one Fetch request under the caller Context. */
+  call(ctx: Context, request: CallRequest, ...options: readonly CallOption[]): Promise<Response>
+  /** Opens one server stream after the response headers arrive. */
+  stream<Request extends Struct, ResponseSchema extends Struct>(
+    ctx: Context,
+    endpoint: Endpoint<Request, ResponseSchema, true>,
+    request: NoInfer<Infer<Request>>,
+    ...options: readonly CallOption[]
+  ): Promise<ServerStream<Infer<ResponseSchema>>>
   /** Stops every resident transport connection and discovery watcher owned by this Client. */
   close(ctx: Context): Promise<void>
 }
@@ -558,10 +669,10 @@ export type CallOption = (options: CallOptions) => CallOptions
 export type CallRetryOptions = RetryOptions
 
 /** Performs one unary Client call. */
-export type Call = Handler<CallRequest, Promise<Message>, readonly CallOption[]>
+export type Call = Handler<CallRequest, Promise<Response>, readonly CallOption[]>
 
 /** Wraps one unary Client call with explicit caller-owned behavior. */
-export type ClientMiddleware = Middleware<CallRequest, Promise<Message>, readonly CallOption[]>
+export type ClientMiddleware = Middleware<CallRequest, Promise<Response>, readonly CallOption[]>
 
 /** Captures the immutable construction settings used by one Client. */
 export interface ClientOptions {
@@ -641,7 +752,8 @@ function isCallRequest(value: unknown): value is CallRequest {
     value !== null &&
     typeof Reflect.get(value, "service") === "string" &&
     typeof Reflect.get(value, "endpoint") === "string" &&
-    Reflect.get(value, "message") !== undefined
+    "headers" in value &&
+    "body" in value
   )
 }
 
@@ -713,33 +825,76 @@ function snapshotClientOptions(value: unknown): ClientOptions {
   })
 }
 
-/** Configures immutable direct transport addresses for every future call. */
-export function withAddress(...addresses: readonly string[]): ClientOption {
-  if (addresses.length === 0) throw new TypeError("withAddress requires at least one address")
-  const captured = snapshotAddresses(addresses, "withAddress addresses")
-  return (options) =>
-    snapshotClientOptions({
-      addresses: captured,
-      service: options.service,
-      discovery: options.discovery,
-      selector: options.selector,
-      transport: options.transport,
-      block: options.block,
-      middleware: options.middleware,
-      operationMiddleware: options.operationMiddleware,
-      closeTimeoutMs: options.closeTimeoutMs,
-      poolSize: options.poolSize,
-      poolTtlMs: options.poolTtlMs
-    })
+const discoveryScheme = /^discovery:/iu
+const discoveryTripleSlash = /^discovery:\/\/\//iu
+
+/** Parses one discovery:/// target and leaves every other scheme untouched. */
+function discoveryTarget(value: string): string | null {
+  if (!discoveryScheme.test(value)) return null
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch (cause) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name", { cause })
+  }
+  if (
+    url.protocol !== "discovery:" ||
+    url.host.length !== 0 ||
+    url.username.length !== 0 ||
+    url.password.length !== 0
+  ) {
+    throw new TypeError("withEndpoint discovery authority must be empty")
+  }
+  if (
+    !discoveryTripleSlash.test(value) ||
+    url.search.length !== 0 ||
+    url.hash.length !== 0 ||
+    !url.pathname.startsWith("/")
+  ) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name")
+  }
+  let target: string
+  try {
+    target = decodeURIComponent(url.pathname.slice(1))
+  } catch (cause) {
+    throw new TypeError("withEndpoint discovery endpoint must be discovery:///name", { cause })
+  }
+  if (target.length === 0) throw new TypeError("withEndpoint discovery target must be non-empty")
+  return target
 }
 
-/** Configures the Discovery service identity for every future call. */
-export function withService(value: string): ClientOption {
-  const captured = callText(value, "withService value", true)
+/** Resolves one withEndpoint argument into direct addresses or one discovery name. */
+function endpointSource(value: unknown): {
+  readonly addresses: readonly string[]
+  readonly service: string | null
+} {
+  if (Array.isArray(value)) {
+    if (value.length === 0) throw new TypeError("withEndpoint requires at least one endpoint")
+    const addresses = snapshotAddresses(value, "withEndpoint")
+    for (const address of addresses) {
+      if (discoveryScheme.test(address)) {
+        throw new TypeError("withEndpoint arrays only accept direct addresses")
+      }
+    }
+    return Object.freeze({ addresses, service: null })
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError("withEndpoint requires a non-empty endpoint")
+  }
+  if (!value.isWellFormed()) throw new TypeError("withEndpoint endpoint must be well-formed")
+  const service = discoveryTarget(value)
+  return service === null
+    ? Object.freeze({ addresses: Object.freeze([value]), service: null })
+    : Object.freeze({ addresses: Object.freeze([]), service })
+}
+
+/** Configures one direct address list or one discovery:/// target. */
+export function withEndpoint(endpoint: string | readonly string[]): ClientOption {
+  const source = endpointSource(endpoint)
   return (options) =>
     snapshotClientOptions({
-      addresses: options.addresses,
-      service: captured,
+      addresses: source.addresses,
+      service: source.service,
       discovery: options.discovery,
       selector: options.selector,
       transport: options.transport,
@@ -911,9 +1066,9 @@ export function circuitBreakerMiddleware(options: CircuitBreakerOptions): Client
         first = null
         breakers.set(operation, breaker)
       }
-      const result = await breaker.execute<Message | CleanupRetryResult>(
+      const result = await breaker.execute<Response | CleanupRetryResult>(
         ctx,
-        async (operationContext): Promise<Message | CleanupRetryResult> => {
+        async (operationContext): Promise<Response | CleanupRetryResult> => {
           try {
             return await next(operationContext, request, ...callOptions)
           } catch (failure) {
@@ -1044,6 +1199,9 @@ function guardedCallRetry(options: RetryOptions): RetryOptions {
   const shouldRetry = options.shouldRetry
   const guarded: RetryPredicate = function shouldRetryCall(ctx, failure, attempt) {
     if (isCompletedCallFailure(failure)) return false
+    if (typeof failure === "object" && failure !== null && committedExchanges.has(failure)) {
+      return false
+    }
     return shouldRetry(ctx, failure, attempt)
   }
   if (options.backoff === undefined) {
@@ -1061,15 +1219,23 @@ function guardedCallRetry(options: RetryOptions): RetryOptions {
   })
 }
 
-/** Copies and validates one complete per-call option snapshot. */
+/** Reports whether a value is a deeply frozen call-option snapshot published by this module. */
+function isPublishedCallOptions(value: unknown): value is CallOptions {
+  return typeof value === "object" && value !== null && publishedCallOptions.has(value)
+}
+
+/** Copies and validates one per-call option snapshot; a published snapshot is returned as is. */
 function snapshotCallOptions(value: unknown): CallOptions {
+  if (isPublishedCallOptions(value)) return value
   if (!isCallOptionsCandidate(value)) {
     throw new TypeError("Call options must be an object")
   }
-  return Object.freeze({
+  const snapshot: CallOptions = Object.freeze({
     filters: snapshotFilters(value.filters),
     retry: snapshotCallRetry(value.retry)
   })
+  publishedCallOptions.add(snapshot)
+  return snapshot
 }
 
 /** Appends go-micro-style Registry filters in declaration order. */
@@ -1157,7 +1323,8 @@ function createClient(
   const dial = transport.dial
   const kind = transportKind(transport)
   const closedError = new Error("client is closed")
-  const idle = new Map<string, ResidentTransportClient>()
+  const idle = new Set<ResidentTransportClient>()
+  const idleByAddress = new Map<string, ResidentTransportClient[]>()
   const active = new Set<ResidentTransportClient>()
   const connections = new Set<ResidentTransportClient>()
   const admissions = new Set<Promise<void>>()
@@ -1178,7 +1345,12 @@ function createClient(
   function closeResident(client: ResidentTransportClient): Promise<void> {
     clearIdleTimer(client)
     if (client.closing !== null) return client.closing
-    if (idle.get(client.address) === client) idle.delete(client.address)
+    if (idle.delete(client)) {
+      const owners = idleByAddress.get(client.address)
+      const index = owners?.indexOf(client) ?? -1
+      if (owners !== undefined && index >= 0) owners.splice(index, 1)
+      if (owners?.length === 0) idleByAddress.delete(client.address)
+    }
     active.delete(client)
     client.closing = Promise.resolve()
       .then(async function closeTransportOwner(): Promise<void> {
@@ -1195,7 +1367,7 @@ function createClient(
   function armIdleTimer(client: ResidentTransportClient): void {
     if (idleTtlMs === 0) return
     const timer = setTimeout(function expireIdleOwner(): void {
-      if (client.idleTimer !== timer || idle.get(client.address) !== client) return
+      if (client.idleTimer !== timer || !idle.has(client)) return
       client.idleTimer = null
       void closeResident(client)
     }, idleTtlMs)
@@ -1205,9 +1377,11 @@ function createClient(
   /** Borrows one idle endpoint owner or dials and captures a new one. */
   async function acquire(ctx: Context, address: string): Promise<ResidentTransportClient> {
     if (closed) throw closedError
-    const available = idle.get(address)
+    const owners = idleByAddress.get(address)
+    const available = owners?.pop()
     if (available !== undefined) {
-      idle.delete(address)
+      if (owners?.length === 0) idleByAddress.delete(address)
+      idle.delete(available)
       clearIdleTimer(available)
       active.add(available)
       return available
@@ -1221,15 +1395,13 @@ function createClient(
       const admitted = await dial.call(transport, ctx, address)
       const admittedClose = admitted?.close
       if (typeof admittedClose !== "function") {
-        throw new TypeError("transport dial must return a Client with send, recv, and close")
+        throw new TypeError("transport dial must return a Client with fetch and close")
       }
-      let admittedSend: unknown
-      let admittedRecv: unknown
+      let admittedFetch: unknown
       try {
-        admittedSend = admitted.send
-        admittedRecv = admitted.recv
-        if (typeof admittedSend !== "function" || typeof admittedRecv !== "function") {
-          throw new TypeError("transport dial must return a Client with send, recv, and close")
+        admittedFetch = admitted.fetch
+        if (typeof admittedFetch !== "function") {
+          throw new TypeError("transport dial must return a Client with fetch and close")
         }
       } catch (value) {
         const primary = boundaryError(value)
@@ -1246,8 +1418,7 @@ function createClient(
       const client: ResidentTransportClient = {
         address,
         receiver: admitted,
-        send: admittedSend as TransportClient["send"],
-        recv: admittedRecv as TransportClient["recv"],
+        fetch: admittedFetch as TransportClient["fetch"],
         close: admittedClose,
         idleTimer: null,
         closing: null
@@ -1280,14 +1451,11 @@ function createClient(
     reusable: boolean
   ): Promise<Error | null> {
     active.delete(client)
-    if (
-      reusable &&
-      !closed &&
-      maxIdle > 0 &&
-      client.closing === null &&
-      !idle.has(client.address)
-    ) {
-      idle.set(client.address, client)
+    if (reusable && !closed && maxIdle > 0 && client.closing === null) {
+      idle.add(client)
+      const owners = idleByAddress.get(client.address)
+      if (owners === undefined) idleByAddress.set(client.address, [client])
+      else owners.push(client)
       armIdleTimer(client)
       while (idle.size > maxIdle) {
         const oldest = idle.values().next().value
@@ -1356,29 +1524,57 @@ function createClient(
     return selected
   }
 
-  /** Performs one selected dial-send-recv attempt with exact cleanup ownership. */
+  const directSnapshots = new Map<string, readonly ServiceInstance[]>()
+
+  /** Returns one service's cached direct snapshot, or its configured form when unpublishable. */
+  function directSnapshot(service: string): readonly ServiceInstance[] {
+    const cached = directSnapshots.get(service)
+    if (cached !== undefined) return cached
+    const configured = directInstances(service, config.addresses)
+    let snapshot: readonly ServiceInstance[]
+    try {
+      snapshot = snapshotServiceInstances(configured)
+    } catch {
+      // The Selector still rejects an unpublishable address exactly as before.
+      snapshot = configured
+    }
+    if (directSnapshots.size >= maximumDirectSnapshots) directSnapshots.clear()
+    directSnapshots.set(service, snapshot)
+    return snapshot
+  }
+
+  /** Performs one selected dial and fetch attempt with exact cleanup ownership. */
   async function attempt(
     ctx: Context,
     service: string,
-    operation: string,
-    outbound: Message,
+    endpoint: string,
+    headers: Headers,
+    body: Uint8Array<ArrayBuffer> | null,
     options: CallOptions
-  ): Promise<Message> {
+  ): Promise<Response> {
+    const operation = `${service}/${endpoint}`
+    const streaming = mediaType(headers.get("accept") ?? "") === eventStreamContentType
+    /** Keeps a post-handshake stream failure from being replayed. */
+    function commitExchange(error: Error): Error {
+      if (streaming && bytesReceived) committedExchanges.add(error)
+      return error
+    }
     let complete: SelectionDone | null = null
     let transportClient: ResidentTransportClient | null = null
     let primary: Error | null = null
-    let response: Message | null = null
+    let response: Response | null = null
     let bytesSent = false
     let bytesReceived = false
-    let replyMetadata: Metadata | null = null
+    let replyMetadata: (() => Metadata) | null = null
     try {
       let snapshot: readonly ServiceInstance[]
-      if (source === null) snapshot = directInstances(service, config.addresses)
+      if (source === null) snapshot = directSnapshot(service)
       else snapshot = await source.resolver.getService(ctx, source.service, config.block === true)
       const instances = filteredInstances(snapshot, options.filters)
       const selection = snapshotSelection(select.call(selector, ctx, instances))
       complete = selection[1]
       const address = selection[0]
+      assertRootAddress(address)
       let attemptContext = ctx
       let projected = callTransportState(ctx)
       if (projected === null) {
@@ -1386,23 +1582,61 @@ function createClient(
         attemptContext = created[0]
         projected = created[1]
       }
-      projected.beginAttempt(address, messageHeaderMetadata(outbound.header))
+      const outbound = outboundHeaders(headers, attemptContext)
+      projected.beginAttempt(address, lazyHeadersMetadata(new Headers(outbound)))
       transportClient = await acquire(attemptContext, address)
-      await transportClient.send.call(transportClient.receiver, attemptContext, outbound)
+      const request = callRequest(address, service, endpoint, outbound, body, attemptContext)
+      projected.beginAttempt(address, lazyHeadersMetadata(outbound))
       bytesSent = true
-      const candidate = await transportClient.recv.call(transportClient.receiver, attemptContext)
+      const candidate = await transportClient.fetch.call(
+        transportClient.receiver,
+        attemptContext,
+        request
+      )
+      if (!(candidate instanceof Response)) {
+        throw new TypeError("transport fetch must return a Response")
+      }
       bytesReceived = true
-      const received = snapshotMessage(candidate)
-      replyMetadata = messageHeaderMetadata(received.header)
-      response = received
+      replyMetadata = lazyHeadersMetadata(new Headers(candidate.headers))
       projected.updateReply(replyMetadata)
-      const serviceFailure = decodeServiceError("unary", 200, received.header, received.body)
-      if (serviceFailure !== null) throw serviceFailure
-      const validator = typedResponseValidator(ctx)
-      if (validator !== null) await validator.validate(received)
-      return received
+      if (!candidate.ok) {
+        const serviceFailure = await decodeServiceErrorResponse(candidate)
+        if (serviceFailure !== null) throw serviceFailure
+        abandonResponse(candidate)
+        throw newTransportProtocolError(`client received HTTP status ${candidate.status}`)
+      }
+      if (streaming) {
+        const deliveredType = mediaType(candidate.headers.get("content-type") ?? "")
+        if (deliveredType !== eventStreamContentType) {
+          abandonResponse(candidate)
+          throw newTransportProtocolError(
+            "server stream response Content-Type must be text/event-stream"
+          )
+        }
+      }
+      let delivered = applyResponseObservers(attemptContext, candidate)
+      const validator = typedResponseValidator(attemptContext)
+      const rawBody = validator === null && delivered.body !== null && delivered.bodyUsed !== true
+      if (transportClient !== null && (streaming || rawBody)) {
+        const held = transportClient
+        delivered = observeResponseBody(
+          delivered,
+          function releaseHeld(): void {
+            /** The body has already ended; pool release must not surface later. */
+            function ignoreRelease(_value?: unknown): void {}
+            void release(held, true).then(ignoreRelease, ignoreRelease)
+          },
+          { cancelSource: true }
+        )
+        // The body owns the owner only once observation started; a throw leaves it to `finally`.
+        transportClient = null
+      }
+      response = delivered
+      if (streaming) return delivered
+      if (validator !== null) await validator.validate(delivered)
+      return delivered
     } catch (value) {
-      primary = boundaryError(value)
+      primary = commitExchange(boundaryError(value))
       throw primary
     } finally {
       let feedbackFailure: Error | null = null
@@ -1427,17 +1661,23 @@ function createClient(
       if (primary !== null && feedbackFailure !== null) {
         if (closeFailure !== null) {
           // oxlint-disable-next-line eslint/no-unsafe-finally -- Preserve primary/feedback/close order.
-          throw new AggregateError(
-            [primary, feedbackFailure, closeFailure],
-            "client call and cleanup failed"
+          throw commitExchange(
+            new AggregateError(
+              [primary, feedbackFailure, closeFailure],
+              "client call and cleanup failed"
+            )
           )
         }
         // oxlint-disable-next-line eslint/no-unsafe-finally -- Preserve primary/feedback order.
-        throw new AggregateError([primary, feedbackFailure], "client call and feedback failed")
+        throw commitExchange(
+          new AggregateError([primary, feedbackFailure], "client call and feedback failed")
+        )
       }
       if (primary !== null && closeFailure !== null) {
         // oxlint-disable-next-line eslint/no-unsafe-finally -- Preserve primary/close order.
-        throw new AggregateError([primary, closeFailure], "client call and close failed")
+        throw commitExchange(
+          new AggregateError([primary, closeFailure], "client call and close failed")
+        )
       }
       if (primary === null && response !== null) {
         const failures: Error[] = []
@@ -1445,31 +1685,29 @@ function createClient(
         if (closeFailure !== null) failures.push(closeFailure)
         if (failures.length !== 0) {
           // oxlint-disable-next-line eslint/no-unsafe-finally -- Return the completed reply with cleanup failures.
-          throw newCompletedCallFailure(snapshotMessage(response), failures)
+          throw newCompletedCallFailure(response, failures)
         }
       }
     }
   }
 
   /** Snapshots one logical call and performs one attempt unless replay was explicitly authorized. */
-  const baseCall: Call = async function baseCall(ctx, request, ...values): Promise<Message> {
+  const baseCall: Call = async function baseCall(ctx, request, ...values): Promise<Response> {
     const service = callName(request.service, "service")
     const endpoint = callName(request.endpoint, "endpoint")
     if (closed) throw closedError
-    const input = snapshotMessage(request.message)
-    rejectReservedHeaders(input)
+    const headers = snapshotHeaders(request.headers)
+    const body = snapshotBody(request.body)
+    rejectReservedHeaders(headers)
     const options = callOptions(values)
-    const outbound = snapshotMessage({
-      header: unaryRequestHeaders(ctx, input.header, service, endpoint),
-      body: input.body
-    })
-    const operation = `${service}/${endpoint}`
-    if (options.retry === null) return await attempt(ctx, service, operation, outbound, options)
-    const retried = await retry<Message | CleanupRetryResult>(
+    if (options.retry === null) {
+      return await attempt(ctx, service, endpoint, headers, body, options)
+    }
+    const retried = await retry<Response | CleanupRetryResult>(
       ctx,
-      async function retryAttempt(attemptContext): Promise<Message | CleanupRetryResult> {
+      async function retryAttempt(attemptContext): Promise<Response | CleanupRetryResult> {
         try {
-          return await attempt(attemptContext, service, operation, outbound, options)
+          return await attempt(attemptContext, service, endpoint, headers, body, options)
         } catch (value) {
           if (isCompletedCallFailure(value)) {
             return cleanupRetryResult(value)
@@ -1493,7 +1731,7 @@ function createClient(
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-  ): Promise<Message> {
+  ): Promise<Response> {
     const operation = `${callName(request.service, "service")}/${callName(
       request.endpoint,
       "endpoint"
@@ -1523,7 +1761,7 @@ function createClient(
     ctx: Context,
     request: CallRequest,
     options: readonly CallOption[]
-  ): Promise<Message> {
+  ): Promise<Response> {
     const resolved = callOptions(options)
     const logicalContext = logicalTransportContext(ctx, request, kind)
     return await composedCall(logicalContext, request, function resolvedCallOptions(): CallOptions {
@@ -1532,19 +1770,19 @@ function createClient(
   }
 
   /** Calls one typed endpoint contract. */
-  function call<Request extends Struct, Response extends Struct>(
+  function call<RequestSchema extends Struct, ResponseSchema extends Struct>(
     ctx: Context,
-    contract: Endpoint<Request, Response>,
-    request: NoInfer<Infer<Request>>,
+    contract: Endpoint<RequestSchema, ResponseSchema>,
+    request: NoInfer<Infer<RequestSchema>>,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-  ): Promise<Infer<Response>>
+  ): Promise<Infer<ResponseSchema>>
 
-  /** Calls one raw Message endpoint. */
+  /** Calls one raw Fetch endpoint. */
   function call(
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-  ): Promise<Message>
+  ): Promise<Response>
 
   /** Dispatches one raw or typed invocation without exposing an additional client concept. */
   async function call(
@@ -1557,6 +1795,9 @@ function createClient(
       return await rawCall(ctx, subject, runtimeCallOptions(values, 0))
     }
     if (!isEndpoint(subject)) throw new TypeError("Client call requires a request or Endpoint")
+    if (subject.stream === true) {
+      throw new TypeError("Client call does not accept a stream endpoint")
+    }
     if (values.length === 0) throw new TypeError("Client typed call requires a request value")
 
     const contract = endpointContract(
@@ -1571,10 +1812,8 @@ function createClient(
     const request: CallRequest = {
       service: contract.service,
       endpoint: contract.endpoint,
-      message: {
-        header: { [contentTypeHeader]: jsonContentType },
-        body
-      }
+      headers: { "content-type": jsonContentType },
+      body
     }
     const boundary = newTypedResponseBoundary(contract.response)
     const response = await rawCall(
@@ -1588,6 +1827,38 @@ function createClient(
     )
     const decoded = boundary[1]()
     return decoded === null ? await boundary[2](response) : decoded[0]
+  }
+
+  /** Opens one server stream after response headers, then parses SSE on iteration. */
+  async function stream<RequestSchema extends Struct, ResponseSchema extends Struct>(
+    ctx: Context,
+    subject: Endpoint<RequestSchema, ResponseSchema, true>,
+    request: NoInfer<Infer<RequestSchema>>,
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
+  ): Promise<ServerStream<Infer<ResponseSchema>>> {
+    if (closed) throw closedError
+    if (!isEndpoint(subject) || subject.stream !== true) {
+      throw new TypeError("Client stream requires a stream endpoint")
+    }
+    const contract = endpointContract(
+      subject.service,
+      subject.endpoint,
+      subject.request,
+      subject.response,
+      true
+    )
+    const body = encodeJsonBody(contract.request, request)
+    const response = await rawCall(
+      ctx,
+      {
+        service: contract.service,
+        endpoint: contract.endpoint,
+        headers: { "content-type": jsonContentType, accept: eventStreamContentType },
+        body
+      },
+      options
+    )
+    return openServerStream(response, contract.response, receiveLimit(transport), ctx)
   }
 
   /** Starts the single combined transport and discovery owner drain. */
@@ -1613,10 +1884,10 @@ function createClient(
     return waitForContext(ctx, beginClientClose())
   }
 
-  return Object.freeze({ call, close })
+  return Object.freeze({ call, stream, close })
 }
 
-/** Creates one lightweight unary Client from go-micro-style functional options. */
+/** Creates one lightweight Client from go-micro-style functional options. */
 export function newClient(...options: readonly ClientOption[]): Client {
   const resolved = clientOptions(options)
   if (resolved.transport === null) throw new TypeError("newClient requires a transport option")
@@ -1626,7 +1897,9 @@ export function newClient(...options: readonly ClientOption[]): Client {
   let source: DiscoverySource | null
   if (resolved.discovery !== null) {
     if (resolved.service === null) {
-      throw new TypeError("newClient discovery requires a service option")
+      throw new TypeError(
+        "newClient requires a discovery endpoint when withDiscovery is configured"
+      )
     }
     source = {
       resolver: newDiscoveryResolver(resolved.discovery),
@@ -1634,7 +1907,7 @@ export function newClient(...options: readonly ClientOption[]): Client {
     }
   } else {
     if (resolved.service !== null) {
-      throw new TypeError("newClient service option requires discovery")
+      throw new TypeError("newClient discovery endpoint requires withDiscovery")
     }
     if (resolved.addresses.length === 0) {
       throw new TypeError("newClient requires direct addresses or discovery")

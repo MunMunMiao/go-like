@@ -15,9 +15,10 @@ interval、temporality、aggregation 等 OpenTelemetry 配置。应用继续使�
 - `traceWebHandler(handler, tracer, propagator?)`：包装标准单参数 Web Handler；
 - `traceBroker(broker, tracer, propagator?)`：包装 Broker publish/consume。
 
-它们使用官方 OpenTelemetry API 创建 span。raw Client 在 Message header 传播；类型化 Client 委托原
-Client 完整调用，并通过 go-like Context metadata 传播，因此不会复制 codec、retry 或 middleware 语义。
-Server 同时从已解码的 Context metadata 与 Message header 提取；Broker 与 Web 使用各自 header；
+它们使用官方 OpenTelemetry API 创建 span。传播载体是 Fetch headers 与 `Go-Like-Metadata`，不是已删除的
+Transport `Message`。类型化 Client 委托原 Client 完整调用，并通过 go-like Context metadata 传播，因此不会复制
+codec、retry 或 middleware 语义。Server 从已解码的 Context metadata 与请求 headers 提取；Broker 与 Web 使用各自 header。
+服务端流在 response body 结束时结束 span，并记录 `go-like.handshake_ms` 与 `go-like.message_count`。
 不会安装全局 provider、Context Manager、propagator 或自动 instrumentation。Web wrapper 只观测到
 `Response` headers 到达，不读取、clone、tee、锁定或接管 request/response body。
 
@@ -55,7 +56,7 @@ import {
   middleware as clientMiddleware,
   newClient,
   withDiscovery,
-  withService,
+  withEndpoint,
   withTransport
 } from "@go-like/client"
 import {
@@ -64,12 +65,21 @@ import {
   measureUnaryMiddleware,
   newRequestMetrics
 } from "@go-like/otel"
+import type { Client } from "@go-like/client"
+import type { Discovery } from "@go-like/registry"
+import type { Transport } from "@go-like/transport"
 import { middleware } from "@go-like/server"
+import type { MeterProvider } from "@opentelemetry/api"
+
+declare const meterProvider: MeterProvider
+declare const client: Client
+declare const discovery: Discovery
+declare const transport: Transport
 
 const requestMetrics = newRequestMetrics(meterProvider.getMeter("orders"))
 const existingClientWithMetrics = measureClient(client, requestMetrics)
 const clientWithMetrics = newClient(
-  withService("orders-http"),
+  withEndpoint("discovery:///orders-http"),
   withDiscovery(discovery),
   withTransport(transport),
   clientMiddleware(measureClientMiddleware(requestMetrics))

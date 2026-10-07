@@ -1,12 +1,13 @@
-import type { CallOption, CallRequest, Client } from "@go-like/client"
+import type { CallOption, Client } from "@go-like/client"
 import { background } from "@go-like/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
+import { telecomProvisioning } from "../src/contract"
 import { newTelecomProvisioningHandler } from "../src/http"
 import { newMemoryProvisioningRepository } from "../src/repository"
 import { newProvisionTelecomService, type ProvisionServiceCommand } from "../src/service"
-import { newTelecomProvisioningClient, newTelecomProvisioningMicroservice } from "../src/transport"
+import { newTelecomProvisioningMicroservice } from "../src/transport"
 
 describe("telecom service provisioning", () => {
   test("maps only admitted plans to fixed integer monthly fees", async () => {
@@ -108,16 +109,12 @@ describe("telecom service provisioning", () => {
   })
 
   test("maps public route, malformed body, and provisioning failures", async () => {
-    const notFoundHandler = newTelecomProvisioningHandler({
-      async provision() {
-        throw new Error("must not call")
-      }
+    const notFoundHandler = newTelecomProvisioningHandler(async function unusedProvision() {
+      throw new Error("must not call")
     })
     expect((await notFoundHandler(new Request("https://example.test/wrong"))).status).toBe(404)
-    const invalidHandler = newTelecomProvisioningHandler({
-      async provision() {
-        throw new Error("must not call")
-      }
+    const invalidHandler = newTelecomProvisioningHandler(async function unusedProvision() {
+      throw new Error("must not call")
     })
     const invalid = await invalidHandler(
       new Request("https://example.test/v1/telecom-services", {
@@ -140,10 +137,8 @@ describe("telecom service provisioning", () => {
       })
     )
     expect(incomplete.status).toBe(400)
-    const rejectedHandler = newTelecomProvisioningHandler({
-      async provision() {
-        throw new Error("provisioning dependency failed")
-      }
+    const rejectedHandler = newTelecomProvisioningHandler(async function rejectProvision() {
+      throw new Error("provisioning dependency failed")
     })
     const rejected = await rejectedHandler(
       new Request("https://example.test/v1/telecom-services", {
@@ -181,27 +176,21 @@ describe("telecom service provisioning", () => {
     let rejected = false
     let observed: readonly unknown[] = Object.freeze([])
     const client = Object.freeze({
-      async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
-        observed = [ctxValue, request, ...options]
+      async call(...args: readonly unknown[]) {
+        observed = args
         if (rejected) throw failure
-        return {
-          header: Object.freeze({ "Content-Type": "application/json" }),
-          body: new TextEncoder().encode(JSON.stringify(result))
-        }
+        return result
       },
       async close(): Promise<void> {}
     }) as unknown as Client
-    const { provision } = newTelecomProvisioningClient(client)
+    expect(telecomProvisioning.endpoints.activate).toMatchObject({
+      service: "telecom-provisioning.v1",
+      endpoint: "activate"
+    })
+    const provision = telecomProvisioning.newClient(client).activate
 
     expect(await provision(ctx, command, option)).toEqual(result)
-    expect(observed[0]).toBe(ctx)
-    expect(observed[1]).toMatchObject({
-      service: "telecom-provisioning",
-      endpoint: "Provisioning.Activate"
-    })
-    const request = observed[1] as CallRequest
-    expect(JSON.parse(new TextDecoder().decode(request.message.body))).toEqual(command)
-    expect(observed.slice(2)).toEqual([option])
+    expect(observed).toEqual([ctx, telecomProvisioning.endpoints.activate, command, option])
     rejected = true
     await expect(provision(ctx, command)).rejects.toBe(failure)
   })
@@ -213,33 +202,17 @@ describe("telecom service provisioning", () => {
     const running = app.run()
     await service.server.endpoint(background())
     try {
-      const malformed = {
-        orderId: "order-1",
-        subscriberId: "subscriber-1",
-        simId: "sim-1",
-        plan: "mobile-basic",
-        toJSON() {
-          return null
-        }
-      } as never
-      await expect(service.client.provision(background(), malformed)).rejects.toThrow()
-      const unsupported = {
-        orderId: "order-1",
-        subscriberId: "subscriber-1",
-        simId: "sim-1",
-        plan: "mobile-basic",
-        toJSON() {
-          return {
-            orderId: "order-1",
-            subscriberId: "subscriber-1",
-            simId: "sim-1",
-            plan: "landline"
-          }
-        }
-      } as never
-      await expect(service.client.provision(background(), unsupported)).rejects.toThrow()
+      await expect(service.client.activate(background(), null as never)).rejects.toThrow()
       await expect(
-        service.client.provision(background(), {
+        service.client.activate(background(), {
+          orderId: "order-1",
+          subscriberId: "subscriber-1",
+          simId: "sim-1",
+          plan: "landline"
+        } as never)
+      ).rejects.toThrow()
+      await expect(
+        service.client.activate(background(), {
           orderId: "order-1",
           subscriberId: "subscriber-1",
           simId: "sim-1",
@@ -258,8 +231,8 @@ describe("telecom service provisioning", () => {
         subscriberId: "subscriber-1",
         simId: "sim-1",
         plan: "mobile-basic",
-        monthlyFeeMinor: 1.5,
-        status: "active"
+        monthlyFeeMinor: 2_900,
+        status: "paused"
       } as never
     })
     const invalidApp = newApp(name("telecom-invalid-response"), server(invalidServer.server))
@@ -267,13 +240,13 @@ describe("telecom service provisioning", () => {
     await invalidServer.server.endpoint(background())
     try {
       await expect(
-        invalidServer.client.provision(background(), {
+        invalidServer.client.activate(background(), {
           orderId: "order-1",
           subscriberId: "subscriber-1",
           simId: "sim-1",
           plan: "mobile-basic"
         })
-      ).rejects.toThrow("invalid service response")
+      ).rejects.toThrow("internal service error")
     } finally {
       await invalidApp.stop()
       await invalidRunning
@@ -283,7 +256,7 @@ describe("telecom service provisioning", () => {
   test("calls the internal service through go-like Memory Transport", async () => {
     const repository = newMemoryProvisioningRepository()
     const service = newTelecomProvisioningMicroservice(newProvisionTelecomService(repository))
-    const handler = newTelecomProvisioningHandler(service.client)
+    const handler = newTelecomProvisioningHandler(service.client.activate)
     const app = newApp(name("telecom-service-provisioning-transport-test"), server(service.server))
     const running = app.run()
     await service.server.endpoint(background())

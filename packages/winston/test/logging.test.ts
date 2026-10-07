@@ -4,8 +4,13 @@ import type { Broker, BrokerEvent, BrokerMessage, Subscriber } from "@go-like/br
 import type { CallOption, CallRequest, Client } from "@go-like/client"
 import { background, withCancelCause, type Context } from "@go-like/context"
 import { struct } from "@go-like/struct"
-import { endpoint as typedEndpoint, type Endpoint, type Message } from "@go-like/transport"
-import { endpoint, request as service } from "@go-like/transport/headers"
+import { newMetadata } from "@go-like/metadata"
+import {
+  endpoint as typedEndpoint,
+  newServerContext,
+  type Endpoint,
+  type TransportInfo
+} from "@go-like/transport"
 import type { Logger } from "winston"
 
 import { logBroker, logClient, logUnaryMiddleware, logWebHandler } from "../src/index"
@@ -101,10 +106,20 @@ function expectCompletion(
   )
 }
 
-const response: Message = Object.freeze({
-  header: Object.freeze({ result: "ok" }),
-  body: new Uint8Array([2])
-})
+const response = new Response(new Uint8Array([2]), { headers: { result: "ok" } })
+
+/** Builds TransportInfo whose operation is independent of request headers. */
+function transportInfo(operation: string): TransportInfo {
+  const headers = newMetadata()
+  return {
+    kind: () => "http",
+    endpoint: () => "",
+    operation: () => operation,
+    requestHeaders: () => headers,
+    replyHeaders: () => headers,
+    peerIdentity: () => null
+  }
+}
 
 describe("native Winston request logging", () => {
   test("logs Client completion once while preserving receiver, options, result, and failures", async () => {
@@ -119,7 +134,7 @@ describe("native Winston request logging", () => {
         _ctx: Context,
         _request: CallRequest,
         ...options: readonly CallOption[]
-      ): Promise<Message> {
+      ): Promise<Response> {
         expect(this.marker).toBe("client")
         expect(options).toHaveLength(optionSeen ? 0 : 1)
         if (!optionSeen) optionSeen = true
@@ -136,10 +151,12 @@ describe("native Winston request logging", () => {
     const request = {
       service: "catalog",
       endpoint: "Get",
-      message: { header: { secret: "not logged" }, body: new Uint8Array([1]) }
+      headers: { secret: "not logged" },
+      body: new Uint8Array([1])
     }
 
-    expect(await client.call(background(), request, option)).toBe(response)
+    const delivered = await client.call(background(), request, option)
+    expect(new Uint8Array(await delivered.arrayBuffer())).toEqual(new Uint8Array([2]))
     expectCompletion(logger.entries[0]!, "info", "client", "catalog/Get", "success")
 
     const canceled = withCancelCause(background())
@@ -225,32 +242,58 @@ describe("native Winston request logging", () => {
     ])
   })
 
-  test("logs routed unary Server completion without exposing message data", async () => {
+  test("logs the Server operation from TransportInfo without exposing request data", async () => {
     const logger = new CaptureLogger()
     const failure = new Error("handler failed")
-    const request: Message = {
-      header: { [service.toUpperCase()]: "orders", [endpoint]: "Create", authorization: "hidden" },
-      body: new Uint8Array([1, 2, 3])
-    }
-    const success = logUnaryMiddleware(logger.official())((_ctx, message) => {
-      expect(message).toBe(request)
-      return response
+    const request = new Request("https://service.test/orders/Create", {
+      method: "POST",
+      headers: { authorization: "hidden", "Go-Like-Service": "attacker-controlled-tenant-9817" }
     })
-    expect(await success(background(), request)).toBe(response)
+    const fresh = new Response(new Uint8Array([2]), { headers: { result: "ok" } })
+    const success = logUnaryMiddleware(logger.official())((_ctx, incoming) => {
+      expect(incoming).toBe(request)
+      return fresh
+    })
+    const handled = await success(
+      newServerContext(background(), transportInfo("orders/Create")),
+      request
+    )
+    expect(handled.headers.get("result")).toBe("ok")
+    expect(new Uint8Array(await handled.arrayBuffer())).toEqual(new Uint8Array([2]))
     expectCompletion(logger.entries[0]!, "info", "server", "orders/Create", "success")
 
     const failed = logUnaryMiddleware(logger.official())(() => {
       throw failure
     })
-    await expect(failed(background(), { header: {}, body: new Uint8Array() })).rejects.toBe(failure)
+    await expect(failed(background(), new Request("https://service.test/missing"))).rejects.toBe(
+      failure
+    )
     expectCompletion(logger.entries[1]!, "error", "server", "unknown/unknown", "failure", [
       "errorType"
     ])
 
     const canceled = withCancelCause(background())
     canceled[1](failure)
-    await expect(failed(canceled[0], request)).rejects.toBe(failure)
+    await expect(
+      failed(newServerContext(canceled[0], transportInfo("orders/Create")), request)
+    ).rejects.toBe(failure)
     expectCompletion(logger.entries[2]!, "info", "server", "orders/Create", "canceled")
+    const root = background()
+    await expect(
+      failed(
+        {
+          deadline: root.deadline,
+          done: root.done,
+          err: root.err,
+          value(): never {
+            throw new Error("transport info unavailable")
+          }
+        },
+        request
+      )
+    ).rejects.toBe(failure)
+    expect(JSON.stringify(logger.entries)).not.toContain("hidden")
+    expect(JSON.stringify(logger.entries)).not.toContain("attacker-controlled-tenant-9817")
   })
 
   test("preserves synchronous and asynchronous Web Handler behavior", async () => {
@@ -428,7 +471,7 @@ describe("native Winston request logging", () => {
     expect(() =>
       logClient(
         {
-          call(): Promise<Message> {
+          call(): Promise<Response> {
             return Promise.resolve(response)
           },
           close(): Promise<void> {

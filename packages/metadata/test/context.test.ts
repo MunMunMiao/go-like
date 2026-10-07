@@ -10,8 +10,15 @@ import {
   newClientContext,
   newMetadata,
   newServerContext,
-  propagateToClientContext
+  propagateToClientContext,
+  type Metadata
 } from "../src/index"
+
+/** Returns metadata read from a Context or fails the test when it is absent. */
+function carried(metadata: Metadata | null): Metadata {
+  if (metadata === null) throw new Error("expected Context metadata")
+  return metadata
+}
 
 test("keeps client and server metadata in isolated Context domains", () => {
   const client = newMetadata({ trace: "client" })
@@ -63,6 +70,39 @@ test("snapshots attached metadata and rejects unbranded hostile Context values",
   }
   expect(fromClientContext(hostile)).toBeNull()
   expect(fromServerContext(hostile)).toBeNull()
+})
+
+test("attaches a distinct frozen record per Context and leaves the original snapshot untouched", () => {
+  const original = newMetadata({ trace: ["one", "two"], zone: "cn" })
+  const client = carried(fromClientContext(newClientContext(background(), original)))
+  const server = carried(fromServerContext(newServerContext(background(), original)))
+
+  expect(client).not.toBe(original)
+  expect(server).not.toBe(original)
+  expect(server).not.toBe(client)
+  expect(client).toEqual(original)
+  expect(server).toEqual(original)
+  for (const attached of [client, server]) {
+    const record = attached as Record<string, unknown>
+    expect(Object.isFrozen(attached)).toBe(true)
+    expect(Object.isFrozen(attached.trace)).toBe(true)
+    expect(() => {
+      record.trace = []
+    }).toThrow(TypeError)
+    expect(() => (attached.trace as string[]).push("three")).toThrow(TypeError)
+  }
+  expect(original).toEqual({ trace: ["one", "two"], zone: ["cn"] })
+  expect(Object.isFrozen(original)).toBe(true)
+
+  const structural: Metadata = { Trace: ["one"] }
+  expect(carried(fromClientContext(newClientContext(background(), structural)))).toEqual({
+    trace: ["one"]
+  })
+  expect(carried(fromServerContext(newServerContext(background(), structural)))).toEqual({
+    trace: ["one"]
+  })
+  expect(() => newClientContext(background(), { trace: 1 } as never)).toThrow(TypeError)
+  expect(() => newServerContext(background(), { trace: 1 } as never)).toThrow(TypeError)
 })
 
 test("propagates only explicit server keys while preserving client conflicts and multi-values", () => {

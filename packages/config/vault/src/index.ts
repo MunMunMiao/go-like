@@ -92,22 +92,6 @@ function property(value: unknown, key: string): unknown {
   return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined
 }
 
-/** Reports whether one string contains no unpaired UTF-16 surrogate units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      if (index + 1 >= value.length) return false
-      const next = value.charCodeAt(index + 1)
-      if (next < 0xdc00 || next > 0xdfff) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
-      return false
-    }
-  }
-  return true
-}
-
 /** Validates JSON.parse output against the complete ConfigValue domain. */
 function isJsonConfigValue(value: unknown): value is ConfigValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true
@@ -270,7 +254,7 @@ function discardBody(response: Response): void {
 function isVaultTimestamp(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    isWellFormed(value) &&
+    value.isWellFormed() &&
     VaultTimestamp.test(value) &&
     Number.isFinite(Date.parse(value))
   )
@@ -330,7 +314,7 @@ function parseResponse(text: string): QueryResult {
 
 /** Encodes one strict slash-separated Vault route without URL-normalized dot segments. */
 function route(value: string, label: string): string {
-  if (!isWellFormed(value)) throw new TypeError(`Vault ${label} contains invalid UTF-16`)
+  if (!value.isWellFormed()) throw new TypeError(`Vault ${label} contains invalid UTF-16`)
   const segments = value.split("/")
   const encoded: string[] = []
   for (const segment of segments) {
@@ -368,7 +352,7 @@ function vaultOrigin(address: string): URL {
 /** Validates one optional secret-safe HTTP header value without retaining the resulting Headers. */
 function headerValue(value: string | undefined, label: string): void {
   if (value === undefined) return
-  if (typeof value !== "string" || value.length === 0 || !isWellFormed(value)) {
+  if (typeof value !== "string" || value.length === 0 || !value.isWellFormed()) {
     throw new TypeError(`Vault ${label} must be a non-empty HTTP header value`)
   }
   try {

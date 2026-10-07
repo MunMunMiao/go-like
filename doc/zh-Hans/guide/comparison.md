@@ -13,34 +13,34 @@
 
 ## 在技术栈中的位置
 
-| 工具      | 主要解决的问题                       | 通常由它拥有的部分                                                                                                                                                       | go-like 可以补充、但不替换的部分                                                         |
-| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| NestJS    | 约定驱动的 Node 应用框架             | Modules、providers、controllers、decorators、application context、framework lifecycle、HTTP 或 microservice adapter                                                      | 围绕原生应用增加结构式 lifecycle boundary 或 internal call contract，前提是自己写 bridge |
-| Fastify   | Node HTTP server 和请求处理 pipeline | Route table、hooks、plugins、encapsulation、Node listener、request/reply objects                                                                                         | 围绕 Fastify 所拥有的资源增加 lifecycle 或 provider adapter                              |
-| Hono      | Web Standards 路由和 middleware      | Routes、middleware、sub-apps、`app.fetch`、runtime adapter 选择                                                                                                          | Core App、显式资源生命周期、内部 Client/Transport、discovery                             |
-| Elysia    | Bun 优先的 typed Web framework       | Route tree、schema 组合、decorators、hooks、Bun 或 Web Standard adapter                                                                                                  | 保留原生 Elysia 行为的同时增加 Core lifecycle 和内部 service building blocks             |
-| Koa       | 精简的 Node middleware kernel        | Middleware stack 和 Node listener；router 通常由外部提供                                                                                                                 | 不再引入另一套路由器的前提下补上 lifecycle 和内部 service contract                       |
-| tRPC      | 类型安全的 procedure layer           | Router/procedure paths、input/output parsers、context factory、HTTP/Fetch/WS adapters                                                                                    | Provider ownership、service discovery、selector policy、显式 App lifecycle               |
-| go-micro  | Go 微服务和 agent-oriented 生态      | Go Context、service/client/transport/registry/broker 抽象，以及额外的 agent/flow/MCP/A2A 范围                                                                            | go-like 借用部分词汇，不借用 Go ABI、goroutine 或 transport 兼容性                       |
-| go-kratos | Go 云原生服务框架                    | App lifecycle、Go Context、HTTP/gRPC transports、middleware、registry、config、Protobuf/code generation                                                                  | 基于 Protobuf-ES 的 Context-first 生成代码; `/native` 提供标准 gRPC 四种调用形态         |
-| go-like   | 显式的 TypeScript 服务构建块         | Context、App/Server lifecycle、standard Fetch edge、内部 unary Message transport、Client/Server、Registry/Discovery/Selector、Config/Store/Cache/Broker/Health、adapters | 应用仍拥有框架路由、原生数据面、业务策略、认证和部署                                     |
+| 工具      | 主要解决的问题                       | 通常由它拥有的部分                                                                                                                                                 | go-like 可以补充、但不替换的部分                                                         |
+| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| NestJS    | 约定驱动的 Node 应用框架             | Modules、providers、controllers、decorators、application context、framework lifecycle、HTTP 或 microservice adapter                                                | 围绕原生应用增加结构式 lifecycle boundary 或 internal call contract，前提是自己写 bridge |
+| Fastify   | Node HTTP server 和请求处理 pipeline | Route table、hooks、plugins、encapsulation、Node listener、request/reply objects                                                                                   | 围绕 Fastify 所拥有的资源增加 lifecycle 或 provider adapter                              |
+| Hono      | Web Standards 路由和 middleware      | Routes、middleware、sub-apps、`app.fetch`、runtime adapter 选择                                                                                                    | Core App、显式资源生命周期、内部 Client/Transport、discovery                             |
+| Elysia    | Bun 优先的 typed Web framework       | Route tree、schema 组合、decorators、hooks、Bun 或 Web Standard adapter                                                                                            | 保留原生 Elysia 行为的同时增加 Core lifecycle 和内部 service building blocks             |
+| Koa       | 精简的 Node middleware kernel        | Middleware stack 和 Node listener；router 通常由外部提供                                                                                                           | 不再引入另一套路由器的前提下补上 lifecycle 和内部 service contract                       |
+| tRPC      | 类型安全的 procedure layer           | Router/procedure paths、input/output parsers、context factory、HTTP/Fetch/WS adapters                                                                              | Provider ownership、service discovery、selector policy、显式 App lifecycle               |
+| go-micro  | Go 微服务和 agent-oriented 生态      | Go Context、service/client/transport/registry/broker 抽象，以及额外的 agent/flow/MCP/A2A 范围                                                                      | go-like 借用部分词汇，不借用 Go ABI、goroutine 或 transport 兼容性                       |
+| go-kratos | Go 云原生服务框架                    | App lifecycle、Go Context、HTTP/gRPC transports、middleware、registry、config、Protobuf/code generation                                                            | 基于 Protobuf-ES 的 Context-first 生成代码; `/native` 提供标准 gRPC 四种调用形态         |
+| go-like   | 显式的 TypeScript 服务构建块         | Context、App/Server lifecycle、standard Fetch edge、内部 Fetch JSON 与 SSE、Client/Server、Registry/Discovery/Selector、Config/Store/Cache/Broker/Health、adapters | 应用仍拥有框架路由、原生数据面、业务策略、认证和部署                                     |
 
 所以，go-like 并不是要赢一场“谁的框架最大”的比较。真正的问题是：应用是否需要这些边界保持显式、并且可以组合。
 
 ## 所有权矩阵
 
-| 关注点                 | NestJS                                        | Fastify                            | Hono / Elysia / Koa                                         | tRPC                                       | go-like                                                                                   |
-| ---------------------- | --------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| 外部 route table       | Controllers 和 decorators                     | Fastify instance                   | Framework instance 或外部 router                            | Procedure router，不是普通 REST routes     | 外部 framework 或 application                                                             |
-| Web handler ABI        | Adapter 所有的 request/reply abstraction      | Node request/reply                 | 对 Hono 和 Web Standard adapter 来说，Standard Fetch 是核心 | Fetch/Node/Express/Fastify adapters        | 标准的 `(Request) => Response \| Promise<Response>`                                       |
-| Application lifecycle  | Application context 和 hooks                  | `ready`、`listen`、`close`、hooks  | Runtime adapter 和 framework lifecycle 各不相同             | 由 host/adapter 负责                       | `newApp`、`App.run`、`App.stop`、hooks、结构式 Servers                                    |
-| Resource lifecycle     | Container/framework hooks                     | Plugin 和 server hooks             | 由 application/runtime 负责                                 | 由 application/adapter 负责                | 显式的 `Server.start(ctx)` / `stop(ctx)` 契约和 adapter 所有权                            |
-| Dependency composition | Nest container/providers                      | Plugin decoration 和 encapsulation | Context/env 和组合；没有通用 DI container                   | 显式 context factory 和 router composition | 显式 constructors 与 functional options；没有 DI container                                |
-| Internal transport     | Microservice transports 和 framework adapters | 不是 service discovery 抽象        | 不是 service discovery 抽象                                 | Procedure adapters 和可选 WebSocket        | `Transport`、`Client`、`Listener`、`Socket`、unary `Message`                              |
-| Discovery 和 selection | Transport-specific 或外部提供                 | 外部提供                           | 外部提供                                                    | 外部提供                                   | `Registry`、`Discovery`、`Watcher`、Filters、五种 Selector 策略                           |
-| Retry                  | Framework 或 provider-specific                | Application/plugin-specific        | Application-specific                                        | Middleware/adapter-specific                | 默认一次；`withRetry` 需要授权和总尝试次数                                                |
-| Streaming              | Framework/provider 选择                       | Node/Web stream 选择               | 原生 Web Streams 和 framework API                           | 取决于 adapter 的 HTTP/WS                  | Web Streams; Message unary; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Global instrumentation | Framework/provider integration                | Plugin ecosystem                   | Middleware ecosystem                                        | Middleware/adapters                        | 显式 wrappers；不安装 global provider                                                     |
+| 关注点                 | NestJS                                        | Fastify                            | Hono / Elysia / Koa                                         | tRPC                                       | go-like                                                                                               |
+| ---------------------- | --------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 外部 route table       | Controllers 和 decorators                     | Fastify instance                   | Framework instance 或外部 router                            | Procedure router，不是普通 REST routes     | 外部 framework 或 application                                                                         |
+| Web handler ABI        | Adapter 所有的 request/reply abstraction      | Node request/reply                 | 对 Hono 和 Web Standard adapter 来说，Standard Fetch 是核心 | Fetch/Node/Express/Fastify adapters        | 标准的 `(Request) => Response \| Promise<Response>`                                                   |
+| Application lifecycle  | Application context 和 hooks                  | `ready`、`listen`、`close`、hooks  | Runtime adapter 和 framework lifecycle 各不相同             | 由 host/adapter 负责                       | `newApp`、`App.run`、`App.stop`、hooks、结构式 Servers                                                |
+| Resource lifecycle     | Container/framework hooks                     | Plugin 和 server hooks             | 由 application/runtime 负责                                 | 由 application/adapter 负责                | 显式的 `Server.start(ctx)` / `stop(ctx)` 契约和 adapter 所有权                                        |
+| Dependency composition | Nest container/providers                      | Plugin decoration 和 encapsulation | Context/env 和组合；没有通用 DI container                   | 显式 context factory 和 router composition | 显式 constructors 与 functional options；没有 DI container                                            |
+| Internal transport     | Microservice transports 和 framework adapters | 不是 service discovery 抽象        | 不是 service discovery 抽象                                 | Procedure adapters 和可选 WebSocket        | `Transport`、`Client`、`Listener`、`defineService`、SSE `ServerStream`                                |
+| Discovery 和 selection | Transport-specific 或外部提供                 | 外部提供                           | 外部提供                                                    | 外部提供                                   | `Registry`、`Discovery`、`Watcher`、Filters、五种 Selector 策略                                       |
+| Retry                  | Framework 或 provider-specific                | Application/plugin-specific        | Application-specific                                        | Middleware/adapter-specific                | 默认一次；`withRetry` 需要授权和总尝试次数                                                            |
+| Streaming              | Framework/provider 选择                       | Node/Web stream 选择               | 原生 Web Streams 和 framework API                           | 取决于 adapter 的 HTTP/WS                  | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
+| Global instrumentation | Framework/provider integration                | Plugin ecosystem                   | Middleware ecosystem                                        | Middleware/adapters                        | 显式 wrappers；不安装 global provider                                                                 |
 
 前五行的标签描述的是架构位置，不是质量排名。框架拥有 route table，在 route composition 是主要问题时很有用；这只是和 go-like 把路由留给应用所做的不同所有权选择。
 
@@ -79,13 +79,13 @@ Client
   -> Selector.select
   -> opaque ServiceEndpoint URL
   -> Transport.dial or resident logical owner
-  -> send(Message)
+  -> fetch(Request)
   -> @go-like/server route and unary handler
-  -> recv(Message)
+  -> read Response
   -> feedback and owner release
 ```
 
-typed `Endpoint` 把 `Struct` request/response validation 绑定到现有的 `Message` 边界上。它不是 IDL，也不是生成式 protocol。`withAddress(...addresses)` 选择构造期直连快照；直连与发现快照使用同一个 Selector。进程内 Memory Transport 路径仍很适合做第一条测试。
+typed `Endpoint` 把 `Struct` request/response validation 绑定到JSON Fetch body 上。它不是 IDL，也不是生成式 protocol。`withEndpoint(...)` 选择构造期直连快照；直连与发现快照使用同一个 Selector。进程内 Memory Transport 路径仍很适合做第一条测试。
 
 NestJS 的 microservice transport 选项、tRPC procedure adapter 和 Go framework transport，都不能和这张 DAG 直接互换。它们可能拥有不同的 route identity、serialization model、connection pool 或 retry layer。比较时应记录这些差异，不要把所有名字里有“RPC”的方框都当成同一种能力。
 
@@ -108,8 +108,8 @@ Web framework or Fetch Handler
   -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
 
 go-like internal Client/Transport
-  -> one unary Message request and one unary Message response
-  -> no full-duplex RPC Stream SPI
+  -> one JSON body, or one SSE server stream when `stream: true`
+  -> not a bidirectional multi-frame protocol
 
 @go-like/transport-grpc-buf
   -> Fetch: Connect/gRPC-Web unary and server-streaming
@@ -158,7 +158,7 @@ Koa 是一个小型 Node middleware kernel，不内置 router。这正好说明�
 
 ### tRPC
 
-tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以使用 Fetch、Node、Express、Fastify 或 WebSocket adapter，但它不是 Registry、Selector、connection pool 或 application lifecycle manager。go-like 的 typed Endpoint 是对 unary Message 做的更小的 runtime Struct binding，不是另一个 procedure DSL，也不是生成式 IDL。
+tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以使用 Fetch、Node、Express、Fastify 或 WebSocket adapter，但它不是 Registry、Selector、connection pool 或 application lifecycle manager。go-like 的 typed Endpoint 是对 JSON Fetch body 做的更小的 runtime Struct binding，不是另一个 procedure DSL，也不是生成式 IDL。
 
 ### go-micro 与 go-kratos
 
@@ -166,7 +166,7 @@ tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以
 
 - Go `context.Context` 和 go-like `Context` 都强调显式取消，但 runtime 表示不同。
 - go-micro 的 Registry watcher model 与 go-like 的完整替换 snapshot，不应该被教成相同的 event stream。
-- `@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于 unary Transport SPI 的调用路径。
+- `@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于内部 Fetch/SSE 路径的调用路径。
 - go-micro 和 go-kratos 的 provider 默认值、retry loop、stream half-close 行为和 selector 默认值都与版本有关。发布新的比较版本前，应使用研究记录中的 fixed upstream commit table 重新核对。
 
 ## 怎么选
@@ -193,7 +193,7 @@ tRPC 拥有类型安全的 procedure router 和 procedure middleware。它可以
 - `packages/web/src/context.ts`：标准 Handler 和 Context bridge；
 - `packages/client/src/index.ts`：Client options、pooling、retry 和 attempt pipeline；
 - `packages/server/src/index.ts`：内部 unary handlers 和 route dispatch；
-- `packages/transport/src/types.ts` 和 `packages/transport/src/endpoint.ts`：Message 与 typed Endpoint 边界；
+- `packages/transport/src/types.ts` 和 `packages/transport/src/endpoint.ts`：Fetch Request/Response 与 defineService 边界；
 - `packages/registry/src/types.ts` 和 `packages/registry/src/selector.ts`：snapshots、filters、selectors 和 feedback。
 
 研究记录还保存了以下固定版本的外部比较输入：

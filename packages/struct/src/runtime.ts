@@ -1,6 +1,6 @@
 import { DEFINITION } from "./symbols"
 import type {
-  ParseResult,
+  InternalParseResult,
   Path,
   PrimitiveKind,
   RuntimeStruct,
@@ -11,20 +11,19 @@ import type {
 } from "./types"
 
 export interface PrimitiveDefinitionInput<K extends PrimitiveKind, TInput, TOutput = TInput> {
-  decode?: (value: TInput, path: Path) => ParseResult<TOutput>
+  decode?: (value: TInput, path: Path) => InternalParseResult<TOutput>
   encode?: (value: TOutput) => unknown
   expected: string
   is: (value: unknown) => value is TInput
   kind: K
   alias?: string
   runtimeIs?: (value: unknown) => boolean
-  zero: () => TOutput
 }
 
 export function createPrimitiveStruct<TInput, TOutput = TInput>(
   definition: PrimitiveDefinitionInput<PrimitiveKind, TInput, TOutput>
-): Struct<TInput | undefined, TOutput> {
-  return castStruct<Struct<TInput | undefined, TOutput>>(
+): Struct<TInput, TOutput> {
+  return castStruct<Struct<TInput, TOutput>>(
     makeStruct({
       ...definition,
       flags: DEFAULT_FLAGS
@@ -50,9 +49,8 @@ export function makeStruct(definition: StructDefinition): RuntimeStruct {
       }
     })
 
-  const struct: RuntimeStruct = {
+  return {
     [DEFINITION]: definition,
-    _struct: undefined as never,
     alias(name: string) {
       if (typeof name !== "string") {
         throw new TypeError("alias() requires a string name")
@@ -66,18 +64,14 @@ export function makeStruct(definition: StructDefinition): RuntimeStruct {
     null() {
       return withFlags({ nullable: true })
     },
+    nullable() {
+      return withFlags({ nullable: true })
+    },
     nullish() {
       return withFlags({ nullable: true, optional: true })
     },
     optional() {
       return withFlags({ optional: true })
     }
-  }
-
-  Object.defineProperty(struct, "_struct", {
-    enumerable: false,
-    value: undefined
-  })
-
-  return struct
+  } as RuntimeStruct
 }

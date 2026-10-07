@@ -3,19 +3,28 @@ import type { CallOption, CallRequest, Client } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import type { Middleware } from "@go-like/server"
 import type { Infer, Struct } from "@go-like/struct"
-import type { Endpoint, Message } from "@go-like/transport"
-import { endpoint, request as service } from "@go-like/transport/headers"
+import {
+  fromServerContext,
+  observeResponseBody,
+  type Endpoint,
+  type ResponseBodyEnd,
+  type ServerStream
+} from "@go-like/transport"
+import { observeCall } from "@go-like/transport/provider"
 import type { Handler } from "@go-like/web"
 import { Counter, Histogram, Registry, type RegistryContentType } from "prom-client"
 
 export type RequestComponent = "broker" | "client" | "server" | "web"
 export type RequestMetricLabel = "component" | "operation" | "outcome"
+export type StreamMessageLabel = "component" | "operation" | "direction"
 export type RequestOutcome = "canceled" | "failure" | "success"
 
-/** Holds the two official prom-client collectors used by go-like request instrumentation. */
+/** Holds the official prom-client collectors used by go-like request instrumentation. */
 export interface RequestMetrics {
   readonly requestsTotal: Counter<RequestMetricLabel>
   readonly requestDurationSeconds: Histogram<RequestMetricLabel>
+  /** Counts server-stream messages. Absent on adapters that only implement unary collectors. */
+  readonly streamMessagesTotal?: Counter<StreamMessageLabel>
 }
 
 export interface PrometheusHandlerOptions {
@@ -82,6 +91,37 @@ function startMeasurement(
   return complete
 }
 
+/** Classifies a terminal body for a client or server operation. */
+function outcomeFromEnd(
+  end: ResponseBodyEnd | null,
+  failure: unknown,
+  ctx: Context
+): RequestOutcome {
+  if (failure !== null) return contextOutcome(ctx)
+  if (end === null) return "success"
+  if (end.reason === "cancel" || end.status.kind === "canceled") return "canceled"
+  if (end.stream && end.status.kind !== "success") return "failure"
+  return "success"
+}
+
+/** Adds sent or received stream messages when the collector exists. */
+function recordStreamMessages(
+  metrics: RequestMetrics,
+  component: RequestComponent,
+  operation: string,
+  direction: "received" | "sent",
+  end: ResponseBodyEnd | null
+): void {
+  if (end?.stream !== true || end.messageCount <= 0 || metrics.streamMessagesTotal === undefined) {
+    return
+  }
+  try {
+    metrics.streamMessagesTotal.inc({ component, operation, direction }, end.messageCount)
+  } catch {
+    // Metrics must not replace the wrapped operation's result.
+  }
+}
+
 /** Classifies a failed Context-owned operation without inspecting its error. */
 function contextOutcome(ctx: Context): RequestOutcome {
   try {
@@ -91,33 +131,27 @@ function contextOutcome(ctx: Context): RequestOutcome {
   }
 }
 
-/** Reads one unique reserved routing header without exposing other request metadata. */
-function routeField(headers: Readonly<Record<string, string>>, expected: string): string {
-  const normalized = expected.toLowerCase()
-  let found: string | null = null
-  for (const key of Object.keys(headers)) {
-    if (key.toLowerCase() !== normalized) continue
-    if (found !== null) return UnknownRoute
-    found = headers[key] ?? ""
+/** Creates one bounded server operation from TransportInfo, never from request headers. */
+function serverOperation(ctx: Context): string {
+  let operation = ""
+  try {
+    const info = fromServerContext(ctx)
+    if (info !== null) operation = info.operation()
+  } catch {
+    operation = ""
   }
-  return found === null || found.length === 0 ? UnknownRoute : found
-}
-
-/** Creates one bounded server operation from the reserved service and endpoint headers. */
-function serverOperation(headers: Readonly<Record<string, string>>): string {
-  return `${routeField(headers, service)}/${routeField(headers, endpoint)}`
+  const slash = operation.indexOf("/")
+  const service = slash < 0 ? operation : operation.slice(0, slash)
+  const endpoint = slash < 0 ? "" : operation.slice(slash + 1)
+  const serviceName = operation.length === 0 || service.length === 0 ? UnknownRoute : service
+  const endpointName = operation.length === 0 || endpoint.length === 0 ? UnknownRoute : endpoint
+  return `${serviceName}/${endpointName}`
 }
 
 /** Distinguishes an asynchronous Web Handler result without changing synchronous semantics. */
 function isResponsePromise(value: Response | Promise<Response>): value is Promise<Response> {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) return false
   return "then" in value && typeof value.then === "function"
-}
-
-/** Classifies one completed Web response at the response-header boundary. */
-function webResponseOutcome(request: Request, response: Response): RequestOutcome {
-  if (request.signal.aborted) return "canceled"
-  return response.status >= 500 ? "failure" : "success"
 }
 
 /** Classifies one failed Web request without inspecting the rejection value. */
@@ -139,7 +173,13 @@ export function newRequestMetrics(registry: Registry<RegistryContentType>): Requ
     labelNames: ["component", "operation", "outcome"],
     registers: [registry]
   })
-  return Object.freeze({ requestsTotal, requestDurationSeconds })
+  const streamMessagesTotal = new Counter<StreamMessageLabel>({
+    name: "go_like_stream_messages_total",
+    help: "Total go-like server-stream messages sent or received.",
+    labelNames: ["component", "operation", "direction"],
+    registers: [registry]
+  })
+  return Object.freeze({ requestsTotal, requestDurationSeconds, streamMessagesTotal })
 }
 
 /** Wraps one logical Client call and records it once regardless of transport retries. */
@@ -170,7 +210,7 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
-  ): Promise<Message>
+  ): Promise<Response>
 
   /** Measures either public Client call overload through the original receiver. */
   async function measuredCall(
@@ -185,18 +225,59 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
     const complete = startMeasurement(metrics, "client", `${subject.service}/${subject.endpoint}`)
     const callArguments: unknown[] = [ctx, subject]
     for (const value of values) callArguments.push(value)
-    try {
-      const response: unknown = await Reflect.apply(call, client, callArguments)
-      complete("success")
-      return response
-    } catch (value) {
-      complete(contextOutcome(ctx))
-      throw value
-    }
+    return await observeCall(
+      ctx,
+      performance.now(),
+      function invoke(callContext: Context): Promise<unknown> {
+        const args = callArguments.slice()
+        args[0] = callContext
+        return Reflect.apply(call, client, args)
+      },
+      function record(end, failure): void {
+        complete(outcomeFromEnd(end, failure, ctx))
+        recordStreamMessages(
+          metrics,
+          "client",
+          `${subject.service}/${subject.endpoint}`,
+          "received",
+          end
+        )
+      }
+    )
+  }
+
+  /** Measures one server stream through the original receiver. */
+  async function measuredStream<RequestStruct extends Struct, ResponseStruct extends Struct>(
+    ctx: Context,
+    endpoint: Endpoint<RequestStruct, ResponseStruct, true>,
+    request: NoInfer<Infer<RequestStruct>>,
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves the Client call ABI. */
+  ): Promise<ServerStream<Infer<ResponseStruct>>> {
+    if (typeof client.stream !== "function") throw new TypeError("client must implement stream")
+    const operation = `${endpoint.service}/${endpoint.endpoint}`
+    const complete = startMeasurement(metrics, "client", operation)
+    return (await observeCall(
+      ctx,
+      performance.now(),
+      function invoke(callContext: Context): Promise<unknown> {
+        const args: [
+          Context,
+          Endpoint<RequestStruct, ResponseStruct, true>,
+          NoInfer<Infer<RequestStruct>>,
+          ...CallOption[]
+        ] = [callContext, endpoint, request, ...options]
+        return client.stream!.apply(client, args)
+      },
+      function record(end, failure): void {
+        complete(outcomeFromEnd(end, failure, ctx))
+        recordStreamMessages(metrics, "client", operation, "received", end)
+      }
+    )) as ServerStream<Infer<ResponseStruct>>
   }
 
   return Object.freeze({
     call: measuredCall,
+    stream: measuredStream,
     /** Closes the native Client through its original receiver without recording a request. */
     close(ctx: Context): Promise<void> {
       return close.call(client, ctx)
@@ -204,17 +285,24 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
   })
 }
 
-/** Creates unary Server middleware that records the reserved service operation. */
+/** Creates unary Server middleware that records the TransportInfo operation. */
 export function measureUnaryMiddleware(metrics: RequestMetrics): Middleware {
   validateRequestMetrics(metrics)
   return (next) => {
     if (typeof next !== "function") throw new TypeError("unary handler must be a function")
-    return async (ctx, message) => {
-      const complete = startMeasurement(metrics, "server", serverOperation(message.header))
+    return async (ctx, request) => {
+      const operation = serverOperation(ctx)
+      const complete = startMeasurement(metrics, "server", operation)
       try {
-        const response = await next(ctx, message)
-        complete("success")
-        return response
+        const response = await next(ctx, request)
+        return observeResponseBody(
+          response,
+          function ended(end): void {
+            complete(outcomeFromEnd(end, null, ctx))
+            recordStreamMessages(metrics, "server", operation, "sent", end)
+          },
+          { startedAt: performance.now() }
+        )
       } catch (value) {
         complete(contextOutcome(ctx))
         throw value
@@ -232,10 +320,22 @@ export function measureWebHandler(handler: Handler, metrics: RequestMetrics): Ha
   /** Measures one request only until its Response headers or rejection are available. */
   function measuredWebHandler(request: Request): Response | Promise<Response> {
     const complete = startMeasurement(metrics, "web", request.method)
-    /** Completes an asynchronous response without replacing its identity. */
+    /** Completes a response when its body ends, preserving a null body. */
     function resolveResponse(response: Response): Response {
-      complete(webResponseOutcome(request, response))
-      return response
+      return observeResponseBody(
+        response,
+        function ended(end): void {
+          if (request.signal.aborted || end.reason === "cancel" || end.status.kind === "canceled") {
+            complete("canceled")
+          } else if (end.stream) {
+            complete(end.status.kind === "success" ? "success" : "failure")
+            recordStreamMessages(metrics, "web", request.method, "sent", end)
+          } else {
+            complete(end.httpStatus >= 500 ? "failure" : "success")
+          }
+        },
+        { startedAt: performance.now() }
+      )
     }
     /** Completes an asynchronous failure before preserving its rejection identity. */
     function rejectResponse(value: unknown): never {

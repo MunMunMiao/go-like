@@ -33,7 +33,7 @@ curl --fail http://127.0.0.1:3000/readyz
 curl --fail http://127.0.0.1:3000/metrics
 ```
 
-`/call` 通过 Consul 发现本进程注册的 `platform.echo/Ping`，返回
+`/call` 通过 Consul 发现本进程注册的 `platform-echo.v1/ping`，返回
 `{"response":"pong:1"}`。修改 Vault 中的 `release` 后，Config watcher 会发布新快照，后续调用使用新值。
 
 停止程序后清理：
@@ -50,7 +50,7 @@ docker compose -f examples/enterprise-platform-runtime/compose.yaml down
 ```text
 src/
 ├── config.ts      # Vault 配置契约与完整快照校验
-├── echo.ts        # platform.echo/Ping 业务 Handler
+├── echo.ts        # platform-echo.v1/ping 业务 Handler
 ├── probes.ts      # liveness/readiness 探针
 ├── management.ts  # health 与 metrics 路由
 ├── runtime-state.ts # Vault Store 运行实例状态
@@ -78,16 +78,16 @@ application logs --------> Pino destination
 
 ## go-like 能力
 
-| 能力          | 使用方式                                                                                                                 |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| App           | `newApp(...options)`、`app.run()`、`app.stop()`                                                                          |
-| Server        | `newServer(transport(...), address(...), middleware(...))`，再调用 `registerEchoHandler(server, handler)`                |
-| Client        | `newClient(withDiscovery(...), withService(...), withSelector(...), withTransport(...))`，再调用 `newEchoClient(client)` |
-| Registry      | Core App 使用 `registrar(registry)` 注册自身；Client 直接使用同一 Discovery                                              |
-| Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭                                     |
-| Web           | Node Web Server 承载标准 Fetch Handler                                                                                   |
-| Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                                                                |
-| Store         | `@go-like/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback                                 |
+| 能力          | 使用方式                                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| App           | `newApp(...options)`、`app.run()`、`app.stop()`                                                                                   |
+| Server        | `newServer(transport(...), address(...), middleware(...))`，再调用 `echoService.registerHandler(server, handler)`                 |
+| Client        | `newClient(withDiscovery(...), withEndpoint(...), withSelector(...), withTransport(...))`，再调用 `echoService.newClient(client)` |
+| Registry      | Core App 使用 `registrar(registry)` 注册自身；Client 直接使用同一 Discovery                                                       |
+| Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭                                              |
+| Web           | Node Web Server 承载标准 Fetch Handler                                                                                            |
+| Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                                                                         |
+| Store         | `@go-like/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback                                          |
 
 Server、Client、Registry 和 App 的用法与 go-like 当前公开 API 保持一致。
 

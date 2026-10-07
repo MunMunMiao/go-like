@@ -3,7 +3,7 @@ import { filterLabel, filterVersion } from "@go-like/registry"
 import type { Discovery, Selector } from "@go-like/registry"
 import type { CircuitBreakerOptions } from "@go-like/resilience"
 import { struct } from "@go-like/struct"
-import { endpoint, type Message, type Transport } from "@go-like/transport"
+import { endpoint, type Transport } from "@go-like/transport"
 
 import * as ClientPackage from "../src/index"
 import {
@@ -18,10 +18,9 @@ import {
   withBlock,
   withSelector,
   withTransport,
-  withAddress,
+  withEndpoint,
   withFilter,
   withRetry,
-  withService,
   type Call,
   type CallOption,
   type CallOptions,
@@ -36,23 +35,27 @@ import {
 declare const discovery: Discovery
 declare const selector: Selector
 declare const transport: Transport
-declare const message: Message
 
 const TypedRequest = struct.object({ currency: struct.literal("USD") })
 const TypedResponse = struct.object({ total: struct.number() })
 
-const request: CallRequest = { service: "orders", endpoint: "Create", message }
+const request: CallRequest = {
+  service: "orders",
+  endpoint: "Create",
+  headers: { tenant: "one" },
+  body: new Uint8Array()
+}
 const client: Client = newClient(
-  withService("orders-registry"),
+  withEndpoint("discovery:///orders-registry"),
   withDiscovery(discovery),
   withTransport(transport)
 )
-const response: Promise<Message> = client.call(background(), request)
+const response: Promise<Response> = client.call(background(), request)
 const closed: Promise<void> = client.close(background())
-const addressOption: ClientOption = withAddress("memory://orders")
-const serviceOption: ClientOption = withService("orders-registry")
+const addressOption: ClientOption = withEndpoint("memory://orders")
+const serviceOption: ClientOption = withEndpoint("discovery:///orders-registry")
 const directClient: Client = newClient(withTransport(transport), addressOption)
-const directResponse: Promise<Message> = directClient.call(background(), request)
+const directResponse: Promise<Response> = directClient.call(background(), request)
 const call: Call = client.call
 const typedEndpoint = endpoint("orders", "Quote", TypedRequest, TypedResponse)
 const typedResponse: Promise<{ readonly total: number }> = client.call(
@@ -73,7 +76,7 @@ const callOptions: CallOptions = {
   retry: callRetry
 }
 const callOption: CallOption = withFilter(filterVersion("v1"))
-const filteredResponse: Promise<Message> = client.call(
+const filteredResponse: Promise<Response> = client.call(
   background(),
   request,
   callOption,
@@ -107,7 +110,7 @@ const blockOption: ClientOption = withBlock()
 const block: boolean | undefined = options.block
 const configured: Client = newClient(
   blockOption,
-  withService("orders-registry"),
+  withEndpoint("discovery:///orders-registry"),
   withDiscovery(discovery),
   withSelector(selector),
   withTransport(transport),
@@ -136,9 +139,14 @@ void [
   configured
 ]
 
-// @ts-expect-error withAddress is construction-only, never a per-call option.
-const perCallAddress: CallOption = withAddress("memory://orders")
+// @ts-expect-error withEndpoint is construction-only, never a per-call option.
+const perCallAddress: CallOption = withEndpoint("memory://orders")
 void perCallAddress
+const readonlyTargets = ["memory://orders-a", "memory://orders-b"] as const
+const readonlyEndpoint: ClientOption = withEndpoint(readonlyTargets)
+void readonlyEndpoint
+// @ts-expect-error withEndpoint takes one target value, not a rest list.
+withEndpoint("memory://orders-a", "memory://orders-b")
 // @ts-expect-error CallOptions no longer carries a per-call address.
 void callOptions.address
 // @ts-expect-error ClientOptions address snapshots are immutable.
@@ -151,7 +159,7 @@ client.call(request)
 // @ts-expect-error Typed requests are inferred from the Endpoint, not widened from the call.
 client.call(background(), typedEndpoint, { currency: "EUR" })
 // @ts-expect-error CallRequest service is a string.
-const invalidRequest: CallRequest = { service: 1, endpoint: "Create", message }
+const invalidRequest: CallRequest = { service: 1, endpoint: "Create", headers: {}, body: null }
 void invalidRequest
 // @ts-expect-error The package has no PascalCase callable alias.
 ClientPackage.NewClient(discovery, selector, transport)

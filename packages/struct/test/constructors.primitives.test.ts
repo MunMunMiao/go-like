@@ -8,23 +8,7 @@ function encode(struct: unknown, value: unknown): unknown {
   return encodeValue(struct as RuntimeStruct, value)
 }
 
-describe("constructors.ts numeric and date primitives", () => {
-  test("number follows JavaScript number semantics except NaN", () => {
-    for (const value of [0, -0, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      const [error, output] = parse(struct.number(), value)
-
-      expect(error).toBeNull()
-      expect(Object.is(output, value)).toBe(true)
-      expect(Object.is(encode(struct.number(), value), value)).toBe(true)
-    }
-
-    const [error, output] = parse(struct.number(), Number.NaN)
-
-    expect(error).toBeInstanceOf(StructError)
-    expect(error?.issues[0]?.code).toBe("invalid_type")
-    expect(output).toBe(0)
-  })
-
+describe("constructors.ts bigint and date primitives", () => {
   test("bigint accepts BigInt and string wire form, rejects number", () => {
     const [e1, v1] = parse(struct.bigint(), 42n)
     if (e1) {
@@ -45,10 +29,8 @@ describe("constructors.ts numeric and date primitives", () => {
     expect(v3).toBe(9007199254740993n)
 
     const [e4, v4] = parse(struct.bigint(), undefined)
-    if (e4) {
-      throw e4
-    }
-    expect(v4).toBe(0n)
+    expect(e4).toBeInstanceOf(StructError)
+    expect(v4).toBeUndefined()
 
     const [e5] = parse(struct.bigint(), 42)
     expect(e5).toBeInstanceOf(StructError)
@@ -66,21 +48,6 @@ describe("constructors.ts numeric and date primitives", () => {
       throw err
     }
     expect(encode(struct.bigint(), parsed as bigint)).toBe("9007199254740993")
-  })
-
-  test("bigint string parsing follows native BigInt grammar", () => {
-    for (const [input, expected] of [
-      ["", 0n],
-      [" ", 0n],
-      ["+1", 1n],
-      ["01", 1n],
-      ["0x10", 16n]
-    ] as const) {
-      const [error, output] = parse(struct.bigint(), input)
-
-      expect(error).toBeNull()
-      expect(output).toBe(expected)
-    }
   })
 
   test("date accepts Date instance, ISO string, and epoch number", () => {
@@ -103,12 +70,9 @@ describe("constructors.ts numeric and date primitives", () => {
     }
     expect((v3 as Date).getTime()).toBe(d.getTime())
 
-    const [e4, zero] = parse(struct.date(), undefined)
-    if (e4) {
-      throw e4
-    }
-    expect(zero).toBeInstanceOf(Date)
-    expect((zero as Date).getTime()).toBe(0)
+    const [e4, value] = parse(struct.date(), undefined)
+    expect(e4).toBeInstanceOf(StructError)
+    expect(value).toBeUndefined()
   })
 
   test("date rejects invalid wire input with invalid_type code", () => {
@@ -136,15 +100,6 @@ describe("constructors.ts numeric and date primitives", () => {
     }
     expect(encode(struct.date(), parsed as Date)).toBe("2026-05-12T10:00:00.000Z")
   })
-
-  test("date string parsing follows the native Date parser", () => {
-    for (const input of ["2026-05-12", "2026-05-12T10:00:00", "2026-05-12T10:00:00Z"]) {
-      const [error, output] = parse(struct.date(), input)
-
-      expect(error).toBeNull()
-      expect(output.getTime()).toBe(new Date(input).getTime())
-    }
-  })
 })
 
 describe("constructors.ts intersection", () => {
@@ -152,6 +107,12 @@ describe("constructors.ts intersection", () => {
     expect(() => (struct.intersection as unknown as (...structs: unknown[]) => unknown)()).toThrow(
       new TypeError("intersection requires at least one struct")
     )
+  })
+
+  test("intersection of one struct is the struct itself", () => {
+    const named = struct.object({ name: struct.string() })
+
+    expect(parse(struct.intersection(named), { name: "x" })).toEqual([null, { name: "x" }])
   })
 
   test("intersection merges two object structs field-wise", () => {
@@ -166,6 +127,39 @@ describe("constructors.ts intersection", () => {
     expect(okVal).toEqual({ name: "x", age: 30 })
 
     const [badErr] = parse(person, { name: "x", age: "bad" })
+    expect(badErr).toBeInstanceOf(StructError)
+  })
+
+  test("nested object intersections flatten into one merge", () => {
+    const person = struct.intersection(
+      struct.intersection(
+        struct.object({ name: struct.string() }),
+        struct.object({ age: struct.number() })
+      ),
+      struct.object({ active: struct.boolean() })
+    )
+
+    const [okErr, okVal] = parse(person, { active: true, age: 30, name: "x" })
+    if (okErr) {
+      throw okErr
+    }
+    expect(okVal).toEqual({ active: true, age: 30, name: "x" })
+  })
+
+  test("intersection merges three object structs field-wise", () => {
+    const person = struct.intersection(
+      struct.object({ name: struct.string() }),
+      struct.object({ age: struct.number() }),
+      struct.object({ active: struct.boolean() })
+    )
+
+    const [okErr, okVal] = parse(person, { active: true, age: 30, name: "x" })
+    if (okErr) {
+      throw okErr
+    }
+    expect(okVal).toEqual({ active: true, age: 30, name: "x" })
+
+    const [badErr] = parse(person, { active: true, age: 30, name: false })
     expect(badErr).toBeInstanceOf(StructError)
   })
 

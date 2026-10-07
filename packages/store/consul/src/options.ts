@@ -13,19 +13,6 @@ export interface CapturedOptions {
 const DefaultRoot = "go-like/store"
 const MaximumRootBytes = 1_024
 
-/** Reports whether one string contains only complete UTF-16 scalar sequences. */
-export function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Normalizes one isolated Consul KV root without retaining empty or dot segments. */
 export function consulRoot(value: string | undefined): string {
   if (value === undefined) return DefaultRoot
@@ -35,7 +22,7 @@ export function consulRoot(value: string | undefined): string {
   let end = value.length
   while (end > start && value.charCodeAt(end - 1) === 47) end -= 1
   const root = value.slice(start, end)
-  if (root.length === 0 || !isWellFormed(root)) {
+  if (root.length === 0 || !root.isWellFormed()) {
     throw new TypeError("Consul Store root must be a non-empty well-formed path")
   }
   for (const segment of root.split("/")) {

@@ -1,8 +1,18 @@
-import { background, canceled, withCancel, withTimeout, withValue } from "@go-like/context"
-import type { Context } from "@go-like/context"
+import {
+  afterFunc,
+  background,
+  canceled,
+  cause,
+  withCancel,
+  withCancelCause,
+  withTimeout as withContextTimeout,
+  withValue,
+  type Context
+} from "@go-like/context"
 
-import { timeout } from "./options"
-import type { Client, Listener, Message, Option, Transport } from "./types"
+import { secure, timeout, tlsConfig, withConnClose, withTimeout } from "./options"
+import { fromServerContext } from "./transport-info"
+import type { Client, Listener, Option, Transport, TransportHandler } from "./types"
 
 /** Creates a fresh structural Transport for one isolated conformance case. */
 export type TransportFactory = () => Transport | Promise<Transport>
@@ -18,6 +28,24 @@ export interface TransportConformanceOptions {
   readonly listenAddress: string
   readonly faultHarness: TransportConformanceFaultHarness | null
   readonly operationTimeoutMs?: number
+  /** Requires dial-before-listen to fail with TransportStateError. Default true. */
+  readonly dialBeforeListen?: boolean
+  /** Requires the handler to observe the caller's Request object. Default true. */
+  readonly preservesRequestIdentity?: boolean
+  /** Requires secure and TLS admission to fail as unsupported. Default true. */
+  readonly unsupportedSecurity?: boolean
+  /** Requires connectionClose to reject the next fetch. Default true. */
+  readonly connectionCloseEndsClient?: boolean
+  /** Requires a thrown handler to reject fetch instead of returning a Response. Default true. */
+  readonly handlerFailuresReject?: boolean
+  /** Substring addr() must contain. An empty string skips that check. Default "memory:". */
+  readonly boundAddressIncludes?: string
+  /** Requires an unread or partly read body to keep the handler Context alive until cancel. Default true. */
+  readonly observeOpenBody?: boolean
+  /** Requires request abort to preserve the caller's Error identity. Default true. */
+  readonly preservesClientAbortCause?: boolean
+  /** Requires serve cancellation to fail an in-flight fetch with TransportClosedError. Default true. */
+  readonly serveCancelRejectsFetch?: boolean
 }
 
 /** Describes one runner-neutral Transport conformance case. */
@@ -31,1417 +59,1078 @@ interface SnapshotConformanceOptions {
   readonly listenAddress: string
   readonly faultHarness: TransportConformanceFaultHarness | null
   readonly operationTimeoutMs: number
+  readonly dialBeforeListen: boolean
+  readonly preservesRequestIdentity: boolean
+  readonly unsupportedSecurity: boolean
+  readonly connectionCloseEndsClient: boolean
+  readonly handlerFailuresReject: boolean
+  readonly boundAddressIncludes: string
+  readonly observeOpenBody: boolean
+  readonly preservesClientAbortCause: boolean
+  readonly serveCancelRejectsFetch: boolean
 }
 
-interface Deferred {
-  readonly promise: Promise<void>
-  /** Resolves the deferred operation exactly once. */
-  resolve(): void
+/** Started serve promise kept beside its readiness barrier. */
+interface OpenServe {
+  readonly serving: Promise<void>
 }
 
-interface FulfilledOutcome<T> {
-  readonly rejected: false
-  readonly value: T
-}
-
-interface RejectedOutcome {
-  readonly rejected: true
+interface Settled {
+  readonly ok: boolean
   readonly value: unknown
 }
 
-type Outcome<T = unknown> = FulfilledOutcome<T> | RejectedOutcome
-
-/** Performs one best-effort conformance cleanup operation. */
-type Cleanup = (ctx: Context) => void | Promise<void>
-/** Performs one bounded conformance scenario. */
-type Scenario = (ctx: Context) => void | Promise<void>
-
 const DefaultConformanceTimeoutMs = 2_000
-
-/** Creates one runner-neutral deferred signal. */
-function deferred(): Deferred {
-  const resolvers: (() => void)[] = []
-  const promise = new Promise<void>((resolve) => {
-    resolvers.push(resolve)
-  })
-  return Object.freeze({
-    promise,
-    /** Resolves the captured Promise. */
-    resolve(): void {
-      const resolve = resolvers.shift()
-      if (resolve !== undefined) resolve()
-    }
-  })
-}
+const DerivedDeadlineMs = 60_000
 
 /** Fails one transport conformance assertion with a stable diagnostic. */
-function fail(message: string): never {
-  throw new Error(message)
+function check(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message)
+  }
 }
 
 /** Captures fulfillment or rejection without leaving an unhandled Promise. */
-async function outcome<T>(operation: Promise<T>): Promise<Outcome<T>> {
+async function settled(operation: Promise<unknown>): Promise<Settled> {
   try {
-    return Object.freeze({ rejected: false, value: await operation })
-  } catch (failure) {
-    return Object.freeze({ rejected: true, value: failure })
+    return { ok: true, value: await operation }
+  } catch (value) {
+    return { ok: false, value }
   }
 }
 
-/** Captures both a synchronous throw and an asynchronous rejection from one invocation. */
-async function invokeOutcome<T>(operation: () => T | Promise<T>): Promise<Outcome<T>> {
-  try {
-    return await outcome(Promise.resolve(operation()))
-  } catch (failure) {
-    return Object.freeze({ rejected: true, value: failure })
-  }
+/** Returns one inert Response for conformance handlers. */
+function staticOk(): Response {
+  return new Response("ok")
 }
 
-/** Crosses one real Web task boundary before observing delayed lifecycle side effects. */
-async function crossWebTaskBoundary(): Promise<void> {
-  await new Promise<void>((resolve) => {
+/** Builds one POST request against a memory URL or a host:port authority. */
+function request(address: string, path = "/orders.v1/get", signal?: AbortSignal): Request {
+  const init: RequestInit = { method: "POST", body: "{}" }
+  if (signal !== undefined) init.signal = signal
+  const base = address.includes("://") ? address : `http://${address}`
+  return new Request(new URL(path, base), init)
+}
+
+/** Reads one optional boolean conformance flag. */
+function requiredBoolean(value: boolean | undefined, name: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback
+  if (typeof value !== "boolean") {
+    throw new TypeError(`transport conformance ${name} must be a boolean`)
+  }
+  return value
+}
+
+/** Reads one optional string conformance flag. An empty string is meaningful. */
+function requiredString(value: string | undefined, name: string, fallback: string): string {
+  if (value === undefined) return fallback
+  if (typeof value !== "string") {
+    throw new TypeError(`transport conformance ${name} must be a string`)
+  }
+  return value
+}
+
+/** Waits until queued Promise work can no longer hide an already settled operation. */
+async function taskBoundary(): Promise<void> {
+  await new Promise<void>(function wait(resolve): void {
     setTimeout(resolve, 0)
   })
 }
 
-/** Bounds one operation with an existing owner Context. */
-async function boundedWithContext<T>(
-  ctx: Context,
-  operation: (ctx: Context) => T | Promise<T>,
-  timeoutMs: number,
-  label: string
-): Promise<T> {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs)
-  const timeout = new Promise<never>((_resolve, reject) => {
-    /** Rejects the bounded wait when its private deadline or cancellation wins. */
-    function onTimeout(): void {
-      reject(
-        new Error(`${label} did not settle within ${timeoutMs}ms`, {
-          cause: ctx.err()
-        })
-      )
-    }
-    timeoutSignal.addEventListener("abort", onTimeout, { once: true })
-  })
-  const running = Promise.resolve().then(() => operation(ctx))
-  return await Promise.race([running, timeout])
-}
-
-/** Bounds one conformance operation so a broken provider cannot hang the runner. */
-async function bounded<T>(
-  operation: (ctx: Context) => T | Promise<T>,
-  timeoutMs: number,
-  label: string
-): Promise<T> {
-  const [ctx, cancel] = withCancel(background())
-  try {
-    return await boundedWithContext(ctx, operation, timeoutMs, label)
-  } finally {
-    cancel()
-  }
-}
-
-/** Runs every cleanup despite earlier failures and preserves one or many exact failures. */
-async function cleanupAll(
-  cleanups: readonly Cleanup[],
-  timeoutMs: number,
-  label: string
-): Promise<void> {
-  const failures: unknown[] = []
-  let sequence = 0
-  for (const cleanup of cleanups) {
-    sequence += 1
-    const result = await outcome(bounded(cleanup, timeoutMs, `${label} cleanup ${sequence}`))
-    if (result.rejected) failures.push(result.value)
-  }
-  if (failures.length === 1) throw failures[0]
-  if (failures.length > 1) throw new AggregateError(failures, `${label} cleanup failed`)
-}
-
-/** Runs one scenario and bounded cleanup while preserving both failures in order. */
-async function withCleanup(
-  scenario: Scenario,
-  cleanups: readonly Cleanup[],
-  timeoutMs: number,
-  label: string
-): Promise<void> {
-  const [ownerCtx, cancelOwner] = withCancel(background())
-  const [primary, cleaned] = await (async (): Promise<readonly [Outcome, Outcome]> => {
-    try {
-      const scenarioResult = await outcome(boundedWithContext(ownerCtx, scenario, timeoutMs, label))
-      const cleanupResult = await outcome(cleanupAll(cleanups, timeoutMs, label))
-      const results: readonly [Outcome, Outcome] = [scenarioResult, cleanupResult]
-      return Object.freeze(results)
-    } finally {
-      cancelOwner()
-    }
-  })()
-  if (primary.rejected && cleaned.rejected) {
-    const failures: unknown[] = [primary.value]
-    if (cleaned.value instanceof AggregateError) {
-      for (const failure of cleaned.value.errors) failures.push(failure)
-    } else {
-      failures.push(cleaned.value)
-    }
-    throw new AggregateError(failures, `${label} and cleanup failed`)
-  }
-  if (primary.rejected) throw primary.value
-  if (cleaned.rejected) throw cleaned.value
-}
-
-/** Creates one already-canceled Context for admission and caller-scope checks. */
-function preCanceledContext(): Context {
-  const [ctx, cancel] = withCancel(background())
-  cancel()
-  return ctx
-}
-
-/** Reads a structural stable-error code without requiring a class or brand. */
-function errorCode(value: unknown): unknown {
-  if (typeof value !== "object" || value === null || !("code" in value)) return null
-  return value.code
-}
-
-/** Finds one original failure through an arbitrary-depth structural cause chain. */
-function containsCause(value: unknown, target: Error): boolean {
-  let current = value
-  const visited = new Set<object>()
-  while (typeof current === "object" && current !== null) {
-    if (current === target) return true
-    if (visited.has(current)) return false
-    visited.add(current)
-    try {
-      if (!("cause" in current)) return false
-      current = current.cause
-    } catch {
-      return false
-    }
-  }
-  return false
-}
-
-/** Requires one operation to reject with the exact standard canceled singleton. */
-function requireCanceled(result: Outcome, label: string): void {
-  if (!result.rejected || result.value !== canceled) fail(`${label} must preserve context canceled`)
-}
-
-/** Requires one operation to reject with a stable structural transport code. */
-function requireCode(result: Outcome, code: string, label: string): void {
-  if (!result.rejected || errorCode(result.value) !== code) {
-    fail(`${label} must reject with ${code}`)
-  }
-}
-
-/** Cancels an operation only after its active invocation remains pending. */
-async function cancelStarted<T>(
-  parent: Context,
-  operation: (ctx: Context) => T | Promise<T>,
-  label: string,
-  onCancel: () => void = (): void => {}
-): Promise<Outcome<T>> {
-  const [ctx, cancel] = withCancel(parent)
-  const running = invokeOutcome(() => operation(ctx))
-  await crossWebTaskBoundary()
-  if (!(await remainsPending(running))) {
-    const completed = await running
-    cancel()
-    if (completed.rejected) throw completed.value
-    return completed
-  }
-  cancel()
-  onCancel()
-  const canceledResult = await running
-  requireCanceled(canceledResult, label)
-  return canceledResult
-}
-
-/** Compares one Message against the reviewed conformance payload. */
-function verifyMessage(message: Message, topic = "before", firstByte = 1): void {
-  if (message.header.topic !== topic) fail("transport did not defensively copy Message headers")
-  const body = message.body
-  if (body.length !== 2 || body[0] !== firstByte || body[1] !== 2) {
-    fail("transport did not defensively copy Message body bytes")
-  }
-}
-
-/** Returns whether a terminal operation remains pending after already-queued Promise work settles. */
+/** Returns whether a terminal operation remains pending after queued Promise work settles. */
 async function remainsPending(operation: Promise<unknown>): Promise<boolean> {
-  let settled = false
+  let done = false
   /** Records either terminal outcome through one shared callable. */
   function markSettled(): void {
-    settled = true
+    done = true
   }
   void Promise.resolve(operation).then(markSettled, markSettled)
   await Promise.resolve()
   await Promise.resolve()
-  return !settled
+  return !done
 }
 
-/** Closes an optional client without obscuring the caller's primary assertion. */
-async function closeClient(ctx: Context, client: Client | null): Promise<void> {
-  if (client !== null) await client.close(ctx)
-}
-
-/** Closes an optional listener. */
-async function closeListener(ctx: Context, listener: Listener | null): Promise<void> {
-  if (listener !== null) await listener.close(ctx)
-}
-
-/** Consumes an optional accept terminal independently from listener close. */
-async function consumeAccept(_ctx: Context, accepting: Promise<Outcome> | null): Promise<void> {
-  if (accepting === null) return
-  const terminal = await accepting
-  if (terminal.rejected) throw terminal.value
-}
-
-/** Verifies option order, last-wins behavior, and detached readback. */
-async function appliesOptions(factory: TransportFactory): Promise<void> {
-  const transport = await factory()
-  transport.init(timeout(1), timeout(2))
-  const first = transport.options()
-  const second = transport.options()
-  if (first === second) fail("Transport.options must return a new defensive snapshot")
-  if (first.timeoutMs !== 2) {
-    fail("Transport.init must apply options in order with the last option winning")
+/** Cancels an operation only when it is still pending; a completed resource keeps its identity. */
+async function cancelIfPending<T>(
+  operation: (ctx: Context) => Promise<T>,
+  label: string
+): Promise<Settled> {
+  const [ctx, cancel] = withCancel(background())
+  const running = settled(operation(ctx))
+  await taskBoundary()
+  if (await remainsPending(running)) {
+    cancel()
+    const canceledResult = await running
+    check(
+      canceledResult.ok === false && canceledResult.value === canceled,
+      `${label} must preserve canceled`
+    )
+    return canceledResult
   }
-  if (!Object.isFrozen(first)) {
-    fail("Transport.options must return an immutable snapshot")
-  }
+  const completed = await running
+  cancel()
+  return completed
 }
 
-/** Verifies reviewed defaults and fail-closed provider validation of structural options. */
-async function validatesOptions(factory: TransportFactory): Promise<void> {
-  const transport = await factory()
-  const defaults = transport.options()
-  if (
-    defaults.codec !== null ||
-    defaults.logger !== null ||
-    defaults.timeoutMs !== 0 ||
-    defaults.secure ||
-    defaults.tlsConfig !== null
-  )
-    fail("Transport.options must expose the reviewed common defaults")
+/** Waits for listeners that publish accepted() and returns immediately otherwise. */
+async function whenReady(listener: Listener): Promise<void> {
+  const accepted: unknown = Reflect.get(listener, "accepted")
+  if (typeof accepted !== "function") return
+  await Reflect.apply(accepted, listener, [])
+}
 
-  /** Produces one structural reducer whose resulting state is invalid. */
-  const malformedOption: Option = (current) =>
-    Object.freeze({
-      codec: current.codec,
-      logger: current.logger,
-      timeoutMs: -1,
-      secure: current.secure,
-      tlsConfig: current.tlsConfig
+/** Starts one serve call and waits until the listener can admit a request. */
+async function openServe(
+  listener: Listener,
+  ctx: Context,
+  handler: TransportHandler
+): Promise<OpenServe> {
+  const serving = listener.serve(ctx, handler)
+  await whenReady(listener)
+  return Object.freeze({ serving })
+}
+
+/** Resolves once ctx becomes terminal. */
+async function untilCanceled(ctx: Context): Promise<void> {
+  if (ctx.err() !== null) return
+  await new Promise<void>(function wait(resolve): void {
+    afterFunc(ctx, function done(): void {
+      resolve()
     })
-  const malformed = await invokeOutcome(() => transport.init(malformedOption))
-  if (!malformed.rejected) fail("Transport.init must reject malformed structural Option output")
-}
-
-/** Verifies init leaves resources created from an earlier option snapshot usable. */
-async function preservesExistingResources(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  const initialResult: unknown = transport.init(timeout(0))
-  if (initialResult !== undefined) {
-    fail("Transport.init must complete synchronously without returning I/O")
-  }
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const address = listener.addr()
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const request = await socket.recv(ctx)
-          await socket.send(ctx, request)
-        })
-      )
-      client = await transport.dial(ownerCtx, address)
-      const replacementResult: unknown = transport.init(timeout(1))
-      if (replacementResult !== undefined) {
-        fail("Transport.init must complete synchronously without returning I/O")
-      }
-      if (listener.addr() !== address) fail("Transport.init changed an existing listener address")
-      const sending = client.send(ownerCtx, {
-        header: Object.freeze({ topic: "before" }),
-        body: new Uint8Array([1, 2])
-      })
-      await sending
-      verifyMessage(await client.recv(ownerCtx))
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "existing resource option snapshot"
-  )
-}
-
-/** Verifies pre-canceled creation Contexts reject without consuming later admission. */
-async function rejectsCanceledCreation(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      const dialed = await invokeOutcome(() =>
-        transport.dial(preCanceledContext(), options.listenAddress)
-      )
-      if (!dialed.rejected) {
-        client = dialed.value
-        fail("Transport.dial accepted a pre-canceled Context")
-      }
-      requireCanceled(dialed, "Transport.dial")
-
-      const listened = await invokeOutcome(() =>
-        transport.listen(preCanceledContext(), options.listenAddress)
-      )
-      if (!listened.rejected) {
-        listener = listened.value
-        fail("Transport.listen accepted a pre-canceled Context")
-      }
-      requireCanceled(listened, "Transport.listen")
-
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const unexpectedHandler = deferred()
-      accepting = outcome(listener.accept(ownerCtx, unexpectedHandler.resolve))
-      client = await transport.dial(ownerCtx, listener.addr())
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "canceled creation admission"
-  )
-}
-
-/** Verifies in-flight creation cancellation and later admission on the same Transport. */
-async function cancelsStartedCreation(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      const probedListener = await cancelStarted(
-        ownerCtx,
-        (ctx) => transport.listen(ctx, options.listenAddress),
-        "started Transport.listen"
-      )
-      if (!probedListener.rejected) await probedListener.value.close(ownerCtx)
-
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const request = await socket.recv(ctx)
-          await socket.send(ctx, request)
-        })
-      )
-      const activeListener = listener
-      const probedClient = await cancelStarted(
-        ownerCtx,
-        (ctx) => transport.dial(ctx, activeListener.addr()),
-        "started Transport.dial"
-      )
-      if (!probedClient.rejected) await probedClient.value.close(ownerCtx)
-
-      client = await transport.dial(ownerCtx, listener.addr())
-      const exchanged = await exchange(ownerCtx, client, "started-creation-health")
-      if (exchanged.rejected) throw exchanged.value
-      verifyMessage(exchanged.value, "started-creation-health")
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "started creation cancellation"
-  )
-}
-
-/** Verifies bound address publication and clean close of a pending accept loop. */
-async function closesPendingAccept(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const address = listener.addr()
-      if (address.length === 0) fail("Listener.addr must return a non-empty bound address")
-      const unexpectedHandler = deferred()
-      accepting = outcome(listener.accept(ownerCtx, unexpectedHandler.resolve))
-      if (!(await remainsPending(accepting)))
-        fail("Listener.accept must remain pending until a terminal event")
-      await Promise.all([listener.close(ownerCtx), listener.close(ownerCtx)])
-      if (await remainsPending(accepting)) {
-        fail("Listener.close must not resolve before Listener.accept settles")
-      }
-      const terminal = await accepting
-      accepting = null
-      if (terminal.rejected) throw terminal.value
-      await listener.close(ownerCtx)
-      if (listener.addr() !== address) fail("Listener.addr changed after close")
-      const repeated = await invokeOutcome(() =>
-        listener?.accept(ownerCtx, unexpectedHandler.resolve)
-      )
-      requireCode(repeated, "GO_LIKE_TRANSPORT_STATE", "repeated Listener.accept")
-    },
-    [async (ctx) => closeListener(ctx, listener), async (ctx) => consumeAccept(ctx, accepting)],
-    options.operationTimeoutMs,
-    "pending accept close"
-  )
-}
-
-/** Verifies accept cancellation and one-shot terminal state. */
-async function cancelsAccept(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const [ctx, cancel] = withCancel(background())
-      const unexpectedHandler = deferred()
-      accepting = outcome(listener.accept(ctx, unexpectedHandler.resolve))
-      if (!(await remainsPending(accepting)))
-        fail("Listener.accept settled before Context cancellation")
-      cancel()
-      const terminal = await accepting
-      accepting = null
-      requireCanceled(terminal, "Listener.accept cancellation")
-      const activeListener = listener
-      const repeated = await invokeOutcome(() =>
-        activeListener.accept(ownerCtx, unexpectedHandler.resolve)
-      )
-      requireCode(repeated, "GO_LIKE_TRANSPORT_STATE", "repeated Listener.accept")
-    },
-    [async (ctx) => closeListener(ctx, listener), async (ctx) => consumeAccept(ctx, accepting)],
-    options.operationTimeoutMs,
-    "accept cancellation"
-  )
-}
-
-/** Verifies pre-canceled accept admission and caller-scoped started Listener.close cleanup. */
-async function scopesListenerClose(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const activeListener = listener
-      const unexpectedHandler = deferred()
-      const rejected = await invokeOutcome(() =>
-        activeListener.accept(preCanceledContext(), unexpectedHandler.resolve)
-      )
-      requireCanceled(rejected, "pre-canceled Listener.accept")
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const request = await socket.recv(ctx)
-          await socket.send(ctx, request)
-        })
-      )
-      if (!(await remainsPending(accepting)))
-        fail("pre-canceled accept consumed the one-shot Listener")
-
-      const closing = await invokeOutcome(() => activeListener.close(preCanceledContext()))
-      requireCanceled(closing, "pre-canceled Listener.close")
-      await crossWebTaskBoundary()
-      if (!(await remainsPending(accepting))) {
-        fail("pre-canceled Listener.close must not start owner cleanup")
-      }
-      const dialed = await invokeOutcome(() => transport.dial(ownerCtx, activeListener.addr()))
-      if (dialed.rejected) {
-        throw new Error("pre-canceled Listener.close must not start owner cleanup", {
-          cause: dialed.value
-        })
-      }
-      client = dialed.value
-      const healthy = await exchange(ownerCtx, client, "listener-close-health")
-      if (healthy.rejected) {
-        throw new Error("pre-canceled Listener.close must not start owner cleanup", {
-          cause: healthy.value
-        })
-      }
-      verifyMessage(healthy.value, "listener-close-health")
-
-      await cancelStarted(ownerCtx, (ctx) => activeListener.close(ctx), "started Listener.close")
-      const joined = await invokeOutcome(() => activeListener.close(ownerCtx))
-      if (joined.rejected) {
-        throw new Error("a later Listener.close caller must join owner cleanup", {
-          cause: joined.value
-        })
-      }
-      if (await remainsPending(accepting)) {
-        fail("a later Listener.close must not resolve before Listener.accept settles")
-      }
-      const terminal = await accepting
-      accepting = null
-      if (terminal.rejected) throw terminal.value
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "listener close caller scope"
-  )
-}
-
-/** Verifies socket Context admission, owner close, idempotence, and closed errors. */
-async function checksSocketLifecycle(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  const message: Message = Object.freeze({
-    header: Object.freeze({ topic: "before" }),
-    body: new Uint8Array([1, 2])
   })
-  const noHandlerFailure = Object.freeze({ state: "no-handler-failure" })
-  let handlerFailure: unknown = noHandlerFailure
-  const handlerChecked = deferred()
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          try {
-            requireCanceled(
-              await invokeOutcome(() => socket.close(preCanceledContext())),
-              "pre-canceled handler Socket.close"
-            )
-            await crossWebTaskBoundary()
-            const received = await invokeOutcome(() => socket.recv(ctx))
-            if (received.rejected) {
-              throw new Error("pre-canceled handler Socket.close must not close the Socket", {
-                cause: received.value
-              })
-            }
-            requireCanceled(
-              await invokeOutcome(() => socket.recv(preCanceledContext())),
-              "pre-canceled handler Socket.recv"
-            )
-            requireCanceled(
-              await invokeOutcome(() => socket.send(preCanceledContext(), message)),
-              "pre-canceled handler Socket.send"
-            )
-            const sent = await invokeOutcome(() => socket.send(ctx, received.value))
-            if (sent.rejected) {
-              throw new Error("pre-canceled handler Socket.close must not close the Socket", {
-                cause: sent.value
-              })
-            }
-            await socket.close(ownerCtx)
-            requireCode(
-              await invokeOutcome(() => socket.recv(ownerCtx)),
-              "GO_LIKE_TRANSPORT_CLOSED",
-              "closed handler Socket.recv"
-            )
-            requireCode(
-              await invokeOutcome(() => socket.send(ownerCtx, received.value)),
-              "GO_LIKE_TRANSPORT_CLOSED",
-              "closed handler Socket.send"
-            )
-            await Promise.all([socket.close(ownerCtx), socket.close(ownerCtx)])
-          } catch (failure) {
-            handlerFailure = failure
-            throw failure
-          } finally {
-            handlerChecked.resolve()
-          }
-        })
-      )
-      client = await transport.dial(ownerCtx, listener.addr())
-      const activeClient = client
-      requireCanceled(
-        await invokeOutcome(() => activeClient.send(preCanceledContext(), message)),
-        "pre-canceled Socket.send"
-      )
-      requireCanceled(
-        await invokeOutcome(() => activeClient.recv(preCanceledContext())),
-        "pre-canceled Socket.recv"
-      )
-      requireCanceled(
-        await invokeOutcome(() => activeClient.close(preCanceledContext())),
-        "pre-canceled Socket.close"
-      )
-      await crossWebTaskBoundary()
-      const sending = outcome(client.send(ownerCtx, message))
-      const sent = await sending
-      if (sent.rejected) {
-        await crossWebTaskBoundary()
-        if (handlerFailure === noHandlerFailure) await crossWebTaskBoundary()
-        if (handlerFailure !== noHandlerFailure) throw handlerFailure
-        throw new Error("pre-canceled Socket.close must not close the Client", {
-          cause: sent.value
-        })
-      }
-      await handlerChecked.promise
-      if (handlerFailure !== noHandlerFailure) throw handlerFailure
-      const received = await invokeOutcome(() => activeClient.recv(ownerCtx))
-      if (received.rejected) {
-        throw new Error("pre-canceled Socket.close must not close the Client", {
-          cause: received.value
-        })
-      }
-      verifyMessage(received.value)
-
-      await client.close(ownerCtx)
-      requireCode(
-        await invokeOutcome(() => activeClient.send(ownerCtx, message)),
-        "GO_LIKE_TRANSPORT_CLOSED",
-        "closed Socket.send"
-      )
-      requireCode(
-        await invokeOutcome(() => activeClient.recv(ownerCtx)),
-        "GO_LIKE_TRANSPORT_CLOSED",
-        "closed Socket.recv"
-      )
-      await Promise.all([client.close(ownerCtx), client.close(ownerCtx)])
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "socket lifecycle"
-  )
 }
 
-/** Verifies in-flight client and handler cancellation without closing unrelated ownership. */
-async function cancelsStartedSockets(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let accepting: Promise<Outcome> | null = null
-  const clientSendRelease = deferred()
-  const clientRecvStarted = deferred()
-  const clientRecvRelease = deferred()
-  const handlerRecvChecked = deferred()
-  const handlerSendChecked = deferred()
-  const handlerCloseChecked = deferred()
-  const noHandlerFailure = Object.freeze({ state: "no-handler-failure" })
-  let handlerFailure: unknown = noHandlerFailure
-  let handlerStage: "routing" | "recv" | "send" | "close" = "routing"
-  let handlerRecvCanceled = false
-  let handlerSendCanceled = false
-  const cleanups: Cleanup[] = [
-    () => {
-      clientSendRelease.resolve()
-    },
-    () => {
-      clientRecvRelease.resolve()
-    },
-    async (ctx) => closeListener(ctx, listener),
-    async (ctx) => consumeAccept(ctx, accepting)
-  ]
-
-  /** Registers each admitted client as its own independently bounded cleanup. */
-  function retainClient(client: Client): Client {
-    cleanups.splice(cleanups.length - 2, 0, async (ctx) => client.close(ctx))
-    return client
-  }
-
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const stage = handlerStage
-          let action = `handler ${stage} operation`
-          try {
-            if (stage === "recv") {
-              const received = await cancelStarted(
-                ctx,
-                (operationCtx) => socket.recv(operationCtx),
-                "started handler Socket.recv"
-              )
-              handlerRecvCanceled = received.rejected
-              if (!received.rejected) {
-                action = "handler recv follow-up response"
-                await socket.send(ctx, received.value)
-              }
-              return
-            }
-
-            const request = await socket.recv(ctx)
-            if (stage === "send") {
-              const sent = await cancelStarted(
-                ctx,
-                (operationCtx) => socket.send(operationCtx, request),
-                "started handler Socket.send"
-              )
-              handlerSendCanceled = sent.rejected
-              return
-            }
-            if (stage === "close") {
-              await cancelStarted(
-                ctx,
-                (operationCtx) => socket.close(operationCtx),
-                "started handler Socket.close"
-              )
-              return
-            }
-            if (request.header.topic === "client-send-cancel") {
-              await clientSendRelease.promise
-            }
-            if (request.header.topic === "client-recv-cancel") {
-              clientRecvStarted.resolve()
-              await clientRecvRelease.promise
-            }
-            await socket.send(ctx, request)
-          } catch (failure) {
-            if (stage !== "routing") {
-              handlerFailure = new Error(`${action} failed`, { cause: failure })
-            }
-            throw failure
-          } finally {
-            if (stage === "recv") handlerRecvChecked.resolve()
-            if (stage === "send") handlerSendChecked.resolve()
-            if (stage === "close") handlerCloseChecked.resolve()
-          }
-        })
-      )
-
-      const sendClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      await cancelStarted(
-        ownerCtx,
-        (ctx) =>
-          sendClient.send(ctx, {
-            header: Object.freeze({ topic: "client-send-cancel" }),
-            body: new Uint8Array([1, 2])
-          }),
-        "started client Socket.send",
-        clientSendRelease.resolve
-      )
-      const sendHealth = await exchange(ownerCtx, sendClient, "client-send-health")
-      if (sendHealth.rejected) {
-        throw new Error("client Socket.send cancellation closed its owning client", {
-          cause: sendHealth.value
-        })
-      }
-      verifyMessage(sendHealth.value, "client-send-health")
-
-      const recvClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      const sendingForRecv = outcome(
-        recvClient.send(ownerCtx, {
-          header: Object.freeze({ topic: "client-recv-cancel" }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await clientRecvStarted.promise
-      await cancelStarted(
-        ownerCtx,
-        (ctx) => recvClient.recv(ctx),
-        "started client Socket.recv",
-        clientRecvRelease.resolve
-      )
-      const sendAfterRecvCancel = await sendingForRecv
-      if (
-        sendAfterRecvCancel.rejected &&
-        sendAfterRecvCancel.value !== canceled &&
-        errorCode(sendAfterRecvCancel.value) !== "GO_LIKE_TRANSPORT_CLOSED"
-      )
-        fail("client Socket.send after recv cancellation returned an unrelated failure")
-      const recvHealth = await exchange(ownerCtx, recvClient, "client-recv-health")
-      if (recvHealth.rejected) {
-        throw new Error("client Socket.recv cancellation closed its owning client", {
-          cause: recvHealth.value
-        })
-      }
-      verifyMessage(recvHealth.value, "client-recv-health")
-
-      const closeClientProbe = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      await cancelStarted(
-        ownerCtx,
-        (ctx) => closeClientProbe.close(ctx),
-        "started client Socket.close"
-      )
-
-      handlerStage = "recv"
-      const handlerRecvClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      const handlerRecvSending = outcome(
-        handlerRecvClient.send(ownerCtx, {
-          header: Object.freeze({ topic: "handler-recv-cancel" }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await handlerRecvChecked.promise
-      if (handlerFailure !== noHandlerFailure) {
-        throw new Error("started handler Socket.recv failed conformance", { cause: handlerFailure })
-      }
-      const handlerRecvSent = await handlerRecvSending
-      if (!handlerRecvCanceled) {
-        if (handlerRecvSent.rejected) {
-          throw new Error("completed handler Socket.recv did not preserve its response", {
-            cause: handlerRecvSent.value
-          })
-        }
-        verifyMessage(await handlerRecvClient.recv(ownerCtx), "handler-recv-cancel")
-      }
-
-      handlerStage = "send"
-      const handlerSendClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      const handlerSendSending = outcome(
-        handlerSendClient.send(ownerCtx, {
-          header: Object.freeze({ topic: "handler-send-cancel" }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await handlerSendChecked.promise
-      if (handlerFailure !== noHandlerFailure) {
-        throw new Error("started handler Socket.send failed conformance", { cause: handlerFailure })
-      }
-      const handlerSent = await handlerSendSending
-      if (!handlerSendCanceled) {
-        if (handlerSent.rejected) {
-          throw new Error("completed handler Socket.send did not preserve its response", {
-            cause: handlerSent.value
-          })
-        }
-        verifyMessage(await handlerSendClient.recv(ownerCtx), "handler-send-cancel")
-      }
-
-      handlerStage = "close"
-      const handlerCloseClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      const handlerCloseSending = outcome(
-        handlerCloseClient.send(ownerCtx, {
-          header: Object.freeze({ topic: "handler-close-cancel" }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await handlerCloseChecked.promise
-      if (handlerFailure !== noHandlerFailure) {
-        throw new Error("started handler Socket.close failed conformance", {
-          cause: handlerFailure
-        })
-      }
-      await handlerCloseSending
-
-      handlerStage = "routing"
-      const healthClient = retainClient(await transport.dial(ownerCtx, listener.addr()))
-      const health = await exchange(ownerCtx, healthClient, "started-socket-health")
-      if (health.rejected) {
-        if (accepting !== null && !(await remainsPending(accepting))) {
-          await accepting
-          accepting = null
-        }
-        throw new Error("handler Socket cancellation closed its unrelated listener", {
-          cause: health.value
-        })
-      }
-      verifyMessage(health.value, "started-socket-health")
-    },
-    cleanups,
-    options.operationTimeoutMs,
-    "started Socket cancellation"
-  )
-}
-
-/** Waits for one Context to terminate and returns its exact terminal error. */
-async function waitContext(ctx: Context): Promise<unknown> {
-  const signal = ctx.done()
-  if (signal === null) fail("handler Context must expose a cancellation signal")
-  if (ctx.err() === null) {
-    await new Promise<void>((resolve) => {
-      /** Resolves the handler wait when its Context terminates. */
-      function onAbort(): void {
-        resolve()
-      }
-      signal.addEventListener("abort", onAbort, { once: true })
-    })
-  }
-  return ctx.err()
-}
-
-/** Verifies handler Context derivation and cancellation by accept termination. */
-async function cancelsHandlerWithAccept(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  let sending: Promise<Outcome> | null = null
-  let handlerContext: Context = background()
-  const noHandlerFailure = Object.freeze({ state: "no-handler-failure" })
-  let handlerFailure: unknown = noHandlerFailure
-  const started = deferred()
-  const stopped = deferred()
-  const handlerTimeoutMs = Math.max(60_000, Math.min(options.operationTimeoutMs * 2, 2_147_483_647))
-  /** Holds the accept-owned child canceler after scenario admission. */
-  let cancelAccept: (() => void) | null = null
-  const valueKey = Object.freeze({ key: "handler-context" })
-  const value = Object.freeze({ value: "preserved" })
-  await withCleanup(
-    async (ownerCtx) => {
-      const [acceptCtx, cancel] = withTimeout(ownerCtx, handlerTimeoutMs)
-      cancelAccept = cancel
-      const valuedAcceptCtx = withValue(acceptCtx, valueKey, value)
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(valuedAcceptCtx, async (ctx, socket) => {
-          try {
-            handlerContext = ctx
-            await socket.recv(ctx)
-            started.resolve()
-            const failure = await waitContext(ctx)
-            if (failure !== canceled) fail("accept termination must cancel the handler Context")
-          } catch (failure) {
-            handlerFailure = failure
-            throw failure
-          } finally {
-            stopped.resolve()
-          }
-        })
-      )
-      client = await transport.dial(ownerCtx, listener.addr())
-      sending = outcome(
-        client.send(ownerCtx, {
-          header: Object.freeze({ topic: "cancel-accept" }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await started.promise
-      const observedContext = handlerContext
-      if (observedContext === valuedAcceptCtx)
-        fail("AcceptHandler Context must be derived, not reused")
-      if (observedContext.value(valueKey) !== value) {
-        fail("handler Context must preserve accept Context values")
-      }
-      const [expectedDeadline, expectedHasDeadline] = valuedAcceptCtx.deadline()
-      const [observedDeadline, observedHasDeadline] = observedContext.deadline()
-      if (
-        !expectedHasDeadline ||
-        !observedHasDeadline ||
-        expectedDeadline.getTime() !== observedDeadline.getTime()
-      )
-        fail("handler Context must preserve the accept Context deadline")
-      cancelAccept()
-      const terminal = await accepting
-      accepting = null
-      requireCanceled(terminal, "handler-owning Listener.accept")
-      await stopped.promise
-      if (handlerFailure !== noHandlerFailure) throw handlerFailure
-      await sending
-    },
-    [
-      async () => {
-        cancelAccept?.()
-        if (accepting !== null) {
-          const terminal = await accepting
-          accepting = null
-          requireCanceled(terminal, "handler-owning Listener.accept cleanup")
-        }
-      },
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting),
-      async () => {
-        if (sending !== null) await sending
-      }
-    ],
-    options.operationTimeoutMs,
-    "handler accept Context"
-  )
-}
-
-/** Runs one handler-cancellation probe for listener or socket termination. */
-async function handlerTerminationProbe(
-  transport: Transport,
-  options: SnapshotConformanceOptions,
-  source: "listener" | "socket"
-): Promise<void> {
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  let sending: Promise<Outcome> | null = null
-  const noHandlerFailure = Object.freeze({ state: "no-handler-failure" })
-  let handlerFailure: unknown = noHandlerFailure
-  const started = deferred()
-  const stopped = deferred()
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          try {
-            await socket.recv(ctx)
-            started.resolve()
-            if (source === "socket") await socket.close(ownerCtx)
-            const failure = await waitContext(ctx)
-            if (failure !== canceled) fail(`${source} termination must cancel the handler Context`)
-          } catch (failure) {
-            handlerFailure = failure
-            throw failure
-          } finally {
-            stopped.resolve()
-          }
-        })
-      )
-      client = await transport.dial(ownerCtx, listener.addr())
-      sending = outcome(
-        client.send(ownerCtx, {
-          header: Object.freeze({ topic: source }),
-          body: new Uint8Array([1, 2])
-        })
-      )
-      await started.promise
-      if (source === "listener") await listener.close(ownerCtx)
-      await stopped.promise
-      if (handlerFailure !== noHandlerFailure) throw handlerFailure
-      await sending
-    },
-    [
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting),
-      async () => {
-        if (sending !== null) await sending
-      }
-    ],
-    options.operationTimeoutMs,
-    `${source} handler termination`
-  )
-}
-
-/** Verifies listener and socket termination both cancel per-handler Contexts. */
-async function cancelsHandlerWithOwnedTermination(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  await handlerTerminationProbe(transport, options, "listener")
-  await handlerTerminationProbe(transport, options, "socket")
-}
-
-/** Verifies recv-before-send state and FIFO pairing by send invocation order. */
-async function preservesSocketOrder(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  const releaseFirst = deferred()
-  const secondStarted = deferred()
-  const secondCompleted = deferred()
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const request = await socket.recv(ctx)
-          if (request.header.topic === "first") await releaseFirst.promise
-          if (request.header.topic === "second") secondStarted.resolve()
-          await socket.send(ctx, request)
-          if (request.header.topic === "second") secondCompleted.resolve()
-        })
-      )
-      client = await transport.dial(ownerCtx, listener.addr())
-      const activeClient = client
-      requireCode(
-        await invokeOutcome(() => activeClient.recv(ownerCtx)),
-        "GO_LIKE_TRANSPORT_STATE",
-        "recv before send"
-      )
-      const firstSend = client.send(ownerCtx, {
-        header: Object.freeze({ topic: "first" }),
-        body: new Uint8Array([1, 2])
-      })
-      const secondSend = client.send(ownerCtx, {
-        header: Object.freeze({ topic: "second" }),
-        body: new Uint8Array([2, 2])
-      })
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0)
-      })
-      const concurrent = !(await remainsPending(secondStarted.promise))
-      if (concurrent) await secondCompleted.promise
-      releaseFirst.resolve()
-      await Promise.all([firstSend, secondSend])
-      verifyMessage(await client.recv(ownerCtx), "first", 1)
-      verifyMessage(await client.recv(ownerCtx), "second", 2)
-    },
-    [
-      () => {
-        releaseFirst.resolve()
-      },
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "socket invocation order"
-  )
-}
-
-/** Completes one send/recv pair and exposes either phase failure as one Outcome. */
-async function exchange(ctx: Context, client: Client, topic: string): Promise<Outcome<Message>> {
-  const sent = await invokeOutcome(() =>
-    client.send(ctx, {
-      header: Object.freeze({ topic }),
-      body: new Uint8Array([1, 2])
-    })
-  )
-  if (sent.rejected) return sent
-  return await invokeOutcome(() => client.recv(ctx))
-}
-
-/** Verifies handler concurrency and isolation after one handler rejection. */
-async function isolatesHandlerFailure(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let first: Client | null = null
-  let second: Client | null = null
-  let third: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  const bothStarted = deferred()
-  let active = 0
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          const request = await socket.recv(ctx)
-          active += 1
-          if (active === 2) bothStarted.resolve()
-          await bothStarted.promise
-          active -= 1
-          if (request.header.topic === "failure")
-            throw new Error("expected isolated handler failure")
-          await socket.send(ctx, request)
-        })
-      )
-      first = await transport.dial(ownerCtx, listener.addr())
-      second = await transport.dial(ownerCtx, listener.addr())
-      const failed = exchange(ownerCtx, first, "failure")
-      const succeeded = exchange(ownerCtx, second, "success")
-      const failedResult = await failed
-      if (!failedResult.rejected) fail("a rejecting handler must fail only its own exchange")
-      const successResult = await succeeded
-      if (successResult.rejected) throw successResult.value
-      verifyMessage(successResult.value, "success")
-      if (!(await remainsPending(accepting))) fail("one handler failure terminated the accept loop")
-
-      third = await transport.dial(ownerCtx, listener.addr())
-      const later = await exchange(ownerCtx, third, "later")
-      if (later.rejected) throw later.value
-      verifyMessage(later.value, "later")
-    },
-    [
-      async (ctx) => closeClient(ctx, third),
-      async (ctx) => closeClient(ctx, second),
-      async (ctx) => closeClient(ctx, first),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "handler failure isolation"
-  )
-}
-
-/** Verifies both send and receive sides detach Message headers and body bytes. */
-async function exchangesMessage(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let client: Client | null = null
-  let accepting: Promise<Outcome> | null = null
-  let sending: Promise<Outcome<void>> | null = null
-  const received = deferred()
-  const release = deferred()
-  const handlerChecked = deferred()
-  const noHandlerFailure = Object.freeze({ state: "no-handler-failure" })
-  let handlerFailure: unknown = noHandlerFailure
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      accepting = outcome(
-        listener.accept(ownerCtx, async (ctx, socket) => {
-          try {
-            const request = await socket.recv(ctx)
-            verifyMessage(request)
-            const exposedRequestBody = request.body
-            exposedRequestBody[0] = 88
-            verifyMessage(request)
-            received.resolve()
-            await release.promise
-            const responseHeader = { topic: "response" }
-            const responseBody = new Uint8Array([3, 2])
-            const responding = socket.send(ctx, { header: responseHeader, body: responseBody })
-            responseHeader.topic = "mutated"
-            responseBody[0] = 99
-            await responding
-          } catch (failure) {
-            handlerFailure = failure
-            throw failure
-          } finally {
-            handlerChecked.resolve()
-          }
-        })
-      )
-      client = await transport.dial(ownerCtx, listener.addr())
-      const header = { topic: "before" }
-      const body = new Uint8Array([1, 2])
-      sending = outcome(client.send(ownerCtx, { header, body }))
-      header.topic = "after"
-      body[0] = 99
-      await Promise.race([received.promise, handlerChecked.promise])
-      if (handlerFailure !== noHandlerFailure) throw handlerFailure
-      release.resolve()
-      const sent = await sending
-      if (sent.rejected) throw sent.value
-      const response = await client.recv(ownerCtx)
-      verifyMessage(response, "response", 3)
-      if (!Object.isFrozen(response.header)) fail("received Message header must be frozen")
-      const exposed = response.body
-      exposed[0] = 77
-      verifyMessage(response, "response", 3)
-    },
-    [
-      () => {
-        release.resolve()
-      },
-      async () => {
-        if (sending !== null) await sending
-      },
-      async (ctx) => closeClient(ctx, client),
-      async (ctx) => closeListener(ctx, listener),
-      async (ctx) => consumeAccept(ctx, accepting)
-    ],
-    options.operationTimeoutMs,
-    "Message defensive copy"
-  )
-}
-
-/** Verifies an injected provider host failure reaches accept with original cause. */
-async function preservesHostFailure(
-  factory: TransportFactory,
-  options: SnapshotConformanceOptions,
-  harness: TransportConformanceFaultHarness
-): Promise<void> {
-  const transport = await factory()
-  let listener: Listener | null = null
-  let accepting: Promise<Outcome> | null = null
-  await withCleanup(
-    async (ownerCtx) => {
-      listener = await transport.listen(ownerCtx, options.listenAddress)
-      const unexpectedHandler = deferred()
-      accepting = outcome(listener.accept(ownerCtx, unexpectedHandler.resolve))
-      const cause = new Error("injected unexpected listener failure")
-      await harness.failListener(ownerCtx, listener, cause)
-      const terminal = await accepting
-      accepting = null
-      if (!terminal.rejected) fail("unexpected listener failure must reject Listener.accept")
-      if (!containsCause(terminal.value, cause)) {
-        fail("unexpected listener failure must preserve its original cause")
-      }
-    },
-    [async (ctx) => closeListener(ctx, listener), async (ctx) => consumeAccept(ctx, accepting)],
-    options.operationTimeoutMs,
-    "unexpected listener failure"
-  )
-}
-
-/** Narrows one structural fault injection callable. */
-function isFaultCallable(
-  value: unknown
-): value is TransportConformanceFaultHarness["failListener"] {
-  return typeof value === "function"
-}
-
-/** Snapshots one borrowed fault harness without retaining a mutable method lookup. */
-function snapshotFaultHarness(value: unknown): TransportConformanceFaultHarness | null {
-  if (value === null) return null
-  if (typeof value !== "object") {
-    throw new TypeError("transport conformance faultHarness must be an object or null")
-  }
-  const failListener: unknown = Reflect.get(value, "failListener")
-  if (!isFaultCallable(failListener)) {
-    throw new TypeError("transport conformance faultHarness must be an object or null")
-  }
-  return Object.freeze({
-    /** Delegates one fault injection through the snapshotted structural callable. */
-    failListener(ctx: Context, listener: Listener, cause: Error): void | Promise<void> {
-      return failListener.call(value, ctx, listener, cause)
-    }
-  })
+/** Returns the Error name when value is an Error. */
+function errorName(value: unknown): string {
+  return value instanceof Error ? value.name : ""
 }
 
 /** Validates and freezes the complete conformance configuration. */
 function snapshotConformanceOptions(
   options: TransportConformanceOptions
 ): SnapshotConformanceOptions {
-  const candidate: unknown = options
-  if (typeof candidate !== "object" || candidate === null) {
+  if (typeof options !== "object" || options === null) {
     throw new TypeError("transport conformance options must be an object")
   }
-  const listenAddress: unknown =
-    "listenAddress" in candidate ? Reflect.get(candidate, "listenAddress") : undefined
-  if (typeof listenAddress !== "string" || listenAddress.length === 0) {
+  if (typeof options.listenAddress !== "string" || options.listenAddress.length === 0) {
     throw new TypeError("transport conformance listenAddress must be a non-empty string")
   }
-  if (!("faultHarness" in candidate)) {
+  if (!("faultHarness" in options)) {
     throw new TypeError("transport conformance faultHarness must be an object or null")
   }
-  const faultHarness: unknown = Reflect.get(candidate, "faultHarness")
-  const requestedTimeout =
-    "operationTimeoutMs" in candidate
-      ? Reflect.get(candidate, "operationTimeoutMs")
-      : DefaultConformanceTimeoutMs
-  if (
-    !Number.isSafeInteger(requestedTimeout) ||
-    typeof requestedTimeout !== "number" ||
-    requestedTimeout <= 0
-  ) {
+  const faultHarness = options.faultHarness
+  if (faultHarness !== null) {
+    if (typeof faultHarness !== "object") {
+      throw new TypeError("transport conformance faultHarness must be an object or null")
+    }
+    if (typeof faultHarness.failListener !== "function") {
+      throw new TypeError("transport conformance faultHarness.failListener must be a function")
+    }
+  }
+  const operationTimeoutMs = options.operationTimeoutMs ?? DefaultConformanceTimeoutMs
+  if (!Number.isSafeInteger(operationTimeoutMs) || operationTimeoutMs <= 0) {
     throw new RangeError("transport conformance operationTimeoutMs must be a positive safe integer")
   }
   return Object.freeze({
-    listenAddress,
-    faultHarness: snapshotFaultHarness(faultHarness),
-    operationTimeoutMs: requestedTimeout
+    listenAddress: options.listenAddress,
+    faultHarness,
+    operationTimeoutMs,
+    dialBeforeListen: requiredBoolean(options.dialBeforeListen, "dialBeforeListen", true),
+    preservesRequestIdentity: requiredBoolean(
+      options.preservesRequestIdentity,
+      "preservesRequestIdentity",
+      true
+    ),
+    unsupportedSecurity: requiredBoolean(options.unsupportedSecurity, "unsupportedSecurity", true),
+    connectionCloseEndsClient: requiredBoolean(
+      options.connectionCloseEndsClient,
+      "connectionCloseEndsClient",
+      true
+    ),
+    handlerFailuresReject: requiredBoolean(
+      options.handlerFailuresReject,
+      "handlerFailuresReject",
+      true
+    ),
+    boundAddressIncludes: requiredString(
+      options.boundAddressIncludes,
+      "boundAddressIncludes",
+      "memory:"
+    ),
+    observeOpenBody: requiredBoolean(options.observeOpenBody, "observeOpenBody", true),
+    preservesClientAbortCause: requiredBoolean(
+      options.preservesClientAbortCause,
+      "preservesClientAbortCause",
+      true
+    ),
+    serveCancelRejectsFetch: requiredBoolean(
+      options.serveCancelRejectsFetch,
+      "serveCancelRejectsFetch",
+      true
+    )
   })
+}
+
+/** Serves one handler and closes both sides after scenario. */
+async function withExchange(
+  transport: Transport,
+  address: string,
+  handler: TransportHandler,
+  scenario: (client: Client, listener: Listener, serving: Promise<void>) => Promise<void>
+): Promise<void> {
+  const listener = await transport.listen(background(), address)
+  const opened = await openServe(listener, background(), handler)
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+  try {
+    await scenario(client, listener, serving)
+  } finally {
+    await settled(client.close(background()))
+    await settled(listener.close(background()))
+    await settled(serving)
+  }
+}
+
+/** Checks option order, defaults, and the absence of a codec field. */
+async function appliesOptions(factory: TransportFactory): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  check(transport.string().length > 0, "transport string() must be non-empty")
+  check(
+    transport.kind?.() === "memory" || transport.string().length > 0,
+    "transport kind is optional"
+  )
+  const defaults = transport.options()
+  check(defaults.logger === null, "default logger must be null")
+  check(defaults.timeoutMs === 0, "default timeout must be zero")
+  check(defaults.secure === false, "default secure must be false")
+  check(defaults.tlsConfig === null, "default tlsConfig must be null")
+  check(!("codec" in defaults), "codec is not a transport option")
+  transport.init(timeout(5), timeout(9))
+  const snapshot = transport.options()
+  transport.init(timeout(11))
+  check(snapshot.timeoutMs === 9, "option snapshots must be immutable")
+  check(transport.options().timeoutMs === 11, "later init must replace timeout")
+  let invalid = false
+  try {
+    transport.init(1 as never)
+  } catch (error) {
+    invalid = error instanceof TypeError
+  }
+  check(invalid, "init must reject a non-function option")
+}
+
+/** Checks that init does not change a client created earlier. */
+async function preservesExistingResources(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  check(options.operationTimeoutMs > 0, "conformance operation timeout must be positive")
+  transport.init(timeout(0))
+  await withExchange(
+    transport,
+    options.listenAddress,
+    async function slow(_ctx, _request): Promise<Response> {
+      await new Promise<void>(function wait(resolve): void {
+        setTimeout(resolve, 40)
+      })
+      return new Response("slow")
+    },
+    async function scenario(client, listener): Promise<void> {
+      transport.init(timeout(1))
+      const response = await client.fetch(background(), request(listener.addr()))
+      check(response.status === 200, "existing client must keep the timeout captured at dial")
+      await response.arrayBuffer()
+    }
+  )
+}
+
+/** Checks pre-canceled dial and listen admission. */
+async function rejectsCanceledCreation(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const [ctx, cancel] = withCancel(background())
+  cancel()
+  const dialed = await settled(transport.dial(ctx, options.listenAddress))
+  const listened = await settled(transport.listen(ctx, options.listenAddress))
+  check(
+    dialed.ok === false && dialed.value === canceled,
+    "pre-canceled dial must preserve canceled"
+  )
+  check(
+    listened.ok === false && listened.value === canceled,
+    "pre-canceled listen must preserve canceled"
+  )
+}
+
+/** Checks address publication, one-shot serve, and optional dial-before-listen. */
+async function servesOnce(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  if (options.dialBeforeListen) {
+    const missing = await settled(transport.dial(background(), options.listenAddress))
+    check(
+      missing.ok === false && errorName(missing.value) === "TransportStateError",
+      "dial before listen must fail"
+    )
+  }
+  const listener = await transport.listen(background(), options.listenAddress)
+  let client: Client | null = null
+  let serving: Promise<void> | null = null
+  try {
+    check(listener.addr().length > 0, "listener address must be non-empty")
+    if (options.boundAddressIncludes.length > 0) {
+      check(
+        listener.addr().includes(options.boundAddressIncludes),
+        "listener must publish its bound address"
+      )
+    }
+    const opened = await openServe(listener, background(), staticOk)
+    serving = opened.serving
+    client = await transport.dial(background(), listener.addr(), withTimeout(0))
+    const response = await client.fetch(background(), request(listener.addr()))
+    check(response.status === 200, "the admitted serve handler must run")
+    await response.arrayBuffer()
+    const second = await settled(listener.serve(background(), staticOk))
+    check(
+      second.ok === false && errorName(second.value) === "TransportStateError",
+      "serve is one-shot"
+    )
+  } finally {
+    if (client !== null) await settled(client.close(background()))
+    await settled(listener.close(background()))
+    if (serving !== null) await settled(serving)
+  }
+}
+
+/** Checks serve cancellation and that a pre-canceled serve does not consume the one-shot. */
+async function cancelsServe(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const listener = await transport.listen(background(), options.listenAddress)
+  const [preCanceled, cancelPre] = withCancel(background())
+  cancelPre()
+  const rejected = await settled(listener.serve(preCanceled, staticOk))
+  check(
+    rejected.ok === false && rejected.value === canceled,
+    "pre-canceled serve must not be consumed"
+  )
+  const reason = new Error("serve-stopped")
+  const [serveCtx, cancelServe] = withCancelCause(background())
+  let entered: (() => void) | undefined
+  const ready = new Promise<void>(function capture(resolve): void {
+    entered = resolve
+  })
+  const opened = await openServe(
+    listener,
+    serveCtx,
+    async function handler(ctx): Promise<Response> {
+      entered?.()
+      await untilCanceled(ctx)
+      return new Response("done")
+    }
+  )
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+  const pending = settled(client.fetch(background(), request(listener.addr())))
+  await ready
+  cancelServe(reason)
+  const served = await settled(serving)
+  const fetched = await pending
+  check(
+    served.ok === false && served.value === reason,
+    "serve cancellation must preserve its cause"
+  )
+  if (fetched.ok === true && fetched.value instanceof Response) {
+    await fetched.value.arrayBuffer()
+  }
+  if (options.serveCancelRejectsFetch) {
+    check(
+      fetched.ok === false && errorName(fetched.value) === "TransportClosedError",
+      "in-flight fetch must fail when serve stops"
+    )
+  }
+  await settled(client.close(background()))
+  await settled(listener.close(background()))
+}
+
+/** Checks that a handler Context stays alive until its Response body ends. */
+async function derivesHandlerContext(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const key = Object.freeze({ name: "conformance" })
+  const [serveCtx, cancelServe] = withContextTimeout(withValue(background(), key, "kept"), 30_000)
+  const contexts = new Map<string, Context>()
+  let releaseCancel: (() => void) | undefined
+  const cancelGate = new Promise<void>(function captureCancel(resolve): void {
+    releaseCancel = resolve
+  })
+  const listener = await transport.listen(background(), options.listenAddress)
+  const opened = await openServe(listener, serveCtx, function handler(ctx, seen): Response {
+    const path = new URL(seen.url).pathname
+    contexts.set(path, ctx)
+    check(ctx.err() === null, "handler Context must be active while the handler runs")
+    check(seen instanceof Request, "handler must observe the Request")
+    if (path === "/empty") return new Response(null, { status: 204 })
+    if (path === "/cancel") {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          /** Stays open until the case releases the source. */
+          async pull(controller): Promise<void> {
+            await cancelGate
+            try {
+              controller.close()
+            } catch {
+              // Consumer cancellation already terminated the body.
+            }
+          }
+        })
+      )
+    }
+    if (path === "/error") {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          /** Fails the first read. */
+          start(controller): void {
+            controller.error(new Error("broke"))
+          }
+        })
+      )
+    }
+    return new Response("ok", { status: 201 })
+  })
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+  let hanging: Response | null = null
+  try {
+    const body = await client.fetch(background(), request(listener.addr(), "/body"))
+    const bodyCtx = contexts.get("/body") ?? null
+    check(body.status === 201, "handler status must pass through")
+    check(bodyCtx !== null && bodyCtx !== serveCtx, "handler Context must be derived")
+    check(bodyCtx !== null && bodyCtx.value(key) === "kept", "handler Context must inherit values")
+    check(
+      bodyCtx !== null && bodyCtx.deadline()[1] === true,
+      "handler Context must inherit the serve deadline"
+    )
+    expectBytes(await body.arrayBuffer(), "ok")
+    check(
+      bodyCtx !== null && bodyCtx.err() === canceled,
+      "Response body EOF must cancel the handler Context"
+    )
+
+    const empty = await client.fetch(background(), request(listener.addr(), "/empty"))
+    const emptyCtx = contexts.get("/empty") ?? null
+    check(empty.status === 204, "null body status must pass through")
+    check(
+      emptyCtx !== null && emptyCtx.err() === canceled,
+      "a null Response body must cancel the handler Context at delivery"
+    )
+
+    if (options.observeOpenBody) {
+      hanging = await client.fetch(background(), request(listener.addr(), "/cancel"))
+      const cancelCtx = contexts.get("/cancel") ?? null
+      check(
+        cancelCtx !== null && cancelCtx.err() === null,
+        "an open body must keep the handler Context active"
+      )
+      await hanging.body?.cancel(new Error("stop"))
+      check(
+        cancelCtx !== null && cancelCtx.err() === canceled,
+        "Response body cancel must cancel the handler Context"
+      )
+    }
+
+    const brokenResult = await settled(
+      client.fetch(background(), request(listener.addr(), "/error"))
+    )
+    const errorCtx = contexts.get("/error") ?? null
+    if (brokenResult.ok === true && brokenResult.value instanceof Response) {
+      await settled(brokenResult.value.arrayBuffer())
+    }
+    check(
+      errorCtx !== null && errorCtx.err() === canceled,
+      "a Response body error must cancel the handler Context"
+    )
+  } finally {
+    releaseCancel?.()
+    await settled(hanging?.body?.cancel() ?? Promise.resolve())
+    await settled(client.close(background()))
+    await settled(listener.close(background()))
+    await settled(serving)
+    cancelServe()
+  }
+}
+
+/** Checks that a buffered body has the expected UTF-8 text. */
+function expectBytes(bytes: ArrayBuffer, text: string): void {
+  check(new TextDecoder().decode(bytes) === text, "Response body bytes must pass through")
+}
+
+/** Names how a probed Response body terminates. */
+type BodyEnd = "end" | "error" | "cancel"
+
+/** Holds what one handler call lets a case observe about its Contexts. */
+interface BodyProbe {
+  readonly ctx: Context
+  /** A far-future deadline derived from ctx, as a handler or caller would derive it. */
+  readonly child: Context
+  /** Cancels child so a failing case never leaves its timer armed. */
+  readonly release: () => void
+  /** Records whether ctx or child was canceled while the body was still being produced. */
+  canceledWhileProducing: boolean
+}
+
+/** Derives the probed child Context from one handler Context. */
+function newProbe(ctx: Context): BodyProbe {
+  const [child, release] = withContextTimeout(ctx, DerivedDeadlineMs)
+  return { ctx, child, release, canceledWhileProducing: false }
+}
+
+/** Streams a first chunk, then ends, errors, or closes once gate opens, noting Context state per pull. */
+function probedBody(
+  probe: BodyProbe,
+  end: BodyEnd,
+  gate: Promise<void>
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  let pulls = 0
+  return new ReadableStream<Uint8Array>(
+    {
+      /** Notes a Context canceled before the body reached any terminal state. */
+      async pull(controller): Promise<void> {
+        pulls += 1
+        const pull = pulls
+        if (probe.ctx.err() !== null || probe.child.err() !== null) {
+          probe.canceledWhileProducing = true
+        }
+        if (pull === 1) {
+          controller.enqueue(encoder.encode("a"))
+          return
+        }
+        await gate
+        try {
+          if (end === "error") controller.error(new Error("broke"))
+          else if (end === "end" && pull === 2) controller.enqueue(encoder.encode("b"))
+          else controller.close()
+        } catch {
+          // Consumer cancellation already terminated the body.
+        }
+      }
+    },
+    { highWaterMark: 0 }
+  )
+}
+
+/** Reports whether ctx becomes terminal within timeoutMs. */
+async function endsWithin(ctx: Context, timeoutMs: number): Promise<boolean> {
+  const [bound, cancelBound] = withContextTimeout(background(), timeoutMs)
+  try {
+    await Promise.race([untilCanceled(ctx), untilCanceled(bound)])
+  } finally {
+    cancelBound()
+  }
+  return ctx.err() !== null
+}
+
+/** Returns the probe recorded for path, or fails the case when the handler never ran. */
+function probeFor(probes: ReadonlyMap<string, BodyProbe>, path: string): BodyProbe {
+  const probe = probes.get(path)
+  if (probe === undefined) throw new Error(`the handler must run for ${path}`)
+  return probe
+}
+
+/** Checks that the derived Context of one probe was canceled by its body's terminal state. */
+async function expectReleased(
+  probe: BodyProbe,
+  options: SnapshotConformanceOptions,
+  terminal: string
+): Promise<void> {
+  const released =
+    (await endsWithin(probe.child, options.operationTimeoutMs)) && probe.child.err() === canceled
+  check(released, `a derived Context must be canceled when the Response body ${terminal}`)
+}
+
+/** Checks that a Context derived from the handler Context follows the Response body's end. */
+async function releasesDerivedContext(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const probes = new Map<string, BodyProbe>()
+  let release: (() => void) | undefined
+  const held = new Promise<void>(function captureRelease(resolve): void {
+    release = resolve
+  })
+  await withExchange(
+    transport,
+    options.listenAddress,
+    function handler(ctx, seen): Response {
+      const path = new URL(seen.url).pathname
+      const probe = newProbe(ctx)
+      probes.set(path, probe)
+      const end = path.slice(1) as BodyEnd
+      return new Response(probedBody(probe, end, end === "cancel" ? held : Promise.resolve()))
+    },
+    async function scenario(client, listener): Promise<void> {
+      try {
+        const ended = await client.fetch(background(), request(listener.addr(), "/end"))
+        expectBytes(await ended.arrayBuffer(), "ab")
+        await expectReleased(probeFor(probes, "/end"), options, "ends")
+
+        const errored = await settled(
+          client.fetch(background(), request(listener.addr(), "/error"))
+        )
+        if (errored.ok === true && errored.value instanceof Response) {
+          await settled(errored.value.arrayBuffer())
+        }
+        await expectReleased(probeFor(probes, "/error"), options, "errors")
+
+        if (options.observeOpenBody) {
+          const hanging = await client.fetch(background(), request(listener.addr(), "/cancel"))
+          const reader = hanging.body?.getReader()
+          await reader?.read()
+          await reader?.cancel(new Error("stop"))
+          await expectReleased(probeFor(probes, "/cancel"), options, "is canceled")
+        }
+      } finally {
+        release?.()
+        for (const probe of probes.values()) probe.release()
+      }
+    }
+  )
+}
+
+/** Checks that the handler Context stays active until its Response body reaches a terminal state. */
+async function keepsContextActive(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const probes = new Map<string, BodyProbe>()
+  let openBody: (() => void) | undefined
+  const gate = options.observeOpenBody
+    ? new Promise<void>(function captureOpen(resolve): void {
+        openBody = resolve
+      })
+    : Promise.resolve()
+  await withExchange(
+    transport,
+    options.listenAddress,
+    function handler(ctx, seen): Response {
+      const probe = newProbe(ctx)
+      probes.set(new URL(seen.url).pathname, probe)
+      return new Response(probedBody(probe, "end", gate))
+    },
+    async function scenario(client, listener): Promise<void> {
+      try {
+        const response = await client.fetch(background(), request(listener.addr(), "/body"))
+        const probe = probeFor(probes, "/body")
+        if (options.observeOpenBody) {
+          check(
+            probe.ctx.err() === null && probe.child.err() === null,
+            "the handler Context must stay active while the Response body is unread"
+          )
+          const reader = response.body?.getReader()
+          let step = await reader?.read()
+          check(
+            probe.ctx.err() === null && probe.child.err() === null,
+            "the handler Context must stay active while the Response body is partly read"
+          )
+          openBody?.()
+          while (step !== undefined && !step.done) step = await reader?.read()
+        } else {
+          await response.arrayBuffer()
+        }
+        check(
+          !probe.canceledWhileProducing,
+          "the handler Context must stay active while the Response body is produced"
+        )
+      } finally {
+        openBody?.()
+        for (const probe of probes.values()) probe.release()
+      }
+    }
+  )
+}
+
+/** Checks Request and Response identity. */
+async function exchangesIdentity(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const seen: { request: Request | null } = { request: null }
+  const produced = new Response("body", { status: 200, headers: { "x-memory": "1" } })
+  await withExchange(
+    transport,
+    options.listenAddress,
+    function handler(_ctx, incoming): Response {
+      seen.request = incoming
+      return produced
+    },
+    async function scenario(client, listener): Promise<void> {
+      const original = request(listener.addr(), "/payment.v1/pay")
+      const response = await client.fetch(background(), original)
+      if (options.preservesRequestIdentity) {
+        check(seen.request === original, "the handler must observe the caller's Request")
+      }
+      check(response.status === produced.status, "handler status must pass through")
+      check(response.headers.get("x-memory") === "1", "handler headers must pass through")
+      expectBytes(await response.arrayBuffer(), "body")
+      const info = fromServerContext
+      check(typeof info === "function", "server context reader stays available")
+    }
+  )
+}
+
+/** Checks that one handler failure does not fail another exchange. */
+async function isolatesHandlerFailure(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  let releaseFailure: (() => void) | undefined
+  const gate = new Promise<void>(function capture(resolve): void {
+    releaseFailure = resolve
+  })
+  await withExchange(
+    transport,
+    options.listenAddress,
+    async function handler(_ctx, incoming): Promise<Response> {
+      if (new URL(incoming.url).pathname === "/fail") {
+        await gate
+        throw new Error("isolated")
+      }
+      return new Response("ok")
+    },
+    async function scenario(client, listener): Promise<void> {
+      const good = client.fetch(background(), request(listener.addr(), "/ok"))
+      const bad = settled(client.fetch(background(), request(listener.addr(), "/fail")))
+      const goodResponse = await good
+      check(goodResponse.status === 200, "a sibling handler failure must not fail this exchange")
+      await goodResponse.arrayBuffer()
+      releaseFailure?.()
+      const failed = await bad
+      if (options.handlerFailuresReject) {
+        check(
+          failed.ok === false && failed.value instanceof Error,
+          "the failing handler must reject"
+        )
+      } else if (failed.ok === true && failed.value instanceof Response) {
+        await failed.value.arrayBuffer()
+      }
+      const later = await client.fetch(background(), request(listener.addr(), "/later"))
+      check(later.status === 200, "the listener must accept a later exchange")
+      await later.arrayBuffer()
+    }
+  )
+}
+
+/** Checks operation timeout and connection close. */
+async function timesOutAndCloses(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const listener = await transport.listen(background(), options.listenAddress)
+  const opened = await openServe(
+    listener,
+    background(),
+    async function handler(ctx, incoming): Promise<Response> {
+      if (new URL(incoming.url).pathname === "/slow") await untilCanceled(ctx)
+      return new Response("ok")
+    }
+  )
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(50))
+  const timed = await settled(client.fetch(background(), request(listener.addr(), "/slow")))
+  check(
+    timed.ok === false && errorName(timed.value) === "DeadlineExceeded",
+    "fetch must surface the dial timeout"
+  )
+  await settled(client.close(background()))
+  if (options.connectionCloseEndsClient) {
+    const closing = await transport.dial(
+      background(),
+      listener.addr(),
+      withTimeout(0),
+      withConnClose()
+    )
+    const first = await closing.fetch(background(), request(listener.addr(), "/once"))
+    check(first.status === 200, "connectionClose still returns the first Response")
+    await first.arrayBuffer()
+    const second = await settled(closing.fetch(background(), request(listener.addr(), "/twice")))
+    check(
+      second.ok === false && errorName(second.value) === "TransportClosedError",
+      "connectionClose must reject the next fetch"
+    )
+    await settled(closing.close(background()))
+  }
+  const [closeCtx, cancelClose] = withCancel(background())
+  cancelClose()
+  const listenerClose = await settled(listener.close(closeCtx))
+  check(
+    listenerClose.ok === false && listenerClose.value === canceled,
+    "pre-canceled close must not close the listener"
+  )
+  await settled(listener.close(background()))
+  await settled(serving)
+}
+
+/** Checks unsupported secure and TLS admission without failing init. */
+async function rejectsUnsupported(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const secured = await Promise.resolve(factory())
+  secured.init(secure(true))
+  check(secured.options().secure === true, "init(secure) must be observable before admission")
+  const listened = await settled(secured.listen(background(), options.listenAddress))
+  check(
+    listened.ok === false && errorName(listened.value) === "UnsupportedTransportCapabilityError",
+    "secure memory listeners are unsupported"
+  )
+  const tls = await Promise.resolve(factory())
+  tls.init(
+    tlsConfig({
+      serverName: "memory.internal",
+      caCertificate: null,
+      certificateChain: null,
+      privateKey: null
+    })
+  )
+  const dialed = await settled(tls.dial(background(), options.listenAddress))
+  check(
+    dialed.ok === false && errorName(dialed.value) === "UnsupportedTransportCapabilityError",
+    "TLS memory dials are unsupported"
+  )
+}
+
+/** Checks client close ownership and request abortion. */
+async function cancelsWithClient(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const reason = new Error("client-abort")
+  const observed: { ctx: Context | null } = { ctx: null }
+  let entered: (() => void) | undefined
+  const ready = new Promise<void>(function capture(resolve): void {
+    entered = resolve
+  })
+  const listener = await transport.listen(background(), options.listenAddress)
+  const opened = await openServe(
+    listener,
+    background(),
+    async function handler(ctx, incoming): Promise<Response> {
+      if (new URL(incoming.url).pathname !== "/abort") return new Response("ok")
+      observed.ctx = ctx
+      entered?.()
+      await untilCanceled(ctx)
+      return new Response("aborted")
+    }
+  )
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+  const controller = new AbortController()
+  const pending = settled(
+    client.fetch(background(), request(listener.addr(), "/abort", controller.signal))
+  )
+  await ready
+  controller.abort(reason)
+  const aborted = await pending
+  const handlerCtx = observed.ctx
+  check(aborted.ok === false && aborted.value === reason, "request abort must reject fetch")
+  check(handlerCtx !== null, "request abort must reach the handler")
+  if (handlerCtx !== null) await untilCanceled(handlerCtx)
+  check(
+    handlerCtx !== null && handlerCtx.err() === canceled,
+    "request abort must cancel the handler Context"
+  )
+  if (options.preservesClientAbortCause) {
+    check(
+      handlerCtx !== null && cause(handlerCtx) === reason,
+      "request abort must preserve the caller cause"
+    )
+  }
+  await settled(client.close(background()))
+  const replacement = await transport.dial(background(), listener.addr(), withTimeout(0))
+  const healthy = await replacement.fetch(background(), request(listener.addr(), "/health"))
+  check(healthy.status === 200, "closing a client must not close the listener")
+  await healthy.arrayBuffer()
+  await settled(replacement.close(background()))
+  await settled(listener.close(background()))
+  await settled(serving)
+}
+
+/** Checks public defaults and rejection of a structurally negative timeout. */
+async function validatesOptions(factory: TransportFactory): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const defaults = transport.options()
+  check(defaults.logger === null, "default logger must be null")
+  check(defaults.timeoutMs === 0, "default timeout must be zero")
+  check(defaults.secure === false, "default secure must be false")
+  check(defaults.tlsConfig === null, "default tlsConfig must be null")
+  check(!("codec" in defaults), "codec is not a transport option")
+  const malformed: Option = function malformed(current) {
+    return Object.freeze({
+      logger: current.logger,
+      timeoutMs: -1,
+      secure: current.secure,
+      tlsConfig: current.tlsConfig
+    })
+  }
+  let invalid = false
+  try {
+    transport.init(malformed)
+  } catch (error) {
+    invalid = error instanceof RangeError
+  }
+  check(invalid, "init must reject a negative timeout")
+}
+
+/** Checks that canceling an in-flight dial or listen preserves identity and later admission. */
+async function cancelsStartedCreation(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const probedListener = await cancelIfPending(
+    (ctx) => transport.listen(ctx, options.listenAddress),
+    "started Transport.listen"
+  )
+  if (probedListener.ok === true && isListener(probedListener.value)) {
+    await probedListener.value.close(background())
+  }
+  const listener = await transport.listen(background(), options.listenAddress)
+  const opened = await openServe(listener, background(), () => new Response("ok"))
+  const serving = opened.serving
+  try {
+    const probedClient = await cancelIfPending(
+      (ctx) => transport.dial(ctx, listener.addr()),
+      "started Transport.dial"
+    )
+    if (probedClient.ok === true && isClient(probedClient.value)) {
+      await probedClient.value.close(background())
+    }
+    const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+    const response = await client.fetch(background(), request(listener.addr()))
+    check(response.status === 200, "a later dial must still be admitted")
+    await response.arrayBuffer()
+    await client.close(background())
+  } finally {
+    await settled(listener.close(background()))
+    await settled(serving)
+  }
+}
+
+/** Checks that close admission is caller-scoped and an in-flight handler keeps cleanup pending. */
+async function scopesClose(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  let release: (() => void) | undefined
+  const gate = new Promise<void>(function capture(resolve): void {
+    release = resolve
+  })
+  let entered: (() => void) | undefined
+  const ready = new Promise<void>(function captureReady(resolve): void {
+    entered = resolve
+  })
+  const listener = await transport.listen(background(), options.listenAddress)
+  const opened = await openServe(listener, background(), async function handler(_ctx, incoming) {
+    if (new URL(incoming.url).pathname === "/hold") {
+      entered?.()
+      await gate
+      return new Response("held")
+    }
+    return new Response("ok")
+  })
+  const serving = opened.serving
+  const client = await transport.dial(background(), listener.addr(), withTimeout(0))
+  let held: Promise<Settled> | null = null
+  try {
+    const [preCanceled, cancelPre] = withCancel(background())
+    cancelPre()
+    const clientClose = await settled(client.close(preCanceled))
+    check(
+      clientClose.ok === false && clientClose.value === canceled,
+      "pre-canceled client.close must preserve canceled"
+    )
+    const stillOpen = await client.fetch(background(), request(listener.addr(), "/ok"))
+    check(stillOpen.status === 200, "pre-canceled client.close must not close the client")
+    await stillOpen.arrayBuffer()
+    const listenerPre = await settled(listener.close(preCanceled))
+    check(
+      listenerPre.ok === false && listenerPre.value === canceled,
+      "pre-canceled listener.close must preserve canceled"
+    )
+    const stillServing = await client.fetch(background(), request(listener.addr(), "/ok"))
+    check(stillServing.status === 200, "pre-canceled listener.close must not start cleanup")
+    await stillServing.arrayBuffer()
+    held = settled(client.fetch(background(), request(listener.addr(), "/hold")))
+    await ready
+    const [closeCtx, cancelClose] = withCancel(background())
+    const closing = listener.close(closeCtx)
+    check(
+      await remainsPending(closing),
+      "started listener.close must wait for the in-flight handler"
+    )
+    cancelClose()
+    const waiter = await settled(closing)
+    check(
+      waiter.ok === false && waiter.value === canceled,
+      "canceling a started close rejects only that caller"
+    )
+    release?.()
+    await held
+    await settled(client.close(background()))
+    const joined = await settled(listener.close(background()))
+    check(joined.ok === true, "a later listener.close must join cleanup")
+    const served = await settled(serving)
+    check(served.ok === true, "serve must settle after the in-flight handler returns")
+  } finally {
+    release?.()
+    if (held !== null) await held
+    await settled(client.close(background()))
+    await settled(listener.close(background()))
+    await settled(serving)
+  }
+}
+
+/** Reports whether value is a public Listener. */
+function isListener(value: unknown): value is Listener {
+  return typeof value === "object" && value !== null && "close" in value && "serve" in value
+}
+
+/** Reports whether value is a public Client. */
+function isClient(value: unknown): value is Client {
+  return typeof value === "object" && value !== null && "fetch" in value && "close" in value
+}
+
+/** Checks an injected listener failure. */
+async function preservesHostFailure(
+  factory: TransportFactory,
+  options: SnapshotConformanceOptions,
+  faultHarness: TransportConformanceFaultHarness
+): Promise<void> {
+  const transport = await Promise.resolve(factory())
+  const listener = await transport.listen(background(), options.listenAddress)
+  const serving = listener.serve(background(), staticOk)
+  const reason = new Error("host-down")
+  await faultHarness.failListener(background(), listener, reason)
+  const served = await settled(serving)
+  check(served.ok === false && served.value === reason, "listener failure must preserve its cause")
+  await settled(listener.close(background()))
 }
 
 /** Builds isolated, runner-neutral black-box cases for the public Transport contract. */
@@ -1458,7 +1147,7 @@ export function transportConformanceCases(
     }),
     Object.freeze({
       name: "transport exposes defaults and rejects invalid public options",
-      /** Runs common default and public option validation assertions. */
+      /** Runs default readback and malformed reducer assertions. */
       run: async () => validatesOptions(factory)
     }),
     Object.freeze({
@@ -1473,48 +1162,38 @@ export function transportConformanceCases(
     }),
     Object.freeze({
       name: "started dial and listen cancellation preserves identity and later admission",
-      /** Runs in-flight creation cancellation and later-admission assertions. */
+      /** Runs in-flight creation cancellation and a later successful admission. */
       run: async () => cancelsStartedCreation(factory, snapshot)
     }),
     Object.freeze({
-      name: "listener exposes its bound address and closes a pending accept",
-      /** Runs listener address and clean-close assertions. */
-      run: async () => closesPendingAccept(factory, snapshot)
+      name: "listener exposes its bound address and serve is one-shot",
+      /** Runs listener address, dial-before-listen, and one-shot assertions. */
+      run: async () => servesOnce(factory, snapshot)
     }),
     Object.freeze({
-      name: "accept cancellation preserves the Context terminal error",
-      /** Runs accept cancellation and one-shot assertions. */
-      run: async () => cancelsAccept(factory, snapshot)
+      name: "serve cancellation preserves the Context terminal error",
+      /** Runs serve cancellation and pre-canceled one-shot assertions. */
+      run: async () => cancelsServe(factory, snapshot)
     }),
     Object.freeze({
-      name: "pre-canceled accept remains reusable and pre-canceled or started close is caller-scoped",
-      /** Runs accept admission and owner cleanup assertions. */
-      run: async () => scopesListenerClose(factory, snapshot)
+      name: "handler Context stays alive until the Response body ends",
+      /** Runs handler Context lifetime assertions for EOF, cancel, and error. */
+      run: async () => derivesHandlerContext(factory, snapshot)
     }),
     Object.freeze({
-      name: "socket Context admission, close ownership, and closed errors are stable",
-      /** Runs socket Context and close-state assertions. */
-      run: async () => checksSocketLifecycle(factory, snapshot)
+      name: "a Context derived from the handler Context is canceled when the Response body ends",
+      /** Runs derived Context release assertions for EOF, error, and cancel. */
+      run: async () => releasesDerivedContext(factory, snapshot)
     }),
     Object.freeze({
-      name: "started client and handler Socket cancellation preserves identity and ownership",
-      /** Runs in-flight Socket cancellation and unrelated-owner assertions. */
-      run: async () => cancelsStartedSockets(factory, snapshot)
+      name: "the handler Context stays active while the Response body is unread or partly read",
+      /** Runs handler Context liveness assertions before any terminal body state. */
+      run: async () => keepsContextActive(factory, snapshot)
     }),
     Object.freeze({
-      name: "handler Context is derived and canceled by accept termination",
-      /** Runs accept-owned handler Context assertions. */
-      run: async () => cancelsHandlerWithAccept(factory, snapshot)
-    }),
-    Object.freeze({
-      name: "handler Context is canceled by listener and socket termination",
-      /** Runs listener- and socket-owned handler Context assertions. */
-      run: async () => cancelsHandlerWithOwnedTermination(factory, snapshot)
-    }),
-    Object.freeze({
-      name: "socket rejects recv-before-send and preserves invocation order",
-      /** Runs socket state and FIFO pairing assertions. */
-      run: async () => preservesSocketOrder(factory, snapshot)
+      name: "client and listener exchange the same Request and Response",
+      /** Runs Fetch identity assertions. */
+      run: async () => exchangesIdentity(factory, snapshot)
     }),
     Object.freeze({
       name: "concurrent handlers isolate one handler failure",
@@ -1522,11 +1201,30 @@ export function transportConformanceCases(
       run: async () => isolatesHandlerFailure(factory, snapshot)
     }),
     Object.freeze({
-      name: "client and listener exchange a defensively copied Message",
-      /** Runs bidirectional Message-copy assertions. */
-      run: async () => exchangesMessage(factory, snapshot)
+      name: "fetch honors dial timeout and connection close",
+      /** Runs timeout and connection-close assertions. */
+      run: async () => timesOutAndCloses(factory, snapshot)
+    }),
+    Object.freeze({
+      name: "pre-canceled and started close is caller-scoped",
+      /** Runs caller-scoped client and listener close assertions. */
+      run: async () => scopesClose(factory, snapshot)
+    }),
+    Object.freeze({
+      name: "client abort cancels the handler Context without closing the listener",
+      /** Runs abort mapping and client-close ownership assertions. */
+      run: async () => cancelsWithClient(factory, snapshot)
     })
   ]
+  if (snapshot.unsupportedSecurity) {
+    cases.push(
+      Object.freeze({
+        name: "secure and TLS options are rejected at admission",
+        /** Runs unsupported-capability assertions. */
+        run: async () => rejectsUnsupported(factory, snapshot)
+      })
+    )
+  }
   const faultHarness = snapshot.faultHarness
   if (faultHarness !== null) {
     cases.push(

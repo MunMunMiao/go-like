@@ -14,7 +14,6 @@ import {
   withConnClose,
   type ListenOption,
   type ListenOptions,
-  type Message,
   type TLSEncodedBytes,
   type TLSConfig
 } from "@go-like/transport"
@@ -46,9 +45,24 @@ function clientTLS(): TLSConfig {
   })
 }
 
-/** Decodes one transport body for readable wire assertions. */
-function text(message: Message): string {
-  return new TextDecoder().decode(message.body)
+/** Copies bytes into an ArrayBuffer Fetch accepts as a body. */
+function copied(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
+}
+
+/** Builds one POST on the dial origin. */
+function posted(
+  address: string,
+  body: Uint8Array | string | null = null,
+  secureDial = false
+): Request {
+  const init: RequestInit = { method: "POST" }
+  if (typeof body === "string") init.body = body
+  else if (body !== null && body.byteLength > 0) init.body = copied(body)
+  const base = address.includes("://") ? address : `${secureDial ? "https" : "http"}://${address}`
+  return new Request(new URL("/echo/call", base.endsWith("/") ? base : `${base}/`), init)
 }
 
 /** Returns one Promise rejection without imposing runtime-specific Error branding. */
@@ -96,24 +110,19 @@ test("Node transport performs a real listen, dial, exchange, and close", async (
     listenOption
   )) as HTTPListener
   expect(listenOptionCalls).toBe(1)
-  const serving = listener.accept(background(), async (ctx, socket) => {
-    const request = await socket.recv(ctx)
-    await socket.send(ctx, { header: {}, body: request.body })
+  const serving = listener.serve(background(), function echo(_ctx, request): Response {
+    return new Response(request.body)
   })
   await listener.accepted()
 
   const client = await transport.dial(background(), listener.addr())
-  await client.send(background(), {
-    header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
-    body: new Uint8Array([1, 2, 3])
-  })
-  let response
+  let response: Response
   try {
-    response = await client.recv(background())
+    response = await client.fetch(background(), posted(listener.addr(), new Uint8Array([1, 2, 3])))
   } catch (error) {
     throw failures[0] ?? error
   }
-  expect(response.body).toEqual(new Uint8Array([1, 2, 3]))
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
 
   await client.close(background())
   await listener.close(background())
@@ -138,7 +147,17 @@ test("Node client close wins the public send body-read microtask", async () => {
       background(),
       `127.0.0.1:${listeningPort(server)}`
     )
-    const sending = rejection(client.send(background(), { header: {}, body: new Uint8Array([1]) }))
+    const sending = rejection(
+      client.fetch(
+        background(),
+        new Request(`http://127.0.0.1:${listeningPort(server)}/echo/call`, {
+          method: "POST",
+          body: new ReadableStream<Uint8Array>({
+            pull(): void {}
+          })
+        })
+      )
+    )
     await Promise.resolve()
     await client.close(background())
     expect(await sending).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
@@ -180,7 +199,10 @@ test("Node client close still terminates a request already admitted by the serve
       background(),
       `127.0.0.1:${listeningPort(server)}`
     )
-    const sending = client.send(background(), { header: {}, body: new Uint8Array([1]) })
+    const sending = client.fetch(
+      background(),
+      posted(`127.0.0.1:${listeningPort(server)}`, new Uint8Array([1]))
+    )
     await admitted
     await client.close(background())
     expect(await rejection(sending)).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
@@ -217,11 +239,8 @@ test("Node transport preserves an explicitly injected Fetch executor", async () 
   const transport = newNodeHTTPTransport(executor(injected))
   const client = await transport.dial(background(), "127.0.0.1:1")
 
-  await client.send(background(), {
-    header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
-    body: new TextEncoder().encode("request")
-  })
-  expect(text(await client.recv(background()))).toBe("injected")
+  const response = await client.fetch(background(), posted("127.0.0.1:1", "request"))
+  expect(await response.text()).toBe("injected")
   expect(requests).toHaveLength(1)
   expect(await requests[0]?.text()).toBe("request")
   await client.close(background())
@@ -281,19 +300,13 @@ test("Node client performs verified mTLS over negotiated HTTP/2", async () => {
     const transport = newNodeHTTPTransport()
     transport.init(secure(true), tlsConfig(clientTLS()))
     const client = await transport.dial(background(), `127.0.0.1:${listeningPort(server)}`)
-    await client.send(background(), {
-      header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
-      body: new TextEncoder().encode("mtls-h2")
-    })
-    const response = await client.recv(background())
-    expect(text(response)).toBe("mtls-h2")
-    expect(response.header["go-like-reply"]).toBe("2.0")
+    const address = `127.0.0.1:${listeningPort(server)}`
+    const response = await client.fetch(background(), posted(address, "mtls-h2", true))
+    expect(await response.text()).toBe("mtls-h2")
+    expect(response.headers.get("go-like-reply")).toBe("2.0")
     expect(protocol).toBe("2.0")
-    await client.send(background(), {
-      header: { "Go-Like-Service": "echo", "Go-Like-Endpoint": "call" },
-      body: new TextEncoder().encode("mtls-h2-reused")
-    })
-    expect(text(await client.recv(background()))).toBe("mtls-h2-reused")
+    const reused = await client.fetch(background(), posted(address, "mtls-h2-reused", true))
+    expect(await reused.text()).toBe("mtls-h2-reused")
     await client.close(background())
   } finally {
     await new Promise<void>(function close(resolve, reject): void {
@@ -386,26 +399,18 @@ test("Node client owns plaintext body cancellation and premature close", async (
   })
   try {
     const transport = newNodeHTTPTransport()
-    const pending = await transport.dial(
-      background(),
-      `127.0.0.1:${listeningPort(server)}`,
-      withConnClose()
-    )
-    await pending.send(background(), { header: {}, body: new Uint8Array() })
+    const address = `127.0.0.1:${listeningPort(server)}`
+    const pending = await transport.dial(background(), address, withConnClose())
     const [ctx, cancel] = withCancel(background())
-    const receiving = pending.recv(ctx)
+    const pendingResponse = await pending.fetch(ctx, posted(address))
     setImmediate(cancel)
-    expect(await rejection(receiving)).not.toBeNull()
+    expect(await rejection(pendingResponse.arrayBuffer())).not.toBeNull()
     await pending.close(background())
 
-    const truncated = await transport.dial(
-      background(),
-      `127.0.0.1:${listeningPort(server)}`,
-      withConnClose()
-    )
-    await truncated.send(background(), { header: {}, body: new Uint8Array() })
+    const truncated = await transport.dial(background(), address, withConnClose())
+    const truncatedResponse = await truncated.fetch(background(), posted(address))
     truncate()
-    expect(await rejection(truncated.recv(background()))).not.toBeNull()
+    expect(await rejection(truncatedResponse.arrayBuffer())).not.toBeNull()
     await truncated.close(background())
   } finally {
     server.closeAllConnections()
@@ -443,9 +448,10 @@ test("Node client releases an unshared stalled TLS handshake after caller cancel
   })
   try {
     const transport = newNodeHTTPTransport()
-    const client = await transport.dial(background(), `https://127.0.0.1:${listeningPort(server)}`)
+    const address = `https://127.0.0.1:${listeningPort(server)}`
+    const client = await transport.dial(background(), address)
     const [ctx, cancel] = withCancel(background())
-    const sending = client.send(ctx, { header: {}, body: new Uint8Array() })
+    const sending = client.fetch(ctx, posted(address))
     const firstSocket = await firstAccepted
     const firstClosed = new Promise<void>(function observe(resolve): void {
       firstSocket.once("close", resolve)
@@ -455,7 +461,7 @@ test("Node client releases an unshared stalled TLS handshake after caller cancel
     await firstClosed
 
     const [retryContext, cancelRetry] = withCancel(background())
-    const retry = client.send(retryContext, { header: {}, body: new Uint8Array() })
+    const retry = client.fetch(retryContext, posted(address))
     const secondSocket = await secondAccepted
     const secondClosed = new Promise<void>(function observe(resolve): void {
       secondSocket.once("close", resolve)
@@ -499,9 +505,10 @@ test("Node client releases an HTTP/2 session canceled before response headers", 
   try {
     const transport = newNodeHTTPTransport()
     transport.init(secure(true), tlsConfig(clientTLS()))
-    const client = await transport.dial(background(), `127.0.0.1:${listeningPort(server)}`)
+    const address = `127.0.0.1:${listeningPort(server)}`
+    const client = await transport.dial(background(), address)
     const [ctx, cancel] = withCancel(background())
-    const sending = client.send(ctx, { header: {}, body: new Uint8Array() })
+    const sending = client.fetch(ctx, posted(address, null, true))
     await admitted
     cancel()
     expect(await rejection(sending)).not.toBeNull()
@@ -555,7 +562,7 @@ test("Node client rejects invalid TLS identity material before network I/O", asy
     })
   )
   const client = await transport.dial(background(), "127.0.0.1:1")
-  await expect(client.send(background(), { header: {}, body: new Uint8Array() })).rejects.toThrow(
+  await expect(client.fetch(background(), posted("127.0.0.1:1", null, true))).rejects.toThrow(
     "requires both"
   )
   await client.close(background())
@@ -574,8 +581,8 @@ test("Node client rejects invalid TLS identity material before network I/O", asy
     })
   )
   const derClient = await der.dial(background(), "127.0.0.1:1")
-  await expect(
-    derClient.send(background(), { header: {}, body: new Uint8Array() })
-  ).rejects.toThrow("must use PEM")
+  await expect(derClient.fetch(background(), posted("127.0.0.1:1", null, true))).rejects.toThrow(
+    "must use PEM"
+  )
   await derClient.close(background())
 })

@@ -1,21 +1,22 @@
+import type { Client } from "@go-like/client"
 import { background, withCancel } from "@go-like/context"
 import { newApp, server } from "@go-like/core"
 import { describe, expect, spyOn, test } from "bun:test"
 
+import { learningCapacity } from "../src/contract"
 import { newEnrollmentHandler } from "../src/http"
 import { newLearningEnrollmentService } from "../src/runtime"
 import { newCapacityRuntime, newMemoryEnrollmentRepository } from "../src/transport"
 import { newEnrollLearner } from "../src/service"
 
 /** Starts the internal capacity server and drains it after each assertion. */
-async function withService(
+async function withRunningCapacity(
   service: ReturnType<typeof newLearningEnrollmentService>,
   run: () => Promise<void>
 ): Promise<void> {
   const app = newApp(server(service.capacity.server))
   const running = app.run()
-  await Promise.resolve()
-  await Promise.resolve()
+  await service.capacity.server.endpoint(background())
   try {
     await run()
   } finally {
@@ -45,7 +46,7 @@ function enroll(
 describe("learning enrollment", () => {
   test("never drives course capacity below zero", async () => {
     const service = newLearningEnrollmentService(Object.freeze({ typescript: 1 }))
-    await withService(service, async function verify(): Promise<void> {
+    await withRunningCapacity(service, async function verify(): Promise<void> {
       expect((await enroll(service, "one", "learner-one", "typescript")).status).toBe(201)
       expect((await enroll(service, "two", "learner-two", "typescript")).status).toBe(409)
       expect(service.capacity.remaining(background(), "typescript")).toBe(0)
@@ -54,7 +55,7 @@ describe("learning enrollment", () => {
 
   test("keeps one request idempotent across the internal transport boundary", async () => {
     const service = newLearningEnrollmentService(Object.freeze({ distributed: 2 }))
-    await withService(service, async function verify(): Promise<void> {
+    await withRunningCapacity(service, async function verify(): Promise<void> {
       const first = await enroll(service, "stable", "learner-one", "distributed")
       const second = await enroll(service, "stable", "learner-one", "distributed")
       expect(await first.json()).toEqual(await second.json())
@@ -64,7 +65,7 @@ describe("learning enrollment", () => {
 
   test("rejects a second enrollment for the same learner and course", async () => {
     const service = newLearningEnrollmentService(Object.freeze({ systems: 2 }))
-    await withService(service, async function verify(): Promise<void> {
+    await withRunningCapacity(service, async function verify(): Promise<void> {
       expect((await enroll(service, "first", "learner-one", "systems")).status).toBe(201)
       const duplicate = await enroll(service, "second", "learner-one", "systems")
       expect(duplicate.status).toBe(409)
@@ -74,7 +75,7 @@ describe("learning enrollment", () => {
 
   test("rejects conflicting reuse of an enrollment request id", async () => {
     const service = newLearningEnrollmentService(Object.freeze({ architecture: 1, databases: 1 }))
-    await withService(service, async function verify(): Promise<void> {
+    await withRunningCapacity(service, async function verify(): Promise<void> {
       expect((await enroll(service, "same", "learner-one", "architecture")).status).toBe(201)
       const conflict = await enroll(service, "same", "learner-one", "databases")
       expect(conflict.status).toBe(409)
@@ -97,7 +98,7 @@ describe("learning enrollment", () => {
     expect(malformed.status).toBe(400)
     expect(await malformed.json()).toMatchObject({ code: "enrollment_rejected" })
 
-    await withService(service, async function verify(): Promise<void> {
+    await withRunningCapacity(service, async function verify(): Promise<void> {
       for (const [field, value] of [
         ["requestId", ""],
         ["learnerId", ""],
@@ -168,10 +169,10 @@ describe("learning enrollment", () => {
     const runtime = newCapacityRuntime({ course: 1 })
     const running = runtime.server.start(background())
     void running.catch(() => {})
-    await Promise.resolve()
+    await runtime.server.endpoint(background())
     try {
       await expect(runtime.client.reserve(background(), "bad-request", "course")).rejects.toThrow(
-        "invalid capacity request"
+        "invalid request body"
       )
     } finally {
       parse.mockRestore()
@@ -182,7 +183,7 @@ describe("learning enrollment", () => {
     const replayRuntime = newCapacityRuntime({ course: 2, other: 1 })
     const replayRunning = replayRuntime.server.start(background())
     void replayRunning.catch(() => {})
-    await Promise.resolve()
+    await replayRuntime.server.endpoint(background())
     try {
       expect(await replayRuntime.client.reserve(background(), "replay", "course")).toBe(1)
       expect(await replayRuntime.client.reserve(background(), "replay", "course")).toBe(1)
@@ -202,11 +203,11 @@ describe("learning enrollment", () => {
     const invalidReplyRuntime = newCapacityRuntime({ course: 1 })
     const invalidReplyRunning = invalidReplyRuntime.server.start(background())
     void invalidReplyRunning.catch(() => {})
-    await Promise.resolve()
+    await invalidReplyRuntime.server.endpoint(background())
     try {
       await expect(
         invalidReplyRuntime.client.reserve(background(), "invalid-reply", "course")
-      ).rejects.toThrow("invalid capacity reply")
+      ).rejects.toThrow("client typed response is invalid")
     } finally {
       invalidReplyParse.mockRestore()
       await invalidReplyRuntime.server.stop(background())
@@ -238,5 +239,27 @@ describe("learning enrollment", () => {
       enroll(background(), { requestId: "", learnerId: "learner", courseId: "course" })
     ).rejects.toThrow("invalid requestId")
     expect(capacityCalls).toEqual([])
+  })
+
+  test("calls learning-capacity.v1 through client.reserve", async () => {
+    const ctx = background()
+    const request = Object.freeze({ requestId: "req-1", courseId: "course" })
+    const reply = Object.freeze({ remainingSeats: 4 })
+    let observed: readonly unknown[] = Object.freeze([])
+    const client = Object.freeze({
+      async call(...args: readonly unknown[]) {
+        observed = args
+        return reply
+      },
+      async close(): Promise<void> {}
+    }) as unknown as Client
+    const reserve = learningCapacity.newClient(client).reserve
+
+    expect({
+      name: learningCapacity.name,
+      endpoint: learningCapacity.endpoints.reserve?.endpoint
+    }).toEqual({ name: "learning-capacity.v1", endpoint: "reserve" })
+    expect(await reserve(ctx, request)).toEqual(reply)
+    expect(observed[1]).toEqual(learningCapacity.endpoints.reserve)
   })
 })

@@ -10,6 +10,6 @@ Los nombres exactos de los proveedores de Registry son `@go-like/registry-mdns`,
 
 Importa desde el paquete más pequeño que sea dueño del contrato. Los hosts de runtime como Node tienen entradas explícitas. No hay un cajón público llamado `adapters`; los headers propios usan siempre el prefijo `Go-Like-`.
 
-`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del Transport SPI unary.
+`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
 
 [Límites de cancelación y apagado](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

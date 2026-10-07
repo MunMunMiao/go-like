@@ -167,6 +167,10 @@ export function newNodeHTTPTransport(
       for (const value of selected) arguments_.push(value)
       return Reflect.apply(transport.listen, transport, arguments_)
     },
+    /** Returns the configured per-message receive ceiling. */
+    maxMessageBytes(): number {
+      return transport.maxMessageBytes()
+    },
     /** Returns the stable provider name. */
     string(): string {
       return "http"

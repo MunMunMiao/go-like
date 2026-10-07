@@ -1,7 +1,7 @@
 # go-like 与 Go 微服务工具包能力横向对比
 
 > [!NOTE]
-> 本文是历史研究记录，不是当前 canonical 的 TypeScript 框架比较入口。请从 [`doc/guide/comparison.md`](../doc/guide/comparison.md) 开始；本页保留固定源码调查的原始表格和判定过程。
+> 本文是历史研究记录，不是当前 canonical 的 TypeScript 框架比较入口。请从 [`doc/guide/comparison.md`](../doc/guide/comparison.md) 开始；本页保留固定源码调查的原始表格和判定过程。表中 go-like 列的 `withAddress` 与 unary Message 是 2026-07-24 调查时的写法，已被 `withEndpoint` 与 Fetch `Request`/`Response` 取代。
 
 调研基线：2026-07-24。
 

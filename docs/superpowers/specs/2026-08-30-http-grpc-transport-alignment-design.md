@@ -4,6 +4,8 @@ Date: 2026-08-30
 
 Status: revised after implementation review
 
+> 下文的 `withAddress` / `withService` 已被 `withEndpoint` 取代。当前说明见 [service-call](../../../doc/guide/service-call.md)。
+
 Implementation/evidence checkpoint (2026-09-23): the public API is implemented in this checkout,
 but the acceptance list below is a required behavior list, not a claim that every runtime gate passes.
 Connect 2.1.2 cancellation can retain a deadline timer; Bun 1.4.2 Fetch cancellation and

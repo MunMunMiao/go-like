@@ -7,14 +7,17 @@ import {
   cause,
   deadlineExceeded,
   withCancelCause,
+  withTimeout,
   withValue,
   type Context
 } from "@go-like/context"
 import { fromClientContext, newMetadata, newClientContext, type Metadata } from "@go-like/metadata"
-import { filterLabel, filterVersion } from "@go-like/registry"
+import { filterLabel, filterVersion, newRoundRobinSelector } from "@go-like/registry"
+import { snapshotServiceInstances } from "@go-like/registry/provider"
 import { struct } from "@go-like/struct"
 import type {
   Discovery,
+  Filter,
   SelectionDone,
   SelectionOutcome,
   Selector,
@@ -31,12 +34,11 @@ import {
 import type {
   Client as TransportClient,
   Listener,
-  Message,
   Options,
   Transport,
   TransportInfo
 } from "@go-like/transport"
-import { encodeMetadataHeader, encodeServiceError } from "@go-like/transport/provider"
+import { encodeMetadataHeader, serviceErrorResponse } from "@go-like/transport/provider"
 import { circuitOpen } from "@go-like/resilience"
 
 import {
@@ -51,17 +53,19 @@ import {
   withBlock,
   withSelector,
   withTransport,
-  withAddress,
+  withEndpoint,
   withFilter,
   withRetry,
-  withService,
+  type CallOption,
+  type CallOptions,
   type CallRequest,
+  type Client,
   type ClientMiddleware,
   type ClientOption
 } from "../src/index"
 import { newDiscoveryResolver } from "../src/discovery"
 
-type MainStage = "discover" | "select" | "dial" | "send" | "recv"
+type MainStage = "discover" | "select" | "dial" | "fetch"
 
 interface MainFailure {
   readonly stage: MainStage
@@ -72,14 +76,20 @@ interface CustomAfterContext extends Context {
   afterFunc(callback: () => void): () => boolean
 }
 
+interface SentRequest {
+  readonly url: string
+  readonly method: string
+  readonly headers: Readonly<Record<string, string>>
+  readonly body: Uint8Array
+}
+
 interface HarnessOptions {
   readonly mainFailure?: MainFailure
   readonly feedbackFailure?: unknown
   readonly closeFailure?: unknown
-  readonly response?: Message
+  readonly response?: Response
   readonly onDiscover?: () => void
-  readonly onSend?: (client: TransportClient) => void
-  readonly onRecv?: (ctx: Context) => void
+  readonly onFetch?: (ctx: Context, request: Request, client: TransportClient) => void
   readonly onFeedback?: (client: TransportClient) => unknown
   readonly onClose?: (ctx: Context) => void | Promise<void>
 }
@@ -89,12 +99,11 @@ interface Harness {
   readonly selector: Selector
   readonly transport: Transport
   readonly events: string[]
-  readonly sent: Message[]
+  readonly sent: SentRequest[]
   readonly discoveryContexts: Context[]
   readonly selectionContexts: Context[]
   readonly dialContexts: Context[]
-  readonly sendContexts: Context[]
-  readonly recvContexts: Context[]
+  readonly fetchContexts: Context[]
   readonly feedbackContexts: Context[]
   readonly outcomes: SelectionOutcome[]
   readonly closeContexts: Context[]
@@ -124,19 +133,31 @@ function expectedSelectionOutcome(
   return { error, replyMetadata, bytesSent, bytesReceived }
 }
 
+/** Copies bytes into a Fetch body the caller can mutate independently. */
+function responseFrom(headers: HeadersInit, body: Uint8Array, status = 200): Response {
+  const copy = new ArrayBuffer(body.byteLength)
+  new Uint8Array(copy).set(body)
+  return new Response(copy, { status, headers })
+}
+
+/** Reads one response body without requiring the caller to know the stream type. */
+async function bodyBytes(response: Response): Promise<Uint8Array> {
+  return new Uint8Array(await response.arrayBuffer())
+}
+
 /** Builds structural dependencies while recording every observable Client boundary. */
 function harness(options: HarnessOptions = {}): Harness {
   const events: string[] = []
-  const sent: Message[] = []
+  const sent: SentRequest[] = []
   const discoveryContexts: Context[] = []
   const selectionContexts: Context[] = []
   const dialContexts: Context[] = []
-  const sendContexts: Context[] = []
-  const recvContexts: Context[] = []
+  const fetchContexts: Context[] = []
   const feedbackContexts: Context[] = []
   const outcomes: SelectionOutcome[] = []
   const closeContexts: Context[] = []
   const instances = Object.freeze([selectedEndpoint.instance])
+  const prepared = options.response ?? responseFrom({ node: "a" }, new Uint8Array([9, 8]))
 
   const done: SelectionDone = (ctx, outcome) => {
     events.push(outcome.error === null ? "done:ok" : "done:error")
@@ -174,21 +195,20 @@ function harness(options: HarnessOptions = {}): Harness {
     }
   }
   const transportClient: TransportClient = {
-    async send(this: TransportClient, ctx, message): Promise<void> {
+    async fetch(this: TransportClient, ctx, request): Promise<Response> {
       expect(this).toBe(transportClient)
-      events.push("send")
-      sendContexts.push(ctx)
-      sent.push(message)
-      options.onSend?.(transportClient)
-      if (options.mainFailure?.stage === "send") throw options.mainFailure.value
-    },
-    async recv(this: TransportClient, ctx): Promise<Message> {
-      expect(this).toBe(transportClient)
-      events.push("recv")
-      recvContexts.push(ctx)
-      options.onRecv?.(ctx)
-      if (options.mainFailure?.stage === "recv") throw options.mainFailure.value
-      return options.response ?? { header: { node: "a" }, body: new Uint8Array([9, 8]) }
+      events.push("fetch")
+      fetchContexts.push(ctx)
+      sent.push({
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body: new Uint8Array(await request.clone().arrayBuffer())
+      })
+      options.onFetch?.(ctx, request, transportClient)
+      if (options.mainFailure?.stage === "fetch") throw options.mainFailure.value
+      if (!(prepared instanceof Response)) return prepared
+      return prepared.clone()
     },
     async close(this: TransportClient, ctx): Promise<void> {
       expect(this).toBe(transportClient)
@@ -196,12 +216,6 @@ function harness(options: HarnessOptions = {}): Harness {
       closeContexts.push(ctx)
       await options.onClose?.(ctx)
       if (options.closeFailure !== undefined) throw options.closeFailure
-    },
-    local(): string {
-      return "client"
-    },
-    remote(): string {
-      return selectedEndpoint.url
     }
   }
   const transport: Transport = {
@@ -237,8 +251,7 @@ function harness(options: HarnessOptions = {}): Harness {
     discoveryContexts,
     selectionContexts,
     dialContexts,
-    sendContexts,
-    recvContexts,
+    fetchContexts,
     feedbackContexts,
     outcomes,
     closeContexts,
@@ -246,6 +259,7 @@ function harness(options: HarnessOptions = {}): Harness {
   }
 }
 
+/** Requires one Promise to reject with an Error and returns its exact identity. */
 /** Requires one Promise to reject with an Error and returns its exact identity. */
 async function rejected(operation: Promise<unknown>): Promise<Error> {
   try {
@@ -275,12 +289,12 @@ function completedCallFailure(value: Error): AggregateError {
 }
 
 /** Reads the completed response retained in the standard Error cause field. */
-function completedResponse(value: AggregateError): Message {
+function completedResponse(value: AggregateError): Response {
   const response = value.cause
-  if (typeof response !== "object" || response === null || !("header" in response)) {
+  if (!(response instanceof Response)) {
     throw new Error("completed call failure did not retain its response")
   }
-  return response as Message
+  return response
 }
 
 /** Bounds one test wait without retaining its guard timer after settlement. */
@@ -445,6 +459,31 @@ function firstEndpointSelector(): Selector {
   return Object.freeze(selector)
 }
 
+/** Selects like `firstEndpointSelector` and records every instance array it receives. */
+function recordingSelector(seen: (readonly ServiceInstance[])[]): Selector {
+  const first = firstEndpointSelector()
+  return Object.freeze({
+    select(
+      ctx: Context,
+      instances: readonly ServiceInstance[]
+    ): readonly [ServiceEndpoint, SelectionDone] {
+      seen.push(instances)
+      return first.select(ctx, instances)
+    }
+  })
+}
+
+/** Completes one empty raw call to the named service and drains its response body. */
+async function completeCall(client: Client, service: string): Promise<void> {
+  const response = await client.call(background(), {
+    service,
+    endpoint: "Create",
+    headers: {},
+    body: new Uint8Array()
+  })
+  await bodyBytes(response)
+}
+
 /** Polls one asynchronous resident-state transition under a finite test boundary. */
 async function eventually(check: () => boolean, timeoutMs = 1_500): Promise<void> {
   const deadline = performance.now() + timeoutMs
@@ -452,6 +491,136 @@ async function eventually(check: () => boolean, timeoutMs = 1_500): Promise<void
     if (performance.now() >= deadline) throw new Error("resident state did not converge")
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
+}
+
+interface PoolOwner {
+  readonly address: string
+  readonly serial: number
+  fetches: number
+  closes: number
+}
+
+interface PoolProbe {
+  readonly transport: Transport
+  readonly owners: readonly PoolOwner[]
+}
+
+const poolRequest: CallRequest = {
+  service: "orders",
+  endpoint: "Get",
+  headers: {},
+  body: new Uint8Array()
+}
+
+/** Builds a Transport whose every dial admits one distinct owner that rejects use after close. */
+function poolProbe(respond?: (owner: PoolOwner) => Response | Promise<Response>): PoolProbe {
+  const owners: PoolOwner[] = []
+  const transport: Transport = Object.freeze({
+    init(): void {
+      throw new Error("unexpected init")
+    },
+    async dial(_ctx: Context, address: string): Promise<TransportClient> {
+      const owner: PoolOwner = { address, serial: owners.length + 1, fetches: 0, closes: 0 }
+      owners.push(owner)
+      return Object.freeze({
+        async fetch(): Promise<Response> {
+          if (owner.closes > 0) throw new Error(`owner ${owner.serial} was used after close`)
+          owner.fetches += 1
+          await Promise.resolve()
+          if (respond !== undefined) return await respond(owner)
+          return responseFrom({ node: "a" }, new Uint8Array([owner.serial]))
+        },
+        async close(): Promise<void> {
+          owner.closes += 1
+        }
+      })
+    },
+    listen(): Promise<Listener> {
+      throw new Error("unexpected listen")
+    },
+    options(): Options {
+      throw new Error("unexpected options")
+    },
+    string(): string {
+      return "pool-probe"
+    }
+  })
+  return { transport, owners }
+}
+
+interface TimerTracker {
+  /** Timers of the watched delay that have neither fired nor been cleared. */
+  readonly live: Set<unknown>
+  restore(): void
+}
+
+/** Tracks every timer scheduled with one sentinel delay until it fires or is cleared. */
+function trackTimers(delay: number): TimerTracker {
+  const live = new Set<unknown>()
+  const realSet = globalThis.setTimeout
+  const realClear = globalThis.clearTimeout
+  globalThis.setTimeout = function trackedSetTimeout(
+    handler: () => void,
+    ms?: number
+  ): ReturnType<typeof setTimeout> {
+    if (ms !== delay) return realSet(handler, ms)
+    const timer = realSet(function trackedFire(): void {
+      live.delete(timer)
+      handler()
+    }, ms)
+    live.add(timer)
+    return timer
+  } as typeof setTimeout
+  globalThis.clearTimeout = function trackedClearTimeout(
+    timer?: Parameters<typeof clearTimeout>[0]
+  ): void {
+    live.delete(timer)
+    realClear(timer)
+  } as typeof clearTimeout
+  return {
+    live,
+    restore(): void {
+      for (const timer of live) realClear(timer as Parameters<typeof clearTimeout>[0])
+      globalThis.setTimeout = realSet
+      globalThis.clearTimeout = realClear
+    }
+  }
+}
+
+interface OptionProbe {
+  readonly client: Client
+  /** Options accumulated by the outermost middleware from the options it received. */
+  readonly forwarded: CallOptions[]
+  /** Options accumulated by the innermost call once its own snapshot has been taken. */
+  readonly downstream: CallOptions[]
+  /** Option counts received by the outermost middleware. */
+  readonly arities: number[]
+}
+
+const optionOperation = endpoint("orders", "Create", struct.number(), struct.number())
+const emptyCallOptions: CallOptions = Object.freeze({ filters: Object.freeze([]), retry: null })
+
+/** Builds a Client whose middleware records the call options each layer accumulated. */
+function optionProbe(extra: readonly CallOption[] = []): OptionProbe {
+  const probe = poolProbe(() =>
+    responseFrom({ "content-type": "application/json" }, new TextEncoder().encode("1"))
+  )
+  const forwarded: CallOptions[] = []
+  const downstream: CallOptions[] = []
+  const arities: number[] = []
+  const client = newClient(
+    withTransport(probe.transport),
+    withEndpoint("memory://orders"),
+    middleware((next) => async (ctx, request, ...options) => {
+      arities.push(options.length)
+      forwarded.push(options.reduce((current, option) => option(current), emptyCallOptions))
+      return await next(ctx, request, ...options, ...extra, function observe(current) {
+        downstream.push(current)
+        return current
+      })
+    })
+  )
+  return { client, forwarded, downstream, arities }
 }
 
 /** Verifies that completed close waits used an already released deadline Context. */
@@ -510,7 +679,7 @@ describe("unary Client", () => {
     const source = controlledDiscovery(Object.freeze([first]))
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -518,7 +687,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     await client.call(background(), request)
@@ -559,7 +729,7 @@ describe("unary Client", () => {
     })
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -569,7 +739,8 @@ describe("unary Client", () => {
       await client.call(background(), {
         service: "orders",
         endpoint: "Get",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
       await eventually(() => getCalls === 2)
       expect(subject.events).toContain("dial:http://127.0.0.1:9090/")
@@ -582,7 +753,7 @@ describe("unary Client", () => {
     const source = controlledDiscovery(Object.freeze([]))
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -590,7 +761,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     try {
@@ -617,7 +789,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -625,7 +797,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     try {
@@ -647,7 +820,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -655,7 +828,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
     const cancellation = new Error("first readiness waiter canceled")
     const [firstContext, cancelFirst] = withCancelCause(background())
@@ -685,7 +859,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -693,7 +867,8 @@ describe("unary Client", () => {
     const pending = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void pending.catch(() => {})
     await eventually(() => source.counts.get === 1 && source.counts.watch === 1)
@@ -710,7 +885,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -718,7 +893,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     try {
@@ -743,7 +919,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -751,7 +927,8 @@ describe("unary Client", () => {
     const pending = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void pending.catch(() => {})
 
@@ -771,7 +948,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -785,7 +962,8 @@ describe("unary Client", () => {
             {
               service: "orders",
               endpoint: "Get",
-              message: { header: {}, body: new Uint8Array() }
+              headers: {},
+              body: new Uint8Array()
             },
             withFilter(() => [])
           )
@@ -850,7 +1028,7 @@ describe("unary Client", () => {
     const source = controlledDiscovery(Object.freeze([first]))
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -858,7 +1036,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     try {
@@ -880,7 +1059,7 @@ describe("unary Client", () => {
     const source = controlledDiscovery(Object.freeze([selectedEndpoint.instance]))
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(source.discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport),
@@ -889,7 +1068,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     try {
@@ -1052,7 +1232,7 @@ describe("unary Client", () => {
     })
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1062,7 +1242,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Get",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -1346,7 +1527,7 @@ describe("unary Client", () => {
     })
     const subject = harness({ closeFailure: transportFailure })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -1354,7 +1535,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
 
     const firstClose = client.close(background())
@@ -1406,7 +1588,7 @@ describe("unary Client", () => {
     })
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -1414,7 +1596,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await eventually(() => getCalls === 2)
     const marker = new Error("close Context inspection failed")
@@ -1449,7 +1632,7 @@ describe("unary Client", () => {
 
   test("settles a fulfilled Client close when a custom StopFunc throws", async () => {
     const cleanupFailure = new Error("custom StopFunc failed after Client close")
-    const client = newClient(withTransport(harness().transport), withAddress("memory://orders"))
+    const client = newClient(withTransport(harness().transport), withEndpoint("memory://orders"))
     const unhandled: unknown[] = []
     function observeUnhandled(reason: unknown): void {
       unhandled.push(reason)
@@ -1470,11 +1653,12 @@ describe("unary Client", () => {
     const operationFailure = new Error("Client close failed")
     const cleanupFailure = new Error("custom StopFunc failed after rejected Client close")
     const subject = harness({ closeFailure: operationFailure })
-    const client = newClient(withTransport(subject.transport), withAddress("memory://orders"))
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     const unhandled: unknown[] = []
     function observeUnhandled(reason: unknown): void {
@@ -1608,7 +1792,7 @@ describe("unary Client", () => {
     })
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1616,7 +1800,8 @@ describe("unary Client", () => {
     const called = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void called.catch(() => {})
     await watchEntered
@@ -1656,7 +1841,7 @@ describe("unary Client", () => {
     })
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(discovery),
       withSelector(firstEndpointSelector()),
       withTransport(subject.transport)
@@ -1664,7 +1849,8 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
     const marker = new Error("first caller canceled")
     const [firstContext, cancelFirst] = withCancelCause(background())
@@ -1694,14 +1880,14 @@ describe("unary Client", () => {
     const key = Object.freeze({})
     const value = Object.freeze({ request: "value" })
     const subject = harness({
-      response: { header: responseHeader, body: responseBody },
+      response: responseFrom(responseHeader, responseBody),
       onDiscover() {
         requestHeader.tenant = "changed"
         requestBody[0] = 99
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1716,7 +1902,8 @@ describe("unary Client", () => {
     const response = await client.call(rootContext, {
       service: "orders",
       endpoint: "Create",
-      message: { header: requestHeader, body: requestBody }
+      headers: requestHeader,
+      body: requestBody
     })
     await client.close(background())
 
@@ -1725,55 +1912,51 @@ describe("unary Client", () => {
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
-      "recv",
+      "fetch",
       "done:ok",
       "close"
     ])
     expect(subject.sent).toHaveLength(1)
     const outbound = subject.sent[0]
-    if (outbound === undefined) throw new Error("Client did not send its outbound Message")
-    expect(outbound.header).toEqual({
-      tenant: "one",
-      "Go-Like-Method": "POST",
-      "Go-Like-Service": "orders",
-      "Go-Like-Endpoint": "Create",
-      "Go-Like-Metadata": metadataWire
+    if (outbound === undefined) throw new Error("Client did not send its outbound Request")
+    expect(outbound).toEqual({
+      url: "http://127.0.0.1:8080/orders/Create",
+      method: "POST",
+      headers: {
+        tenant: "one",
+        "go-like-method": "POST",
+        "go-like-metadata": metadataWire
+      },
+      body: new Uint8Array([1, 2, 3])
     })
-    expect(outbound.body).toEqual(new Uint8Array([1, 2, 3]))
-    expect(Object.isFrozen(outbound)).toBe(true)
-    expect(Object.isFrozen(outbound.header)).toBe(true)
+    expect(outbound.body).not.toBe(requestBody)
 
     responseHeader.Node = "changed"
     responseBody[0] = 77
-    expect(response.header).toEqual({ Node: "a" })
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
-    const firstBody = response.body
-    firstBody[0] = 55
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
-    expect(Object.isFrozen(response)).toBe(true)
+    expect(response.headers.get("node")).toBe("a")
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
+    expect(response).toBeInstanceOf(Response)
 
     expect(transportFromClientContext(rootContext)).toBeNull()
     expect(subject.dialContexts).toHaveLength(1)
-    expect(subject.sendContexts).toEqual(subject.dialContexts)
-    expect(subject.recvContexts).toEqual(subject.dialContexts)
+    expect(subject.fetchContexts).toEqual(subject.dialContexts)
+    expect(subject.fetchContexts).toEqual(subject.dialContexts)
     const transportInfo = transportFromClientContext(subject.dialContexts[0] ?? background())
     if (transportInfo === null) throw new Error("Client did not inject TransportInfo")
     expect(transportInfo.kind()).toBe("http")
     expect(transportInfo.endpoint()).toBe("http://127.0.0.1:8080/")
     expect(transportInfo.operation()).toBe("orders/Create")
     expect(transportInfo.requestHeaders()).toEqual({
-      "go-like-endpoint": ["Create"],
       "go-like-metadata": [metadataWire],
       "go-like-method": ["POST"],
-      "go-like-service": ["orders"],
       tenant: ["one"]
     })
     expect(transportInfo.replyHeaders()).toEqual({ node: ["a"] })
+    expect(transportInfo.peerIdentity()).toBeNull()
     expect(fromClientContext(subject.dialContexts[0] ?? background())).toEqual({
       baggage: ["one", "two"]
     })
-    expect(outbound.header).not.toHaveProperty("baggage")
+    expect(outbound.headers).not.toHaveProperty("baggage")
     expect(transportInfo.requestHeaders()).not.toHaveProperty("baggage")
 
     expect(subject.outcomes).toHaveLength(1)
@@ -1796,7 +1979,7 @@ describe("unary Client", () => {
   test("captures structural dependency methods and their receivers at construction", async () => {
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1814,7 +1997,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders-v2",
       endpoint: "CreateV2",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await client.close(background())
     expect(subject.events).toEqual([
@@ -1822,8 +2006,7 @@ describe("unary Client", () => {
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
-      "recv",
+      "fetch",
       "done:ok",
       "close"
     ])
@@ -1833,10 +2016,10 @@ describe("unary Client", () => {
     let replacementRecvCalls = 0
     let replacementCloseCalls = 0
     const subject = harness({
-      onSend(transportClient) {
-        Reflect.set(transportClient, "recv", async function replacementRecv(): Promise<Message> {
+      onFetch(_ctx, _request, transportClient) {
+        Reflect.set(transportClient, "fetch", async function replacementFetch(): Promise<Response> {
           replacementRecvCalls += 1
-          return { header: {}, body: new Uint8Array([1]) }
+          return responseFrom({ node: "a" }, new Uint8Array([1]))
         })
       },
       onFeedback(transportClient) {
@@ -1846,7 +2029,7 @@ describe("unary Client", () => {
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1855,11 +2038,12 @@ describe("unary Client", () => {
     const response = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await client.close(background())
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
     expect(replacementRecvCalls).toBe(0)
     expect(replacementCloseCalls).toBe(0)
     expect(subject.events).toEqual([
@@ -1867,8 +2051,7 @@ describe("unary Client", () => {
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
-      "recv",
+      "fetch",
       "done:ok",
       "close"
     ])
@@ -1892,7 +2075,7 @@ describe("unary Client", () => {
       }
     )
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1902,7 +2085,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -1918,14 +2102,11 @@ describe("unary Client", () => {
     let closes = 0
     Reflect.set(subject.transport, "dial", async function hostileDial(): Promise<never> {
       const admitted = {
-        async recv(): Promise<Message> {
-          return { header: {}, body: new Uint8Array() }
-        },
         async close(): Promise<void> {
           closes += 1
         }
       }
-      Object.defineProperty(admitted, "send", {
+      Object.defineProperty(admitted, "fetch", {
         get() {
           throw accessorFailure
         }
@@ -1933,7 +2114,7 @@ describe("unary Client", () => {
       return admitted as never
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -1943,7 +2124,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -1957,16 +2139,13 @@ describe("unary Client", () => {
     const withoutClose = harness()
     Reflect.set(withoutClose.transport, "dial", async function malformedDial(): Promise<never> {
       return {
-        send(): Promise<void> {
-          return Promise.resolve()
-        },
-        recv(): Promise<Message> {
-          return Promise.resolve({ header: {}, body: new Uint8Array() })
+        fetch(): Promise<Response> {
+          return Promise.resolve(responseFrom({ node: "a" }, new Uint8Array()))
         }
       } as never
     })
     const missingCloseClient = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(withoutClose.discovery),
       withSelector(withoutClose.selector),
       withTransport(withoutClose.transport)
@@ -1975,9 +2154,10 @@ describe("unary Client", () => {
       missingCloseClient.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
-    ).rejects.toThrow("transport dial must return a Client with send, recv, and close")
+    ).rejects.toThrow("transport dial must return a Client with fetch and close")
 
     const cleanupFailure = new Error("malformed owner close failed")
     const withFailingClose = harness()
@@ -1989,7 +2169,7 @@ describe("unary Client", () => {
       } as never
     })
     const failingCloseClient = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(withFailingClose.discovery),
       withSelector(withFailingClose.selector),
       withTransport(withFailingClose.transport)
@@ -1998,7 +2178,8 @@ describe("unary Client", () => {
       failingCloseClient.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -2049,7 +2230,7 @@ describe("unary Client", () => {
     for (const invalid of invalidOptions) {
       expect(() =>
         Reflect.apply(newClient, undefined, [
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(subject.discovery),
           withSelector(subject.selector),
           withTransport(subject.transport),
@@ -2090,25 +2271,27 @@ describe("unary Client", () => {
     const firstSubject = harness()
     const secondSubject = harness()
     const first = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(firstDiscovery.discovery),
       withTransport(firstSubject.transport)
     )
     const second = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(secondDiscovery.discovery),
       withTransport(secondSubject.transport)
     )
     const request: CallRequest = {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
-    await first.call(background(), request)
-    await first.call(background(), request)
-    await first.call(background(), request)
-    await second.call(background(), request)
+    // dx.md 7.5: a raw body holds its connection until the caller reads it.
+    await bodyBytes(await first.call(background(), request))
+    await bodyBytes(await first.call(background(), request))
+    await bodyBytes(await first.call(background(), request))
+    await bodyBytes(await second.call(background(), request))
 
     expect(firstSubject.events.filter((event) => event.startsWith("dial:"))).toEqual([
       "dial:memory://orders-a",
@@ -2121,17 +2304,17 @@ describe("unary Client", () => {
     await second.close(background())
   })
 
-  test("calls one typed endpoint without replacing the raw Message API", async () => {
+  test("calls one typed endpoint and keeps the raw Fetch call", async () => {
     const NumberValue = struct.number()
     const operation = endpoint("orders", "Create", NumberValue, NumberValue)
     const subject = harness({
-      response: {
-        header: { "content-type": "Application/JSON; charset=utf-8" },
-        body: new TextEncoder().encode("42")
-      }
+      response: responseFrom(
+        { "content-type": "Application/JSON; charset=utf-8" },
+        new TextEncoder().encode("42")
+      )
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withTransport(subject.transport)
     )
@@ -2139,10 +2322,10 @@ describe("unary Client", () => {
     await expect(client.call(background(), operation, 7)).resolves.toBe(42)
     expect(subject.sent).toHaveLength(1)
     expect(subject.sent[0]).toEqual({
-      header: {
-        "Content-Type": "application/json",
-        "Go-Like-Endpoint": "Create",
-        "Go-Like-Service": "orders"
+      url: "http://127.0.0.1:8080/orders/Create",
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
       },
       body: new TextEncoder().encode("7")
     })
@@ -2150,9 +2333,10 @@ describe("unary Client", () => {
     const raw = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
-    expect(raw.body).toEqual(new TextEncoder().encode("42"))
+    expect(await bodyBytes(raw)).toEqual(new TextEncoder().encode("42"))
     await client.close(background())
   })
 
@@ -2160,24 +2344,27 @@ describe("unary Client", () => {
     const NumberValue = struct.number()
     const operation = endpoint("orders", "Create", NumberValue, NumberValue)
     const responses = [
-      { header: {}, body: new TextEncoder().encode("1") },
       {
-        header: {
-          "Content-Type": "application/json",
-          "content-type": "application/json"
-        },
-        body: new TextEncoder().encode("1")
+        response: responseFrom({}, new TextEncoder().encode("1")),
+        reply: {}
       },
       {
-        header: { "Content-Type": "application/json" },
-        body: new TextEncoder().encode('"invalid"')
+        response: responseFrom({ "content-type": "text/plain" }, new TextEncoder().encode("1")),
+        reply: { "content-type": "text/plain" }
+      },
+      {
+        response: responseFrom(
+          { "content-type": "application/json" },
+          new TextEncoder().encode('"invalid"')
+        ),
+        reply: { "content-type": "application/json" }
       }
     ]
 
-    for (const response of responses) {
-      const subject = harness({ response })
+    for (const candidate of responses) {
+      const subject = harness({ response: candidate.response })
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -2189,7 +2376,7 @@ describe("unary Client", () => {
         message: "client typed response is invalid"
       })
       expect(subject.outcomes).toEqual([
-        expectedSelectionOutcome(failure, true, true, response.header)
+        expectedSelectionOutcome(failure, true, true, candidate.reply)
       ])
       await client.close(background())
     }
@@ -2199,14 +2386,14 @@ describe("unary Client", () => {
     const NumberValue = struct.number()
     const operation = endpoint("orders", "Create", NumberValue, NumberValue)
     const subject = harness({
-      response: {
-        header: { "Content-Type": "application/json" },
-        body: new TextEncoder().encode('"invalid"')
-      }
+      response: responseFrom(
+        { "content-type": "application/json" },
+        new TextEncoder().encode('"invalid"')
+      )
     })
     const observed: Error[] = []
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -2245,10 +2432,10 @@ describe("unary Client", () => {
     expect(retryFailure === subject.outcomes[0]?.error).toBe(true)
     expect(subject.outcomes).toEqual([
       expectedSelectionOutcome(retryFailure, true, true, {
-        "Content-Type": "application/json"
+        "content-type": "application/json"
       }),
       expectedSelectionOutcome(failure, true, true, {
-        "Content-Type": "application/json"
+        "content-type": "application/json"
       })
     ])
     expect(observed).toEqual([failure])
@@ -2262,7 +2449,7 @@ describe("unary Client", () => {
     const NumberValue = struct.number()
     const operation = endpoint("orders", "Create", NumberValue, NumberValue)
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withTransport(subject.transport)
     )
@@ -2312,7 +2499,7 @@ describe("unary Client", () => {
     ] as const) {
       const subject = harness()
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -2320,7 +2507,8 @@ describe("unary Client", () => {
       const request = {
         service: field === "service" ? value : "orders",
         endpoint: field === "endpoint" ? value : "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       }
       await expect(
         Reflect.apply(client.call, client, [background(), request])
@@ -2330,10 +2518,13 @@ describe("unary Client", () => {
   })
 
   test("rejects either reserved header case-insensitively before discovery", async () => {
-    for (const header of [{ "GO-LIKE-service": "caller" }, { "go-like-ENDPOINT": "caller" }]) {
+    for (const header of [
+      { "GO-LIKE-METADATA": "caller" },
+      { "go-like-timeout-ms": "10" }
+    ] as const) {
       const subject = harness()
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -2342,7 +2533,8 @@ describe("unary Client", () => {
         client.call(background(), {
           service: "orders",
           endpoint: "Create",
-          message: { header, body: new Uint8Array() }
+          headers: header,
+          body: new Uint8Array()
         })
       ).rejects.toBeInstanceOf(TypeError)
       expect(subject.events).toEqual([])
@@ -2351,37 +2543,25 @@ describe("unary Client", () => {
 
   test("projects large TransportInfo headers in one grouped snapshot without losing valid neighbors", async () => {
     const requestHeader: Record<string, string> = {
-      "bad key": "still-on-wire",
-      "bad-value": "contains\0control",
       "X-Duplicate": "first",
-      "x-duplicate": "second",
-      emoji: "😀",
-      "": "empty-key",
-      "\ud800": "unpaired-key",
-      "bad-surrogate-value": "\ud800"
+      "x-duplicate": "second"
     }
     for (let index = 0; index < 2_000; index += 1) {
       requestHeader[`x-request-${index}`] = String(index)
     }
     const responseHeader: Record<string, string> = {
-      "bad key": "still-on-wire",
-      "bad-value": "contains\0control",
       "X-Duplicate": "first",
       "x-duplicate": "second",
-      "x-oversize": "x".repeat(4_097),
-      emoji: "😀",
-      "": "empty-key",
-      "\ud800": "unpaired-key",
-      "bad-surrogate-value": "\ud800"
+      "x-oversize": "x".repeat(4_097)
     }
     for (let index = 0; index < 2_000; index += 1) {
       responseHeader[`x-response-${index}`] = String(index)
     }
     const subject = harness({
-      response: { header: responseHeader, body: new Uint8Array([1]) }
+      response: responseFrom(responseHeader, new Uint8Array([1]))
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -2390,54 +2570,58 @@ describe("unary Client", () => {
     const response = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: requestHeader, body: new Uint8Array() }
+      headers: requestHeader,
+      body: new Uint8Array()
     })
 
-    expect(response.header).toEqual(responseHeader)
+    expect(response.headers.get("x-duplicate")).toBe("first, second")
+    expect(response.headers.get("x-response-1999")).toBe("1999")
+    expect(response.headers.get("x-oversize")).toBe("x".repeat(4_097))
     expect(subject.events).toContain("dial:http://127.0.0.1:8080/")
-    expect(subject.sent[0]?.header["bad key"]).toBe("still-on-wire")
-    expect(subject.sent[0]?.header["bad-value"]).toBe("contains\0control")
+    expect(subject.sent[0]?.headers["x-duplicate"]).toBe("first, second")
     const info = transportFromClientContext(subject.dialContexts[0] ?? background())
     if (info === null) throw new Error("Transport did not receive TransportInfo")
     const requestProjection = info.requestHeaders()
-    expect(Object.keys(requestProjection)).toHaveLength(2_006)
-    expect(requestProjection["go-like-service"]).toEqual(["orders"])
-    expect(requestProjection["go-like-endpoint"]).toEqual(["Create"])
-    expect(requestProjection["bad key"]).toEqual(["still-on-wire"])
-    expect(requestProjection["bad-value"]).toEqual(["contains\0control"])
-    expect(requestProjection["x-duplicate"]).toEqual(["first", "second"])
-    expect(requestProjection["emoji"]).toEqual(["😀"])
+    expect(Object.keys(requestProjection)).toHaveLength(2_001)
+    expect(requestProjection["x-duplicate"]).toEqual(["first, second"])
     expect(requestProjection["x-request-1999"]).toEqual(["1999"])
-    expect(requestProjection).not.toHaveProperty("")
-    expect(requestProjection).not.toHaveProperty("\ud800")
-    expect(requestProjection).not.toHaveProperty("bad-surrogate-value")
+    expect(requestProjection).not.toHaveProperty("go-like-service")
+    expect(requestProjection).not.toHaveProperty("go-like-endpoint")
     const replyProjection = info.replyHeaders()
-    expect(Object.keys(replyProjection)).toHaveLength(2_005)
-    expect(replyProjection["bad key"]).toEqual(["still-on-wire"])
-    expect(replyProjection["bad-value"]).toEqual(["contains\0control"])
-    expect(replyProjection["x-duplicate"]).toEqual(["first", "second"])
-    expect(replyProjection["emoji"]).toEqual(["😀"])
+    expect(Object.keys(replyProjection)).toHaveLength(2_002)
+    expect(replyProjection["x-duplicate"]).toEqual(["first, second"])
     expect(replyProjection["x-response-1999"]).toEqual(["1999"])
     expect(replyProjection["x-oversize"]).toEqual(["x".repeat(4_097)])
-    expect(replyProjection).not.toHaveProperty("")
-    expect(replyProjection).not.toHaveProperty("\ud800")
-    expect(replyProjection).not.toHaveProperty("bad-surrogate-value")
+    await client.close(background())
 
-    const unrepresentable = harness()
-    const unrepresentableClient = newClient(
-      withService("orders"),
-      withDiscovery(unrepresentable.discovery),
-      withSelector(unrepresentable.selector),
-      withTransport(unrepresentable.transport)
-    )
-    await expect(
-      unrepresentableClient.call(background(), {
-        service: "orders",
-        endpoint: "Create\0",
-        message: { header: {}, body: new Uint8Array() }
-      })
-    ).rejects.toThrow("CallRequest.endpoint must be a visible ASCII route token")
-    expect(transportFromClientContext(unrepresentable.dialContexts[0] ?? background())).toBeNull()
+    for (const headers of [
+      { "bad key": "still-on-wire" },
+      { "bad-value": "contains\0control" },
+      { emoji: "😀" },
+      { "": "empty-key" },
+      { "\ud800": "unpaired-key" },
+      { "bad-surrogate-value": "\ud800" },
+      1,
+      null
+    ]) {
+      const rejectedSubject = harness()
+      const rejectedClient = newClient(
+        withEndpoint("discovery:///orders"),
+        withDiscovery(rejectedSubject.discovery),
+        withSelector(rejectedSubject.selector),
+        withTransport(rejectedSubject.transport)
+      )
+      await expect(
+        rejectedClient.call(background(), {
+          service: "orders",
+          endpoint: "Create",
+          headers: headers as HeadersInit,
+          body: new Uint8Array()
+        })
+      ).rejects.toThrow("CallRequest.headers must be a header record")
+      expect(rejectedSubject.events).toEqual([])
+      await rejectedClient.close(background())
+    }
   })
 
   test("rejects malformed Selector tuples before unary target I/O", async () => {
@@ -2459,7 +2643,7 @@ describe("unary Client", () => {
         return selection
       })
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -2469,7 +2653,8 @@ describe("unary Client", () => {
         client.call(background(), {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       ).rejects.toBeInstanceOf(TypeError)
       expect(subject.events).toEqual(["discover:orders", "discover:orders", "select"])
@@ -2482,18 +2667,19 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders-direct")
+      withEndpoint("memory://orders-direct")
     )
 
     const response = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await client.close(background())
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
-    expect(subject.events).toEqual(["dial:memory://orders-direct", "send", "recv", "close"])
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
+    expect(subject.events).toEqual(["dial:memory://orders-direct", "fetch", "close"])
   })
 
   test("feeds every direct address to one injected Selector and dials its choice", async () => {
@@ -2526,13 +2712,14 @@ describe("unary Client", () => {
     const client = newClient(
       withTransport(subject.transport),
       withSelector(selector),
-      withAddress("memory://orders-a", "memory://orders-b")
+      withEndpoint(["memory://orders-a", "memory://orders-b"])
     )
 
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
 
     expect(subject.events.filter((event) => event.startsWith("dial:"))).toEqual([
@@ -2541,16 +2728,188 @@ describe("unary Client", () => {
     await client.close(background())
   })
 
-  test("round-robins consecutive successful direct calls across configured addresses", async () => {
+  test("reuses one published direct snapshot per service across attempts", async () => {
     const subject = harness()
+    const seen: (readonly ServiceInstance[])[] = []
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders-a", "memory://orders-b")
+      withSelector(recordingSelector(seen)),
+      withEndpoint(["memory://orders-b", "memory://orders-a"])
+    )
+
+    for (const service of ["orders", "orders", "billing", "orders", "billing"]) {
+      await completeCall(client, service)
+    }
+
+    expect(seen).toHaveLength(5)
+    const [first, second, other, third, otherAgain] = seen
+    if (first === undefined || other === undefined) throw new Error("missing direct snapshot")
+    expect(second).toBe(first)
+    expect(third).toBe(first)
+    expect(otherAgain).toBe(other)
+    expect(other).not.toBe(first)
+    expect(first).toEqual([
+      {
+        id: "",
+        name: "orders",
+        version: "",
+        metadata: {},
+        endpoints: ["memory://orders-a", "memory://orders-b"]
+      }
+    ])
+    expect(other[0]?.name).toBe("billing")
+    // A published snapshot is deeply frozen and recognized, not copied, by the registry helper.
+    for (const snapshot of [first, other]) {
+      expect(Object.isFrozen(snapshot)).toBe(true)
+      for (const instance of snapshot) {
+        expect(Object.isFrozen(instance)).toBe(true)
+        expect(Object.isFrozen(instance.metadata)).toBe(true)
+        expect(Object.isFrozen(instance.endpoints)).toBe(true)
+      }
+      expect(snapshotServiceInstances(snapshot)).toBe(snapshot)
+    }
+    await client.close(background())
+  })
+
+  test("rebuilds a direct snapshot after the bounded per-service cache turns over", async () => {
+    const subject = harness()
+    const seen: (readonly ServiceInstance[])[] = []
+    const client = newClient(
+      withTransport(subject.transport),
+      withSelector(recordingSelector(seen)),
+      withEndpoint("memory://orders")
+    )
+
+    // Call n is recorded at seen[n]: 1,024 services fit, so service-0 is still cached.
+    for (let index = 0; index < 1_024; index += 1) await completeCall(client, `service-${index}`)
+    await completeCall(client, "service-0")
+    expect(seen[1_024]).toBe(seen[0])
+
+    // One more service turns the cache over: service-0 is rebuilt, the newest one stays cached.
+    await completeCall(client, "service-1024")
+    await completeCall(client, "service-0")
+    await completeCall(client, "service-1024")
+    expect(seen[1_026]).not.toBe(seen[0])
+    expect(seen[1_026]).toEqual(seen[0])
+    expect(seen[1_027]).toBe(seen[1_025])
+    await client.close(background())
+  })
+
+  test("keeps the configured direct instance when its addresses cannot be published", async () => {
+    const subject = harness()
+    const seen: (readonly ServiceInstance[])[] = []
+    const addresses = ["memory://orders-b", "http://user:secret@example.test/"]
+    const client = newClient(
+      withTransport(subject.transport),
+      withSelector(recordingSelector(seen)),
+      withEndpoint(addresses)
     )
     const request: CallRequest = {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    // The injected Selector alone decides; configured order and credentials reach it unchanged.
+    await bodyBytes(await client.call(background(), request))
+    await bodyBytes(await client.call(background(), request))
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toEqual([
+      { id: "", name: "orders", version: "", metadata: {}, endpoints: addresses }
+    ])
+    expect(Object.isFrozen(seen[0])).toBe(true)
+    expect(Object.isFrozen(seen[0]?.[0])).toBe(true)
+    expect(subject.events.filter((event) => event.startsWith("dial:"))).toEqual([
+      "dial:memory://orders-b"
+    ])
+    await client.close(background())
+
+    // The built-in Selector reports the registry validation failure, after cancellation.
+    for (const address of ["http://example.test/#fragment", "http://user:secret@example.test/"]) {
+      const builtIn = newClient(withTransport(subject.transport), withEndpoint(address))
+      const failure = await rejected(builtIn.call(background(), request))
+      expect(failure).toBeInstanceOf(TypeError)
+      expect(failure.message).toBe("ServiceInstance endpoint must omit credentials and fragments")
+      const [ctx, cancel] = withCancelCause(background())
+      const reason = new Error("caller gave up")
+      cancel(reason)
+      expect(await rejected(builtIn.call(ctx, request))).toBe(reason)
+      await builtIn.close(background())
+    }
+  })
+
+  test("lets the built-in Selector hand out published direct and discovery instances as is", async () => {
+    const seen: (readonly ServiceInstance[])[] = []
+    const chosen: ServiceEndpoint[] = []
+    const builtIn = newRoundRobinSelector()
+    const selector: Selector = Object.freeze({
+      select(
+        ctx: Context,
+        instances: readonly ServiceInstance[]
+      ): readonly [ServiceEndpoint, SelectionDone] {
+        seen.push(instances)
+        const selected = builtIn.select(ctx, instances)
+        chosen.push(selected[0])
+        return selected
+      }
+    })
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Get",
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    const direct = newClient(
+      withTransport(harness().transport),
+      withSelector(selector),
+      withEndpoint(["memory://orders-b", "memory://orders-a"])
+    )
+    await bodyBytes(await direct.call(background(), request))
+    await bodyBytes(await direct.call(background(), request))
+    await direct.close(background())
+    expect(chosen.map((endpoint) => endpoint.url)).toEqual([
+      "memory://orders-a",
+      "memory://orders-b"
+    ])
+    expect(seen[1]).toBe(seen[0])
+    expect(chosen[0]?.instance).toBe(seen[0]?.[0])
+    expect(chosen[1]?.instance).toBe(seen[1]?.[0])
+
+    const published = snapshotServiceInstances([
+      {
+        id: "orders-a",
+        name: "orders",
+        version: "v1",
+        metadata: {},
+        endpoints: ["memory://orders-a"]
+      }
+    ])
+    const source = controlledDiscovery(published)
+    const discovered = newClient(
+      withTransport(harness().transport),
+      withSelector(selector),
+      withEndpoint("discovery:///orders"),
+      withDiscovery(source.discovery)
+    )
+    await bodyBytes(await discovered.call(background(), request))
+    await discovered.close(background())
+    expect(seen[2]).toBe(published)
+    expect(chosen[2]?.instance).toBe(published[0])
+  })
+
+  test("round-robins consecutive successful direct calls across configured addresses", async () => {
+    const subject = harness()
+    const client = newClient(
+      withTransport(subject.transport),
+      withEndpoint(["memory://orders-a", "memory://orders-b"])
+    )
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
     }
 
     await client.call(background(), request)
@@ -2567,7 +2926,7 @@ describe("unary Client", () => {
     const failure = new Error("second receive failed")
     let receives = 0
     const subject = harness({
-      onRecv() {
+      onFetch() {
         receives += 1
         if (receives === 2) throw failure
       }
@@ -2592,12 +2951,13 @@ describe("unary Client", () => {
     const client = newClient(
       withTransport(subject.transport),
       withSelector(selector),
-      withAddress("memory://orders")
+      withEndpoint("memory://orders")
     )
     const request: CallRequest = {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     await client.call(background(), request)
@@ -2615,17 +2975,16 @@ describe("unary Client", () => {
     expect(() =>
       newClient(
         withTransport(subject.transport),
-        withAddress("memory://orders"),
-        withService("orders-registry"),
+        withEndpoint("memory://orders"),
         withDiscovery(subject.discovery)
       )
     ).toThrow("newClient cannot combine direct addresses with discovery")
     expect(() =>
       newClient(withTransport(subject.transport), withDiscovery(subject.discovery))
-    ).toThrow("newClient discovery requires a service option")
+    ).toThrow("newClient requires a discovery endpoint when withDiscovery is configured")
     expect(() =>
-      newClient(withTransport(subject.transport), withService("orders-registry"))
-    ).toThrow("newClient service option requires discovery")
+      newClient(withTransport(subject.transport), withEndpoint("discovery:///orders-registry"))
+    ).toThrow("newClient discovery endpoint requires withDiscovery")
     expect(() => newClient(withTransport(subject.transport))).toThrow(
       "newClient requires direct addresses or discovery"
     )
@@ -2634,10 +2993,10 @@ describe("unary Client", () => {
 
   test("rejects zero, empty, malformed, and duplicate direct addresses before dialing", () => {
     const subject = harness()
-    expect(() => withAddress()).toThrow(TypeError)
-    expect(() => withAddress("")).toThrow(TypeError)
-    expect(() => withAddress("\ud800")).toThrow(TypeError)
-    expect(() => withAddress("memory://orders", "memory://orders")).toThrow(TypeError)
+    expect(() => withEndpoint([])).toThrow(TypeError)
+    expect(() => withEndpoint("")).toThrow(TypeError)
+    expect(() => withEndpoint("\ud800")).toThrow(TypeError)
+    expect(() => withEndpoint(["memory://orders", "memory://orders"])).toThrow(TypeError)
     expect(subject.events).toEqual([])
   })
 
@@ -2645,7 +3004,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withTransport(subject.transport),
-      withService("orders-http"),
+      withEndpoint("discovery:///orders-http"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector)
     )
@@ -2653,12 +3012,14 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders-contract",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
 
     expect(subject.events[0]).toBe("discover:orders-http")
     expect(subject.events).toContain("dial:http://127.0.0.1:8080/")
-    expect(subject.sent[0]?.header["Go-Like-Service"]).toBe("orders-contract")
+    expect(subject.sent[0]?.url).toBe("http://127.0.0.1:8080/orders-contract/Create")
+    expect(subject.sent[0]?.headers["go-like-service"]).toBeUndefined()
     const transportInfo = transportFromClientContext(subject.dialContexts[0] ?? background())
     if (transportInfo === null) throw new Error("Discovery call did not inject TransportInfo")
     expect(transportInfo.operation()).toBe("orders-contract/Create")
@@ -2672,7 +3033,7 @@ describe("unary Client", () => {
     })
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders-direct"),
+      withEndpoint("memory://orders-direct"),
       middleware((next) => async (ctx, request, ...options) => {
         expect(options).toHaveLength(1)
         return await next(ctx, request, ...options)
@@ -2682,17 +3043,141 @@ describe("unary Client", () => {
     const response = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await client.close(background())
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
-    expect(subject.events).toEqual(["dial:memory://orders-direct", "send", "recv", "close"])
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
+    expect(subject.events).toEqual(["dial:memory://orders-direct", "fetch", "close"])
     const transportInfo = transportFromClientContext(subject.dialContexts[0] ?? background())
     if (transportInfo === null) throw new Error("Direct call did not inject TransportInfo")
     expect(transportInfo.kind()).toBe("transport")
     expect(transportInfo.endpoint()).toBe("memory://orders-direct")
     expect(transportInfo.operation()).toBe("orders/Create")
+  })
+
+  test("carries a published call-option snapshot through every layer without copying it", async () => {
+    const { client, forwarded, downstream } = optionProbe()
+    const keepAll: Filter = (instances) => instances
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    await bodyBytes(await client.call(background(), request, withFilter(keepAll)))
+    const published = forwarded[0]
+    if (published === undefined) throw new Error("missing published call options")
+    expect(published.filters).toEqual([keepAll])
+    expect(Object.isFrozen(published)).toBe(true)
+    expect(Object.isFrozen(published.filters)).toBe(true)
+
+    // Raw, middleware, and typed layers all receive the published snapshot itself.
+    await bodyBytes(await client.call(background(), request, () => published))
+    expect(await client.call(background(), optionOperation, 1, () => published)).toBe(1)
+    expect(forwarded).toHaveLength(3)
+    expect(downstream).toHaveLength(3)
+    for (const observed of [forwarded[1], forwarded[2], downstream[1], downstream[2]]) {
+      expect(observed).toBe(published)
+    }
+    await client.close(background())
+  })
+
+  test("applies each user call option once and in declaration order", async () => {
+    const { client, arities } = optionProbe()
+    const applied: string[] = []
+    const named = (name: string): CallOption =>
+      function namedOption(current): CallOptions {
+        applied.push(name)
+        return current
+      }
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    expect(await client.call(background(), optionOperation, 1, named("a"), named("b"))).toBe(1)
+    expect(applied).toEqual(["a", "b"])
+    await bodyBytes(await client.call(background(), request, named("c"), named("d")))
+    expect(applied).toEqual(["a", "b", "c", "d"])
+    // Middleware still sees exactly one resolved option, however many the caller supplied.
+    expect(arities).toEqual([1, 1])
+    await client.close(background())
+  })
+
+  test("shares the default call options between calls that pass no option", async () => {
+    const { client, forwarded, arities } = optionProbe()
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    await bodyBytes(await client.call(background(), request))
+    await bodyBytes(await client.call(background(), request))
+    expect(await client.call(background(), optionOperation, 1)).toBe(1)
+    expect(await client.call(background(), optionOperation, 1)).toBe(1)
+    expect(arities).toEqual([1, 1, 1, 1])
+    const defaults = forwarded[0]
+    if (defaults === undefined) throw new Error("missing default call options")
+    expect(defaults).toEqual({ filters: [], retry: null })
+    expect(Object.isFrozen(defaults)).toBe(true)
+    expect(forwarded).toHaveLength(4)
+    for (const observed of forwarded.slice(1)) expect(observed).toBe(defaults)
+    await client.close(background())
+  })
+
+  test("copies and validates every call option that no snapshot published", async () => {
+    const { client, forwarded } = optionProbe()
+    const request: CallRequest = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    // Frozen is not published: a look-alike is copied, never adopted.
+    const lookalike: CallOptions = Object.freeze({ filters: Object.freeze([]), retry: null })
+    await bodyBytes(await client.call(background(), request, () => lookalike))
+    expect(await client.call(background(), optionOperation, 1, () => lookalike)).toBe(1)
+    for (const observed of forwarded) {
+      expect(observed).toEqual(lookalike)
+      expect(observed).not.toBe(lookalike)
+    }
+
+    const invalid: readonly (readonly [unknown, string])[] = [
+      [null, "Call options must be an object"],
+      [[], "Call options must be an object"],
+      [{ filters: null, retry: null }, "CallOptions.filters must be an array"],
+      [
+        Object.freeze({ filters: Object.freeze([1]), retry: null }),
+        "call filter must be a function"
+      ],
+      [{ filters: [], retry: 1 }, "CallOptions.retry must be a retry options object or null"]
+    ]
+    for (const [value, message] of invalid) {
+      const option: CallOption = () => value as CallOptions
+      await expect(client.call(background(), request, option)).rejects.toThrow(message)
+      await expect(client.call(background(), optionOperation, 1, option)).rejects.toThrow(message)
+    }
+
+    // Options appended by middleware are validated by the innermost call exactly as before.
+    for (const [value, message] of invalid) {
+      const added = optionProbe([() => value as CallOptions])
+      await expect(added.client.call(background(), request)).rejects.toThrow(message)
+      await added.client.close(background())
+    }
+    const notFunction = optionProbe([1 as never])
+    await expect(notFunction.client.call(background(), request)).rejects.toThrow(
+      "Call option must be a function"
+    )
+    await notFunction.client.close(background())
+    await client.close(background())
   })
 
   test("reports a construction-address owner close timeout", async () => {
@@ -2704,64 +3189,336 @@ describe("unary Client", () => {
     Reflect.deleteProperty(subject.transport, "kind")
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders-direct"),
+      withEndpoint("memory://orders-direct"),
       closeTimeout(5)
     )
     const response = await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     const failure = await rejected(client.close(background()))
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
     expect(failure).toMatchObject({
       message: "transport client close exceeded 5ms"
     })
-    expect(subject.events).toEqual(["dial:memory://orders-direct", "send", "recv", "close"])
+    expect(subject.events).toEqual(["dial:memory://orders-direct", "fetch", "close"])
   })
 
-  test("keeps one idle transport owner per address without sharing an active lease", async () => {
-    const subject = harness()
-    let dials = 0
-    let closes = 0
-    Reflect.set(subject.transport, "dial", async function distinctDial(): Promise<TransportClient> {
-      dials += 1
-      return Object.freeze({
-        async send(): Promise<void> {},
-        async recv(): Promise<Message> {
-          await Promise.resolve()
-          return { header: {}, body: new Uint8Array([dials]) }
-        },
-        async close(): Promise<void> {
-          closes += 1
-        },
-        local(): string {
-          return "client"
-        },
-        remote(): string {
-          return "memory://orders"
+  test("keeps idle transport owners per address without sharing an active lease", async () => {
+    const probe = poolProbe()
+    const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    // The first body must return before the overlapping pair can borrow its idle owner.
+    await bodyBytes(await call())
+    const overlapped = await Promise.all([call(), call()])
+    // An active owner serves one call: the pair needs the idle owner plus one new dial.
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([2, 1])
+    await Promise.all(overlapped.map((response) => bodyBytes(response)))
+
+    // Both completed exchanges stay idle for the address; neither is closed.
+    await Bun.sleep(10)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([0, 0])
+    await client.close(background())
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1])
+    await expect(call()).rejects.toThrow("client is closed")
+    expect(probe.owners).toHaveLength(2)
+  })
+
+  test("reuses both owners of an overlapped pair without dialing again", async () => {
+    const probe = poolProbe()
+    const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    const first = await Promise.all([call(), call()])
+    expect(probe.owners).toHaveLength(2)
+    await Promise.all(first.map((response) => bodyBytes(response)))
+    const second = await Promise.all([call(), call()])
+    await Promise.all(second.map((response) => bodyBytes(response)))
+
+    expect(probe.owners).toHaveLength(2)
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([2, 2])
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([0, 0])
+    await client.close(background())
+  })
+
+  test("reuses the most recently released idle owner of an address first", async () => {
+    const probe = poolProbe()
+    const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    const [one, two, three] = await Promise.all([call(), call(), call()])
+    // Release order is owner 2, owner 1, owner 3: owner 3 tops the address stack.
+    await bodyBytes(two)
+    await bodyBytes(one)
+    await bodyBytes(three)
+    await bodyBytes(await call())
+    await bodyBytes(await call())
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([1, 1, 3])
+
+    // The next overlapped pair takes the top of the stack, then the entry below it.
+    const pair = await Promise.all([call(), call()])
+    await Promise.all(pair.map((response) => bodyBytes(response)))
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([2, 1, 4])
+    expect(probe.owners).toHaveLength(3)
+    await client.close(background())
+  })
+
+  test("closes exactly one owner when poolSize(1) keeps two concurrent completions", async () => {
+    const probe = poolProbe()
+    const client = newClient(
+      withTransport(probe.transport),
+      withEndpoint("memory://orders"),
+      poolSize(1)
+    )
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    const [first, second] = await Promise.all([call(), call()])
+    await bodyBytes(first)
+    await bodyBytes(second)
+    await eventually(() => probe.owners[0]?.closes === 1)
+    await Bun.sleep(10)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0])
+
+    // The evicted owner left its address stack: the next pair reuses only the retained owner.
+    const pair = await Promise.all([call(), call()])
+    await Promise.all(pair.map((response) => bodyBytes(response)))
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([1, 2, 1])
+    await eventually(() => probe.owners[1]?.closes === 1)
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1, 1])
+  })
+
+  test("enforces poolSize across addresses and drops the evicted owner from its address stack", async () => {
+    const probe = poolProbe()
+    const client = newClient(
+      withTransport(probe.transport),
+      withEndpoint(["memory://a", "memory://b"]),
+      poolSize(1)
+    )
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    // The default round-robin Selector sends the first pair to a, then b.
+    const [toA, toB] = await Promise.all([call(), call()])
+    expect(probe.owners.map((owner) => owner.address)).toEqual(["memory://a", "memory://b"])
+    await bodyBytes(toA)
+    await bodyBytes(toB)
+    await eventually(() => probe.owners[0]?.closes === 1)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0])
+
+    // The next pair asks for a, then b: a must dial afresh while b reuses its retained owner.
+    const next = await Promise.all([call(), call()])
+    await Promise.all(next.map((response) => bodyBytes(response)))
+    expect(probe.owners.map((owner) => `${owner.address}:${owner.fetches}`)).toEqual([
+      "memory://a:1",
+      "memory://b:2",
+      "memory://a:1"
+    ])
+    await eventually(() => probe.owners[2]?.closes === 1)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0, 1])
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1, 1])
+  })
+
+  test("closes instead of pooling an owner whose exchange failed or is not reusable", async () => {
+    const NumberValue = struct.number()
+    const operation = endpoint("orders", "Create", NumberValue, NumberValue)
+    const failure = new Error("fetch failed")
+    const json = { "content-type": "application/json" }
+    const rawOk = (owner: PoolOwner): Response =>
+      responseFrom({ node: "a" }, new Uint8Array([owner.serial]))
+    const typedOk = (): Response => responseFrom(json, new TextEncoder().encode("1"))
+    const raw = (client: Client): Promise<unknown> => client.call(background(), poolRequest)
+    const typed = (client: Client): Promise<unknown> => client.call(background(), operation, 1)
+    const modes = [
+      {
+        invoke: raw,
+        good: rawOk,
+        bad(): Response {
+          throw failure
+        }
+      },
+      { invoke: raw, good: rawOk, bad: () => responseFrom({}, new Uint8Array(), 503) },
+      { invoke: raw, good: rawOk, bad: () => ({}) as never },
+      {
+        invoke: typed,
+        good: typedOk,
+        bad: () => responseFrom(json, new TextEncoder().encode('"invalid"'))
+      }
+    ] as const
+
+    for (const mode of modes) {
+      const probe = poolProbe((owner) => (owner.serial === 1 ? mode.bad() : mode.good(owner)))
+      const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+
+      await rejected(mode.invoke(client))
+      expect(probe.owners.map((owner) => owner.closes)).toEqual([1])
+      const result = await mode.invoke(client)
+      if (result instanceof Response) await bodyBytes(result)
+
+      // The failed owner was never pooled, so the second call had to dial its own owner.
+      expect(probe.owners.map((owner) => owner.fetches)).toEqual([1, 1])
+      expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0])
+      await client.close(background())
+      expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1])
+    }
+  })
+
+  test("awaits and reports the close of a completed typed exchange when pooling is disabled", async () => {
+    const closeFailure = new Error("close failed")
+    const subject = harness({
+      response: responseFrom({ "content-type": "application/json" }, new TextEncoder().encode("1")),
+      closeFailure
+    })
+    const client = newClient(
+      withTransport(subject.transport),
+      withEndpoint("memory://orders"),
+      poolSize(0)
+    )
+
+    const failure = completedCallFailure(
+      await rejected(client.call(background(), optionOperation, 1))
+    )
+    expect(failure.errors).toEqual([closeFailure])
+    expect(subject.events).toEqual(["dial:memory://orders", "fetch", "close"])
+    await client.close(background())
+  })
+
+  test("closes the owner when a raw response body cannot be observed", async () => {
+    const probe = poolProbe(() => {
+      const source = new ReadableStream<Uint8Array>({
+        start(controller): void {
+          controller.close()
         }
       })
+      const response = new Response(source)
+      // A locked, unread body cannot be observed; the failed exchange must not strand its owner.
+      response.body?.getReader()
+      return response
     })
-    const client = newClient(withTransport(subject.transport), withAddress("memory://orders"))
-    const request: CallRequest = {
-      service: "orders",
-      endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+    const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+
+    await rejected(client.call(background(), poolRequest))
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1])
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1])
+  })
+
+  test("pools only the owner of the overlapped exchange that succeeded", async () => {
+    const failure = new Error("fetch failed")
+    const probe = poolProbe((owner) => {
+      if (owner.serial === 1) throw failure
+      return responseFrom({ node: "a" }, new Uint8Array([owner.serial]))
+    })
+    const client = newClient(withTransport(probe.transport), withEndpoint("memory://orders"))
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    const [failed, succeeded] = await Promise.allSettled([call(), call()])
+    expect(failed.status).toBe("rejected")
+    if (succeeded.status !== "fulfilled") throw new Error("second overlapped call failed")
+    await bodyBytes(succeeded.value)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0])
+
+    // Only the successful owner is reusable: the next pair borrows it and dials one more.
+    const pair = await Promise.all([call(), call()])
+    await Promise.all(pair.map((response) => bodyBytes(response)))
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([1, 2, 1])
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1, 1])
+  })
+
+  test("closes each pooled owner at its own idle expiry and removes it from the address stack", async () => {
+    const probe = poolProbe()
+    const client = newClient(
+      withTransport(probe.transport),
+      withEndpoint("memory://orders"),
+      poolTtl(200)
+    )
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+    const [first, second] = await Promise.all([call(), call()])
+    await bodyBytes(first)
+    await Bun.sleep(100)
+    await bodyBytes(second)
+
+    // The earlier owner expires alone; the later one is still idle and reusable.
+    await eventually(() => probe.owners[0]?.closes === 1)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 0])
+    await bodyBytes(await call())
+    expect(probe.owners.map((owner) => owner.fetches)).toEqual([1, 2])
+
+    // Once released again, the later owner expires on its own timer exactly once.
+    await eventually(() => probe.owners[1]?.closes === 1)
+    await Bun.sleep(20)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1])
+
+    // No expired owner remains on the stack: the next call dials a third owner.
+    await bodyBytes(await call())
+    expect(probe.owners).toHaveLength(3)
+    await client.close(background())
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1, 1])
+  })
+
+  test("keeps exactly one pending expiry timer per idle owner", async () => {
+    const ttl = 86_400_000
+    const timers = trackTimers(ttl)
+    try {
+      const probe = poolProbe()
+      const client = newClient(
+        withTransport(probe.transport),
+        withEndpoint("memory://orders"),
+        poolTtl(ttl)
+      )
+      const call = (): Promise<Response> => client.call(background(), poolRequest)
+
+      // Active owners are not idle and carry no expiry.
+      const first = await Promise.all([call(), call()])
+      expect(timers.live.size).toBe(0)
+      await Promise.all(first.map((response) => bodyBytes(response)))
+      expect(timers.live.size).toBe(2)
+
+      // Borrowing cancels the expiry; releasing arms exactly one new timer per owner.
+      const second = await Promise.all([call(), call()])
+      expect(probe.owners).toHaveLength(2)
+      expect(timers.live.size).toBe(0)
+      await Promise.all(second.map((response) => bodyBytes(response)))
+      expect(timers.live.size).toBe(2)
+
+      await client.close(background())
+      expect(timers.live.size).toBe(0)
+    } finally {
+      timers.restore()
     }
-    const call = (): Promise<Message> => client.call(background(), request)
+  })
 
-    await call()
-    await Promise.all([call(), call()])
+  test("closes every pooled owner across addresses exactly once on client close", async () => {
+    const probe = poolProbe()
+    const client = newClient(
+      withTransport(probe.transport),
+      withEndpoint(["memory://a", "memory://b"])
+    )
+    const call = (): Promise<Response> => client.call(background(), poolRequest)
 
-    expect(dials).toBe(2)
-    expect(closes).toBe(1)
+    const batch = await Promise.all([call(), call(), call(), call()])
+    for (const response of batch) await bodyBytes(response)
+    expect(probe.owners.map((owner) => owner.address)).toEqual([
+      "memory://a",
+      "memory://b",
+      "memory://a",
+      "memory://b"
+    ])
+    await Bun.sleep(10)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([0, 0, 0, 0])
+
+    await Promise.all([client.close(background()), client.close(background())])
     await client.close(background())
-    await client.close(background())
-    expect(closes).toBe(2)
+    expect(probe.owners.map((owner) => owner.closes)).toEqual([1, 1, 1, 1])
     await expect(call()).rejects.toThrow("client is closed")
-    expect(dials).toBe(2)
+    expect(probe.owners).toHaveLength(4)
   })
 
   test("bounds the global idle pool by least-recently-used address and supports zero reuse", async () => {
@@ -2777,18 +3534,11 @@ describe("unary Client", () => {
         dialed.push(address)
         const identity = `${address}#${dials}`
         return Object.freeze({
-          async send(): Promise<void> {},
-          async recv(): Promise<Message> {
-            return { header: {}, body: new Uint8Array() }
+          async fetch(): Promise<Response> {
+            return responseFrom({ node: "a" }, new Uint8Array())
           },
           async close(): Promise<void> {
             closed.push(identity)
-          },
-          local(): string {
-            return "client"
-          },
-          remote(): string {
-            return address
           }
         })
       },
@@ -2825,25 +3575,26 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
     const client = newClient(
       withTransport(transport),
-      withAddress("memory://a", "memory://b", "memory://c", "memory://d"),
+      withEndpoint(["memory://a", "memory://b", "memory://c", "memory://d"]),
       withSelector(selector),
       poolSize(2),
       poolTtl(0)
     )
 
-    await client.call(background(), request)
-    await client.call(background(), request)
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
+    await bodyBytes(await client.call(background(), request))
+    await bodyBytes(await client.call(background(), request))
     await eventually(() => closed.length === 1)
     expect(closed).toEqual(["memory://a#1"])
 
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
     expect(dialed).toEqual(["memory://a", "memory://b", "memory://c"])
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
     await eventually(() => closed.length === 2)
     expect(dialed).toEqual(["memory://a", "memory://b", "memory://c", "memory://d"])
     expect(closed).toEqual(["memory://a#1", "memory://c#3"])
@@ -2856,13 +3607,9 @@ describe("unary Client", () => {
       { length: 101 },
       (_value, index) => `memory://default-${index}`
     )
-    const defaults = newClient(
-      withTransport(transport),
-      withAddress(...defaultAddresses),
-      poolTtl(0)
-    )
+    const defaults = newClient(withTransport(transport), withEndpoint(defaultAddresses), poolTtl(0))
     for (let index = 0; index < 101; index += 1) {
-      await defaults.call(background(), request)
+      await bodyBytes(await defaults.call(background(), request))
     }
     await eventually(() => closed.length === 1)
     expect(closed).toEqual(["memory://default-0#1"])
@@ -2877,18 +3624,11 @@ describe("unary Client", () => {
       async dial(): Promise<TransportClient> {
         zeroDials += 1
         return Object.freeze({
-          async send(): Promise<void> {},
-          async recv(): Promise<Message> {
-            return { header: {}, body: new Uint8Array() }
+          async fetch(): Promise<Response> {
+            return responseFrom({ node: "a" }, new Uint8Array())
           },
           async close(): Promise<void> {
             zeroCloses += 1
-          },
-          local(): string {
-            return "client"
-          },
-          remote(): string {
-            return "memory://zero"
           }
         })
       },
@@ -2902,15 +3642,17 @@ describe("unary Client", () => {
         return "pool-zero-test"
       }
     })
-    const zero = newClient(withTransport(noReuse), withAddress("memory://zero"), poolSize(0))
-    await zero.call(background(), request)
-    await zero.call(background(), request)
+    const zero = newClient(withTransport(noReuse), withEndpoint("memory://zero"), poolSize(0))
+    await bodyBytes(await zero.call(background(), request))
+    await bodyBytes(await zero.call(background(), request))
+    // poolSize(0) closes from the body observer, which does not await transport close.
+    await eventually(() => zeroCloses === 2)
     expect([zeroDials, zeroCloses]).toEqual([2, 2])
     await zero.close(background())
   })
 
   test("expires idle owners without a later acquire but never expires an active lease", async () => {
-    const held = Promise.withResolvers<Message>()
+    const held = Promise.withResolvers<Response>()
     let dials = 0
     let receives = 0
     let closes = 0
@@ -2921,20 +3663,13 @@ describe("unary Client", () => {
       async dial(): Promise<TransportClient> {
         dials += 1
         return Object.freeze({
-          async send(): Promise<void> {},
-          recv(): Promise<Message> {
+          async fetch(): Promise<Response> {
             receives += 1
             if (receives === 2) return held.promise
-            return Promise.resolve({ header: {}, body: new Uint8Array() })
+            return responseFrom({ node: "a" }, new Uint8Array())
           },
           async close(): Promise<void> {
             closes += 1
-          },
-          local(): string {
-            return "client"
-          },
-          remote(): string {
-            return "memory://ttl"
           }
         })
       },
@@ -2948,26 +3683,27 @@ describe("unary Client", () => {
         return "pool-ttl-test"
       }
     })
-    const client = newClient(withTransport(transport), withAddress("memory://ttl"), poolTtl(10))
+    const client = newClient(withTransport(transport), withEndpoint("memory://ttl"), poolTtl(10))
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
     const active = client.call(background(), request)
     await eventually(() => receives === 2)
     await Bun.sleep(25)
     expect([dials, closes]).toEqual([1, 0])
-    held.resolve({ header: {}, body: new Uint8Array() })
-    await active
+    held.resolve(responseFrom({ node: "a" }, new Uint8Array()))
+    await bodyBytes(await active)
     await eventually(() => closes === 1)
     expect(dials).toBe(1)
     await client.close(background())
   })
 
   test("joins close, release, and idle timer races through one owner close", async () => {
-    const heldResponse = Promise.withResolvers<Message>()
+    const heldResponse = Promise.withResolvers<Response>()
     const heldClose = Promise.withResolvers<void>()
     let receives = 0
     let closes = 0
@@ -2977,21 +3713,14 @@ describe("unary Client", () => {
       },
       async dial(): Promise<TransportClient> {
         return Object.freeze({
-          async send(): Promise<void> {},
-          recv(): Promise<Message> {
+          async fetch(): Promise<Response> {
             receives += 1
             if (receives === 2) return heldResponse.promise
-            return Promise.resolve({ header: {}, body: new Uint8Array() })
+            return responseFrom({ node: "a" }, new Uint8Array())
           },
           close(): Promise<void> {
             closes += 1
             return heldClose.promise
-          },
-          local(): string {
-            return "client"
-          },
-          remote(): string {
-            return "memory://race"
           }
         })
       },
@@ -3005,20 +3734,22 @@ describe("unary Client", () => {
         return "pool-race-test"
       }
     })
-    const client = newClient(withTransport(transport), withAddress("memory://race"), poolTtl(10))
+    const client = newClient(withTransport(transport), withEndpoint("memory://race"), poolTtl(10))
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
     const call = client.call(background(), request)
     await eventually(() => receives === 2)
     const closing = client.close(background())
     await eventually(() => closes === 1)
-    heldResponse.resolve({ header: {}, body: new Uint8Array() })
+    heldResponse.resolve(responseFrom({ node: "a" }, new Uint8Array()))
     heldClose.resolve()
-    await Promise.all([call, closing])
+    await bodyBytes(await call)
+    await closing
     await Bun.sleep(20)
     expect(closes).toBe(1)
   })
@@ -3026,33 +3757,27 @@ describe("unary Client", () => {
   test("closes an active transport owner and rejects future calls", async () => {
     const subject = harness()
     const started = Promise.withResolvers<void>()
-    const response = Promise.withResolvers<Message>()
+    const response = Promise.withResolvers<Response>()
     const stopped = new Error("transport owner stopped")
     let closes = 0
     Reflect.set(subject.transport, "dial", async function activeDial(): Promise<TransportClient> {
       return Object.freeze({
-        async send(): Promise<void> {},
-        recv(): Promise<Message> {
+        async fetch(): Promise<Response> {
           started.resolve()
           return response.promise
         },
         async close(): Promise<void> {
           closes += 1
           response.reject(stopped)
-        },
-        local(): string {
-          return "client"
-        },
-        remote(): string {
-          return "memory://orders"
         }
       })
     })
-    const client = newClient(withTransport(subject.transport), withAddress("memory://orders"))
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
     const call = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void call.catch(() => {})
     await started.promise
@@ -3072,11 +3797,12 @@ describe("unary Client", () => {
       dialed.resolve()
       return await admission.promise
     })
-    const client = newClient(withTransport(subject.transport), withAddress("memory://orders"))
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
     const call = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void call.catch(() => {})
     await dialed.promise
@@ -3084,18 +3810,11 @@ describe("unary Client", () => {
     void closing.catch(() => {})
     admission.resolve(
       Object.freeze({
-        async send(): Promise<void> {},
-        async recv(): Promise<Message> {
-          return { header: {}, body: new Uint8Array() }
+        async fetch(): Promise<Response> {
+          return responseFrom({ node: "a" }, new Uint8Array())
         },
         async close(): Promise<void> {
           closes += 1
-        },
-        local(): string {
-          return "client"
-        },
-        remote(): string {
-          return "memory://orders"
         }
       })
     )
@@ -3114,11 +3833,12 @@ describe("unary Client", () => {
       dialed.resolve()
       return await admission.promise
     })
-    const client = newClient(withTransport(subject.transport), withAddress("memory://orders"))
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
     const call = client.call(background(), {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     void call.catch(() => {})
     await dialed.promise
@@ -3126,18 +3846,11 @@ describe("unary Client", () => {
     void closing.catch(() => {})
     admission.resolve(
       Object.freeze({
-        async send(): Promise<void> {},
-        async recv(): Promise<Message> {
-          return { header: {}, body: new Uint8Array() }
+        async fetch(): Promise<Response> {
+          return responseFrom({ node: "a" }, new Uint8Array())
         },
         async close(): Promise<void> {
           throw cleanupFailure
-        },
-        local(): string {
-          return "client"
-        },
-        remote(): string {
-          return "memory://orders"
         }
       })
     )
@@ -3192,7 +3905,7 @@ describe("unary Client", () => {
       return Object.freeze([Object.freeze({ instance, url }), function complete(): void {}])
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3203,7 +3916,8 @@ describe("unary Client", () => {
       {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       },
       withFilter(filterVersion("v2")),
       withFilter(filterLabel("zone", "a")),
@@ -3216,7 +3930,7 @@ describe("unary Client", () => {
     expect(subject.events).toContain("dial:http://orders-c.test/")
   })
 
-  test("passes discovered opaque endpoints unchanged through Selector to Transport", async () => {
+  test("passes discovered endpoint lists unchanged and rejects a non-root node address before dial", async () => {
     const discovered = Object.freeze([
       Object.freeze({
         id: "orders-http",
@@ -3248,9 +3962,6 @@ describe("unary Client", () => {
 
     const subject = harness()
     const selectedSnapshots: (readonly ServiceInstance[])[] = []
-    Reflect.set(subject.transport, "kind", function kind(): string {
-      return "http"
-    })
     Reflect.set(subject.discovery, "getService", async function transportDiscovery(): Promise<
       readonly ServiceInstance[]
     > {
@@ -3275,38 +3986,123 @@ describe("unary Client", () => {
       }
     )
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
     )
-
-    await client.call(background(), {
+    const request = {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
-    })
+      headers: {},
+      body: new Uint8Array()
+    }
+
+    const failure = await rejected(client.call(background(), request))
     await client.close(background())
 
+    expect(failure).toBeInstanceOf(TypeError)
+    expect(failure.message).toBe(
+      "client node address must be an absolute root URL, received not a transport URL"
+    )
     expect(selectedSnapshots).toHaveLength(1)
     expect(selectedSnapshots[0]).toBe(discovered)
-    expect(subject.events).toContain("dial:not a transport URL")
-    const info = transportFromClientContext(subject.dialContexts[0] ?? background())
-    if (info === null) throw new Error("Transport did not receive TransportInfo")
-    expect(info.kind()).toBe("http")
-    expect(info.endpoint()).toBe("not a transport URL")
+    expect(subject.events.some((event) => event.startsWith("dial:"))).toBe(false)
     expect(discovered[0]?.endpoints).toEqual([
       "not a transport URL",
       "grpc://orders",
       "https://orders.test/",
       "http://orders.test/"
     ])
+
+    for (const address of [
+      "grpc://orders",
+      "https://orders.test/",
+      "http://orders.test/",
+      "memory://orders",
+      "custom+rpc://orders"
+    ]) {
+      const direct = harness()
+      const caller = newClient(withTransport(direct.transport), withEndpoint(address))
+      await caller.call(background(), request)
+      expect(direct.events).toContain(`dial:${address}`)
+      expect(direct.sent[0]?.url).toBe(new URL("/orders/Create", address).href)
+      expect(direct.sent[0]?.method).toBe("POST")
+      await caller.close(background())
+    }
+    for (const address of ["http://orders.test/rpc", "https://orders.test/?"]) {
+      const direct = harness()
+      const caller = newClient(withTransport(direct.transport), withEndpoint(address))
+      await expect(caller.call(background(), request)).rejects.toThrow(
+        `client node address must be an absolute root URL, received ${address}`
+      )
+      expect(direct.events.some((event) => event.startsWith("dial:"))).toBe(false)
+      await caller.close(background())
+    }
+    const fragment = harness()
+    const fragmentClient = newClient(
+      withTransport(fragment.transport),
+      withEndpoint("http://example.test/#fragment")
+    )
+    await expect(fragmentClient.call(background(), request)).rejects.toThrow(
+      "ServiceInstance endpoint must omit credentials and fragments"
+    )
+    expect(fragment.events.some((event) => event.startsWith("dial:"))).toBe(false)
+    await fragmentClient.close(background())
+  })
+
+  test("recomputes Go-Like-Timeout-Ms from the caller deadline on each attempt", async () => {
+    const request = {
+      service: "orders",
+      endpoint: "Create",
+      headers: {},
+      body: new Uint8Array()
+    }
+    const open = harness()
+    const openClient = newClient(withTransport(open.transport), withEndpoint("memory://orders"))
+    await openClient.call(background(), request)
+    expect(open.sent[0]?.headers["go-like-timeout-ms"]).toBeUndefined()
+    await openClient.close(background())
+
+    const bounded = harness()
+    const boundedClient = newClient(
+      withTransport(bounded.transport),
+      withEndpoint("memory://orders")
+    )
+    const [ctx, cancel] = withTimeout(background(), 5_000)
+    await boundedClient.call(ctx, request)
+    const header = bounded.sent[0]?.headers["go-like-timeout-ms"]
+    expect(header).toMatch(/^[1-9][0-9]*$/)
+    expect(Number(header)).toBeLessThanOrEqual(5_000)
+    expect(Number(header)).toBeGreaterThan(4_000)
+    cancel()
+    await boundedClient.close(background())
+
+    const expired = harness()
+    const realDial = expired.transport.dial.bind(expired.transport)
+    Reflect.set(
+      expired.transport,
+      "dial",
+      async function delayedDial(ctx: Context, address: string): Promise<TransportClient> {
+        await new Promise((resolve) => setTimeout(resolve, 50))
+        return realDial(ctx, address)
+      }
+    )
+    const expiredClient = newClient(
+      withTransport(expired.transport),
+      withEndpoint("memory://orders")
+    )
+    const [short, cancelShort] = withTimeout(background(), 10)
+    await expiredClient.call(short, request)
+    expect(expired.sent[0]?.headers["go-like-timeout-ms"]).toBe("0")
+    cancelShort()
+    await expiredClient.close(background())
   })
 
   test("fails with the stable selector error when call filters remove every instance", async () => {
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3318,7 +4114,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withFilter(filterVersion("v2"))
       )
@@ -3336,7 +4133,7 @@ describe("unary Client", () => {
     const addresses = ["memory://orders-first", "memory://orders-final"] as const
     let sends = 0
     const subject = harness({
-      onSend() {
+      onFetch() {
         sends += 1
         if (sends === 1) throw transient
       }
@@ -3352,7 +4149,7 @@ describe("unary Client", () => {
     })
     const middlewareInfo: { value: TransportInfo | null } = { value: null }
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3372,7 +4169,8 @@ describe("unary Client", () => {
       {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array([1]) }
+        headers: {},
+        body: new Uint8Array([1])
       },
       withRetry({
         authorization: "idempotent",
@@ -3389,11 +4187,11 @@ describe("unary Client", () => {
       })
     )
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
     expect(sends).toBe(2)
     expect(selections).toBe(2)
     expect(subject.outcomes).toEqual([
-      expectedSelectionOutcome(transient, false, false),
+      expectedSelectionOutcome(transient, true, false),
       expectedSelectionOutcome(null, true, true, { node: "a" })
     ])
     expect(middlewareInfo.value).not.toBeNull()
@@ -3411,14 +4209,14 @@ describe("unary Client", () => {
   test("isolates circuit breakers by operation and rejects open calls before discovery or dial", async () => {
     const dependencyFailure = new Error("orders get unavailable")
     const subject = harness({
-      onRecv(ctx) {
+      onFetch(ctx) {
         if (transportFromClientContext(ctx)?.operation() === "orders/Get") {
           throw dependencyFailure
         }
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3432,7 +4230,8 @@ describe("unary Client", () => {
     const getRequest: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     await expect(client.call(background(), getRequest)).rejects.toBe(dependencyFailure)
@@ -3448,9 +4247,10 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "List",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
-    ).resolves.toMatchObject({ header: { node: "a" } })
+    ).resolves.toMatchObject({ status: 200 })
     expect(subject.dialContexts).toHaveLength(dialsBeforeOpenCall + 1)
     await client.close(background())
   })
@@ -3459,14 +4259,14 @@ describe("unary Client", () => {
     const transient = new Error("transient send failure")
     let sends = 0
     const subject = harness({
-      onSend() {
+      onFetch() {
         sends += 1
         if (sends === 1) throw transient
       }
     })
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders"),
+      withEndpoint("memory://orders"),
       middleware(
         circuitBreakerMiddleware({
           failureThreshold: 1,
@@ -3477,19 +4277,22 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
-    await client.call(
-      background(),
-      request,
-      withRetry({
-        authorization: "idempotent",
-        maxAttempts: 2,
-        shouldRetry: (_ctx, failure) => failure === transient
-      })
+    await bodyBytes(
+      await client.call(
+        background(),
+        request,
+        withRetry({
+          authorization: "idempotent",
+          maxAttempts: 2,
+          shouldRetry: (_ctx, failure) => failure === transient
+        })
+      )
     )
-    await client.call(background(), request)
+    await bodyBytes(await client.call(background(), request))
 
     expect(sends).toBe(3)
     expect(subject.dialContexts).toHaveLength(2)
@@ -3502,7 +4305,7 @@ describe("unary Client", () => {
     let classifications = 0
     let innerFailure: unknown = null
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3528,16 +4331,18 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     const first = await rejected(client.call(background(), request))
     if (!(innerFailure instanceof Error))
       throw new Error("inner middleware did not observe failure")
     expect(first).toBe(innerFailure)
-    completedCallFailure(first)
+    // Feedback failed after the response existed, so the body still owns the connection.
+    await bodyBytes(completedResponse(completedCallFailure(first)))
     const second = await rejected(client.call(background(), request))
-    completedCallFailure(second)
+    await bodyBytes(completedResponse(completedCallFailure(second)))
     expect(classifications).toBe(0)
     expect(subject.dialContexts).toHaveLength(1)
     await client.close(background())
@@ -3549,7 +4354,7 @@ describe("unary Client", () => {
     const [ctx, cancel] = withCancelCause(background())
     let sends = 0
     const subject = harness({
-      onSend() {
+      onFetch() {
         sends += 1
         if (sends !== 1) return
         cancel(cancellation)
@@ -3558,7 +4363,7 @@ describe("unary Client", () => {
     })
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders"),
+      withEndpoint("memory://orders"),
       middleware(
         circuitBreakerMiddleware({
           failureThreshold: 1,
@@ -3569,14 +4374,15 @@ describe("unary Client", () => {
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
 
     await expect(client.call(ctx, request)).rejects.toBe(canceled)
     expect(cause(ctx)).toBe(cancellation)
-    await expect(client.call(background(), request)).resolves.toMatchObject({
-      header: { node: "a" }
-    })
+    const succeeded = await client.call(background(), request)
+    expect(succeeded.status).toBe(200)
+    expect(succeeded.headers.get("node")).toBe("a")
     expect(sends).toBe(2)
     await client.close(background())
   })
@@ -3585,7 +4391,7 @@ describe("unary Client", () => {
     const subject = harness()
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders"),
+      withEndpoint("memory://orders"),
       middleware(
         circuitBreakerMiddleware({
           failureThreshold: 1,
@@ -3598,10 +4404,49 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "",
         endpoint: "Get",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
-    ).rejects.toThrow("CallRequest.service must be a visible ASCII route token")
+    ).rejects.toThrow("CallRequest.service must be a URL unreserved route token")
     expect(subject.events).toEqual([])
+    await client.close(background())
+  })
+
+  test("rejects exact dot-segment route tokens before transport I/O", async () => {
+    const subject = harness()
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
+    const call = (service: string, endpointName: string): Promise<Response> =>
+      client.call(background(), {
+        service,
+        endpoint: endpointName,
+        headers: {},
+        body: new Uint8Array()
+      })
+
+    await expect(call(".", "ok")).rejects.toThrow(
+      "CallRequest.service must be a URL unreserved route token"
+    )
+    await expect(call("..", "ok")).rejects.toThrow(
+      "CallRequest.service must be a URL unreserved route token"
+    )
+    await expect(call("orders", ".")).rejects.toThrow(
+      "CallRequest.endpoint must be a URL unreserved route token"
+    )
+    await expect(call("orders", "..")).rejects.toThrow(
+      "CallRequest.endpoint must be a URL unreserved route token"
+    )
+    expect(subject.events).toEqual([])
+    for (const selector of ["./ok", "../ok", "ok/.", "ok/.."]) {
+      expect(() => use(selector)).toThrow(
+        "client middleware selector must identify a canonical operation or trailing wildcard"
+      )
+    }
+    expect(() => use("a.b/a..b")).not.toThrow()
+    expect(() => use(".a/...")).not.toThrow()
+
+    const accepted = await call("a.b", "a..b")
+    expect(accepted.status).toBe(200)
+    expect(subject.sent.at(-1)?.url).toBe(new URL("/a.b/a..b", "memory://orders").href)
     await client.close(background())
   })
 
@@ -3632,13 +4477,13 @@ describe("unary Client", () => {
     const [ctx, cancel] = withCancelCause(background())
     let sends = 0
     const subject = harness({
-      onSend() {
+      onFetch() {
         sends += 1
         throw transient
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3650,7 +4495,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withRetry({
           authorization: "caller-approved",
@@ -3683,7 +4529,7 @@ describe("unary Client", () => {
     try {
       const subject = harness({ onClose: () => closing })
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport),
@@ -3692,11 +4538,12 @@ describe("unary Client", () => {
       const response = await client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
 
       const failure = await rejected(within(client.close(background())))
-      expect(response.body).toEqual(new Uint8Array([9, 8]))
+      expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
       expect(failure).toMatchObject({
         message: "transport client close exceeded 5ms"
       })
@@ -3721,7 +4568,7 @@ describe("unary Client", () => {
     let sends = 0
     let closes = 0
     const subject = harness({
-      onSend() {
+      onFetch() {
         sends += 1
         if (sends === 1) throw transient
       },
@@ -3731,7 +4578,7 @@ describe("unary Client", () => {
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3744,7 +4591,8 @@ describe("unary Client", () => {
       {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       },
       withRetry({
         authorization: "idempotent",
@@ -3757,7 +4605,7 @@ describe("unary Client", () => {
       })
     )
 
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
     expect(sends).toBe(2)
     expect(retryFailures).toHaveLength(1)
     const firstFailure = retryFailures[0]
@@ -3775,7 +4623,7 @@ describe("unary Client", () => {
     })
     const subject = harness({ onClose: () => closing })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3785,7 +4633,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     const closingClient = client.close(background()).finally(() => {
       settled = true
@@ -3803,7 +4652,7 @@ describe("unary Client", () => {
     const control = Promise.withResolvers<void>()
     const subject = harness({ onClose: () => control.promise })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -3812,7 +4661,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     const marker = new Error("close caller canceled")
     const [caller, cancel] = withCancelCause(background())
@@ -3841,19 +4691,12 @@ describe("unary Client", () => {
     for (const expected of cases) {
       const subject = harness()
       const admitted: TransportClient = {
-        async send(): Promise<void> {},
-        async recv(): Promise<Message> {
-          return { header: {}, body: new Uint8Array([1]) }
+        async fetch(): Promise<Response> {
+          return responseFrom({ node: "a" }, new Uint8Array([1]))
         },
         close(): Promise<void> {
           if (expected.mode === "synchronous") throw expected.failure
           return Promise.reject(expected.failure)
-        },
-        local(): string {
-          return "client"
-        },
-        remote(): string {
-          return selectedEndpoint.url
         }
       }
       Reflect.set(
@@ -3864,7 +4707,7 @@ describe("unary Client", () => {
         }
       )
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport),
@@ -3874,7 +4717,8 @@ describe("unary Client", () => {
       await client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
       const failure = await rejected(client.close(background()))
       expect(failure).toMatchObject({
@@ -3888,7 +4732,7 @@ describe("unary Client", () => {
     const failure = runInNewContext('new Error("foreign close failure")') as Error
     const subject = harness({ closeFailure: failure })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3896,7 +4740,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
 
     expect(failure instanceof Error).toBe(false)
@@ -3930,7 +4775,7 @@ describe("unary Client", () => {
 
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3947,7 +4792,8 @@ describe("unary Client", () => {
           {
             service: "orders",
             endpoint: "Create",
-            message: { header: {}, body: new Uint8Array() }
+            headers: {},
+            body: new Uint8Array()
           },
           option
         ])
@@ -3961,7 +4807,7 @@ describe("unary Client", () => {
       const failure = new Error(`${stage} failed`)
       const subject = harness({ mainFailure: { stage, value: failure } })
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -3971,7 +4817,8 @@ describe("unary Client", () => {
           client.call(background(), {
             service: "orders",
             endpoint: "Create",
-            message: { header: {}, body: new Uint8Array() }
+            headers: {},
+            body: new Uint8Array()
           })
         )
       ).toBe(failure)
@@ -3988,7 +4835,7 @@ describe("unary Client", () => {
   test("normalizes a non-Error dial rejection and completes its selection once", async () => {
     const subject = harness({ mainFailure: { stage: "dial", value: "dial rejected" } })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -3997,7 +4844,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -4017,7 +4865,7 @@ describe("unary Client", () => {
     const failure = runInNewContext('new Error("foreign dial failure")') as Error
     const subject = harness({ mainFailure: { stage: "dial", value: failure } })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4027,7 +4875,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -4037,9 +4886,9 @@ describe("unary Client", () => {
 
   test("preserves the primary Error and closes once without retry after send fails", async () => {
     const primary = new Error("send failed")
-    const subject = harness({ mainFailure: { stage: "send", value: primary } })
+    const subject = harness({ mainFailure: { stage: "fetch", value: primary } })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4049,7 +4898,8 @@ describe("unary Client", () => {
         client.call(background(), {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
     ).toBe(primary)
@@ -4058,20 +4908,20 @@ describe("unary Client", () => {
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
+      "fetch",
       "done:error",
       "close"
     ])
-    expect(subject.outcomes).toEqual([expectedSelectionOutcome(primary, false, false)])
+    expect(subject.outcomes).toEqual([expectedSelectionOutcome(primary, true, false)])
     expectBoundedClose(subject.closeContexts)
   })
 
-  test("reports recv fulfillment before rejecting a malformed response snapshot", async () => {
+  test("rejects a non-Response fetch result after the attempt has started", async () => {
     const subject = harness({
-      response: { header: [] as never, body: new Uint8Array() }
+      response: { header: [], body: new Uint8Array() } as unknown as Response
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4081,13 +4931,14 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
     expect(failure).toBeInstanceOf(TypeError)
-    expect(failure.message).toBe("message header must be a string record")
-    expect(subject.outcomes).toEqual([expectedSelectionOutcome(failure, true, true)])
+    expect(failure.message).toBe("transport fetch must return a Response")
+    expect(subject.outcomes).toEqual([expectedSelectionOutcome(failure, true, false)])
     expectBoundedClose(subject.closeContexts)
   })
 
@@ -4095,13 +4946,13 @@ describe("unary Client", () => {
     const cancellation = new Error("caller canceled")
     const [ctx, cancel] = withCancelCause(withValue(background(), "key", "value"))
     const subject = harness({
-      mainFailure: { stage: "recv", value: cancellation },
-      onRecv() {
+      mainFailure: { stage: "fetch", value: cancellation },
+      onFetch() {
         cancel(cancellation)
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4111,7 +4962,8 @@ describe("unary Client", () => {
         client.call(ctx, {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
     ).toBe(cancellation)
@@ -4126,13 +4978,13 @@ describe("unary Client", () => {
     const providerAbort = new DOMException("provider observed abort", "AbortError")
     const [ctx, cancel] = withCancelCause(background())
     const subject = harness({
-      mainFailure: { stage: "recv", value: providerAbort },
-      onRecv() {
+      mainFailure: { stage: "fetch", value: providerAbort },
+      onFetch() {
         cancel(cancellation)
       }
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4143,7 +4995,8 @@ describe("unary Client", () => {
         client.call(ctx, {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
     ).toBe(providerAbort)
@@ -4155,18 +5008,17 @@ describe("unary Client", () => {
   test("preserves explicit availability evidence when caller cancellation races the result", async () => {
     const cancellation = new Error("caller canceled")
     const [serviceContext, cancelService] = withCancelCause(background())
-    const envelope = encodeServiceError(
-      "unary",
+    const failureResponse = serviceErrorResponse(
       serviceError("orders.unavailable", "service unavailable", 503)
     )
     const serviceSubject = harness({
-      response: { header: envelope.header, body: envelope.body },
-      onRecv() {
+      response: failureResponse,
+      onFetch() {
         cancelService(cancellation)
       }
     })
     const serviceClient = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(serviceSubject.discovery),
       withSelector(serviceSubject.selector),
       withTransport(serviceSubject.transport)
@@ -4175,23 +5027,24 @@ describe("unary Client", () => {
       serviceClient.call(serviceContext, {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
     expect(serviceSubject.outcomes).toEqual([
-      expectedSelectionOutcome(serviceFailure, true, true, envelope.header)
+      expectedSelectionOutcome(serviceFailure, true, true, { "content-type": "application/json" })
     ])
 
     const [statusContext, cancelStatus] = withCancelCause(background())
     const statusFailure = Object.assign(new Error("gateway unavailable"), { status: 504 })
     const statusSubject = harness({
-      mainFailure: { stage: "recv", value: statusFailure },
-      onRecv() {
+      mainFailure: { stage: "fetch", value: statusFailure },
+      onFetch() {
         cancelStatus(cancellation)
       }
     })
     const statusClient = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(statusSubject.discovery),
       withSelector(statusSubject.selector),
       withTransport(statusSubject.transport)
@@ -4201,7 +5054,8 @@ describe("unary Client", () => {
         statusClient.call(statusContext, {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
     ).toBe(statusFailure)
@@ -4214,13 +5068,13 @@ describe("unary Client", () => {
       const hostile = new Error(`feedback Context ${mode} failed`)
       const controlled = lateHostileContext(mode, hostile)
       const subject = harness({
-        mainFailure: { stage: "send", value: primary },
-        onSend() {
+        mainFailure: { stage: "fetch", value: primary },
+        onFetch() {
           controlled[1]()
         }
       })
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport),
@@ -4232,7 +5086,8 @@ describe("unary Client", () => {
         client.call(controlled[0], {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
 
@@ -4249,7 +5104,7 @@ describe("unary Client", () => {
     cancel(cancellation)
     const subject = harness()
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4259,7 +5114,8 @@ describe("unary Client", () => {
         client.call(ctx, {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
     ).toBe(cancellation)
@@ -4271,7 +5127,7 @@ describe("unary Client", () => {
     const feedback = new Error("feedback failed")
     const subject = harness({ feedbackFailure: feedback })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4280,13 +5136,14 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
     const cleanup = completedCallFailure(failure)
 
     expect(cleanup.errors).toEqual([feedback])
-    expect(completedResponse(cleanup).body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(completedResponse(cleanup))).toEqual(new Uint8Array([9, 8]))
     expect(subject.outcomes).toEqual([expectedSelectionOutcome(null, true, true, { node: "a" })])
     expect(subject.closeContexts).toEqual([])
     await client.close(background())
@@ -4297,7 +5154,7 @@ describe("unary Client", () => {
     const closeFailure = new Error("close failed")
     const subject = harness({ closeFailure })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4305,7 +5162,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
 
     expect(await rejected(client.close(background()))).toBe(closeFailure)
@@ -4324,30 +5182,24 @@ describe("unary Client", () => {
         admitted += 1
         if (failure === undefined) throw new Error("unexpected transport admission")
         return Object.freeze({
-          async send(): Promise<void> {},
-          async recv(): Promise<Message> {
-            return { header: {}, body: new Uint8Array() }
+          async fetch(): Promise<Response> {
+            return responseFrom({ node: "a" }, new Uint8Array())
           },
           async close(): Promise<void> {
             throw failure
-          },
-          local(): string {
-            return "client"
-          },
-          remote(): string {
-            return "memory://orders"
           }
         })
       }
     )
     const client = newClient(
       withTransport(subject.transport),
-      withAddress("memory://orders-a", "memory://orders-b")
+      withEndpoint(["memory://orders-a", "memory://orders-b"])
     )
     const request: CallRequest = {
       service: "orders",
       endpoint: "Get",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     }
     await client.call(background(), request)
     await client.call(background(), request)
@@ -4364,10 +5216,10 @@ describe("unary Client", () => {
     const feedback = new Error("feedback failed")
     const subject = harness({
       feedbackFailure: feedback,
-      response: { header: responseHeader, body: responseBody }
+      response: responseFrom(responseHeader, responseBody)
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4376,7 +5228,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
     const cleanup = completedCallFailure(failure)
@@ -4384,10 +5237,8 @@ describe("unary Client", () => {
     responseHeader.node = "changed"
     responseBody[0] = 0
     const response = completedResponse(cleanup)
-    const exposed = response.body
-    exposed[1] = 0
-    expect(response.header).toEqual({ node: "a" })
-    expect(response.body).toEqual(new Uint8Array([9, 8]))
+    expect(response.headers.get("node")).toBe("a")
+    expect(await bodyBytes(response)).toEqual(new Uint8Array([9, 8]))
     expect(cleanup.errors).toEqual([feedback])
     expect(Object.isFrozen(cleanup)).toBeTrue()
     expect(Object.isFrozen(cleanup.errors)).toBeTrue()
@@ -4397,7 +5248,7 @@ describe("unary Client", () => {
     const feedback = new Error("feedback failed")
     const subject = harness({ feedbackFailure: feedback })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4411,7 +5262,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withRetry({
           authorization: "caller-approved",
@@ -4431,8 +5283,8 @@ describe("unary Client", () => {
     completedCallFailure(failure)
     expect(retryChecks).toBe(0)
     expect(backoffs).toBe(0)
-    expect(subject.events.filter((event) => event === "send")).toHaveLength(1)
-    expect(subject.events.filter((event) => event === "recv")).toHaveLength(1)
+    expect(subject.events.filter((event) => event === "fetch")).toHaveLength(1)
+    expect(subject.events.filter((event) => event === "fetch")).toHaveLength(1)
     expect(subject.outcomes).toEqual([expectedSelectionOutcome(null, true, true, { node: "a" })])
   })
 
@@ -4441,13 +5293,13 @@ describe("unary Client", () => {
     const cancellation = new Error("caller canceled before feedback failure")
     const [ctx, cancel] = withCancelCause(background())
     const subject = harness({
-      onRecv() {
+      onFetch() {
         cancel(cancellation)
       },
       feedbackFailure
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4460,7 +5312,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withRetry({
           authorization: "caller-approved",
@@ -4478,12 +5331,12 @@ describe("unary Client", () => {
     )
     const cleanup = completedCallFailure(failure)
 
-    expect(completedResponse(cleanup).body).toEqual(new Uint8Array([9, 8]))
+    expect(await bodyBytes(completedResponse(cleanup))).toEqual(new Uint8Array([9, 8]))
     expect(cleanup.errors).toEqual([feedbackFailure])
     expect(cause(ctx)).toBe(cancellation)
     expect(retryChecks).toBe(0)
     expect(backoffs).toBe(0)
-    expect(subject.events.filter((event) => event === "recv")).toHaveLength(1)
+    expect(subject.events.filter((event) => event === "fetch")).toHaveLength(1)
     await client.close(background())
   })
 
@@ -4494,9 +5347,9 @@ describe("unary Client", () => {
       "client exchange completed but cleanup failed; do not retry",
       { cause: { header: {}, body: new Uint8Array() } }
     )
-    const subject = harness({ mainFailure: { stage: "send", value: lookalike } })
+    const subject = harness({ mainFailure: { stage: "fetch", value: lookalike } })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4508,7 +5361,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withRetry({
           authorization: "caller-approved",
@@ -4588,7 +5442,7 @@ describe("unary Client", () => {
           }
         })
         const client = newClient(
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(subject.discovery),
           withSelector(subject.selector),
           withTransport(subject.transport)
@@ -4597,11 +5451,12 @@ describe("unary Client", () => {
           client.call(background(), {
             service: "orders",
             endpoint: "Create",
-            message: { header: {}, body: new Uint8Array() }
+            headers: {},
+            body: new Uint8Array()
           })
         )
         const cleanup = completedCallFailure(feedbackFailure)
-        expect(completedResponse(cleanup).body).toEqual(new Uint8Array([9, 8]))
+        expect(await bodyBytes(completedResponse(cleanup))).toEqual(new Uint8Array([9, 8]))
         expect(cleanup.errors).toHaveLength(1)
         expect(cleanup.errors[0]).toMatchObject({
           name: "TypeError",
@@ -4616,13 +5471,13 @@ describe("unary Client", () => {
 
         const primary = new Error("send failed")
         const failedSubject = harness({
-          mainFailure: { stage: "send", value: primary },
+          mainFailure: { stage: "fetch", value: primary },
           onFeedback() {
             return current.create()
           }
         })
         const failedClient = newClient(
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(failedSubject.discovery),
           withSelector(failedSubject.selector),
           withTransport(failedSubject.transport)
@@ -4631,7 +5486,8 @@ describe("unary Client", () => {
           failedClient.call(background(), {
             service: "orders",
             endpoint: "Create",
-            message: { header: {}, body: new Uint8Array() }
+            headers: {},
+            body: new Uint8Array()
           })
         )
         expect(aggregate).toBeInstanceOf(AggregateError)
@@ -4655,11 +5511,11 @@ describe("unary Client", () => {
     const close = new Error("close failed")
     const cases = [
       {
-        options: { mainFailure: { stage: "send", value: primary }, feedbackFailure: feedback },
+        options: { mainFailure: { stage: "fetch", value: primary }, feedbackFailure: feedback },
         expected: [primary, feedback]
       },
       {
-        options: { mainFailure: { stage: "send", value: primary }, closeFailure: close },
+        options: { mainFailure: { stage: "fetch", value: primary }, closeFailure: close },
         expected: [primary, close]
       }
     ] satisfies readonly {
@@ -4670,7 +5526,7 @@ describe("unary Client", () => {
     for (const current of cases) {
       const subject = harness(current.options)
       const client = newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport)
@@ -4679,7 +5535,8 @@ describe("unary Client", () => {
         client.call(background(), {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         })
       )
       expect(failure).toBeInstanceOf(AggregateError)
@@ -4692,12 +5549,12 @@ describe("unary Client", () => {
     const feedback = new Error("feedback failed")
     const close = new Error("close failed")
     const subject = harness({
-      mainFailure: { stage: "recv", value: primary },
+      mainFailure: { stage: "fetch", value: primary },
       feedbackFailure: feedback,
       closeFailure: close
     })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4706,7 +5563,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -4718,13 +5576,12 @@ describe("unary Client", () => {
   })
 
   test("decodes a canonical ServiceError without penalizing the selected endpoint", async () => {
-    const envelope = encodeServiceError(
-      "unary",
+    const failureResponse = serviceErrorResponse(
       serviceError("orders.denied", "request denied", 403, { tenant: "one" })
     )
-    const subject = harness({ response: { header: envelope.header, body: envelope.body } })
+    const subject = harness({ response: failureResponse })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4737,7 +5594,8 @@ describe("unary Client", () => {
         {
           service: "orders",
           endpoint: "Create",
-          message: { header: {}, body: new Uint8Array() }
+          headers: {},
+          body: new Uint8Array()
         },
         withRetry({
           authorization: "caller-approved",
@@ -4754,27 +5612,27 @@ describe("unary Client", () => {
     expect(isServiceError(failure)).toBe(true)
     expect(failure).toMatchObject({ code: "orders.denied", status: 403 })
     expect(retryChecks).toBe(1)
-    expect(subject.outcomes).toEqual([expectedSelectionOutcome(null, true, true, envelope.header)])
+    expect(subject.outcomes).toEqual([
+      expectedSelectionOutcome(null, true, true, { "content-type": "application/json" })
+    ])
     expect(subject.events).toEqual([
       "discover:orders",
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
-      "recv",
+      "fetch",
       "done:ok",
       "close"
     ])
   })
 
   test("reports an unavailable ServiceError to selector health feedback", async () => {
-    const envelope = encodeServiceError(
-      "unary",
+    const failureResponse = serviceErrorResponse(
       serviceError("orders.unavailable", "service unavailable", 503)
     )
-    const subject = harness({ response: { header: envelope.header, body: envelope.body } })
+    const subject = harness({ response: failureResponse })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4784,28 +5642,29 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
     expect(isServiceError(failure)).toBe(true)
     expect(failure).toMatchObject({ code: "orders.unavailable", status: 503 })
     expect(subject.outcomes).toEqual([
-      expectedSelectionOutcome(failure, true, true, envelope.header)
+      expectedSelectionOutcome(failure, true, true, { "content-type": "application/json" })
     ])
     expect(subject.events.filter((event) => event.startsWith("done:"))).toEqual(["done:error"])
   })
 
   test("reports malformed ServiceError wire as an exact selector protocol failure", async () => {
-    const envelope = encodeServiceError(
-      "unary",
-      serviceError("orders.denied", "request denied", 403)
-    )
-    const malformed = envelope.body
-    malformed[0] = 0
-    const subject = harness({ response: { header: envelope.header, body: malformed } })
+    const malformed = new Uint8Array([0])
+    const subject = harness({
+      response: new Response(malformed, {
+        status: 403,
+        headers: { "content-type": "application/json" }
+      })
+    })
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport)
@@ -4815,7 +5674,8 @@ describe("unary Client", () => {
       client.call(background(), {
         service: "orders",
         endpoint: "Create",
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     )
 
@@ -4824,7 +5684,7 @@ describe("unary Client", () => {
       code: "GO_LIKE_TRANSPORT_PROTOCOL"
     })
     expect(subject.outcomes).toEqual([
-      expectedSelectionOutcome(failure, true, true, envelope.header)
+      expectedSelectionOutcome(failure, true, true, { "content-type": "application/json" })
     ])
     expect(subject.events.filter((event) => event.startsWith("done:"))).toEqual(["done:error"])
     expect(subject.events.filter((event) => event === "close")).toHaveLength(1)
@@ -4853,17 +5713,15 @@ describe("unary Client", () => {
         const response = await next(ctx, request)
         expect(transportFromClientContext(ctx)).toBe(info)
         expect(info.endpoint()).toBe(selectedEndpoint.url)
-        expect(info.requestHeaders()).toEqual({
-          "go-like-endpoint": ["Create"],
-          "go-like-service": ["orders"]
-        })
+        expect(info.requestHeaders()).toEqual({})
         expect(info.replyHeaders()).toEqual({ node: ["a"] })
+        expect(info.peerIdentity()).toBeNull()
         events.push(`${name}:after`)
         return response
       }
     }
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -4874,7 +5732,8 @@ describe("unary Client", () => {
     await client.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     await client.close(background())
 
@@ -4891,8 +5750,7 @@ describe("unary Client", () => {
       "discover:orders",
       "select",
       "dial:http://127.0.0.1:8080/",
-      "send",
-      "recv",
+      "fetch",
       "done:ok",
       "close"
     ])
@@ -4912,7 +5770,7 @@ describe("unary Client", () => {
         }
     }
     const client = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -4934,7 +5792,8 @@ describe("unary Client", () => {
       await client.call(background(), {
         service,
         endpoint,
-        message: { header: {}, body: new Uint8Array() }
+        headers: {},
+        body: new Uint8Array()
       })
     }
 
@@ -5011,7 +5870,7 @@ describe("unary Client", () => {
     for (const invalid of invalidCollections) {
       expect(() =>
         Reflect.apply(newClient, undefined, [
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(subject.discovery),
           withTransport(subject.transport),
           invalid
@@ -5022,7 +5881,7 @@ describe("unary Client", () => {
     const malformed = use("orders/*", () => null as never)
     expect(() =>
       newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withTransport(subject.transport),
         malformed
@@ -5034,7 +5893,7 @@ describe("unary Client", () => {
     const subject = harness()
     expect(() =>
       newClient(
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withTransport(subject.transport),
         (options) => ({
@@ -5054,35 +5913,38 @@ describe("unary Client", () => {
   test("lets explicit middleware short-circuit or call the base more than once", async () => {
     const shortSubject = harness()
     const short = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(shortSubject.discovery),
       withSelector(shortSubject.selector),
       withTransport(shortSubject.transport),
-      middleware(() => async () => ({ header: { cached: "yes" }, body: new Uint8Array([1]) }))
+      middleware(() => async () => responseFrom({ cached: "yes" }, new Uint8Array([1])))
     )
     const cached = await short.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
-    expect(cached.header).toEqual({ cached: "yes" })
+    expect(cached.headers.get("cached")).toBe("yes")
     expect(shortSubject.events).toEqual([])
 
     const repeatedSubject = harness()
     const repeated = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(repeatedSubject.discovery),
       withSelector(repeatedSubject.selector),
       withTransport(repeatedSubject.transport),
       middleware((next) => async (ctx, request) => {
-        await next(ctx, request)
+        // The discarded attempt must release its raw body before the second dial decision.
+        await bodyBytes(await next(ctx, request))
         return await next(ctx, request)
       })
     )
     await repeated.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     expect(repeatedSubject.outcomes).toEqual([
       expectedSelectionOutcome(null, true, true, { node: "a" }),
@@ -5094,7 +5956,7 @@ describe("unary Client", () => {
 
     const replacedSubject = harness()
     const replaced = newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(replacedSubject.discovery),
       withSelector(replacedSubject.selector),
       withTransport(replacedSubject.transport),
@@ -5105,7 +5967,8 @@ describe("unary Client", () => {
     await replaced.call(background(), {
       service: "orders",
       endpoint: "Create",
-      message: { header: {}, body: new Uint8Array() }
+      headers: {},
+      body: new Uint8Array()
     })
     const replacedInfo = transportFromClientContext(replacedSubject.dialContexts[0] ?? background())
     if (replacedInfo === null) throw new Error("replacement Context lost attempt TransportInfo")
@@ -5118,7 +5981,7 @@ describe("unary Client", () => {
     for (const invalidOption of [() => null, () => ({ middleware: [null] })]) {
       expect(() =>
         Reflect.apply(newClient, undefined, [
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(subject.discovery),
           withSelector(subject.selector),
           withTransport(subject.transport),
@@ -5129,7 +5992,7 @@ describe("unary Client", () => {
     const invalidMiddleware = Reflect.apply(middleware, undefined, [() => Object.freeze({})])
     expect(() =>
       Reflect.apply(newClient, undefined, [
-        withService("orders"),
+        withEndpoint("discovery:///orders"),
         withDiscovery(subject.discovery),
         withSelector(subject.selector),
         withTransport(subject.transport),
@@ -5149,7 +6012,7 @@ describe("unary Client", () => {
 
     const defaults: { value: Parameters<ClientOption>[0] | null } = { value: null }
     newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -5178,7 +6041,7 @@ describe("unary Client", () => {
       return options
     }
     newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -5211,7 +6074,7 @@ describe("unary Client", () => {
     for (const invalid of [null, "yes", 1]) {
       expect(() =>
         Reflect.apply(newClient, undefined, [
-          withService("orders"),
+          withEndpoint("discovery:///orders"),
           withDiscovery(subject.discovery),
           withTransport(subject.transport),
           (options: Parameters<ClientOption>[0]) => ({
@@ -5232,7 +6095,7 @@ describe("unary Client", () => {
     const captured: { value: Parameters<ClientOption>[0] | null } = { value: null }
     newClient(
       withBlock(),
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withSelector(subject.selector),
       withTransport(subject.transport),
@@ -5248,7 +6111,7 @@ describe("unary Client", () => {
 
     const compatible: { value: Parameters<ClientOption>[0] | null } = { value: null }
     newClient(
-      withService("orders"),
+      withEndpoint("discovery:///orders"),
       withDiscovery(subject.discovery),
       withTransport(subject.transport),
       (options) => ({
@@ -5267,5 +6130,66 @@ describe("unary Client", () => {
       }
     )
     expect(compatible.value?.block).toBeFalse()
+  })
+
+  test("rejects a lone surrogate and a raw body that is not bytes", async () => {
+    expect(() => withEndpoint("discovery:///\uDC00")).toThrow(
+      "withEndpoint endpoint must be well-formed"
+    )
+    expect(typeof withEndpoint("discovery:///\uD800\uDC00")).toBe("function")
+    const subject = harness()
+    const client = newClient(withTransport(subject.transport), withEndpoint("memory://orders"))
+    await expect(
+      client.call(background(), {
+        service: "orders",
+        endpoint: "Create",
+        headers: {},
+        body: "text" as never
+      })
+    ).rejects.toThrow("CallRequest.body must be a Uint8Array or null")
+    await client.close(background())
+  })
+
+  test("abandons a non-JSON error when cancel and the fallback read both fail", async () => {
+    const transportClient: TransportClient = {
+      async fetch(): Promise<Response> {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller): void {
+              controller.error(new Error("unreadable"))
+            },
+            cancel(): Promise<void> {
+              return Promise.reject(new Error("cancel failed"))
+            }
+          }),
+          { status: 503, headers: { "content-type": "text/plain" } }
+        )
+      },
+      async close(): Promise<void> {}
+    }
+    const transport: Transport = {
+      kind: () => "http",
+      init(): void {},
+      options(): Options {
+        throw new Error("unused")
+      },
+      async dial(): Promise<TransportClient> {
+        return transportClient
+      },
+      async listen(): Promise<Listener> {
+        throw new Error("unused")
+      },
+      string: () => "test"
+    }
+    const client = newClient(withTransport(transport), withEndpoint("http://127.0.0.1:9/"))
+    await expect(
+      client.call(background(), {
+        service: "orders",
+        endpoint: "Create",
+        headers: {},
+        body: null
+      })
+    ).rejects.toMatchObject({ message: "client received HTTP status 503" })
+    await client.close(background())
   })
 })

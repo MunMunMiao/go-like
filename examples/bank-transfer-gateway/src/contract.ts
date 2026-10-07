@@ -1,5 +1,5 @@
 import { struct, type Infer } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { defineService } from "@go-like/transport"
 
 const transferQuoteCommand = struct.object({
   requestId: struct.string(),
@@ -7,7 +7,7 @@ const transferQuoteCommand = struct.object({
   beneficiaryCountry: struct.string(),
   currency: struct.string(),
   amountMinor: struct.number(),
-  beneficiaryBic: struct.string().null()
+  beneficiaryBic: struct.string().nullish()
 })
 export type TransferQuoteCommand = Infer<typeof transferQuoteCommand>
 
@@ -19,10 +19,13 @@ const transferQuote = struct.object({
 })
 export type TransferQuote = Infer<typeof transferQuote>
 
-/** Defines the typed internal unary contract shared by the Client and Server. */
-export const transferQuoteEndpoint = endpoint(
-  "bank-transfer-routing",
-  "TransferRouting.Quote",
-  transferQuoteCommand,
-  transferQuote
-)
+/** Defines the internal bank-transfer quote contract shared by Client and Server. */
+export const bankTransfer = defineService("bank-transfer-routing.v1", {
+  quote: {
+    request: transferQuoteCommand,
+    response: transferQuote
+  }
+})
+
+/** Exposes the quote endpoint used by the public JSON boundary. */
+export const transferQuoteEndpoint = bankTransfer.endpoints.quote

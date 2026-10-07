@@ -1,10 +1,12 @@
 import type { CallOption, CallRequest, Client, ClientMiddleware } from "@go-like/client"
 import type { Context } from "@go-like/context"
 import type { Infer, Struct } from "@go-like/struct"
-import type { Endpoint, Message } from "@go-like/transport"
+import type { Endpoint, ServerStream } from "@go-like/transport"
+import { observeCall } from "@go-like/transport/provider"
 import { SpanKind, type TextMapPropagator, type Tracer } from "@opentelemetry/api"
 
 import {
+  annotateBodySpan,
   contextOutcome,
   failSpan,
   injectHeaders,
@@ -23,7 +25,7 @@ type RawClientCall = (
   ctx: Context,
   request: CallRequest,
   ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-) => Promise<Message>
+) => Promise<Response>
 
 /** Calls one runtime-erased typed Client endpoint. */
 type TypedClientCall = (
@@ -70,8 +72,50 @@ function isCallRequest(value: unknown): value is CallRequest {
     typeof value.service === "string" &&
     "endpoint" in value &&
     typeof value.endpoint === "string" &&
-    "message" in value
+    "headers" in value &&
+    "body" in value
   )
+}
+
+/** Reports whether headers are a plain record rather than a Fetch header list. */
+function isHeaderRecord(headers: HeadersInit): headers is Record<string, string> {
+  return (
+    typeof headers === "object" &&
+    headers !== null &&
+    !Array.isArray(headers) &&
+    !(headers instanceof Headers)
+  )
+}
+
+/** Copies one plain header record without dropping own keys such as __proto__. */
+function copyHeaderRecord(
+  headers: Readonly<Record<string, string>>
+): Readonly<Record<string, string>> {
+  const record: Record<string, string> = {}
+  for (const key of Object.keys(headers)) {
+    Object.defineProperty(record, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: headers[key]
+    })
+  }
+  return record
+}
+
+/** Copies Fetch headers into the immutable record consumed by propagators. */
+function copyHeaderList(headers: Headers): Readonly<Record<string, string>> {
+  const record: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    record[key] = value
+  })
+  return record
+}
+
+/** Normalizes CallRequest headers before propagation injection. */
+function callHeaders(headers: HeadersInit): Readonly<Record<string, string>> {
+  if (isHeaderRecord(headers)) return copyHeaderRecord(headers)
+  return copyHeaderList(new Headers(headers))
 }
 
 /** Reports whether one runtime value carries a typed endpoint shape. */
@@ -122,12 +166,12 @@ function wrapClient(client: Client, decorate: ClientDecorator): Client {
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
   ): Promise<Infer<ResponseStruct>>
 
-  /** Calls one raw Message endpoint. */
+  /** Calls one raw Fetch endpoint. */
   function call(
     ctx: Context,
     request: CallRequest,
     ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-  ): Promise<Message>
+  ): Promise<Response>
 
   /** Dispatches one raw or typed call through the original Client receiver. */
   async function call(ctx: Context, subject: unknown, _first?: unknown): Promise<unknown> {
@@ -167,8 +211,34 @@ function wrapClient(client: Client, decorate: ClientDecorator): Client {
     return await decorate(ctx, endpoint, invokeTyped)
   }
 
+  /** Opens one server stream through the original receiver and the same decorator. */
+  async function stream<RequestStruct extends Struct, ResponseStruct extends Struct>(
+    ctx: Context,
+    endpoint: Endpoint<RequestStruct, ResponseStruct, true>,
+    request: NoInfer<Infer<RequestStruct>>,
+    ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
+  ): Promise<ServerStream<Infer<ResponseStruct>>> {
+    if (typeof client.stream !== "function") {
+      throw new TypeError("client must implement stream")
+    }
+    const values = runtimeCallOptions(options, 0)
+    /** Invokes the captured stream method with the decorated Context. */
+    async function invokeStream(callContext: Context): Promise<unknown> {
+      const callArguments: [
+        Context,
+        Endpoint<RequestStruct, ResponseStruct, true>,
+        NoInfer<Infer<RequestStruct>>,
+        ...CallOption[]
+      ] = [callContext, endpoint, request]
+      for (const option of values) callArguments.push(option)
+      return await client.stream!.apply(client, callArguments)
+    }
+    return (await decorate(ctx, endpoint, invokeStream)) as ServerStream<Infer<ResponseStruct>>
+  }
+
   return Object.freeze({
     call,
+    stream,
     /** Closes the wrapped Client through its original receiver without instrumentation. */
     close(ctx: Context): Promise<void> {
       return close.call(client, ctx)
@@ -203,30 +273,42 @@ export function traceClient(
         }
       },
       async (span) => {
-        try {
-          let propagated = ctx
-          let request: CallRequest | undefined
-          if (isCallRequest(endpoint)) {
-            request = {
-              service: endpoint.service,
-              endpoint: endpoint.endpoint,
-              message: {
-                header: injectHeaders(endpoint.message.header, propagator),
-                body: endpoint.message.body
-              }
-            }
-          } else {
-            propagated = injectClientContext(ctx, propagator)
-          }
-          const response = await invoke(propagated, request)
-          succeedSpan(span)
-          return response
-        } catch (value) {
-          failSpan(span, ctx, value, "transport_error")
-          throw value
-        } finally {
+        const startedAt = performance.now()
+        let ended = false
+        /** Ends the client span once. */
+        function endSpan(): void {
+          if (ended) return
+          ended = true
           span.end()
         }
+        let propagated = ctx
+        let request: CallRequest | undefined
+        if (isCallRequest(endpoint)) {
+          request = {
+            service: endpoint.service,
+            endpoint: endpoint.endpoint,
+            headers: injectHeaders(callHeaders(endpoint.headers), propagator),
+            body: endpoint.body
+          }
+        } else {
+          propagated = injectClientContext(ctx, propagator)
+        }
+        return await observeCall(
+          propagated,
+          startedAt,
+          function invokeObserved(callContext: Context): Promise<unknown> {
+            return invoke(callContext, request)
+          },
+          function record(end, failure): void {
+            try {
+              if (failure !== null) failSpan(span, ctx, failure, "transport_error")
+              else if (end !== null) annotateBodySpan(span, end, false)
+              else succeedSpan(span)
+            } finally {
+              endSpan()
+            }
+          }
+        )
       }
     )
   }
@@ -246,14 +328,35 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
     invoke: ClientInvocation
   ): Promise<unknown> {
     const complete = startMeasurement(metrics, "client", `${endpoint.service}/${endpoint.endpoint}`)
-    try {
-      const response = await invoke(ctx)
-      complete("success")
-      return response
-    } catch (value) {
-      complete(contextOutcome(ctx))
-      throw value
+    let recorded = false
+    /** Records the logical call once. */
+    function finish(outcome: "success" | "failure" | "canceled"): void {
+      if (recorded) return
+      recorded = true
+      complete(outcome)
     }
+    return await observeCall(
+      ctx,
+      performance.now(),
+      function invokeObserved(callContext: Context): Promise<unknown> {
+        return invoke(callContext)
+      },
+      function record(end, failure): void {
+        if (failure !== null) {
+          finish(contextOutcome(ctx))
+          return
+        }
+        if (end?.reason === "cancel" || end?.status.kind === "canceled") {
+          finish("canceled")
+          return
+        }
+        if (end?.stream === true && end.status.kind !== "success") {
+          finish("failure")
+          return
+        }
+        finish("success")
+      }
+    )
   }
 
   return wrapClient(client, measured)
@@ -262,23 +365,44 @@ export function measureClient(client: Client, metrics: RequestMetrics): Client {
 /** Decorates one raw Client call with fixed OpenTelemetry request metrics. */
 function measureRawCall(
   metrics: RequestMetrics,
-  next: (ctx: Context, request: CallRequest, options: readonly CallOption[]) => Promise<Message>
-): (ctx: Context, request: CallRequest, options: readonly CallOption[]) => Promise<Message> {
+  next: (ctx: Context, request: CallRequest, options: readonly CallOption[]) => Promise<Response>
+): (ctx: Context, request: CallRequest, options: readonly CallOption[]) => Promise<Response> {
   /** Measures one logical raw call without replacing its result or failure. */
   async function measuredRawCall(
     ctx: Context,
     request: CallRequest,
     options: readonly CallOption[]
-  ): Promise<Message> {
+  ): Promise<Response> {
     const complete = startMeasurement(metrics, "client", `${request.service}/${request.endpoint}`)
-    try {
-      const response = await next(ctx, request, options)
-      complete("success")
-      return response
-    } catch (value) {
-      complete(contextOutcome(ctx))
-      throw value
+    let recorded = false
+    /** Records the logical raw call once. */
+    function finish(outcome: "success" | "failure" | "canceled"): void {
+      if (recorded) return
+      recorded = true
+      complete(outcome)
     }
+    return (await observeCall(
+      ctx,
+      performance.now(),
+      function invokeRaw(callContext: Context): Promise<unknown> {
+        return next(callContext, request, options)
+      },
+      function record(end, failure): void {
+        if (failure !== null) {
+          finish(contextOutcome(ctx))
+          return
+        }
+        if (end?.reason === "cancel" || end?.status.kind === "canceled") {
+          finish("canceled")
+          return
+        }
+        if (end?.stream === true && end.status.kind !== "success") {
+          finish("failure")
+          return
+        }
+        finish("success")
+      }
+    )) as Promise<Response>
   }
   return measuredRawCall
 }
@@ -293,7 +417,7 @@ export function measureClientMiddleware(metrics: RequestMetrics): ClientMiddlewa
       ctx: Context,
       request: CallRequest,
       options: readonly CallOption[]
-    ): Promise<Message> {
+    ): Promise<Response> {
       const callArguments: [Context, CallRequest, ...CallOption[]] = [ctx, request]
       for (const option of options) callArguments.push(option)
       return await next.apply(undefined, callArguments)
@@ -304,7 +428,7 @@ export function measureClientMiddleware(metrics: RequestMetrics): ClientMiddlewa
       ctx: Context,
       request: CallRequest,
       ...options: readonly CallOption[] /* go-like-typed-rest: preserves call options. */
-    ): Promise<Message> {
+    ): Promise<Response> {
       return await measured(ctx, request, options)
     }
     return measuredClientCall

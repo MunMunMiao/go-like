@@ -1,13 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import type {
-  DialOption,
-  Message,
-  MessageCodec,
-  Option,
-  TLSConfig,
-  TransportLogger
-} from "../src/types"
+import type { DialOption, Option, TLSConfig, TransportLogger } from "../src/types"
 import * as OptionsModule from "../src/options"
 import {
   reduceTestDialOptions,
@@ -15,7 +8,6 @@ import {
   reduceTestOptions
 } from "./options-fixture"
 
-const codec: (value: MessageCodec | null) => Option = Reflect.get(OptionsModule, "codec")
 const logger: (value: TransportLogger | null) => Option = Reflect.get(OptionsModule, "logger")
 const timeout: (timeoutMs: number) => Option = Reflect.get(OptionsModule, "timeout")
 const secure: (enabled: boolean) => Option = Reflect.get(OptionsModule, "secure")
@@ -24,7 +16,7 @@ const withTimeout: (timeoutMs: number) => DialOption = Reflect.get(OptionsModule
 const withConnClose: () => DialOption = Reflect.get(OptionsModule, "withConnClose")
 
 function optionsImplemented(): boolean {
-  return [codec, logger, timeout, secure, tlsConfig, withTimeout, withConnClose].every(
+  return [logger, timeout, secure, tlsConfig, withTimeout, withConnClose].every(
     (value) => typeof value === "function"
   )
 }
@@ -38,7 +30,6 @@ function requireOptionsImplementation(): boolean {
 describe("transport options", () => {
   test("publishes the exact internal reducer implementation surface", () => {
     expect(Object.keys(OptionsModule).sort()).toEqual([
-      "codec",
       "logger",
       "secure",
       "timeout",
@@ -55,7 +46,6 @@ describe("transport options", () => {
     const listen = reduceTestListenOptions()
 
     expect(common).toEqual({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,
@@ -78,7 +68,6 @@ describe("transport options", () => {
     const dial = reduceTestDialOptions(withTimeout(10), withTimeout(25), withConnClose())
 
     expect(defaults).toEqual({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,
@@ -161,60 +150,8 @@ describe("transport options", () => {
     expect(() => reduceTestOptions(encodingOption)).toThrow(TypeError)
   })
 
-  test("wraps codecs with detached Message and byte boundaries", () => {
+  test("captures logger callables with their original receivers", () => {
     if (!requireOptionsImplementation()) return
-    const marshaledInputs: Message[] = []
-    const unmarshalInputs: Uint8Array[] = []
-    const codecBytes = new Uint8Array([8, 9])
-    const decodedHeader = { key: "before" }
-    const decodedBody = new Uint8Array([10, 11])
-    const structuralCodec: MessageCodec = {
-      marshal(message): Uint8Array {
-        marshaledInputs.push(message)
-        return codecBytes
-      },
-      unmarshal(bytes): Message {
-        unmarshalInputs.push(bytes)
-        return { header: decodedHeader, body: decodedBody }
-      }
-    }
-    const wrapped = reduceTestOptions(codec(structuralCodec)).codec
-    if (wrapped === null) throw new Error("codec snapshot is missing")
-
-    const sourceHeader = { key: "before" }
-    const sourceBody = new Uint8Array([1, 2])
-    const encoded = wrapped.marshal({ header: sourceHeader, body: sourceBody })
-    sourceHeader.key = "after"
-    sourceBody[0] = 99
-    codecBytes[0] = 99
-    expect(marshaledInputs[0]?.header).toEqual({ key: "before" })
-    expect(marshaledInputs[0]?.body).toEqual(new Uint8Array([1, 2]))
-    expect(encoded).toEqual(new Uint8Array([8, 9]))
-
-    const wire = new Uint8Array([3, 4])
-    const decoded = wrapped.unmarshal(wire)
-    wire[0] = 99
-    decodedHeader.key = "after"
-    decodedBody[0] = 99
-    expect(unmarshalInputs[0]).toEqual(new Uint8Array([3, 4]))
-    expect(decoded.header).toEqual({ key: "before" })
-    expect(decoded.body).toEqual(new Uint8Array([10, 11]))
-    const decodedRead = decoded.body
-    decodedRead[0] = 77
-    expect(decoded.body).toEqual(new Uint8Array([10, 11]))
-  })
-
-  test("captures codec and logger callables with their original receivers", () => {
-    if (!requireOptionsImplementation()) return
-    const codecOwner = {
-      byte: 1,
-      marshal(_message: Message): Uint8Array {
-        return new Uint8Array([this.byte])
-      },
-      unmarshal(_bytes: Uint8Array): Message {
-        return { header: { byte: String(this.byte) }, body: new Uint8Array([this.byte]) }
-      }
-    }
     const logMessages: string[] = []
     const loggerOwner = {
       prefix: "original",
@@ -222,30 +159,14 @@ describe("transport options", () => {
         logMessages.push(`${this.prefix}:${message}`)
       }
     }
-    const configured = reduceTestOptions(codec(codecOwner), logger(loggerOwner))
-    const configuredCodec = configured.codec
+    const configured = reduceTestOptions(logger(loggerOwner))
     const configuredLogger = configured.logger
-    if (configuredCodec === null || configuredLogger === null) {
-      throw new Error("callable snapshots are missing")
-    }
+    if (configuredLogger === null) throw new Error("logger snapshot is missing")
 
-    codecOwner.marshal = function replacementMarshal(): Uint8Array {
-      return new Uint8Array([9])
-    }
-    codecOwner.unmarshal = function replacementUnmarshal(): Message {
-      return { header: { byte: "9" }, body: new Uint8Array([9]) }
-    }
     loggerOwner.log = function replacementLog(): void {
       logMessages.push("replacement")
     }
-
-    const encoded = configuredCodec.marshal({ header: {}, body: new Uint8Array() })
-    const decoded = configuredCodec.unmarshal(new Uint8Array())
     configuredLogger.log("info", "message")
-
-    expect(encoded).toEqual(new Uint8Array([1]))
-    expect(decoded.header).toEqual({ byte: "1" })
-    expect(decoded.body).toEqual(new Uint8Array([1]))
     expect(logMessages).toEqual(["original:message"])
   })
 

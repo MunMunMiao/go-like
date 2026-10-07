@@ -1,12 +1,16 @@
+import type { Context } from "@go-like/context"
 import { contextHandler, type Handler } from "@go-like/web"
 
-import type { EchoClient } from "./echo"
+/** Calls the internal echo operation and returns its text. */
+export interface EchoCaller {
+  ping(ctx: Context): Promise<string>
+}
 
 /** Creates the management-plane Handler for health, metrics, and one internal service call. */
 export function newManagementHandler(
   health: Handler,
   metrics: Handler,
-  client: EchoClient,
+  client: EchoCaller,
   onCallError: (error: unknown) => void = () => {}
 ): Handler {
   if (typeof onCallError !== "function") throw new TypeError("onCallError must be a function")

@@ -43,6 +43,9 @@ function info(value: MutableInfoState): TransportInfo {
     },
     replyHeaders() {
       return value.reply
+    },
+    peerIdentity(): string | null {
+      return null
     }
   }
 }
@@ -117,7 +120,8 @@ test("validates dynamic header results and ignores unbranded Context values", ()
     endpoint: () => "endpoint",
     operation: () => "operation",
     requestHeaders: () => null as never,
-    replyHeaders: () => ({ Bad: [] })
+    replyHeaders: () => ({ Bad: [] }),
+    peerIdentity: () => null
   }
   const carried = fromClientContext(newClientContext(background(), malformed))
   if (carried === null) throw new Error("TransportInfo must be present")
@@ -153,6 +157,65 @@ test("validates dynamic endpoints and normalizes non-Error reader failures", () 
   expect(() => newClientContext(background(), throwing)).toThrow(
     "reader rejected with a non-Error value"
   )
+})
+
+test("snapshots a non-empty peer identity and rejects empty, oversized, and bad readers", () => {
+  const identity = { current: "spiffe://orders/pay" }
+  const identified = info(state())
+  identified.peerIdentity = () => identity.current
+  const carried = fromClientContext(newClientContext(background(), identified))
+  if (carried === null) throw new Error("TransportInfo must be present")
+  identity.current = "changed-after-snapshot"
+  expect(carried.peerIdentity()).toBe("spiffe://orders/pay")
+
+  const empty = info(state())
+  empty.peerIdentity = () => ""
+  expect(() => newClientContext(background(), empty)).toThrow(
+    "peerIdentity must be null or a non-empty string"
+  )
+
+  const oversized = info(state())
+  oversized.peerIdentity = () => "x".repeat(4_097)
+  expect(() => newClientContext(background(), oversized)).toThrow("exceeds 4096 UTF-8 bytes")
+
+  const controlled = info(state())
+  controlled.peerIdentity = () => "line\nbreak"
+  expect(() => newClientContext(background(), controlled)).toThrow("control-free")
+
+  const numeric = info(state())
+  numeric.peerIdentity = (() => 1) as never
+  expect(() => newClientContext(background(), numeric)).toThrow(TypeError)
+
+  const raw = Object.freeze({ boundary: "peer" })
+  const nonError = info(state())
+  nonError.peerIdentity = () => {
+    throw raw
+  }
+  expect(() => newClientContext(background(), nonError)).toThrow(
+    "reader rejected with a non-Error value"
+  )
+
+  const foreign = runInNewContext('new Error("foreign peer identity")') as Error
+  const throwing = info(state())
+  throwing.peerIdentity = () => {
+    throw foreign
+  }
+  let observed: unknown = null
+  try {
+    newClientContext(background(), throwing)
+  } catch (error) {
+    observed = error
+  }
+  expect(observed).toBe(foreign)
+
+  const missingPeer = {
+    kind: () => "http",
+    endpoint: () => "endpoint",
+    operation: () => "operation",
+    requestHeaders: () => newMetadata(),
+    replyHeaders: () => newMetadata()
+  }
+  expect(() => newClientContext(background(), missingPeer as never)).toThrow("structural")
 })
 
 test("preserves cross-realm Error identity from structural readers", () => {

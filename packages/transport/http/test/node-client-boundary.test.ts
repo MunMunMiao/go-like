@@ -786,7 +786,7 @@ test("Node owner close rejects a body-read-delayed request before HTTP admission
     })
   })
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget(`http://127.0.0.1:${address.port}/internal`, false),
+    normalizeHTTPDialTarget(`http://127.0.0.1:${address.port}/`, false),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([])
   )
@@ -833,7 +833,7 @@ test("Node secure HTTP/1 owner transfers one socket and creates later TLS socket
     }
   )
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([]),
     runtime
@@ -870,7 +870,7 @@ test("Node owner close wins after selecting a warmed secure HTTP/1 pool", async 
     }
   )
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([]),
     runtime
@@ -913,7 +913,7 @@ test("Node connection-close HTTPS owner negotiates only HTTP/1.1", async () => {
     }
   )
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([
       function close(options) {
@@ -1114,7 +1114,7 @@ test("Node HTTP/2 owner evicts every failed slot and drains GOAWAY without retry
     }
   )
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([]),
     runtime
@@ -1159,7 +1159,7 @@ test("concurrent callers wait independently for one shared TLS handshake", async
     }
   )
   const owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([]),
     runtime
@@ -1202,7 +1202,7 @@ test("Node owner close wins after a TLS socket has already negotiated", async ()
     }
   )
   owner = newNodeHTTPExecutor(
-    normalizeHTTPDialTarget("https://localhost:443/internal", true),
+    normalizeHTTPDialTarget("https://localhost:443/", true),
     defaultHTTPCommonOptions(),
     applyHTTPDialOptions([]),
     runtime

@@ -91,7 +91,7 @@ readiness result, and shutdown owner separately.
 
 1. Start with the typed `Endpoint` and `Struct` boundary.
 2. Use one `newMemoryTransport()` instance for client and server.
-3. Use `withAddress(...)` before introducing Discovery or Selector.
+3. Use `withEndpoint(...)` before introducing Discovery or Selector.
 4. Read the one-attempt DAG and error taxonomy in `doc/guide/service-call.md`.
 5. Add `withRetry(...)` only after an idempotency decision and a bounded test.
 6. Move to `@go-like/transport-http`, then to `/node` only when native Node HTTP/TLS
@@ -367,7 +367,7 @@ Do not collapse these into a score or crown a winner. A comparison row may say
 
 | System    | Product position                                     | Route/procedure owner                                                                         | App lifecycle owner                          | Resource/stop semantics                                                                   | Context model                                                           | DI/state model                                                        | External Web ABI                              | Internal call model                                     | Discovery/selection                               | Retry default                                                 | Streaming                                                               | Runtime/provider scope                                             | Evidence anchor                          |
 | --------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
-| go-like   | lifecycle and service-infrastructure building blocks | external framework owns Web routes; `@go-like/server` owns internal `service/endpoint` routes | `@go-like/core` App                          | structural `start(ctx)`/`stop(ctx)`; sibling stops concurrent; timeout is a wait boundary | explicit structural Context with `AbortSignal`, deadline, cause, values | explicit constructors and options; no DI container or global locator  | standard Fetch `Handler`; host is separate    | unary `Message` through Client/Server/Transport         | Registry snapshot -> Filter -> Selector, optional | one attempt; `withRetry` explicitly authorizes bounded replay | public Web streams remain framework/Web; internal calls are unary only  | selected portable entries plus explicit runtime subpaths/providers | local source plus exact execution record |
+| go-like   | lifecycle and service-infrastructure building blocks | external framework owns Web routes; `@go-like/server` owns internal `service/endpoint` routes | `@go-like/core` App                          | structural `start(ctx)`/`stop(ctx)`; sibling stops concurrent; timeout is a wait boundary | explicit structural Context with `AbortSignal`, deadline, cause, values | explicit constructors and options; no DI container or global locator  | standard Fetch `Handler`; host is separate    | JSON Fetch through Client/Server/Transport              | Registry snapshot -> Filter -> Selector, optional | one attempt; `withRetry` explicitly authorizes bounded replay | public Web streams remain framework/Web; internal calls are unary only  | selected portable entries plus explicit runtime subpaths/providers | local source plus exact execution record |
 | NestJS    | convention-driven application framework              | controllers/decorators and microservice patterns                                              | Nest application context and lifecycle hooks | module/application hooks and adapter-owned resources                                      | standard Node/TypeScript request and framework context                  | module/provider container, dynamic modules, guards/pipes/interceptors | HTTP adapter; microservice transports         | framework transport enum and server/client abstractions | not the go-like Registry/Selector contract        | compare only documented/provider behavior at pinned version   | adapters and microservice transport behavior; do not merge with go-like | Node-focused                                                       | pinned release and official docs         |
 | Fastify   | Node HTTP application framework                      | Fastify route table                                                                           | Fastify `ready`/`listen`/`close` and hooks   | plugin encapsulation and native server close                                              | request/reply objects and hooks                                         | decorators and plugin scope, not Nest-style DI                        | Node HTTP/HTTPS/HTTP2                         | not a service discovery toolkit                         | no go-like-equivalent Registry/Selector claim     | no automatic go-like retry claim                              | framework/plugin and runtime behavior                                   | Node                                                               | pinned release and official docs         |
 | Hono      | Web/request middleware and router                    | Hono route/middleware tree                                                                    | runtime adapter/host, not a full go-like App | app pipeline; host owns listener                                                          | Web `Request`/`Response` and Hono Context                               | context bindings, not general DI                                      | standard Fetch                                | not a Registry/Transport client                         | no go-like-equivalent discovery claim             | no automatic retry claim                                      | native Web streams and runtime features                                 | Web-standard runtimes                                              | pinned release and official docs         |
@@ -502,8 +502,8 @@ that lane was not executed in the synthesis evidence.
 | `@go-like/resilience`          | retry, breaker, limiter primitives              | replay authorization and feedback are explicit; no automatic idempotency                                       | S/U; R                 |
 | `@go-like/web`                 | external Web Handler bridge                     | one standard Fetch argument; no router, auth, or WebSocket abstraction                                         | S/U; R                 |
 | `@go-like/client`              | internal unary Client                           | discovery/filter/selection, middleware, pool, close, and explicit retry                                        | S/U; focused tests; R? |
-| `@go-like/server`              | internal unary Message Server                   | owns a Transport bind and route dispatch; not an external Fetch server                                         | S/U; focused tests; R? |
-| `@go-like/transport`           | Transport/Message SPI                           | Context-first `send`/`recv`; raw Message headers/body; unary current contract                                  | S/U; conformance; R    |
+| `@go-like/server`              | internal JSON and SSE Server                    | owns a Transport bind and `/<service>/<endpoint>` dispatch; not an external application router                 | S/U; focused tests; R? |
+| `@go-like/transport`           | Fetch Request/Response SPI                      | Context-first `fetch`; JSON unary and SSE server streams                                                       | S/U; conformance; R    |
 | `@go-like/transport-http`      | portable HTTP provider                          | Fetch client path; listening requires an admitted host                                                         | S/U; R; D?             |
 | `@go-like/transport-memory`    | in-process provider                             | private address map per instance; no persistence, cross-process, TLS, or network fallback                      | S/U; R                 |
 | `@go-like/config`              | immutable source/snapshot contract              | load/scan/value/watch/close; not a Core Server or ambient config bag                                           | S/U; R                 |
@@ -561,7 +561,7 @@ that lane was not executed in the synthesis evidence.
 | `@go-like/struct/runtime`        | Struct introspection/parsing                        | runtime/provider tooling; preserve public status                             |
 | `@go-like/transport/headers`     | go-like wire header constants                       | stable identifiers; never translate in code or docs snippets                 |
 | `@go-like/transport/json`        | JSON Message body codec                             | UTF-8/JSON/Struct boundary; not a generic HTTP serializer claim              |
-| `@go-like/transport/provider`    | wire/error/metadata helpers                         | provider authors; not a public router API                                    |
+| `@go-like/transport/provider`    | wire/error/metadata helpers and `observeCall`       | provider authors; not a public router API                                    |
 | `@go-like/transport-http/node`   | native Node HTTP/1.1, HTTP/2, TLS, mTLS host/client | Node-specific capabilities; portable Fetch root cannot inject all of them    |
 | `@go-like/web/health`            | `/livez` and `/readyz` handler                      | standard Web response handler; does not install probes or poll in background |
 | `@go-like/web/node`              | Node Web host                                       | listener/host only; do not attribute internal HTTP TLS/HTTP2 to this package |
@@ -659,7 +659,7 @@ Call(ctx, Endpoint, value)
        -> ordered Filters
        -> Selector.select
        -> acquire or dial Transport Client
-       -> send(Message)
+       -> fetch(Request)
        -> Server recv and route headers
        -> server middleware
        -> decode typed request
@@ -688,8 +688,8 @@ Internal service call
   -> @go-like/client
   -> Discovery -> Filter -> Selector
   -> @go-like/transport-http or @go-like/transport-memory
-  -> @go-like/server unary Message route
-  -> typed or raw handler(ctx, Message)
+  -> @go-like/server POST /<service>/<endpoint>
+  -> typed handler or raw handler(ctx, Request)
 
 Web ReadableStream remains Web/application behavior.
 It is not an internal full-duplex RPC stream.
@@ -877,7 +877,7 @@ manifest is not an execution result.
 | C-002 | `Context` is an explicit first argument with cancellation, deadline, cause, and values                             | `packages/context`, focused tests                        | `source`, `unit-pass`                                                   |
 | C-003 | Core Server is exactly `start(ctx)` and `stop(ctx)`; App owns hooks, admission, registration, and stop result      | `packages/core/src/app.ts`, lifecycle tests              | `source`, `unit-pass`                                                   |
 | C-004 | `Server.start()` is not a readiness promise and stop timeout is not proof of native terminality                    | core tests and lifecycle specialist memo                 | `source`, `unit-pass`                                                   |
-| C-005 | External Web uses standard Fetch Handler; internal `@go-like/server` uses unary Message handlers                   | `packages/web`, `packages/server`, examples              | `source`                                                                |
+| C-005 | External Web uses a standard Fetch Handler; internal `@go-like/server` dispatches POST JSON and SSE                | `packages/web`, `packages/server`, examples              | `source`                                                                |
 | C-006 | Internal Client calls are one attempt by default; retry requires explicit authorization and predicate              | `packages/client`, `packages/resilience`, client tests   | `source`, `unit-pass`                                                   |
 | C-007 | A completed response followed by feedback or cleanup failure is not replayed                                       | client cleanup source and tests                          | `source`, `unit-pass`                                                   |
 | C-008 | Registry watcher snapshots are complete replacements and an authoritative empty snapshot fails closed              | registry/client source and tests                         | `source`, `unit-pass`                                                   |

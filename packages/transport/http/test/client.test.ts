@@ -7,12 +7,18 @@ import {
   canceled,
   deadlineExceeded,
   withCancel,
-  withCancelCause
+  withCancelCause,
+  withTimeout,
+  type Context
 } from "@go-like/context"
-import type { Client, Message, TransportLogLevel } from "@go-like/transport"
+import type { TransportLogLevel } from "@go-like/transport"
 import { logger, timeout, withTimeout as withDialTimeout } from "@go-like/transport"
-import { executor, newHTTPTransport, type HTTPExecutor } from "@go-like/transport-http"
-import { runHTTPClientCleanupMatrix } from "./client-cleanup-matrix"
+import {
+  executor,
+  maxMessageBytes,
+  newHTTPTransport,
+  type HTTPExecutor
+} from "@go-like/transport-http"
 
 /** Creates one externally settled Promise. */
 function deferred<T>(): {
@@ -39,14 +45,24 @@ function httpExecutor(
   })
 }
 
-/** Creates one immutable transport Message fixture. */
-function message(value: string, header: Readonly<Record<string, string>> = {}): Message {
-  return Object.freeze({ header: Object.freeze(header), body: new TextEncoder().encode(value) })
+/** Copies bytes into an ArrayBuffer Fetch accepts as a body. */
+function copied(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
 }
 
-/** Decodes one Message body for readable assertions. */
-function text(value: Message): string {
-  return new TextDecoder().decode(value.body)
+/** Builds one same-origin request for the portable example dial target. */
+function request(
+  path: string,
+  body: Uint8Array | string | null = null,
+  headers: HeadersInit = {},
+  method = "POST"
+): Request {
+  const init: RequestInit = { method, headers }
+  if (typeof body === "string") init.body = body
+  else if (body !== null) init.body = copied(body)
+  return new Request(`http://example.test:8080${path}`, init)
 }
 
 /** Starts one real loopback HTTP endpoint and returns its assigned port. */
@@ -75,947 +91,315 @@ async function closeServer(server: Server): Promise<void> {
 }
 
 /** Reads one real incoming request body as UTF-8. */
-async function incomingText(request: IncomingMessage): Promise<string> {
-  request.setEncoding("utf8")
+async function incomingText(value: IncomingMessage): Promise<string> {
+  value.setEncoding("utf8")
   let body = ""
-  for await (const chunk of request) body += String(chunk)
+  for await (const chunk of value) body += String(chunk)
   return body
 }
 
-test("client cleanup distinguishes synchronous close admission from terminal ownership", async () => {
-  expect(await runHTTPClientCleanupMatrix()).toEqual({
-    valid: true,
-    activeReaderOwnerCycle: true,
-    activeReaderIndependentResolve: true,
-    activeReaderIndependentReject: true,
-    statusOwnerCycle: true,
-    multipleSlotAdmission: true,
-    nonReentrantPendingJoin: true,
-    callerCancellationJoin: true,
-    duplicateOwnerIdentity: true,
-    unhandled: 0
-  })
-})
-
-test("dial is validation-only and send emits a defensive standard Fetch POST", async () => {
+test("dial is validation-only and fetch preserves method, URL, and a detached body", async () => {
   const requests: Request[] = []
-  const run = httpExecutor(function run(input, init) {
-    const request = new Request(input, init)
-    requests.push(request)
-    return Promise.resolve(
-      new Response("world", {
-        status: 200,
-        headers: { "Go-Like-Reply": "yes" }
-      })
-    )
+  const run = httpExecutor(function run(input) {
+    const received = input instanceof Request ? input : new Request(input)
+    requests.push(received)
+    return Promise.resolve(new Response("world", { status: 200, headers: { "X-Reply": "yes" } }))
   })
   const transport = newHTTPTransport(executor(run))
   const client = await transport.dial(background(), "example.test:8080")
   expect(requests).toHaveLength(0)
 
   const body = new TextEncoder().encode("hello")
-  const headers = { "Go-Like-Topic": "greeting" }
-  const sent = Object.freeze({ header: headers, body })
-  const send = client.send(background(), sent)
+  const headers = { "X-Topic": "greeting", Connection: "close", Host: "evil.test" }
+  const sent = request("/orders/Create", body, headers, "PUT")
   body.fill(0)
-  headers["Go-Like-Topic"] = "mutated"
-  await send
+  headers["X-Topic"] = "mutated"
+  const response = await client.fetch(background(), sent)
 
   expect(requests).toHaveLength(1)
-  const request = requests[0]
-  expect(request).toBeDefined()
-  expect(request?.method).toBe("POST")
-  expect(request?.url).toBe("http://example.test:8080/")
-  expect(request?.headers.get("Go-Like-Topic")).toBe("greeting")
-  expect(await request?.text()).toBe("hello")
-
-  const received = await client.recv(background())
-  expect(text(received)).toBe("world")
-  expect(received.header["go-like-reply"]).toBe("yes")
-  expect(client.local()).toBe("")
-  expect(client.remote()).toBe("http://example.test:8080")
+  const outbound = requests[0]
+  expect(outbound?.method).toBe("PUT")
+  expect(outbound?.url).toBe("http://example.test:8080/orders/Create")
+  expect(outbound?.redirect).toBe("manual")
+  expect(outbound?.headers.get("X-Topic")).toBe("greeting")
+  expect(outbound?.headers.get("connection")).toBeNull()
+  expect(outbound?.headers.get("host")).toBeNull()
+  expect(await outbound?.text()).toBe("hello")
+  expect(response.status).toBe(200)
+  expect(response.headers.get("x-reply")).toBe("yes")
+  expect(await response.text()).toBe("world")
+  await client.close(background())
 })
 
-test("portable client does not follow a same-origin 307 redirect", async () => {
-  const sourceRequests: Array<Readonly<Record<string, string | readonly string[] | undefined>>> = []
-  let destinationRequests = 0
-  const server = createServer(async function redirect(request, response): Promise<void> {
-    if (request.url === "/destination") {
-      destinationRequests += 1
-      response.writeHead(200)
-      response.end("redirected")
-      return
-    }
-    sourceRequests.push(
-      Object.freeze({
-        body: await incomingText(request),
-        custom: request.headers["x-redirect-test"],
-        service: request.headers["go-like-service"],
-        endpoint: request.headers["go-like-endpoint"],
-        metadata: request.headers["go-like-metadata"]
-      })
-    )
-    response.writeHead(307, { Location: "/destination" })
-    response.end("same-origin redirect")
+test("rejects a non-root dial address and a cross-origin request before I/O", async () => {
+  let calls = 0
+  const run = httpExecutor(function run(): Promise<Response> {
+    calls += 1
+    return Promise.resolve(new Response())
   })
+  const transport = newHTTPTransport(executor(run))
+  await expect(transport.dial(background(), "http://example.test/rpc")).rejects.toThrow(
+    "HTTP dial address must be a root URL without a path, query, or fragment; internal RPC paths are request URLs, not dial addresses"
+  )
+  const client = await transport.dial(background(), "http://example.test:8080/")
+  await expect(
+    client.fetch(background(), new Request("http://other.test/orders/Create", { method: "POST" }))
+  ).rejects.toThrow("HTTP request must remain on its dial origin")
+  await expect(client.fetch(background(), null as never)).rejects.toThrow(
+    "HTTP client fetch requires a Request"
+  )
+  expect(calls).toBe(0)
+  await client.close(background())
+})
+
+test("portable client does not follow a same-origin redirect", async () => {
+  const server = createServer(function redirect(incoming, response): void {
+    void incomingText(incoming).then(function replied(): void {
+      response.writeHead(307, { location: "/next" }).end("stop")
+    })
+  })
+  const port = await listenPort(server)
   try {
-    const port = await listenPort(server)
-    const client = await newHTTPTransport().dial(background(), `http://127.0.0.1:${port}/source`)
-    try {
-      await client.send(
-        background(),
-        message("same-origin body", {
-          "X-Redirect-Test": "same-origin custom",
-          "Go-Like-Service": "orders",
-          "Go-Like-Endpoint": "create",
-          "Go-Like-Metadata": "same-origin metadata"
-        })
-      )
-      await expect(client.recv(background())).rejects.toMatchObject({
-        name: "HTTPStatusError",
-        code: "GO_LIKE_HTTP_STATUS",
-        status: 307
-      })
-      expect(sourceRequests).toEqual([
-        {
-          body: "same-origin body",
-          custom: "same-origin custom",
-          service: "orders",
-          endpoint: "create",
-          metadata: "same-origin metadata"
-        }
-      ])
-      expect(destinationRequests).toBe(0)
-    } finally {
-      await client.close(background())
-    }
+    const client = await newHTTPTransport().dial(background(), `127.0.0.1:${port}`)
+    const response = await client.fetch(
+      background(),
+      new Request(`http://127.0.0.1:${port}/start`, { method: "POST", body: "hello" })
+    )
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe("/next")
+    expect(await response.text()).toBe("stop")
+    await client.close(background())
   } finally {
     await closeServer(server)
   }
 })
 
-test("portable client does not leak internal metadata across a 307 redirect origin", async () => {
-  const destinationMetadata: Array<string | readonly string[] | undefined> = []
-  let destinationRequests = 0
-  const destination = createServer(function receive(request, response): void {
-    destinationRequests += 1
-    destinationMetadata.push(request.headers["go-like-metadata"])
-    response.writeHead(200)
-    response.end("redirected")
+test("bounds request and response bodies by maxMessageBytes", async () => {
+  const run = httpExecutor(function run(): Promise<Response> {
+    return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 503 }))
   })
-  const destinationPort = await listenPort(destination)
-  const sourceRequests: Array<Readonly<Record<string, string | readonly string[] | undefined>>> = []
-  const source = createServer(async function redirect(request, response): Promise<void> {
-    sourceRequests.push(
-      Object.freeze({
-        body: await incomingText(request),
-        custom: request.headers["x-redirect-test"],
-        service: request.headers["go-like-service"],
-        endpoint: request.headers["go-like-endpoint"],
-        metadata: request.headers["go-like-metadata"]
-      })
-    )
-    response.writeHead(307, {
-      Location: `http://127.0.0.1:${destinationPort}/destination`
-    })
-    response.end("cross-origin redirect")
-  })
-  try {
-    const sourcePort = await listenPort(source)
-    const client = await newHTTPTransport().dial(
+  const transport = newHTTPTransport(executor(run), maxMessageBytes(2))
+  const client = await transport.dial(background(), "example.test:8080")
+  await expect(
+    client.fetch(
       background(),
-      `http://127.0.0.1:${sourcePort}/source`
+      request("/orders/Create", new Uint8Array([1]), { "content-length": "3" })
     )
-    try {
-      await client.send(
-        background(),
-        message("cross-origin body", {
-          "X-Redirect-Test": "cross-origin custom",
-          "Go-Like-Service": "payments",
-          "Go-Like-Endpoint": "capture",
-          "Go-Like-Metadata": "cross-origin secret metadata"
-        })
-      )
-      await expect(client.recv(background())).rejects.toMatchObject({
-        name: "HTTPStatusError",
-        code: "GO_LIKE_HTTP_STATUS",
-        status: 307
-      })
-      expect(sourceRequests).toEqual([
-        {
-          body: "cross-origin body",
-          custom: "cross-origin custom",
-          service: "payments",
-          endpoint: "capture",
-          metadata: "cross-origin secret metadata"
-        }
-      ])
-      expect(destinationRequests).toBe(0)
-      expect(destinationMetadata).toEqual([])
-    } finally {
-      await client.close(background())
-    }
-  } finally {
-    await Promise.all([closeServer(source), closeServer(destination)])
-  }
-})
-
-test("serial send invocation creates provisional FIFO slots", async () => {
-  const first = deferred<Response>()
-  const second = deferred<Response>()
-  const calls: Request[] = []
-  const run = httpExecutor(function run(input, init) {
-    calls.push(new Request(input, init))
-    return calls.length === 1 ? first.promise : second.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "http://example.test/rpc")
-
-  const sendOne = client.send(background(), message("one"))
-  const recvOne = client.recv(background())
-  const sendTwo = client.send(background(), message("two"))
-  await Promise.resolve()
-  expect(calls).toHaveLength(1)
-
-  first.resolve(new Response("response-one"))
-  await sendOne
-  expect(text(await recvOne)).toBe("response-one")
-  await Promise.resolve()
-  expect(calls).toHaveLength(2)
-
-  const recvTwo = client.recv(background())
-  second.resolve(new Response("response-two"))
-  await sendTwo
-  expect(text(await recvTwo)).toBe("response-two")
-})
-
-test("recv requires a prior send and permits only one active receiver", async () => {
-  const pending = deferred<Response>()
-  const run = httpExecutor(function run() {
-    return pending.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
-  const send = client.send(background(), message("request"))
-  const recv = client.recv(background())
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
-  pending.resolve(new Response("response"))
-  await send
-  await recv
-})
-
-test("one network failure preserves identity for claimed recv and does not poison later send", async () => {
-  const failure = new Error("network failed")
-  let call = 0
-  const run = httpExecutor(function run() {
-    call += 1
-    return call === 1 ? Promise.reject(failure) : Promise.resolve(new Response("recovered"))
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const [liveContext] = withCancel(background())
-
-  const firstSend = client.send(liveContext, message("first"))
-  const firstRecv = client.recv(liveContext)
-  const results = await Promise.allSettled([firstSend, firstRecv])
-  expect(results[0]).toEqual({ status: "rejected", reason: failure })
-  expect(results[1]).toEqual({ status: "rejected", reason: failure })
-
-  const secondSend = client.send(background(), message("second"))
-  const secondRecv = client.recv(background())
-  await secondSend
-  expect(text(await secondRecv)).toBe("recovered")
-})
-
-test("send validates Context and managed headers before executor I/O", async () => {
-  let calls = 0
-  const run = httpExecutor(function run() {
-    calls += 1
-    return Promise.resolve(new Response())
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const [ctx, cancel] = withCancel(background())
-  cancel()
-
-  await expect(client.send(ctx, message("x"))).rejects.toBe(canceled)
-  await expect(
-    client.send(background(), message("x", { "Content-Length": "1" }))
   ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   await expect(
-    client.send(background(), message("x", { Connection: "close" }))
+    client.fetch(background(), request("/orders/Create", new Uint8Array([1, 2, 3])))
   ).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
-  expect(calls).toBe(0)
-})
-
-test("preserves a custom Context cause while response headers are pending", async () => {
-  const execution = deferred<Response>()
-  const observedSignals: AbortSignal[] = []
-  const run = httpExecutor(function run(input, init) {
-    observedSignals.push(new Request(input, init).signal)
-    return execution.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const [ctx, cancel] = withCancelCause(background())
-  const customCause = new Error("caller canceled pending headers")
-  const sending = client.send(ctx, message("request"))
-  const receiving = client.recv(ctx)
-  await Promise.resolve()
-
-  cancel(customCause)
-
-  const settled = await Promise.allSettled([sending, receiving])
-  expect(settled).toEqual([
-    { status: "rejected", reason: customCause },
-    { status: "rejected", reason: customCause }
-  ])
-  expect(observedSignals[0]?.aborted).toBe(true)
-  expect(observedSignals[0]?.reason).toBe(customCause)
+  const response = await client.fetch(background(), request("/orders/Create", new Uint8Array([1])))
+  expect(response.status).toBe(503)
+  await expect(response.arrayBuffer()).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
   await client.close(background())
 })
 
-test("preserves a custom Context cause while the response body is pending", async () => {
-  const reading = deferred<void>()
-  let canceledBodies = 0
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      pull(): void {
-        reading.resolve()
-      },
-      cancel(): void {
-        canceledBodies += 1
-      }
+test("preserves a caller cancellation and a request abort while headers are pending", async () => {
+  const gate = deferred<void>()
+  const run = httpExecutor(function run(): Promise<Response> {
+    return gate.promise.then(function respond(): Response {
+      return new Response("late")
     })
-  )
-  const run = httpExecutor(function run() {
-    return Promise.resolve(response)
   })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
+  const client = await newHTTPTransport(executor(run)).dial(background(), "example.test:8080")
   const [ctx, cancel] = withCancelCause(background())
-  const customCause = new Error("caller canceled pending body")
-  const sending = client.send(ctx, message("request"))
-  const receiving = client.recv(ctx)
-  await sending
-  await reading.promise
+  const marker = new Error("caller canceled")
+  const pending = client.fetch(ctx, request("/orders/Create", "one"))
+  cancel(marker)
+  await expect(pending).rejects.toBe(marker)
 
-  cancel(customCause)
-
-  await expect(receiving).rejects.toBe(customCause)
-  expect(canceledBodies).toBe(1)
+  const controller = new AbortController()
+  const aborted = new Request("http://example.test:8080/orders/Create", {
+    method: "POST",
+    body: "two",
+    signal: controller.signal
+  })
+  const second = client.fetch(background(), aborted)
+  controller.abort(marker)
+  await expect(second).rejects.toBe(marker)
+  gate.resolve(undefined)
   await client.close(background())
 })
 
-test("close aborts in-flight work and exposes one stable closed error", async () => {
-  const observedSignals: AbortSignal[] = []
-  const never = deferred<Response>()
-  const run = httpExecutor(function run(input, init) {
-    const request = new Request(input, init)
-    observedSignals.push(request.signal)
-    return never.promise
+test("header and body timeouts use the earlier deadline and release the body", async () => {
+  const headerGate = deferred<Response>()
+  const headerRun = httpExecutor(function run(): Promise<Response> {
+    return headerGate.promise
   })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const send = client.send(background(), message("request"))
-  const recv = client.recv(background())
-  await Promise.resolve()
-  await client.close(background())
+  const headerTransport = newHTTPTransport(executor(headerRun))
+  headerTransport.init(timeout(1_000))
+  const headerClient = await headerTransport.dial(
+    background(),
+    "example.test:8080",
+    withDialTimeout(20)
+  )
+  await expect(headerClient.fetch(background(), request("/orders/Create", "x"))).rejects.toBe(
+    deadlineExceeded
+  )
+  headerGate.resolve(new Response("late"))
+  await headerClient.close(background())
 
-  expect(observedSignals[0]?.aborted).toBe(true)
-  const settled = await Promise.allSettled([send, recv])
-  expect(settled[0].status).toBe("rejected")
-  expect(settled[1].status).toBe("rejected")
-  const first = client.send(background(), message("later"))
-  const second = client.recv(background())
-  const closed = await Promise.allSettled([first, second])
-  expect(closed[0].status).toBe("rejected")
-  expect(closed[1].status).toBe("rejected")
-  if (closed[0].status === "rejected" && closed[1].status === "rejected") {
-    expect(closed[0].reason).toBe(closed[1].reason)
-    expect(closed[0].reason).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  }
-})
-
-test("close publishes its owner promise before an executor AbortSignal listener reenters", async () => {
-  const execution = deferred<Response>()
-  let client: Client | null = null
-  let reentrantClose: Promise<void> | null = null
-  let abortCalls = 0
-  /** Reads callback-owned close state without assuming synchronous assignment. */
-  function observedReentrantClose(): Promise<void> | null {
-    return reentrantClose
-  }
-  const run = httpExecutor(function run(input, init): Promise<Response> {
-    const request = new Request(input, init)
-    request.signal.addEventListener(
-      "abort",
-      function reenterClose(): void {
-        abortCalls += 1
-        const activeClient = client
-        if (activeClient === null) throw new Error("client was not assigned before send")
-        reentrantClose = activeClient.close(background())
-      },
-      { once: true }
-    )
-    return execution.promise
-  })
-  client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const sending = client.send(background(), message("request"))
-  await Promise.resolve()
-
-  const outerClose = client.close(background())
-  expect(observedReentrantClose()).toBe(outerClose)
-  expect(abortCalls).toBe(1)
-  await expect(outerClose).resolves.toBeUndefined()
-  await expect(sending).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  expect(client.close(background())).toBe(outerClose)
-})
-
-test("slot cleanup publishes one sentinel before every response cancellation reentry boundary", async () => {
-  type CancellationBoundary =
-    | "body-getter"
-    | "cancel-getter"
-    | "cancel-call"
-    | "then-getter"
-    | "then-call"
-  const boundaries: readonly CancellationBoundary[] = Object.freeze([
-    "body-getter",
-    "cancel-getter",
-    "cancel-call",
-    "then-getter",
-    "then-call"
-  ])
-
-  for (const boundary of boundaries) {
-    const completion = deferred<void>()
-    let client: Client | null = null
-    let reentrantClose: Promise<void> | null = null
-    let reentryStarted = false
-    let bodyGetterCalls = 0
-    let cancelGetterCalls = 0
-    let cancelCalls = 0
-    let thenGetterCalls = 0
-    let thenCallCalls = 0
-    let cancelReceiver: unknown = null
-    /** Reads callback-owned close state without assuming synchronous assignment. */
-    function observedReentrantClose(): Promise<void> | null {
-      return reentrantClose
-    }
-    /** Reenters the client owner exactly once from the selected third-party boundary. */
-    function reenter(): void {
-      if (reentryStarted) return
-      reentryStarted = true
-      const activeClient = client
-      if (activeClient === null) throw new Error("client was not assigned before cleanup")
-      reentrantClose = activeClient.close(background())
-    }
-    const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-    /** Returns one pending body cleanup or a hostile pending thenable. */
-    function cancelBody(this: unknown) {
-      cancelCalls += 1
-      // oxlint-disable-next-line typescript/no-this-alias
-      cancelReceiver = this
-      if (boundary === "cancel-call") reenter()
-      if (boundary === "then-getter" || boundary === "then-call") {
-        return Object.freeze({
-          /** Exposes a hostile then boundary while still representing real pending cleanup. */
-          get then() {
-            thenGetterCalls += 1
-            if (boundary === "then-getter") reenter()
-            return function settleThenable(
-              resolve: (value: void) => void,
-              reject: (reason: unknown) => void
-            ): void {
-              thenCallCalls += 1
-              if (boundary === "then-call") reenter()
-              void completion.promise.then(resolve, reject)
-            }
+  let canceledBodies = 0
+  const bodyRun = httpExecutor(function run(): Promise<Response> {
+    return Promise.resolve(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(): void {},
+          cancel(): void {
+            canceledBodies += 1
           }
         })
-      }
-      return completion.promise
-    }
-    if (boundary === "cancel-getter") {
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        /** Reenters while the borrowed cancel method is read. */
-        get() {
-          cancelGetterCalls += 1
-          reenter()
-          return cancelBody
-        }
-      })
-    } else {
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        value: cancelBody
-      })
-    }
-    const response = new Response(body)
-    if (boundary === "body-getter") {
-      Object.defineProperty(response, "body", {
-        configurable: true,
-        /** Reenters while the transferred Response body is read. */
-        get(): ReadableStream<Uint8Array> {
-          bodyGetterCalls += 1
-          reenter()
-          return body
-        }
-      })
-    }
-    client = await newHTTPTransport(
-      executor(
-        httpExecutor(function run(): Promise<Response> {
-          return Promise.resolve(response)
-        })
       )
-    ).dial(background(), "localhost:8080")
-    await client.send(background(), message("request"))
+    )
+  })
+  const bodyTransport = newHTTPTransport(executor(bodyRun))
+  bodyTransport.init(timeout(30))
+  const bodyClient = await bodyTransport.dial(
+    background(),
+    "example.test:8080",
+    withDialTimeout(1_000)
+  )
+  const response = await bodyClient.fetch(background(), request("/orders/Create", "x"))
+  await new Promise<void>(function wait(resolve): void {
+    setTimeout(resolve, 50)
+  })
+  expect(canceledBodies).toBe(1)
+  await expect(response.arrayBuffer()).rejects.toBeDefined()
+  await bodyClient.close(background())
+})
 
-    const outerClose = client.close(background())
-    let settled = false
-    void outerClose.then(function markSettled(): void {
-      settled = true
-    })
-    await Promise.resolve()
-    await Promise.resolve()
-
-    if (boundary === "cancel-call") {
-      expect(observedReentrantClose()).not.toBe(outerClose)
-    } else {
-      expect(observedReentrantClose()).toBe(outerClose)
-    }
-    expect(client.close(background())).toBe(outerClose)
-    expect(cancelCalls).toBe(1)
-    expect(cancelReceiver).toBe(body)
-    expect(bodyGetterCalls).toBe(boundary === "body-getter" ? 1 : 0)
-    expect(cancelGetterCalls).toBe(boundary === "cancel-getter" ? 1 : 0)
-    expect(thenGetterCalls).toBe(boundary === "then-getter" || boundary === "then-call" ? 1 : 0)
-    expect(thenCallCalls).toBe(boundary === "then-getter" || boundary === "then-call" ? 1 : 0)
-    expect(settled).toBe(false)
-
-    completion.resolve(undefined)
-    await expect(outerClose).resolves.toBeUndefined()
+test("F5 text/plain caller deadline rejects the unread tail", async () => {
+  const bodyRun = httpExecutor(function run(): Promise<Response> {
+    return Promise.resolve(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          /** Publishes one chunk and leaves the tail open. */
+          start(controller): void {
+            controller.enqueue(new TextEncoder().encode("hello"))
+          }
+        }),
+        { headers: { "content-type": "text/plain" } }
+      )
+    )
+  })
+  const client = await newHTTPTransport(executor(bodyRun)).dial(background(), "example.test:8080")
+  const [ctx, cancel] = withTimeout(background(), 40)
+  try {
+    const response = await client.fetch(ctx, request("/orders/Create", "x"))
+    await expect(response.text()).rejects.toBe(deadlineExceeded)
+  } finally {
+    cancel()
+    await client.close(background())
   }
 })
 
-test("slot cleanup breaks an exact cycle with a distinct synchronous admission", async () => {
-  let client: Client | null = null
-  let reentrantClose: Promise<void> | null = null
-  let cancelCalls = 0
-  const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-  Object.defineProperty(body, "cancel", {
-    configurable: true,
-    /** Returns the reentrant admission Promise that prevents owner self-wait. */
-    value(): Promise<void> {
-      cancelCalls += 1
-      const activeClient = client
-      if (activeClient === null) throw new Error("client was not assigned before cleanup")
-      const admission = activeClient.close(background())
-      reentrantClose = admission
-      return admission
+test("a jumped clock after headers rejects when the common timeout is already exhausted", async () => {
+  const realNow = Date.now
+  let now = realNow()
+  Date.now = function frozen(): number {
+    return now
+  }
+  try {
+    const run = httpExecutor(function run(): Promise<Response> {
+      now += 50
+      return Promise.resolve(new Response("late"))
+    })
+    const transport = newHTTPTransport(executor(run))
+    transport.init(timeout(20))
+    const client = await transport.dial(background(), "example.test:8080")
+    await expect(client.fetch(background(), request("/orders/Create", "x"))).rejects.toBe(
+      deadlineExceeded
+    )
+    await client.close(background())
+  } finally {
+    Date.now = realNow
+  }
+})
+
+test("close aborts an in-flight body read and a returned response body", async () => {
+  let releases = 0
+  const body = new ReadableStream<Uint8Array>({
+    pull(): void {},
+    cancel(): void {
+      releases += 1
     }
   })
-  client = await newHTTPTransport(
+  const run = httpExecutor(function run(): Promise<Response> {
+    return Promise.resolve(new Response("ok"))
+  })
+  const client = await newHTTPTransport(executor(run)).dial(background(), "example.test:8080")
+  const reading = client.fetch(
+    background(),
+    new Request("http://example.test:8080/orders/Create", { method: "POST", body })
+  )
+  await Promise.resolve()
+  await client.close(background())
+  await expect(reading).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
+  expect(releases).toBeGreaterThan(0)
+  await expect(client.fetch(background(), request("/orders/Create", "x"))).rejects.toMatchObject({
+    code: "GO_LIKE_TRANSPORT_CLOSED"
+  })
+
+  let responseCancels = 0
+  const open = await newHTTPTransport(
     executor(
       httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(new Response(body))
-      })
-    )
-  ).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-
-  const ownerClose = client.close(background())
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const settled = await Promise.race([
-    ownerClose.then(function ownerSettled(): boolean {
-      return true
-    }),
-    new Promise<boolean>(function timeout(resolve): void {
-      timer = setTimeout(function expired(): void {
-        resolve(false)
-      }, 20)
-    })
-  ])
-  if (timer !== null) clearTimeout(timer)
-
-  /** Reads callback-owned close state without assuming synchronous assignment. */
-  function observedReentrantClose(): Promise<void> | null {
-    return reentrantClose
-  }
-  expect(settled).toBe(true)
-  expect(observedReentrantClose()).not.toBe(ownerClose)
-  expect(client.close(background())).toBe(ownerClose)
-  expect(cancelCalls).toBe(1)
-})
-
-test("executor synchronous and non-Error failures preserve one slot identity", async () => {
-  const original = new Error("synchronous failure")
-  const sync = httpExecutor(function sync(): Promise<Response> {
-    throw original
-  })
-  const client = await newHTTPTransport(executor(sync)).dial(background(), "localhost:8080")
-  const sending = client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  const settled = await Promise.allSettled([sending, receiving])
-  expect(settled[0]).toEqual({ status: "rejected", reason: original })
-  expect(settled[1]).toEqual({ status: "rejected", reason: original })
-
-  const nonError = httpExecutor(function nonError(): Promise<Response> {
-    return Promise.reject("network-string")
-  })
-  const second = await newHTTPTransport(executor(nonError)).dial(background(), "localhost:8080")
-  const secondSend = second.send(background(), message("request"))
-  const secondRecv = second.recv(background())
-  const normalized = await Promise.allSettled([secondSend, secondRecv])
-  if (normalized[0].status === "rejected" && normalized[1].status === "rejected") {
-    expect(normalized[0].reason).toBeInstanceOf(Error)
-    expect(normalized[0].reason).toBe(normalized[1].reason)
-  } else {
-    throw new Error("non-Error executor rejection unexpectedly fulfilled")
-  }
-})
-
-test("executor output and response body protocol failures stay slot-local", async () => {
-  const invalid = httpExecutor(function invalid(): Promise<Response> {
-    return Promise.resolve(Reflect.get({}, "missing"))
-  })
-  const client = await newHTTPTransport(executor(invalid)).dial(background(), "localhost:8080")
-  const sending = client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  const invalidResults = await Promise.allSettled([sending, receiving])
-  for (const result of invalidResults) {
-    expect(result.status).toBe("rejected")
-    if (result.status === "rejected") {
-      expect(result.reason).toMatchObject({ code: "GO_LIKE_TRANSPORT_PROTOCOL" })
-    }
-  }
-
-  for (const failure of [new Error("body failed"), "body failed"]) {
-    const response = new Response(
-      new ReadableStream<Uint8Array>({
-        /** Rejects owned response consumption with the selected hostile value. */
-        pull(controller): void {
-          controller.error(failure)
-        }
-      }),
-      { status: 200 }
-    )
-    const run = httpExecutor(function run(): Promise<Response> {
-      return Promise.resolve(response)
-    })
-    const bodyClient = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-    await bodyClient.send(background(), message("request"))
-    await expect(bodyClient.recv(background())).rejects.toMatchObject({
-      code: "GO_LIKE_TRANSPORT_PROTOCOL"
-    })
-  }
-})
-
-test("the earliest configured response-header timeout rejects send and claimed recv identically", async () => {
-  const never = deferred<Response>()
-  const run = httpExecutor(function run(): Promise<Response> {
-    return never.promise
-  })
-  const transport = newHTTPTransport(executor(run))
-  transport.init(timeout(2))
-  const client = await transport.dial(background(), "localhost:8080", withDialTimeout(100))
-  const sending = client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  const settled = await Promise.allSettled([sending, receiving])
-  expect(settled[0]).toEqual({ status: "rejected", reason: deadlineExceeded })
-  expect(settled[1]).toEqual({ status: "rejected", reason: deadlineExceeded })
-})
-
-test("dial timeout alone bounds pending response headers", async () => {
-  const never = deferred<Response>()
-  const run = httpExecutor(function run(): Promise<Response> {
-    return never.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(
-    background(),
-    "localhost:8080",
-    withDialTimeout(2)
-  )
-  const sending = client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  const settled = await Promise.allSettled([sending, receiving])
-  expect(settled[0]).toEqual({ status: "rejected", reason: deadlineExceeded })
-  expect(settled[1]).toEqual({ status: "rejected", reason: deadlineExceeded })
-})
-
-test("common recv timeout cancels owned bodies while dial timeout remains header-only", async () => {
-  let canceledBodies = 0
-  const pendingResponse = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Keeps response-body consumption pending. */
-      pull(): void {},
-      /** Records operation-timeout cleanup. */
-      cancel(): void {
-        canceledBodies += 1
-      }
-    })
-  )
-  const run = httpExecutor(function run(): Promise<Response> {
-    return Promise.resolve(pendingResponse)
-  })
-  const transport = newHTTPTransport(executor(run))
-  transport.init(timeout(2))
-  const client = await transport.dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  await expect(client.recv(background())).rejects.toBe(deadlineExceeded)
-  await Promise.resolve()
-  expect(canceledBodies).toBe(1)
-
-  const bodyController = deferred<ReadableStreamDefaultController<Uint8Array>>()
-  const delayed = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Captures the body controller without publishing bytes yet. */
-      start(value): void {
-        bodyController.resolve(value)
-      }
-    })
-  )
-  const delayedRun = httpExecutor(function delayedRun(): Promise<Response> {
-    return Promise.resolve(delayed)
-  })
-  const delayedClient = await newHTTPTransport(executor(delayedRun)).dial(
-    background(),
-    "localhost:8080",
-    withDialTimeout(1)
-  )
-  await delayedClient.send(background(), message("request"))
-  const receiving = delayedClient.recv(background())
-  const controller = await bodyController.promise
-  await new Promise<void>(function waitPastHeaderTimeout(resolve): void {
-    setTimeout(resolve, 3)
-  })
-  controller.enqueue(new TextEncoder().encode("body"))
-  controller.close()
-  expect(text(await receiving)).toBe("body")
-})
-
-test("queued sends recheck Context and close before executor admission", async () => {
-  const first = deferred<Response>()
-  let calls = 0
-  const run = httpExecutor(function run(): Promise<Response> {
-    calls += 1
-    return first.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const firstSend = client.send(background(), message("first"))
-  const firstRecv = client.recv(background())
-  const [queuedContext, cancelQueued] = withCancel(background())
-  const queued = client.send(queuedContext, message("queued"))
-  cancelQueued()
-  first.resolve(new Response("first"))
-  await firstSend
-  await firstRecv
-  await expect(queued).rejects.toBe(canceled)
-  expect(calls).toBe(1)
-
-  const hanging = deferred<Response>()
-  let closeCalls = 0
-  const closeRun = httpExecutor(function closeRun(): Promise<Response> {
-    closeCalls += 1
-    return hanging.promise
-  })
-  const closing = await newHTTPTransport(executor(closeRun)).dial(background(), "localhost:8080")
-  const active = closing.send(background(), message("active"))
-  const queuedAfter = closing.send(background(), message("queued"))
-  await Promise.resolve()
-  await closing.close(background())
-  await expect(active).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  await expect(queuedAfter).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  expect(closeCalls).toBe(1)
-})
-
-test("close racing received headers cancels transferred and unread response bodies", async () => {
-  let canceledBodies = 0
-  const stream = new ReadableStream<Uint8Array>({
-    /** Keeps the body pending until the owning client cancels it. */
-    pull(): void {},
-    /** Records body ownership cleanup. */
-    cancel(): void {
-      canceledBodies += 1
-    }
-  })
-  const headers = deferred<Response>()
-  const run = httpExecutor(function run(): Promise<Response> {
-    return headers.promise
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  const sending = client.send(background(), message("request"))
-  headers.resolve(new Response(stream, { status: 200 }))
-  await sending
-  await client.close(background())
-  await Promise.resolve()
-  expect(canceledBodies).toBe(1)
-
-  const raceHeaders = deferred<Response>()
-  let raceCanceled = 0
-  const raceStream = new ReadableStream<Uint8Array>({
-    /** Keeps the racing body pending. */
-    pull(): void {},
-    /** Records racing body cleanup. */
-    cancel(): void {
-      raceCanceled += 1
-    }
-  })
-  const raceRun = httpExecutor(function raceRun(): Promise<Response> {
-    return raceHeaders.promise
-  })
-  const racing = await newHTTPTransport(executor(raceRun)).dial(background(), "localhost:8080")
-  const raceSend = racing.send(background(), message("request"))
-  await Promise.resolve()
-  raceHeaders.resolve(new Response(raceStream, { status: 200 }))
-  await racing.close(background())
-  await expect(raceSend).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  await new Promise<void>(function nextTurn(resolve): void {
-    setTimeout(resolve, 0)
-  })
-  expect(raceCanceled).toBe(1)
-})
-
-test("late response cleanup contains hostile cancellation and preserves close identity", async () => {
-  const synchronousFailure = new Error("late body cancel threw")
-  const bodyGetterFailure = new Error("late response body getter threw")
-  const getterFailure = new Error("late body cancel getter threw")
-  const asynchronousFailure = new Error("late body cancel rejected")
-  const cases: ReadonlyArray<() => Response> = Object.freeze([
-    function synchronousThrow(): Response {
-      const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        /** Throws before a cleanup Promise can be returned. */
-        value(): never {
-          throw synchronousFailure
-        }
-      })
-      return new Response(body)
-    },
-    function bodyGetterThrow(): Response {
-      const response = new Response(new ReadableStream<Uint8Array>({ pull(): void {} }))
-      Object.defineProperty(response, "body", {
-        configurable: true,
-        /** Throws while the late Response transfers its body boundary. */
-        get(): never {
-          throw bodyGetterFailure
-        }
-      })
-      return response
-    },
-    function getterThrow(): Response {
-      const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        /** Throws while the standard cancel method is read. */
-        get(): never {
-          throw getterFailure
-        }
-      })
-      return new Response(body)
-    },
-    function synchronousReturn(): Response {
-      const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        /** Returns no Promise despite the standard TypeScript declaration. */
-        value(): void {}
-      })
-      return new Response(body)
-    },
-    function asynchronousReject(): Response {
-      const body = new ReadableStream<Uint8Array>({ pull(): void {} })
-      Object.defineProperty(body, "cancel", {
-        configurable: true,
-        /** Rejects after returning from the cleanup boundary. */
-        value(): Promise<void> {
-          return Promise.reject(asynchronousFailure)
-        }
-      })
-      return new Response(body)
-    }
-  ])
-
-  for (const response of cases.map(function create(createResponse): Response {
-    return createResponse()
-  })) {
-    const execution = deferred<Response>()
-    const client = await newHTTPTransport(
-      executor(
-        httpExecutor(function run(): Promise<Response> {
-          return execution.promise
-        })
-      )
-    ).dial(background(), "localhost:8080")
-    const sending = client.send(background(), message("request"))
-    await Promise.resolve()
-    await expect(client.close(background())).resolves.toBeUndefined()
-    const sent = await Promise.allSettled([sending])
-    expect(sent[0]?.status).toBe("rejected")
-    if (sent[0]?.status !== "rejected") throw new Error("closed send unexpectedly fulfilled")
-    const closedError = sent[0].reason
-
-    execution.resolve(response)
-    await new Promise<void>(function nextTurn(resolve): void {
-      setTimeout(resolve, 0)
-    })
-
-    const closed = await Promise.allSettled([
-      client.send(background(), message("later")),
-      client.recv(background())
-    ])
-    expect(closed[0]).toEqual({ status: "rejected", reason: closedError })
-    expect(closed[1]).toEqual({ status: "rejected", reason: closedError })
-  }
-})
-
-test("close joins response-body cleanup once and isolates cleanup rejection through logger", async () => {
-  const cleanup = deferred<void>()
-  let cancelCalls = 0
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Keeps the unread body available for owner cleanup. */
-      pull(): void {},
-      /** Delays cleanup settlement until the test releases it. */
-      cancel(): Promise<void> {
-        cancelCalls += 1
-        return cleanup.promise
-      }
-    })
-  )
-  const run = httpExecutor(function run(): Promise<Response> {
-    return Promise.resolve(response)
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-
-  const firstClose = client.close(background())
-  const repeatedClose = client.close(background())
-  let settled = false
-  void firstClose.then(function markSettled(): void {
-    settled = true
-  })
-  await Promise.resolve()
-  await Promise.resolve()
-  expect(firstClose).toBe(repeatedClose)
-  expect(cancelCalls).toBe(1)
-  expect(settled).toBe(false)
-
-  cleanup.resolve(undefined)
-  await expect(firstClose).resolves.toBeUndefined()
-  expect(settled).toBe(true)
-
-  const cleanupFailure = new Error("response cleanup rejected")
-  let loggedCause: unknown = null
-  const rejectingTransport = newHTTPTransport(
-    executor(
-      httpExecutor(function rejectRun(): Promise<Response> {
         return Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
-              /** Keeps the unread response body owned by the client. */
               pull(): void {},
-              /** Rejects the owner cleanup boundary. */
+              cancel(): void {
+                responseCancels += 1
+              }
+            })
+          )
+        )
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  const response = await open.fetch(background(), request("/orders/Create", "x"))
+  await open.close(background())
+  expect(responseCancels).toBe(1)
+  await expect(response.arrayBuffer()).rejects.toBeDefined()
+})
+
+test("close reentered from response-body cancellation resolves without deadlock", async () => {
+  let clientClose: Promise<void> | null = null
+  const client = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(): void {},
+              cancel(): void {
+                clientClose = client.close(background())
+              }
+            })
+          )
+        )
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await client.fetch(background(), request("/orders/Create", "x"))
+  await client.close(background())
+  await clientClose
+  await expect(client.close(background())).resolves.toBeUndefined()
+})
+
+test("logs response cleanup failure and preserves executor close failure", async () => {
+  const logged: unknown[] = []
+  const cleanup = new Error("body cancel failed")
+  const transport = newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(): void {},
               cancel(): Promise<void> {
-                return Promise.reject(cleanupFailure)
+                return Promise.reject(cleanup)
               }
             })
           )
@@ -1023,463 +407,372 @@ test("close joins response-body cleanup once and isolates cleanup rejection thro
       })
     )
   )
-  rejectingTransport.init(
-    logger(
-      Object.freeze({
-        /** Captures the isolated cleanup diagnostic. */
-        log(
-          _level: TransportLogLevel,
-          _message: string,
-          fields?: Readonly<Record<string, unknown>>
-        ): void {
-          loggedCause = fields?.["cause"]
-        }
-      })
-    )
-  )
-  const rejectingClient = await rejectingTransport.dial(background(), "localhost:8080")
-  await rejectingClient.send(background(), message("request"))
-  await expect(rejectingClient.close(background())).resolves.toBeUndefined()
-  expect(loggedCause).toBe(cleanupFailure)
-
-  const synchronousFailure = new Error("response cleanup threw")
-  let synchronousCause: unknown = null
-  const hostileBody = new ReadableStream<Uint8Array>({
-    /** Keeps the unread response body pending. */
-    pull(): void {}
-  })
-  Object.defineProperty(hostileBody, "cancel", {
-    configurable: true,
-    /** Throws from the hostile standard body cleanup boundary. */
-    value(): never {
-      throw synchronousFailure
-    }
-  })
-  const hostileTransport = newHTTPTransport(
-    executor(
-      httpExecutor(function hostileRun(): Promise<Response> {
-        return Promise.resolve(new Response(hostileBody))
-      })
-    )
-  )
-  hostileTransport.init(
-    logger(
-      Object.freeze({
-        /** Captures the normalized synchronous cleanup diagnostic. */
-        log(
-          _level: TransportLogLevel,
-          _message: string,
-          fields?: Readonly<Record<string, unknown>>
-        ): void {
-          synchronousCause = fields?.["cause"]
-        }
-      })
-    )
-  )
-  const hostileClient = await hostileTransport.dial(background(), "localhost:8080")
-  await hostileClient.send(background(), message("request"))
-  await expect(hostileClient.close(background())).resolves.toBeUndefined()
-  expect(synchronousCause).toBe(synchronousFailure)
-
-  const bodyGetterFailure = new Error("response body getter threw")
-  let bodyGetterCause: unknown = null
-  const getterResponse = new Response(new ReadableStream<Uint8Array>({ pull(): void {} }))
-  Object.defineProperty(getterResponse, "body", {
-    configurable: true,
-    /** Throws before the owner can inspect its unread body. */
-    get(): never {
-      throw bodyGetterFailure
-    }
-  })
-  const getterTransport = newHTTPTransport(
-    executor(
-      httpExecutor(function getterRun(): Promise<Response> {
-        return Promise.resolve(getterResponse)
-      })
-    )
-  )
-  getterTransport.init(
-    logger(
-      Object.freeze({
-        /** Captures the isolated hostile body getter diagnostic. */
-        log(
-          _level: TransportLogLevel,
-          _message: string,
-          fields?: Readonly<Record<string, unknown>>
-        ): void {
-          bodyGetterCause = fields?.["cause"]
-        }
-      })
-    )
-  )
-  const getterClient = await getterTransport.dial(background(), "localhost:8080")
-  await getterClient.send(background(), message("request"))
-  await expect(
-    Promise.resolve().then(function closeGetterClient(): Promise<void> {
-      return getterClient.close(background())
+  transport.init(
+    logger({
+      log(
+        level: TransportLogLevel,
+        _message: string,
+        fields?: Readonly<Record<string, unknown>>
+      ): void {
+        logged.push([level, fields?.cause])
+      }
     })
-  ).resolves.toBeUndefined()
-  expect(bodyGetterCause).toBe(bodyGetterFailure)
+  )
+  const client = await transport.dial(background(), "example.test:8080")
+  await client.fetch(background(), request("/orders/Create", "x"))
+  await expect(client.close(background())).resolves.toBeUndefined()
+  expect(logged.length).toBeGreaterThan(0)
+
+  const failure = new Error("executor close failed")
+  const owned = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await owned.fetch(background(), request("/orders/Create"))
+  await owned.close(background())
+
+  const rejecting = newHTTPTransport(
+    executor(function execute(): Promise<Response> {
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+  )
+  void rejecting
+  const preCanceled = withCancelCause(background())
+  preCanceled[1](failure)
+  const closedClient = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response("x"))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(closedClient.close(preCanceled[0])).rejects.toBe(failure)
+  await expect(
+    closedClient.fetch(background(), request("/orders/Create", "x"))
+  ).resolves.toBeInstanceOf(Response)
 })
 
-test("standard logger option contains asynchronous diagnostic rejection end to end", async () => {
-  const cleanupFailure = new Error("owner cleanup rejected")
-  const loggerFailure = new Error("diagnostic logger rejected")
-  const unhandled: unknown[] = []
-  let receiverPreserved = false
-  let loggedCause: unknown = null
-  const loggerOwner = {
-    marker: "standard-option",
-    log(_level: TransportLogLevel, _message: string, fields?: Readonly<Record<string, unknown>>) {
-      receiverPreserved = this.marker === "standard-option"
-      loggedCause = fields?.["cause"]
-      return Promise.reject(loggerFailure)
+test("executor failures stay local and non-Response results are protocol errors", async () => {
+  const syncFailure = new Error("executor threw")
+  const syncClient = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        throw syncFailure
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(syncClient.fetch(background(), request("/orders/Create", "x"))).rejects.toBe(
+    syncFailure
+  )
+  await syncClient
+    .fetch(background(), request("/orders/Create", "x"))
+    .catch(function ignore(): void {})
+  const marker = Object.freeze({ phase: "executor" })
+  const weird = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.reject(marker)
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(weird.fetch(background(), request("/orders/Create", "x"))).rejects.toMatchObject({
+    message: "HTTP executor rejected",
+    cause: marker
+  })
+  const empty = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(null as never)
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(empty.fetch(background(), request("/orders/Create", "x"))).rejects.toMatchObject({
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
+    message: "HTTP executor must return Response"
+  })
+  await syncClient.close(background())
+  await weird.close(background())
+  await empty.close(background())
+})
+
+test("a caller timeout Context rejects before dial admission", async () => {
+  const [ctx, cancel] = withCancel(background())
+  cancel()
+  await expect(newHTTPTransport().dial(ctx, "example.test:8080")).rejects.toBe(canceled)
+  const [timed, stopTimer] = withTimeout(background(), 0)
+  await expect(newHTTPTransport().dial(timed, "example.test:8080")).rejects.toBe(deadlineExceeded)
+  stopTimer()
+})
+
+test("close observes an active caller signal and a late closed response", async () => {
+  const [openCtx, stopOpen] = withCancel(background())
+  const opened = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response("x"))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(opened.close(openCtx)).resolves.toBeUndefined()
+  stopOpen()
+
+  const { newHTTPTransportWithDialExecutor } = await import("../src/transport")
+  const closeFailure = new Error("executor close rejected")
+  const [rejectCtx, stopReject] = withCancel(background())
+  const rejecting = await newHTTPTransportWithDialExecutor(
+    function factory(_target, _common, _dial, fallback) {
+      return {
+        executor: fallback,
+        close(): Promise<void> {
+          return Promise.reject(closeFailure)
+        }
+      }
+    }
+  ).dial(background(), "example.test:8080")
+  await expect(rejecting.close(rejectCtx)).rejects.toBe(closeFailure)
+  stopReject()
+
+  const [cancelCtx, cancelClose] = withCancel(background())
+  const canceling = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  const closing = canceling.close(cancelCtx)
+  cancelClose()
+  await expect(closing).rejects.toBe(canceled)
+
+  let checks = 0
+  const signal = new AbortController().signal
+  const root = background()
+  const flipping: Context = {
+    deadline: () => root.deadline(),
+    done: () => signal,
+    err(): Error | null {
+      checks += 1
+      return checks < 3 ? null : canceled
+    },
+    value: (key) => root.value(key)
+  }
+  const flippingClient = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response(null, { status: 204 }))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(flippingClient.close(flipping)).rejects.toBe(canceled)
+
+  let releaseExecutor = null as ((response: Response) => void) | null
+  let executorStarted: (() => void) | null = null
+  const executorReady = new Promise<void>(function capture(resolve): void {
+    executorStarted = resolve
+  })
+  const owned = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return new Promise<Response>(function pending(resolve): void {
+          releaseExecutor = resolve
+          executorStarted?.()
+        })
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  let lateCancels = 0
+  const pending = owned.fetch(background(), request("/orders/Create", "x"))
+  await executorReady
+  const abortFailure = new Error("abort threw")
+  const originalAbort = AbortController.prototype.abort
+  AbortController.prototype.abort = function throwAbort(): void {
+    throw abortFailure
+  }
+  let closingOwner: Promise<void>
+  try {
+    closingOwner = owned.close(background())
+  } finally {
+    AbortController.prototype.abort = originalAbort
+  }
+  const closeResult = closingOwner.then(
+    function resolved(): Error {
+      return new Error("close resolved")
+    },
+    function rejected(error: unknown): unknown {
+      return error
+    }
+  )
+  const fetchResult = pending.then(
+    function resolved(): Error {
+      return new Error("fetch resolved")
+    },
+    function rejected(error: unknown): unknown {
+      return error
+    }
+  )
+  releaseExecutor?.(
+    new Response(
+      new ReadableStream<Uint8Array>({
+        pull(): void {},
+        cancel(): void {
+          lateCancels += 1
+        }
+      })
+    )
+  )
+  expect(await closeResult).toBe(abortFailure)
+  expect(await fetchResult).toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
+  expect(lateCancels).toBe(1)
+
+  const caller = new AbortController()
+  let abandoned = 0
+  const aborting = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Object.assign(Promise.resolve(new Response(null)), {
+          then(resolve: (response: Response) => void, _reject: (error: unknown) => void): void {
+            resolve(
+              new Response(
+                new ReadableStream<Uint8Array>({
+                  pull(): void {},
+                  cancel(): void {
+                    abandoned += 1
+                  }
+                })
+              )
+            )
+            caller.abort(new Error("late abort"))
+          }
+        }) as Promise<Response>
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  const late = new Request("http://example.test:8080/orders/Create", {
+    method: "POST",
+    body: "x",
+    signal: caller.signal
+  })
+  await expect(aborting.fetch(background(), late)).rejects.toMatchObject({ message: "late abort" })
+  expect(abandoned).toBe(2)
+  await aborting.close(background())
+
+  const locked = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(): void {}
+            })
+          )
+        )
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  const lockedResponse = await locked.fetch(background(), request("/orders/Create", "x"))
+  const reader = lockedResponse.body?.getReader()
+  if (reader === undefined) throw new Error("response body was missing")
+  const originalCancel = ReadableStream.prototype.cancel
+  ReadableStream.prototype.cancel = function throwCancel(): Promise<void> {
+    throw new Error("cancel threw")
+  }
+  try {
+    await expect(locked.close(background())).resolves.toBeUndefined()
+  } finally {
+    ReadableStream.prototype.cancel = originalCancel
+  }
+  await expect(reader.read()).rejects.toBeDefined()
+  reader.releaseLock()
+
+  const NativeRequest = globalThis.Request
+  let requestMode: "error" | "string" = "error"
+  globalThis.Request = class ThrowingRequest extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      if (init?.redirect === "manual") {
+        if (requestMode === "error") throw new Error("rejected request")
+        throw "rejected request"
+      }
+      super(input, init)
     }
   }
-  /** Records any rejected diagnostic Promise that escaped both snapshots. */
-  function observeUnhandled(reason: unknown): void {
-    unhandled.push(reason)
-  }
-  process.on("unhandledRejection", observeUnhandled)
   try {
-    const transport = newHTTPTransport(
+    const rejectingRequest = await newHTTPTransport(
       executor(
         httpExecutor(function run(): Promise<Response> {
-          return Promise.resolve(
-            new Response(
-              new ReadableStream<Uint8Array>({
-                /** Keeps the unread response body owned until close. */
-                pull(): void {},
-                /** Rejects the owner cleanup so the standard logger path runs. */
-                cancel(): Promise<void> {
-                  return Promise.reject(cleanupFailure)
-                }
-              })
-            )
-          )
+          return Promise.resolve(new Response("x"))
         })
       )
-    )
-    transport.init(logger(loggerOwner))
-    const client = await transport.dial(background(), "localhost:8080")
-    await client.send(background(), message("request"))
-    await expect(client.close(background())).resolves.toBeUndefined()
-    await new Promise<void>(function nextTurn(resolve): void {
-      setTimeout(resolve, 0)
+    ).dial(background(), "example.test:8080")
+    await expect(
+      rejectingRequest.fetch(background(), request("/orders/Create", "x"))
+    ).rejects.toMatchObject({
+      code: "GO_LIKE_TRANSPORT_PROTOCOL",
+      message: "invalid HTTP Fetch request",
+      cause: { message: "rejected request" }
     })
-
-    expect(receiverPreserved).toBe(true)
-    expect(loggedCause).toBe(cleanupFailure)
-    expect(unhandled).toEqual([])
+    requestMode = "string"
+    await expect(
+      rejectingRequest.fetch(background(), request("/orders/Create", "x"))
+    ).rejects.toMatchObject({
+      code: "GO_LIKE_TRANSPORT_PROTOCOL",
+      message: "invalid HTTP Fetch request"
+    })
+    await rejectingRequest.close(background())
   } finally {
-    process.off("unhandledRejection", observeUnhandled)
+    globalThis.Request = NativeRequest
   }
-})
 
-test("client cleanup contains a synchronous private AbortController failure", async () => {
-  const originalAbort = AbortController.prototype.abort
-  const abortFailure = new Error("private abort threw")
-  let loggedCause: unknown = null
-  const transport = newHTTPTransport(
+  const invalidURL = await newHTTPTransport(
     executor(
       httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ pull(): void {} })))
+        return Promise.resolve(new Response("x"))
       })
     )
-  )
-  transport.init(
-    logger(
-      Object.freeze({
-        /** Captures the isolated abort failure after body cleanup settles. */
-        log(
-          _level: TransportLogLevel,
-          _message: string,
-          fields?: Readonly<Record<string, unknown>>
-        ): void {
-          loggedCause = fields?.["cause"]
-        }
-      })
-    )
-  )
-  const client = await transport.dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  try {
-    Object.defineProperty(AbortController.prototype, "abort", {
-      configurable: true,
-      writable: true,
-      /** Throws before the private controller can notify executor listeners. */
-      value(): never {
-        throw abortFailure
-      }
-    })
-    await expect(client.close(background())).resolves.toBeUndefined()
-  } finally {
-    Object.defineProperty(AbortController.prototype, "abort", {
-      configurable: true,
-      writable: true,
-      value: originalAbort
-    })
-  }
-  expect(loggedCause).toBe(abortFailure)
-})
-
-test("close caller cancellation does not abandon owner response cleanup", async () => {
-  const cleanup = deferred<void>()
-  let cancelCalls = 0
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Keeps the response unread before close. */
-      pull(): void {},
-      /** Holds owner cleanup beyond the first caller lifetime. */
-      cancel(): Promise<void> {
-        cancelCalls += 1
-        return cleanup.promise
-      }
-    })
-  )
-  const run = httpExecutor(function run(): Promise<Response> {
-    return Promise.resolve(response)
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  const [ctx, cancel] = withCancel(background())
-  const caller = client.close(ctx)
-  cancel()
-  await expect(caller).rejects.toBe(canceled)
-  expect(cancelCalls).toBe(1)
-
-  const ownerJoin = client.close(background())
-  cleanup.resolve(undefined)
-  await expect(ownerJoin).resolves.toBeUndefined()
-})
-
-test("pre-canceled close preserves its cause without admitting cleanup", async () => {
-  const client = await newHTTPTransport(
-    executor(
-      httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(new Response("open"))
-      })
-    )
-  ).dial(background(), "localhost:8080")
-  const [ctx, cancel] = withCancelCause(background())
-  const marker = new Error("close caller expired")
-  cancel(marker)
-
-  await expect(client.close(ctx)).rejects.toBe(marker)
-  await client.send(background(), message("after-close"))
-  expect(text(await client.recv(background()))).toBe("open")
-  await expect(client.close(background())).resolves.toBeUndefined()
-})
-
-test("recv cancellation permanently consumes a response slot and cancels its body", async () => {
-  let bodyCanceled = 0
-  const pullStarted = deferred<void>()
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Keeps body consumption pending. */
-      pull(): void {
-        pullStarted.resolve(undefined)
-      },
-      /** Records recv-owned cancellation. */
-      cancel(): void {
-        bodyCanceled += 1
-      }
-    })
-  )
-  const run = httpExecutor(function run(): Promise<Response> {
-    return Promise.resolve(response)
-  })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  const [ctx, cancel] = withCancel(background())
-  const receiving = client.recv(ctx)
-  await pullStarted.promise
-  cancel()
-  await expect(receiving).rejects.toBe(canceled)
-  await expect(client.recv(background())).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_STATE" })
-  await new Promise<void>(function nextTurn(resolve): void {
-    setTimeout(resolve, 0)
-  })
-  expect(bodyCanceled).toBe(1)
-})
-
-test("close breaks an active reader cancellation cycle through a stable admission", async () => {
-  const pullStarted = deferred<void>()
-  let client: Client | null = null
-  const reentrantCloses: Promise<void>[] = []
-  let cancelCalls = 0
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Publishes that recv owns one active standard reader. */
-      pull(): void {
-        pullStarted.resolve(undefined)
-      },
-      /** Reenters close and returns the stable admission that cannot wait on the owner. */
-      cancel(): Promise<void> {
-        cancelCalls += 1
-        const activeClient = client
-        if (activeClient === null) throw new Error("client was not assigned before reader cleanup")
-        const first = activeClient.close(background())
-        const second = activeClient.close(background())
-        reentrantCloses.push(first, second)
-        return first
-      }
-    })
-  )
-  client = await newHTTPTransport(
-    executor(
-      httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(response)
-      })
-    )
-  ).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  void receiving.catch(function observeClosedRecv(): void {})
-  await pullStarted.promise
-
-  const owner = client.close(background())
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const settled = await Promise.race([
-    Promise.allSettled([owner, receiving]),
-    new Promise<null>(function bounded(resolve): void {
-      timer = setTimeout(function expired(): void {
-        resolve(null)
-      }, 25)
-    })
-  ])
-  if (timer !== null) clearTimeout(timer)
-
-  expect(settled).not.toBeNull()
-  if (settled === null) return
-  expect(settled[0]).toEqual({ status: "fulfilled", value: undefined })
-  expect(settled[1]).toEqual({
-    status: "rejected",
-    reason: expect.objectContaining({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-  })
-  expect(reentrantCloses).toHaveLength(2)
-  expect(reentrantCloses[0]).toBe(reentrantCloses[1])
-  expect(reentrantCloses[0]).not.toBe(owner)
-  expect(client.close(background())).toBe(owner)
-  expect(cancelCalls).toBe(1)
-})
-
-test("close keeps joining a non-reentrant pending active reader cleanup", async () => {
-  const pullStarted = deferred<void>()
-  const cleanup = deferred<void>()
-  let cancelCalls = 0
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Publishes that recv owns one active standard reader. */
-      pull(): void {
-        pullStarted.resolve(undefined)
-      },
-      /** Keeps ordinary reader cleanup pending without reentering the client owner. */
-      cancel(): Promise<void> {
-        cancelCalls += 1
-        return cleanup.promise
-      }
-    })
-  )
-  const client = await newHTTPTransport(
-    executor(
-      httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(response)
-      })
-    )
-  ).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-  const receiving = client.recv(background())
-  void receiving.catch(function observeClosedRecv(): void {})
-  await pullStarted.promise
-
-  const owner = client.close(background())
-  let ownerSettled = false
-  void owner.then(function markOwnerSettled(): void {
-    ownerSettled = true
-  })
-  await Promise.resolve()
-  await Promise.resolve()
-  expect(ownerSettled).toBe(false)
-  expect(cancelCalls).toBe(1)
-
-  cleanup.resolve(undefined)
-  await expect(owner).resolves.toBeUndefined()
-  await expect(receiving).rejects.toMatchObject({ code: "GO_LIKE_TRANSPORT_CLOSED" })
-})
-
-test("recv cancellation contains a synchronous reader cancel failure", async () => {
-  const pullStarted = deferred<void>()
-  const response = new Response(
-    new ReadableStream<Uint8Array>({
-      /** Keeps body consumption pending while exposing reader ownership. */
-      pull(): void {
-        pullStarted.resolve(undefined)
-      }
-    })
-  )
-  const client = await newHTTPTransport(
-    executor(
-      httpExecutor(function run(): Promise<Response> {
-        return Promise.resolve(response)
-      })
-    )
-  ).dial(background(), "localhost:8080")
-  await client.send(background(), message("request"))
-
-  const originalCancel = Object.getOwnPropertyDescriptor(
-    ReadableStreamDefaultReader.prototype,
-    "cancel"
-  )
-  const cleanupFailure = new Error("response reader cancel threw")
-  const [ctx, cancel] = withCancel(background())
-  const receiving = client.recv(ctx)
-  await pullStarted.promise
-  try {
-    Object.defineProperty(ReadableStreamDefaultReader.prototype, "cancel", {
-      configurable: true,
-      writable: true,
-      /** Throws from the active response reader cleanup boundary. */
-      value(): never {
-        throw cleanupFailure
-      }
-    })
-    cancel()
-    await expect(receiving).rejects.toBe(canceled)
-  } finally {
-    if (originalCancel === undefined) {
-      Reflect.deleteProperty(ReadableStreamDefaultReader.prototype, "cancel")
-    } else {
-      Object.defineProperty(ReadableStreamDefaultReader.prototype, "cancel", originalCancel)
+  ).dial(background(), "example.test:8080")
+  const badURL = new Proxy(request("/orders/Create", "x"), {
+    get(target, property, receiver): unknown {
+      if (property === "url") throw new Error("bad url")
+      return Reflect.get(target, property, receiver)
     }
-  }
-})
-
-test("Request construction failures become protocol errors before executor I/O", async () => {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Request")
-  let calls = 0
-  const run = httpExecutor(function run(): Promise<Response> {
-    calls += 1
-    return Promise.resolve(new Response())
   })
-  const client = await newHTTPTransport(executor(run)).dial(background(), "localhost:8080")
-  try {
-    for (const failure of [new Error("request failed"), "request failed"]) {
-      Object.defineProperty(globalThis, "Request", {
-        configurable: true,
-        writable: true,
-        /** Throws the selected hostile constructor value. */
-        value: function BrokenRequest(): never {
-          throw failure
-        }
-      })
-      await expect(client.send(background(), message("request"))).rejects.toMatchObject({
-        code: "GO_LIKE_TRANSPORT_PROTOCOL"
-      })
+  await expect(invalidURL.fetch(background(), badURL)).rejects.toMatchObject({
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
+    message: "invalid HTTP Fetch request",
+    cause: { message: "bad url" }
+  })
+  const badValue = new Proxy(request("/orders/Create", "x"), {
+    get(target, property, receiver): unknown {
+      if (property === "url") throw "bad url"
+      return Reflect.get(target, property, receiver)
     }
-  } finally {
-    if (descriptor === undefined) Reflect.deleteProperty(globalThis, "Request")
-    else Object.defineProperty(globalThis, "Request", descriptor)
-  }
-  expect(calls).toBe(0)
+  })
+  await expect(invalidURL.fetch(background(), badValue)).rejects.toMatchObject({
+    code: "GO_LIKE_TRANSPORT_PROTOCOL",
+    message: "invalid HTTP Fetch request"
+  })
+  await invalidURL.close(background())
+
+  const already = new AbortController()
+  const alreadyReason = new Error("already aborted")
+  already.abort(alreadyReason)
+  const earlyClient = await newHTTPTransport(
+    executor(
+      httpExecutor(function run(): Promise<Response> {
+        return Promise.resolve(new Response("x"))
+      })
+    )
+  ).dial(background(), "example.test:8080")
+  await expect(
+    earlyClient.fetch(
+      background(),
+      new Request("http://example.test:8080/orders/Create", {
+        method: "POST",
+        signal: already.signal
+      })
+    )
+  ).rejects.toBe(alreadyReason)
+  await earlyClient.close(background())
 })

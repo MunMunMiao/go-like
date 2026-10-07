@@ -3,7 +3,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "ES2024.String", "DOM", "DOM.Iterable"],
     "types": ["bun", "node"]
   },
   "include": ["test/e2e/**/*.ts"]

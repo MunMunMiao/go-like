@@ -80,8 +80,10 @@ export interface HTTPServeHandle {
   done(): Promise<void>
 }
 
-/** Implements go-like Transport with a portable unary HTTP wire. */
+/** Implements go-like Transport with a portable HTTP wire. */
 export interface HTTPTransport extends Transport {
+  /** Returns the configured per-message receive ceiling in bytes. */
+  maxMessageBytes(): number
   /** Binds one HTTP listener through a borrowed runtime host. */
   listen(
     ctx: Context,
@@ -94,16 +96,6 @@ export interface HTTPTransport extends Transport {
 export interface HTTPListener extends Listener {
   /** Returns the identity-stable admission Promise. */
   accepted(): Promise<void>
-}
-
-/** Describes a bounded non-200 HTTP response. */
-export interface HTTPStatusError extends Error {
-  readonly name: "HTTPStatusError"
-  readonly code: "GO_LIKE_HTTP_STATUS"
-  readonly status: number
-  readonly statusText: string
-  readonly body: Uint8Array
-  readonly bodyTruncated: boolean
 }
 
 /** Describes a runtime host or serve loop that ended without an upstream Error. */

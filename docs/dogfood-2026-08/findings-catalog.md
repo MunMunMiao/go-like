@@ -1,5 +1,7 @@
 # Findings 目录
 
+> 文中 `Go-Like-Service` / `Go-Like-Endpoint` 记录的是战役当时的失败形状。当前内部 RPC 按 path `/<service>/<endpoint>` 路由，见 [service-call](../../doc/guide/service-call.md)。
+
 本目录按 `suspectedOwner` 再按 `package` 分组，覆盖 9 个失败 dest 上的 84 条 reproduced findings。行级字段见 [findings-index.json](findings-index.json)。原始 JSON 仍在各 dest 的 `projects/*/findings/`。
 
 ## dest 分类

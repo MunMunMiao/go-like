@@ -8,8 +8,7 @@ import {
   parseServerAddress,
   parseServerAdvertise,
   serverOptions,
-  withAddress,
-  withService,
+  withEndpoint,
   withTLSConfig,
   type ClientOption,
   type ClientOptions,
@@ -88,7 +87,7 @@ test("client option boundaries reject malformed runtime values", () => {
         ]),
       "TLS serverName must be a string or null"
     ],
-    [() => withService(""), "withService requires a non-empty service"]
+    [() => withEndpoint("discovery:///"), "withEndpoint discovery target must be non-empty"]
   ]
 
   for (const [operation, message] of cases) expect(operation).toThrow(message)
@@ -113,7 +112,7 @@ test("client option reduction revalidates custom snapshots", () => {
 test("client options reject HTTP direct addresses with TLS", () => {
   const failure = captureFailure(() =>
     clientOptions([
-      withAddress("https://one.example.test", "http://two.example.test"),
+      withEndpoint(["https://one.example.test", "http://two.example.test"]),
       withTLSConfig({
         serverName: null,
         caCertificate: null,

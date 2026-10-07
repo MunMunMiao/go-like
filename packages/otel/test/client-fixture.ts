@@ -1,27 +1,21 @@
-import { newClient, withAddress, withTransport, type Client } from "@go-like/client"
-import type {
-  Client as TransportClient,
-  Listener,
-  Message,
-  Options,
-  Transport
-} from "@go-like/transport"
+import { newClient, withEndpoint, withTransport, type Client } from "@go-like/client"
+import type { Client as TransportClient, Listener, Options, Transport } from "@go-like/transport"
 
+/** Holds one loopback Client and the Requests it fetched. */
 export interface LoopbackClient {
   readonly client: Client
-  readonly sent: readonly Message[]
+  readonly sent: readonly Request[]
 }
 
 /** Creates one real go-like Client over an in-memory structural Transport. */
 export function newLoopbackClient(
-  reply: (request: Message) => Message | Promise<Message>
+  reply: (request: Request) => Response | Promise<Response>
 ): LoopbackClient {
-  const sent: Message[] = []
+  const sent: Request[] = []
   const transport: Transport = {
     init(): void {},
     options(): Options {
       return Object.freeze({
-        codec: null,
         logger: null,
         timeoutMs: 0,
         secure: false,
@@ -29,23 +23,12 @@ export function newLoopbackClient(
       })
     },
     async dial(): Promise<TransportClient> {
-      let request: Message | null = null
       return {
-        async send(_ctx, message): Promise<void> {
-          request = message
-          sent.push(message)
-        },
-        async recv(): Promise<Message> {
-          if (request === null) throw new Error("loopback receive requires a request")
+        async fetch(_ctx, request): Promise<Response> {
+          sent.push(request)
           return await reply(request)
         },
-        async close(): Promise<void> {},
-        local(): string {
-          return "loopback-client"
-        },
-        remote(): string {
-          return "loopback-server"
-        }
+        async close(): Promise<void> {}
       }
     },
     async listen(): Promise<Listener> {
@@ -56,7 +39,7 @@ export function newLoopbackClient(
     }
   }
   return Object.freeze({
-    client: newClient(withTransport(transport), withAddress("memory://loopback")),
+    client: newClient(withTransport(transport), withEndpoint("memory://loopback")),
     sent
   })
 }

@@ -13,34 +13,34 @@ The current go-like source baseline for this track is commit `9385dbf5b6a7d913be
 
 ## Position in the stack
 
-| Tool      | Primary problem                              | What it normally owns                                                                                                                                                      | What go-like would complement, not replace                                                                              |
-| --------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| NestJS    | Convention-driven Node application framework | Modules, providers, controllers, decorators, application context, framework lifecycle, HTTP or microservice adapter                                                        | A structural lifecycle boundary or internal call contract around a native application, if an explicit bridge is written |
-| Fastify   | Node HTTP server and request pipeline        | Route table, hooks, plugins, encapsulation, Node listener, request/reply objects                                                                                           | A lifecycle or provider adapter around a Fastify-owned resource                                                         |
-| Hono      | Web Standards routing and middleware         | Routes, middleware, sub-apps, `app.fetch`, runtime adapter choice                                                                                                          | Core App, explicit resource lifecycle, internal Client/Transport, discovery                                             |
-| Elysia    | Bun-first typed Web framework                | Route tree, schema composition, decorators, hooks, Bun or Web Standard adapter                                                                                             | Core lifecycle and internal service building blocks while retaining native Elysia behavior                              |
-| Koa       | Minimal Node middleware kernel               | Middleware stack and Node listener; router is usually external                                                                                                             | Lifecycle and internal service contracts without introducing another router                                             |
-| tRPC      | Type-safe procedure layer                    | Router/procedure paths, input/output parsers, context factory, HTTP/Fetch/WS adapters                                                                                      | Provider ownership, service discovery, selector policy, explicit App lifecycle                                          |
-| go-micro  | Go microservice and agent-oriented ecosystem | Go Context, service/client/transport/registry/broker abstractions, provider ecosystem, and additional agent/flow/MCP/A2A scope                                             | go-like borrows some vocabulary, not Go ABI, goroutines, or transport compatibility                                     |
-| go-kratos | Go cloud-native service framework            | App lifecycle, Go Context, HTTP/gRPC transports, middleware, registry, config, Protobuf/code generation                                                                    | go-like shares lifecycle and generated-service workflow, not Go ABI or Google gRPC runtime                              |
-| go-like   | Explicit TypeScript service building blocks  | Context, App/Server lifecycle, standard Fetch edge, internal unary Message transport, managed standard gRPC, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health | The application still owns framework routes, business policy, auth, deployment, and unselected native data planes       |
+| Tool      | Primary problem                              | What it normally owns                                                                                                                                                           | What go-like would complement, not replace                                                                              |
+| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| NestJS    | Convention-driven Node application framework | Modules, providers, controllers, decorators, application context, framework lifecycle, HTTP or microservice adapter                                                             | A structural lifecycle boundary or internal call contract around a native application, if an explicit bridge is written |
+| Fastify   | Node HTTP server and request pipeline        | Route table, hooks, plugins, encapsulation, Node listener, request/reply objects                                                                                                | A lifecycle or provider adapter around a Fastify-owned resource                                                         |
+| Hono      | Web Standards routing and middleware         | Routes, middleware, sub-apps, `app.fetch`, runtime adapter choice                                                                                                               | Core App, explicit resource lifecycle, internal Client/Transport, discovery                                             |
+| Elysia    | Bun-first typed Web framework                | Route tree, schema composition, decorators, hooks, Bun or Web Standard adapter                                                                                                  | Core lifecycle and internal service building blocks while retaining native Elysia behavior                              |
+| Koa       | Minimal Node middleware kernel               | Middleware stack and Node listener; router is usually external                                                                                                                  | Lifecycle and internal service contracts without introducing another router                                             |
+| tRPC      | Type-safe procedure layer                    | Router/procedure paths, input/output parsers, context factory, HTTP/Fetch/WS adapters                                                                                           | Provider ownership, service discovery, selector policy, explicit App lifecycle                                          |
+| go-micro  | Go microservice and agent-oriented ecosystem | Go Context, service/client/transport/registry/broker abstractions, provider ecosystem, and additional agent/flow/MCP/A2A scope                                                  | go-like borrows some vocabulary, not Go ABI, goroutines, or transport compatibility                                     |
+| go-kratos | Go cloud-native service framework            | App lifecycle, Go Context, HTTP/gRPC transports, middleware, registry, config, Protobuf/code generation                                                                         | go-like shares lifecycle and generated-service workflow, not Go ABI or Google gRPC runtime                              |
+| go-like   | Explicit TypeScript service building blocks  | Context, App/Server lifecycle, standard Fetch edge, internal Fetch JSON and SSE transport, managed standard gRPC, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health | The application still owns framework routes, business policy, auth, deployment, and unselected native data planes       |
 
 The project is therefore not trying to win a “largest framework” comparison. Its question is whether an application needs these boundaries to be explicit and composable.
 
 ## Ownership matrix
 
-| Concern                 | NestJS                                         | Fastify                             | Hono / Elysia / Koa                                          | tRPC                                            | go-like                                                                                     |
-| ----------------------- | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| External route table    | Controllers and decorators                     | Fastify instance                    | Framework instance or external router                        | Procedure router, not ordinary REST routes      | External framework or application                                                           |
-| Web handler ABI         | Adapter-owned request/reply abstraction        | Node request/reply                  | Standard Fetch is central for Hono and Web Standard adapters | Fetch/Node/Express/Fastify adapters             | Standard `(Request) => Response \| Promise<Response>`                                       |
-| Application lifecycle   | Application context and hooks                  | `ready`, `listen`, `close`, hooks   | Runtime adapter and framework lifecycle vary                 | Host/adapter responsibility                     | `newApp`, `App.run`, `App.stop`, hooks, structural Servers                                  |
-| Resource lifecycle      | Container/framework hooks                      | Plugin and server hooks             | Application/runtime responsibility                           | Application/adapter responsibility              | Explicit `Server.start(ctx)` / `stop(ctx)` contracts and adapter ownership                  |
-| Dependency composition  | Nest container/providers                       | Plugin decoration and encapsulation | Context/env and composition; no general DI container         | Explicit context factory and router composition | Explicit constructors and functional options; no DI container                               |
-| Internal transport      | Microservice transports and framework adapters | Not a service discovery abstraction | Not a service discovery abstraction                          | Procedure adapters and optional WebSocket       | `Transport`, `Client`, `Listener`, `Socket`, unary `Message`                                |
-| Discovery and selection | Transport-specific or external                 | External                            | External                                                     | External                                        | `Registry`, `Discovery`, `Watcher`, Filters, five Selector policies                         |
-| Retry                   | Framework or provider-specific                 | Application/plugin-specific         | Application-specific                                         | Middleware/adapter-specific                     | One attempt by default; `withRetry` requires authorization and total attempts               |
-| Streaming               | Framework/provider choices                     | Node/Web stream choices             | Native Web Streams and framework APIs                        | Adapter-dependent HTTP/WS                       | Web native; Transport unary; Fetch unary/server-streaming; standard gRPC four cardinalities |
-| Global instrumentation  | Framework/provider integration                 | Plugin ecosystem                    | Middleware ecosystem                                         | Middleware/adapters                             | Explicit wrappers; no global provider installation                                          |
+| Concern                 | NestJS                                         | Fastify                             | Hono / Elysia / Koa                                          | tRPC                                            | go-like                                                                                                        |
+| ----------------------- | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| External route table    | Controllers and decorators                     | Fastify instance                    | Framework instance or external router                        | Procedure router, not ordinary REST routes      | External framework or application                                                                              |
+| Web handler ABI         | Adapter-owned request/reply abstraction        | Node request/reply                  | Standard Fetch is central for Hono and Web Standard adapters | Fetch/Node/Express/Fastify adapters             | Standard `(Request) => Response \| Promise<Response>`                                                          |
+| Application lifecycle   | Application context and hooks                  | `ready`, `listen`, `close`, hooks   | Runtime adapter and framework lifecycle vary                 | Host/adapter responsibility                     | `newApp`, `App.run`, `App.stop`, hooks, structural Servers                                                     |
+| Resource lifecycle      | Container/framework hooks                      | Plugin and server hooks             | Application/runtime responsibility                           | Application/adapter responsibility              | Explicit `Server.start(ctx)` / `stop(ctx)` contracts and adapter ownership                                     |
+| Dependency composition  | Nest container/providers                       | Plugin decoration and encapsulation | Context/env and composition; no general DI container         | Explicit context factory and router composition | Explicit constructors and functional options; no DI container                                                  |
+| Internal transport      | Microservice transports and framework adapters | Not a service discovery abstraction | Not a service discovery abstraction                          | Procedure adapters and optional WebSocket       | `Transport`, `Client`, `Listener`, `defineService`, SSE `ServerStream`                                         |
+| Discovery and selection | Transport-specific or external                 | External                            | External                                                     | External                                        | `Registry`, `Discovery`, `Watcher`, Filters, five Selector policies                                            |
+| Retry                   | Framework or provider-specific                 | Application/plugin-specific         | Application-specific                                         | Middleware/adapter-specific                     | One attempt by default; `withRetry` requires authorization and total attempts                                  |
+| Streaming               | Framework/provider choices                     | Node/Web stream choices             | Native Web Streams and framework APIs                        | Adapter-dependent HTTP/WS                       | Web native; internal JSON or SSE server stream; Fetch unary/server-streaming; standard gRPC four cardinalities |
+| Global instrumentation  | Framework/provider integration                 | Plugin ecosystem                    | Middleware ecosystem                                         | Middleware/adapters                             | Explicit wrappers; no global provider installation                                                             |
 
 The labels in the first five rows describe architecture positions, not a quality ranking. A framework owning a route table is useful when route composition is the problem. It is simply a different ownership decision from go-like leaving routes to the application.
 
@@ -79,13 +79,13 @@ Client
   -> Selector.select
   -> opaque ServiceEndpoint URL
   -> Transport.dial or resident logical owner
-  -> send(Message)
+  -> fetch(Request)
   -> @go-like/server route and unary handler
-  -> recv(Message)
+  -> read Response
   -> feedback and owner release
 ```
 
-A typed `Endpoint` binds `Struct` request and response validation to the existing `Message` boundary. It is not an IDL or generated protocol. `withAddress(...addresses)` selects a construction-time direct snapshot; direct and discovered snapshots use the same Selector. The in-process Memory Transport path remains a useful first test because it changes only the Transport provider.
+A typed `Endpoint` binds `Struct` request and response validation to a JSON Fetch body. It is not an IDL or generated protocol. `withEndpoint(...)` selects a construction-time direct snapshot; direct and discovered snapshots use the same Selector. The in-process Memory Transport path remains a useful first test because it changes only the Transport provider.
 
 NestJS's microservice transport options, tRPC procedure adapters, and Go framework transports are not interchangeable with this DAG. They may own a different route identity, serialization model, connection pool, or retry layer. A comparison should record those differences rather than mark all “RPC” boxes as equal.
 
@@ -108,8 +108,8 @@ Web framework or Fetch Handler
   -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
 
 go-like internal Client/Transport
-  -> one unary Message request and one unary Message response
-  -> no full-duplex RPC Stream SPI
+  -> one JSON body, or one SSE server stream when `stream: true`
+  -> not a bidirectional multi-frame protocol
 
 @go-like/transport-grpc-buf
   -> portable Fetch: Connect/gRPC-Web unary and server-streaming
@@ -158,7 +158,7 @@ Koa is a small Node middleware kernel and does not bundle a router. That makes i
 
 ### tRPC
 
-tRPC owns a type-safe procedure router and procedure middleware. It can use Fetch, Node, Express, Fastify, or WebSocket adapters, but it is not a Registry, Selector, connection pool, or application lifecycle manager. go-like's typed Endpoint is a smaller runtime Struct binding over unary Messages, not a competing procedure DSL or generated IDL.
+tRPC owns a type-safe procedure router and procedure middleware. It can use Fetch, Node, Express, Fastify, or WebSocket adapters, but it is not a Registry, Selector, connection pool, or application lifecycle manager. go-like's typed Endpoint is a smaller runtime Struct binding over JSON Fetch bodies, not a competing procedure DSL or generated IDL.
 
 ### go-micro and go-kratos
 
@@ -193,7 +193,7 @@ The go-like claims in this page can be traced to the current tree and package en
 - `packages/web/src/context.ts` for the standard Handler and Context bridge;
 - `packages/client/src/index.ts` for Client options, pooling, retry, and the attempt pipeline;
 - `packages/server/src/index.ts` for internal unary handlers and route dispatch;
-- `packages/transport/src/types.ts` and `packages/transport/src/endpoint.ts` for the Message and typed Endpoint boundaries;
+- `packages/transport/src/types.ts` and `packages/transport/src/endpoint.ts` for the Fetch Request/Response and defineService boundaries;
 - `packages/registry/src/types.ts` and `packages/registry/src/selector.ts` for snapshots, filters, selectors, and feedback.
 
 The research record also stores these pinned external comparison inputs:

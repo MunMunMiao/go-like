@@ -1,4 +1,4 @@
-import { newClient, poolSize, poolTtl, withAddress, withTransport } from "@go-like/client"
+import { newClient, poolSize, poolTtl, withEndpoint, withTransport } from "@go-like/client"
 import { background, type Context } from "@go-like/context"
 import {
   type Client as TransportClient,
@@ -709,7 +709,7 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     client = newClient(
       poolSize(2),
       poolTtl(0),
-      withAddress(...web.serviceEndpoints),
+      withEndpoint(web.serviceEndpoints),
       withTransport(
         countingTransport((address) => {
           dials += 1
@@ -725,9 +725,11 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
           const response = await client?.call(background(), {
             service: "soak",
             endpoint: "Ping",
-            message: { header: {}, body: new Uint8Array() }
+            headers: { "content-type": "application/json" },
+            body: new Uint8Array()
           })
-          if (response === undefined || Decoder.decode(response.body).length !== 1) {
+          const bytes = response === undefined ? null : new Uint8Array(await response.arrayBuffer())
+          if (bytes === null || Decoder.decode(bytes).length !== 1) {
             throw new Error("internal Client returned an invalid response")
           }
           calls += 1

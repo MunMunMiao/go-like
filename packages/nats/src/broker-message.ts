@@ -21,23 +21,9 @@ export function contextFailure(ctx: Context): Error | null {
   return failure === null ? null : (cause(ctx) ?? failure)
 }
 
-/** Reports whether a string contains no unpaired UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
-    if (code >= 0xd800 && code <= 0xdbff) {
-      if (index + 1 >= value.length) return false
-      const following = value.charCodeAt(index + 1)
-      if (following < 0xdc00 || following > 0xdfff) return false
-      index += 1
-    } else if (code >= 0xdc00 && code <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates the portable topic boundary before any native NATS I/O. */
 export function validateTopic(topic: string): void {
-  if (typeof topic !== "string" || topic.length === 0 || !isWellFormed(topic)) {
+  if (typeof topic !== "string" || topic.length === 0 || !topic.isWellFormed()) {
     throw new TypeError("NATS Broker topic must be a non-empty well-formed string")
   }
 }
@@ -54,9 +40,9 @@ function nativeHeaders(source: Readonly<Record<string, string>>): MsgHdrs | null
     const value = source[name]
     if (
       name.length === 0 ||
-      !isWellFormed(name) ||
+      !name.isWellFormed() ||
       typeof value !== "string" ||
-      !isWellFormed(value)
+      !value.isWellFormed()
     ) {
       throw new TypeError("NATS Broker message headers must contain well-formed string entries")
     }

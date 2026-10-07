@@ -29,6 +29,7 @@
     "@go-like/registry-consul": "workspace:*",
     "@go-like/server": "workspace:*",
     "@go-like/store-vault": "workspace:*",
+    "@go-like/struct": "workspace:*",
     "@go-like/transport": "workspace:*",
     "@go-like/transport-http": "workspace:*",
     "@go-like/web": "workspace:*",

@@ -11,6 +11,7 @@ import * as pino from "@go-like/pino"
 import * as prometheus from "@go-like/prometheus"
 import "@go-like/protoc-gen-like"
 import * as registryZookeeper from "@go-like/registry-zookeeper"
+import * as webBun from "@go-like/web/bun"
 import * as winston from "@go-like/winston"
 
 import { runPortable } from "./portable.ts"
@@ -30,7 +31,8 @@ if (
     pino,
     prometheus,
     registryZookeeper,
-    winston
+    winston,
+    webBun
   ].some((value) => typeof value !== "object" || value === null)
 ) {
   throw new Error("published Bun export did not load as a module")

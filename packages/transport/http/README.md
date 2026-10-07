@@ -48,50 +48,67 @@ transport.init(
 const listener = await transport.listen(ctx, "127.0.0.1:9443")
 ```
 
-`clientAuth("require")` 会用 `caCertificate` 验证客户端证书，并把已验证证书的 URI SAN 写入请求头
-`Go-Like-Peer-Identity`；`allowHTTP1(false)` 只允许 HTTP/2。
+`clientAuth("require")` 会用 `caCertificate` 验证客户端证书，并把已验证证书的 URI SAN 放进
+`TransportInfo.peerIdentity()`；它不是请求头。`allowHTTP1(false)` 只允许 HTTP/2。
 默认值分别是 `"none"` 和 `true`。这些是 Node transport construction options，不会公开内部 Host SPI。
 
-高层 Client 在构造时选择单地址、多地址或 Discovery；三种模式都使用同一个 Registry `Selector`。服务胶水
-接收名为 `client` 的通用 `@go-like/client` owner。单地址直连：
+高层 Client 在构造时用 `withEndpoint` 选择一个根 URL、多个根 URL，或一个 `discovery:///` 应用名。直连与发现互斥，并使用同一个 Registry `Selector`。`withAddress` 与 `withService` 已删除。供 Client 选择的 HTTP 地址必须是没有 path、query、fragment 的绝对根 URL，因为内部 RPC path 属于请求 URL。Transport 自己的 `dial` 还接受 `host:port`。单地址直连：
 
 ```ts
-import { newClient, withAddress, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
 import { newHTTPTransport } from "@go-like/transport-http"
 
-const client = newClient(withTransport(newHTTPTransport()), withAddress("https://orders.internal"))
-const orders = newOrderServiceClient(client)
+const orders = defineService("orders", {
+  get: {
+    request: struct.object({ id: struct.string() }),
+    response: struct.object({ id: struct.string() })
+  }
+})
+
+const client = newClient(withTransport(newHTTPTransport()), withEndpoint("https://orders.internal"))
+const api = orders.newClient(client)
+void api
 ```
 
 多地址直连只扩展同一个构造 option：
 
 ```ts
-import { newClient, withAddress, withSelector, withTransport } from "@go-like/client"
+import { newClient, withEndpoint, withSelector, withTransport } from "@go-like/client"
 import { newRoundRobinSelector } from "@go-like/registry"
 import { newHTTPTransport } from "@go-like/transport-http"
 
 const client = newClient(
   withTransport(newHTTPTransport()),
-  withAddress("https://orders-a.internal", "https://orders-b.internal"),
+  withEndpoint(["https://orders-a.internal", "https://orders-b.internal"]),
   withSelector(newRoundRobinSelector())
 )
-const orders = newOrderServiceClient(client)
+void client
 ```
 
-服务发现使用独立的 `orders-http` Registry identity：
+服务发现使用独立的 `orders-http` 应用名：
 
 ```ts
-import { newClient, withDiscovery, withSelector, withService, withTransport } from "@go-like/client"
-import { newRoundRobinSelector } from "@go-like/registry"
+import {
+  newClient,
+  withDiscovery,
+  withEndpoint,
+  withSelector,
+  withTransport
+} from "@go-like/client"
+import { newRoundRobinSelector, type Discovery } from "@go-like/registry"
 import { newHTTPTransport } from "@go-like/transport-http"
+
+declare const discovery: Discovery
 
 const client = newClient(
   withTransport(newHTTPTransport()),
-  withService("orders-http"),
+  withEndpoint("discovery:///orders-http"),
   withDiscovery(discovery),
   withSelector(newRoundRobinSelector())
 )
-const orders = newOrderServiceClient(client)
+void client
 ```
 
 内部微服务 Server 由 `@go-like/server` 组合，并在启动前注册 service handler：
@@ -113,6 +130,7 @@ HTTP 与 `@go-like/transport-grpc-buf/native` 共享 `newClient(...) -> newXClie
 `withConnClose()` 显式绕过复用。`client.close(ctx)` 负责释放该次 dial 持有的全部连接资源。
 
 内部 Transport 不自动跟随 HTTP redirect。portable client 固定使用 `Request.redirect === "manual"`，
-3xx 响应继续由 `client.recv(ctx)` 作为 HTTP status error 返回，不会把请求 body 或内部 header 重放到
-`Location`。通过 `executor(...)` 注入的自定义 Fetch executor 必须遵守传入的 `Request.redirect`，不得
-自行跟随或重放请求；Node native client 同样只向该次 dial 固定的 origin 发起请求。
+`fetch` 把 3xx 原样作为 `Response` 返回，不会把请求 body 或内部 header 重放到 `Location`。连接只有在
+response body 结束、出错或取消后才回到池。通过 `executor(...)` 注入的自定义 Fetch executor 必须遵守传入的
+`Request.redirect`，不得自行跟随或重放请求；Node native client 同样只向该次 dial 固定的 origin 发起请求。
+HTTP 服务端流允许运行时和 socket 缓冲区做有限预取，不承诺与客户端 `for await` 逐条对应。

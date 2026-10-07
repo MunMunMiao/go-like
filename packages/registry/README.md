@@ -72,6 +72,9 @@ try {
 Provider 作者可以从 `@go-like/registry/provider` 导入 `providerOptions`、`notifyRegistrationError` 与不可变
 `ServiceInstance` snapshot helper。`ProviderOptionInput.onRegistrationError` 只观察已经成功注册、随后永久丢失的
 resident registration generation；回调收到防御性快照，其抛错或 rejected thenable 不会接管 provider 生命周期。
+`snapshotServiceInstances` 发布的数组及其全部实例、`metadata` 与 `endpoints` 都是深度冻结的，并被该 helper 登记；
+再次传入这个已发布快照时原样返回，不重复复制与校验，内置 Selector 因此可以复用同一份快照。其他数组，包括
+Filter 返回的新数组和调用方自行冻结的数组，始终会被完整复制并校验。
 这些实现辅助能力不在应用侧根入口中，避免普通用户接触 provider 配置和内部防御性复制概念。
 
 ## Selector

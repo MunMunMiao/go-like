@@ -3,7 +3,7 @@ import {
   withDiscovery,
   withFilter,
   withSelector,
-  withService,
+  withEndpoint,
   withTransport,
   type Client
 } from "@go-like/client"
@@ -38,7 +38,6 @@ import {
   type DialOption,
   type Listener,
   type ListenOption,
-  type Message,
   type Option,
   type Options,
   type Transport
@@ -57,15 +56,11 @@ if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwne
   throw new Error("invalid GO_LIKE_E2E_OWNER")
 }
 const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
-const ServiceName = `go-like-call-${Session}`
-const OperationEndpoint = "Get"
-const DeregisterProbeEndpoint = "DeregisterProbe"
+const ServiceName = `go-like-call-${Session}.v1`
+const OperationEndpoint = "get"
+const DeregisterProbeEndpoint = "deregisterProbe"
 const Encoder = new TextEncoder()
-const Decoder = new TextDecoder()
-const RequestMessage: Message = Object.freeze({
-  header: Object.freeze({}),
-  body: Encoder.encode("request")
-})
+const requestBody = Encoder.encode("request")
 
 interface CommandResult {
   readonly code: number
@@ -249,11 +244,8 @@ function trackedTransport(base: Transport, tracker: TransportTracker): Transport
       tracker.dialedClients += 1
       let closeCalls = 0
       return Object.freeze({
-        recv(operationContext: Context) {
-          return client.recv(operationContext)
-        },
-        send(operationContext: Context, message: Message) {
-          return client.send(operationContext, message)
+        fetch(operationContext: Context, request: Request) {
+          return client.fetch(operationContext, request)
         },
         async close(operationContext: Context): Promise<void> {
           closeCalls += 1
@@ -261,12 +253,6 @@ function trackedTransport(base: Transport, tracker: TransportTracker): Transport
           if (closeCalls === 1) tracker.clientsWithClose += 1
           else tracker.duplicateCloseCalls += 1
           await client.close(operationContext)
-        },
-        local(): string {
-          return client.local()
-        },
-        remote(): string {
-          return client.remote()
         }
       })
     },
@@ -336,29 +322,19 @@ function serviceServer(
   state: NodeState
 ): LifecycleServer & Endpointer {
   const server = newServer(serverTransport(transport), serverAddress("127.0.0.1:0"))
-  server.registerHandler(ServiceName, OperationEndpoint, async function handle(): Promise<Message> {
+  server.registerHandler(ServiceName, OperationEndpoint, function handle(): Response {
     state.activeHandlers += 1
     state.calls[node] += 1
     try {
-      return Object.freeze({
-        header: Object.freeze({ "Go-Like-Node": node }),
-        body: Encoder.encode(node)
-      })
+      return new Response(node, { headers: { "Go-Like-Node": node } })
     } finally {
       state.activeHandlers -= 1
     }
   })
-  server.registerHandler(
-    ServiceName,
-    DeregisterProbeEndpoint,
-    async function probe(): Promise<Message> {
-      state.deregisterProbes[node] += 1
-      return Object.freeze({
-        header: Object.freeze({ "Go-Like-Node": node }),
-        body: Encoder.encode(node)
-      })
-    }
-  )
+  server.registerHandler(ServiceName, DeregisterProbeEndpoint, function probe(): Response {
+    state.deregisterProbes[node] += 1
+    return new Response(node, { headers: { "Go-Like-Node": node } })
+  })
   return server
 }
 
@@ -374,7 +350,7 @@ async function probeBeforeDeregister(
   ensure(instance.id === node, `deregister probe received unexpected instance ${instance.id}`)
   const probeClient = newClient(
     withDiscovery(registry),
-    withService(ServiceName),
+    withEndpoint(`discovery:///${ServiceName}`),
     withSelector(newRoundRobinSelector()),
     withTransport(transport)
   )
@@ -384,11 +360,12 @@ async function probeBeforeDeregister(
       {
         service: ServiceName,
         endpoint: DeregisterProbeEndpoint,
-        message: RequestMessage
+        headers: { "content-type": "application/json" },
+        body: requestBody
       },
       withFilter(filterLabel("node", node))
     )
-    ensure(Decoder.decode(response.body) === node, `deregister probe did not reach node ${node}`)
+    ensure((await response.text()) === node, `deregister probe did not reach node ${node}`)
     probes.push(node)
   } finally {
     await probeClient.close(background())
@@ -658,7 +635,7 @@ try {
   )
   client = newClient(
     withDiscovery(registry),
-    withService(ServiceName),
+    withEndpoint(`discovery:///${ServiceName}`),
     withSelector(selector),
     withTransport(transport)
   )
@@ -667,9 +644,10 @@ try {
     const response = await client.call(background(), {
       service: ServiceName,
       endpoint: OperationEndpoint,
-      message: RequestMessage
+      headers: { "content-type": "application/json" },
+      body: requestBody
     })
-    roundRobin.push(Decoder.decode(response.body))
+    roundRobin.push(await response.text())
   }
   const roundRobinSequence = roundRobin.join(",")
   ensure(roundRobinSequence === "a,b,a,b", "round-robin unary sequence was not a,b,a,b")
@@ -691,7 +669,8 @@ try {
         await client.call(background(), {
           service: ServiceName,
           endpoint: OperationEndpoint,
-          message: RequestMessage
+          headers: { "content-type": "application/json" },
+          body: requestBody
         })
       } catch (value) {
         if (value !== clientSnapshotObserved) throw value
@@ -710,9 +689,10 @@ try {
   const postDeregister = await client.call(background(), {
     service: ServiceName,
     endpoint: OperationEndpoint,
-    message: RequestMessage
+    headers: { "content-type": "application/json" },
+    body: requestBody
   })
-  const postDeregisterNode = Decoder.decode(postDeregister.body)
+  const postDeregisterNode = await postDeregister.text()
   ensure(postDeregisterNode === "b", "post-deregister unary call did not select node b")
 
   await watcher.stop(background())

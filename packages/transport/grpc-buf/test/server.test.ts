@@ -21,7 +21,7 @@ import {
   newClient,
   newServer,
   tlsConfig,
-  withAddress
+  withEndpoint
 } from "../src/native"
 import { serverOptions } from "../src/options"
 import {
@@ -336,7 +336,7 @@ test("generated registration serves a real standard-gRPC request and Context bri
   const server = newServer()
   registerOrderServiceHandler(server, implementation)
   const endpoint = await server.endpoint(background())
-  const client = newClient(withAddress(endpoint))
+  const client = newClient(withEndpoint(endpoint))
   const orders = newOrderServiceClient(client)
   const metadataContext = newClientContext(
     background(),
@@ -974,7 +974,7 @@ test("deferred route replay snapshots service option properties at registration"
   )
   serviceOptions.interceptors = [later]
   const endpoint = await server.endpoint(background())
-  const client = newClient(withAddress(endpoint))
+  const client = newClient(withEndpoint(endpoint))
   const orders = newOrderServiceClient(client)
 
   try {

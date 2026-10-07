@@ -47,6 +47,65 @@ test("snapshots complete replacement arrays", () => {
   expect(Object.isFrozen(snapshot)).toBeTrue()
 })
 
+test("returns a published snapshot unchanged and publishes every other array afresh", () => {
+  const source: ServiceInstance = {
+    id: "one",
+    name: "catalog",
+    version: "v1",
+    metadata: { zone: "a" },
+    endpoints: ["memory://catalog", "memory://catalog-two"]
+  }
+  const values = [source]
+  const published = snapshotServiceInstances(values)
+
+  // Trusting the brand is only safe because everything reachable from it is frozen.
+  expect(Object.isFrozen(published)).toBeTrue()
+  for (const instance of published) {
+    expect(Object.isFrozen(instance)).toBeTrue()
+    expect(Object.isFrozen(instance.metadata)).toBeTrue()
+    expect(Object.isFrozen(instance.endpoints)).toBeTrue()
+  }
+  expect(snapshotServiceInstances(published)).toBe(published)
+  // An unpublished caller array is copied on every call, never returned or remembered.
+  const again = snapshotServiceInstances(values)
+  expect(again).not.toBe(values)
+  expect(again).not.toBe(published)
+  expect(again).toEqual(published)
+})
+
+test("copies and validates every array it did not publish", () => {
+  const valid: ServiceInstance = {
+    id: "one",
+    name: "catalog",
+    version: "",
+    metadata: {},
+    endpoints: ["memory://catalog"]
+  }
+  const published = snapshotServiceInstances([valid])
+
+  // A frozen caller array is not a published snapshot.
+  const frozen = Object.freeze([valid])
+  expect(snapshotServiceInstances(frozen)).not.toBe(frozen)
+  expect(snapshotServiceInstances(frozen)).toEqual([valid])
+
+  // An array derived from published members is copied, republished, and then trusted itself.
+  const derived = Object.freeze(Array.from(published))
+  const republished = snapshotServiceInstances(derived)
+  expect(republished).not.toBe(derived)
+  expect(republished).not.toBe(published)
+  expect(republished).toEqual(published)
+  expect(snapshotServiceInstances(republished)).toBe(republished)
+
+  // Published members give a derived array no credit: its other members and shape are checked.
+  const forged = { ...valid, id: "two", endpoints: ["relative"] }
+  expect(() => snapshotServiceInstances(Object.freeze([...published, forged]))).toThrow(TypeError)
+  expect(() => snapshotServiceInstances([...published, ...published])).toThrow(TypeError)
+  expect(() => snapshotServiceInstances(Object.freeze([...published, ...published]))).toThrow(
+    TypeError
+  )
+  expect(() => snapshotServiceInstances({ ...published } as never)).toThrow(TypeError)
+})
+
 test("canonicalizes protocol-neutral endpoints and service order", () => {
   const snapshot = snapshotServiceInstances([
     {

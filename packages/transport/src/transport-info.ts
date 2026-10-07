@@ -6,6 +6,7 @@ import type { TransportInfo } from "./types"
 const MaximumKindBytes = 64
 const MaximumEndpointBytes = 4_096
 const MaximumOperationBytes = 1_024
+const MaximumPeerIdentityBytes = 4_096
 const KindPattern = /^[a-z0-9][a-z0-9+._-]*$/
 // oxlint-disable-next-line eslint/no-control-regex -- Transport identities reject C0 and DEL exactly.
 const ControlPattern = /[\u0000-\u001f\u007f]/
@@ -25,22 +26,9 @@ function isError(value: unknown): value is Error {
   return typeof candidate === "function" ? candidate(value) === true : value instanceof Error
 }
 
-/** Returns whether value contains only complete UTF-16 scalar sequences. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates one control-free transport identity field and its UTF-8 limit. */
 function transportText(value: unknown, field: string, maximumBytes: number): string {
-  if (typeof value !== "string" || !isWellFormed(value) || ControlPattern.test(value)) {
+  if (typeof value !== "string" || !value.isWellFormed() || ControlPattern.test(value)) {
     throw new TypeError(`TransportInfo ${field} must be a well-formed control-free string`)
   }
   if (Encoder.encode(value).byteLength > maximumBytes) {
@@ -90,7 +78,7 @@ function dataMethod(value: object, key: string): unknown {
   return null
 }
 
-/** Returns whether value implements the five structural TransportInfo methods. */
+/** Returns whether value implements the structural TransportInfo methods. */
 function isTransportInfo(value: unknown): value is TransportInfo {
   return (
     isRecord(value) &&
@@ -98,8 +86,24 @@ function isTransportInfo(value: unknown): value is TransportInfo {
     typeof dataMethod(value, "endpoint") === "function" &&
     typeof dataMethod(value, "operation") === "function" &&
     typeof dataMethod(value, "requestHeaders") === "function" &&
-    typeof dataMethod(value, "replyHeaders") === "function"
+    typeof dataMethod(value, "replyHeaders") === "function" &&
+    typeof dataMethod(value, "peerIdentity") === "function"
   )
+}
+
+/** Reads one peer identity, preserving null and rejecting an empty string. */
+function readPeerIdentity(info: TransportInfo): string | null {
+  try {
+    const observed = info.peerIdentity.call(info)
+    if (observed === null) return null
+    const text = transportText(observed, "peerIdentity", MaximumPeerIdentityBytes)
+    if (text.length === 0) {
+      throw new TypeError("TransportInfo peerIdentity must be null or a non-empty string")
+    }
+    return text
+  } catch (value) {
+    throw readerError(value, "peerIdentity")
+  }
 }
 
 /** Captures stable kind/operation while preserving dynamic endpoint and defensive header reads. */
@@ -113,6 +117,7 @@ function snapshotTransportInfo(info: TransportInfo): TransportInfo {
   const operationReader = info.operation
   const requestHeadersReader = info.requestHeaders
   const replyHeadersReader = info.replyHeaders
+  const peerIdentity = readPeerIdentity(info)
   const kind = readText(info, kindReader, "kind", MaximumKindBytes)
   if (!KindPattern.test(kind)) {
     throw new TypeError("TransportInfo kind must be a lower-case transport token")
@@ -139,6 +144,10 @@ function snapshotTransportInfo(info: TransportInfo): TransportInfo {
     /** Reads and defensively snapshots the provider's current reply headers. */
     replyHeaders() {
       return readMetadata(info, replyHeadersReader, "replyHeaders")
+    },
+    /** Returns the construction-time verified peer identity. */
+    peerIdentity(): string | null {
+      return peerIdentity
     }
   })
   TransportInfoBrand.add(snapshot)

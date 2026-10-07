@@ -7,7 +7,7 @@
     "declaration": true,
     "declarationMap": false,
     "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo",
-    "lib": ["ES2023", "DOM", "DOM.Iterable", "ESNext.Disposable"],
+    "lib": ["ES2023", "ES2024.String", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "skipLibCheck": true,
     "types": ["node"]
   },

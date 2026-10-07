@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable", "ESNext.Disposable"],
+    "lib": ["ES2023", "ES2024.String", "DOM", "DOM.Iterable", "ESNext.Disposable"],
     "types": ["bun", "node"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"],

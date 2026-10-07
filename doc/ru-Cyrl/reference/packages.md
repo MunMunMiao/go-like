@@ -10,6 +10,6 @@
 
 Импортируйте из самого маленького пакета, которому принадлежит контракт. Runtime hosts вроде Node имеют отдельные точки входа. Публичной свалки `adapters` нет, а собственные HTTP headers всегда имеют префикс `Go-Like-`.
 
-`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от unary Transport SPI.
+`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
 
 [Ограничения отмены и завершения](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

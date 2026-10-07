@@ -5,7 +5,6 @@ import {
   endpoint as typedEndpoint,
   type Client,
   type Listener,
-  type Message,
   type Options,
   type Transport
 } from "@go-like/transport"
@@ -33,7 +32,7 @@ import { handler as removedHandler } from "../src/index"
 type ThenOnly<T> = Pick<Promise<T>, "then">
 
 declare const listener: Listener
-declare const thenOnlyMessage: ThenOnly<Message>
+declare const thenOnlyResponse: ThenOnly<Response>
 const NumberValue = struct.number()
 const transportValue: Transport = {
   init(): void {},
@@ -50,10 +49,10 @@ const transportValue: Transport = {
     return "fixture"
   }
 }
-const operation: Handler = async (_ctx: Context, request: Message) => request
-const synchronousOperation: Handler = (_ctx, request) => request
-// @ts-expect-error Handler accepts only a Message or native Promise.
-const thenOnlyOperation: Handler = () => thenOnlyMessage
+const operation: Handler = async (_ctx: Context, request: Request) => new Response(request.body)
+const synchronousOperation: Handler = (_ctx, request) => new Response(request.body)
+// @ts-expect-error Handler accepts only a Response or native Promise.
+const thenOnlyOperation: Handler = () => thenOnlyResponse
 const wrapper: Middleware = (next) => next
 const limiter: RateLimiter = newTokenBucketLimiter({
   capacity: 1,
@@ -75,6 +74,9 @@ const server: Server = newServer(
 const registrarValue: HandlerRegistrar = server
 const rawRegistration: void = server.registerHandler("orders", "get", operation)
 const typedRegistration: void = server.registerHandler(increment, (_ctx, request) => request + 1)
+const batchRegistration: void = server.registerHandlers([
+  { endpoint: increment, handler: (_ctx, request) => request }
+])
 const options: ServerOptions = server.options()
 const advertised: string | null = options.advertise
 const httpRoutes: ServerOptions["httpRoutes"] = options.httpRoutes
@@ -88,6 +90,7 @@ void [
   registrarValue,
   rawRegistration,
   typedRegistration,
+  batchRegistration,
   options,
   advertised,
   httpRoutes,
@@ -105,8 +108,10 @@ void [
 void options.handlers
 
 // @ts-expect-error Context is an independent first argument.
-operation({ header: {}, body: new Uint8Array() })
+operation(new Request("http://127.0.0.1/orders/get"))
 // @ts-expect-error Typed handler responses must match the Endpoint response Struct.
 server.registerHandler(increment, () => "invalid")
+// @ts-expect-error Batch registration expects an array of endpoint bindings.
+server.registerHandlers(increment)
 
 void removedHandler

@@ -2,15 +2,25 @@ import { expect, test } from "bun:test"
 
 import { normalizeHTTPDialTarget, normalizeHTTPListenAddress } from "../src/address"
 
-test("normalizes absolute HTTP URLs without losing path or query", () => {
-  expect(normalizeHTTPDialTarget("https://example.test:8443/a/b?x=1", false)).toEqual({
-    href: "https://example.test:8443/a/b?x=1",
+test("accepts only absolute root HTTP URLs", () => {
+  expect(normalizeHTTPDialTarget("https://example.test:8443", false)).toEqual({
+    href: "https://example.test:8443/",
     origin: "https://example.test:8443"
   })
-  expect(normalizeHTTPDialTarget("https://example.test/a/b?", false)).toEqual({
-    href: "https://example.test/a/b?",
-    origin: "https://example.test"
+  expect(normalizeHTTPDialTarget("https://example.test:8443/", false)).toEqual({
+    href: "https://example.test:8443/",
+    origin: "https://example.test:8443"
   })
+  const rooted =
+    "HTTP dial address must be a root URL without a path, query, or fragment; internal RPC paths are request URLs, not dial addresses"
+  for (const value of [
+    "https://example.test:8443/a/b?x=1",
+    "https://example.test/a/b?",
+    "https://example.test/rpc",
+    "http://example.test/?x=1"
+  ]) {
+    expect(() => normalizeHTTPDialTarget(value, false)).toThrow(rooted)
+  }
 })
 
 test("normalizes authority targets with secure-driven scheme", () => {

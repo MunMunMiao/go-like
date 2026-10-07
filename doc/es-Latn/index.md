@@ -18,6 +18,6 @@ La [referencia de paquetes](/es-Latn/reference/packages) y la [referencia de paq
 
 El `Context` va primero en las operaciones que pueden bloquear, la propiedad de los recursos queda a la vista y cada parada tiene un resultado terminal observable. No copiamos las mayúsculas de Go ni fingimos que JavaScript tiene canales o goroutines: TypeScript conserva sus exports normales y cada proveedor mantiene sus objetos nativos.
 
-`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del Transport SPI unary.
+`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
 
 [Límites de cancelación y apagado](/reference/claims#stream-cancellation-limits): Connect 2.1.2, Bun 1.4.2 Fetch, Deno 2.9.5/2.9.7.

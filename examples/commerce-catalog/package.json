@@ -22,6 +22,7 @@
     "@go-like/registry-consul": "workspace:*",
     "@go-like/resilience": "workspace:*",
     "@go-like/server": "workspace:*",
+    "@go-like/struct": "workspace:*",
     "@go-like/transport": "workspace:*",
     "@go-like/transport-http": "workspace:*",
     "@go-like/web": "workspace:*",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@go-like/cache-memory": "workspace:*",
+    "@go-like/transport-memory": "workspace:*",
     "@types/node": "26.4.0"
   },
   "license": "MIT"

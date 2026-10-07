@@ -1,7 +1,7 @@
 import { create, toBinary } from "@bufbuild/protobuf"
 import { connectNodeAdapter } from "@connectrpc/connect-node"
 import { background, withTimeout } from "@go-like/context"
-import { address, newClient, withAddress } from "@go-like/transport-grpc-buf/native"
+import { address, newClient, withEndpoint } from "@go-like/transport-grpc-buf/native"
 import { createServer } from "node:http2"
 
 import { newServerForTest, type NativeHTTP2Server } from "../../src/server"
@@ -94,7 +94,7 @@ async function serve(): Promise<void> {
 }
 
 async function load(endpoint: string, options: GrpcSoakOptions): Promise<void> {
-  const client = newClient(withAddress(endpoint))
+  const client = newClient(withEndpoint(endpoint))
   const api = newOrderServiceClient(client)
   const request = { id: "x".repeat(options.payloadBytes) }
   const requestBytes = toBinary(

@@ -160,29 +160,16 @@ function contextFailure(ctx: Context): Error | null {
   return failure === null ? null : (cause(ctx) ?? failure)
 }
 
-/** Reports whether one string contains no unmatched UTF-16 surrogate code units. */
-function isWellFormed(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const unit = value.charCodeAt(index)
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1)
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false
-      index += 1
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false
-  }
-  return true
-}
-
 /** Validates one portable non-empty topic before native I/O. */
 function validateTopic(topic: string): void {
-  if (typeof topic !== "string" || topic.length === 0 || !isWellFormed(topic)) {
+  if (typeof topic !== "string" || topic.length === 0 || !topic.isWellFormed()) {
     throw new TypeError("RabbitMQ Broker topic must be a non-empty well-formed string")
   }
 }
 
 /** Validates one native routing component while allowing RabbitMQ's empty routing key. */
 function validateRoutingValue(label: string, value: string): void {
-  if (typeof value !== "string" || !isWellFormed(value)) {
+  if (typeof value !== "string" || !value.isWellFormed()) {
     throw new TypeError(`RabbitMQ Broker ${label} must be a well-formed string`)
   }
 }
@@ -217,9 +204,9 @@ function prepareMessage(message: BrokerMessage): PreparedMessage {
     const value = message.headers[name]
     if (
       name.length === 0 ||
-      !isWellFormed(name) ||
+      !name.isWellFormed() ||
       typeof value !== "string" ||
-      !isWellFormed(value)
+      !value.isWellFormed()
     ) {
       throw new TypeError("RabbitMQ Broker message headers must contain well-formed strings")
     }
@@ -278,7 +265,7 @@ function portableHeaders(native: ConsumeMessage): Readonly<Record<string, string
   if (typeof source === "object" && source !== null && !Array.isArray(source)) {
     for (const name of Object.keys(source)) {
       const value: unknown = Reflect.get(source, name)
-      if (name.length > 0 && isWellFormed(name) && typeof value === "string") {
+      if (name.length > 0 && name.isWellFormed() && typeof value === "string") {
         defineHeader(result, name, value)
       }
     }

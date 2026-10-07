@@ -1,6 +1,6 @@
 import type { Context as GoLikeContext } from "@go-like/context"
 import { fromServerContext, mergeToClientContext, newMetadata } from "@go-like/metadata"
-import { isServiceError } from "@go-like/transport"
+import { isServiceError, type ResponseBodyEnd } from "@go-like/transport"
 import {
   context,
   propagation,
@@ -290,27 +290,49 @@ export function extractRequestHeaders(
     : propagator.extract(context.active(), carrier, headerGetter)
 }
 
-/** Reads one case-insensitive routing field or returns a stable unknown marker. */
-export function routeField(headers: Readonly<Record<string, string>>, expected: string): string {
-  const value = getHeader(propagationCarrier(headers, Object.freeze([])), expected)
-  return typeof value === "string" ? value : "unknown"
-}
-
 /** Marks one successfully completed operation with only low-cardinality outcome data. */
 export function succeedSpan(span: Span): void {
   span.setAttribute("go-like.outcome", "ok")
   span.setStatus({ code: SpanStatusCode.OK })
 }
 
-/** Completes one Web span at the response-header boundary without touching its body. */
-export function completeResponseSpan(span: Span, response: Response): void {
-  span.setAttribute("http.response.status_code", response.status)
-  if (response.status >= 500) {
-    span.setAttribute("go-like.outcome", "http_server_error")
-    span.setStatus({ code: SpanStatusCode.ERROR })
-    return
+/** Completes one span from the first terminal body event. */
+export function annotateBodySpan(span: Span, end: ResponseBodyEnd, web: boolean): void {
+  try {
+    span.setAttribute("http.response.status_code", end.httpStatus)
+    if (end.stream) {
+      span.setAttribute("go-like.stream", true)
+      span.setAttribute("go-like.handshake_ms", end.handshakeMs)
+      span.setAttribute("go-like.message_count", end.messageCount)
+    }
+    if (end.reason === "cancel" || end.status.kind === "canceled") {
+      span.setAttribute("go-like.outcome", "canceled")
+      span.setStatus({ code: SpanStatusCode.ERROR })
+      return
+    }
+    if (end.stream && end.status.kind === "error") {
+      span.setAttribute("go-like.outcome", "service_error")
+      span.setStatus({ code: SpanStatusCode.ERROR })
+      return
+    }
+    if (end.stream && end.status.kind === "truncated") {
+      span.setAttribute("go-like.outcome", "protocol_error")
+      span.setStatus({ code: SpanStatusCode.ERROR })
+      return
+    }
+    if (web && end.httpStatus >= 500) {
+      span.setAttribute("go-like.outcome", "http_server_error")
+      span.setStatus({ code: SpanStatusCode.ERROR })
+      return
+    }
+    if (web && end.httpStatus >= 400) {
+      span.setAttribute("go-like.outcome", "http_client_error")
+      return
+    }
+    succeedSpan(span)
+  } catch {
+    // Observability must not replace the wrapped operation's result.
   }
-  span.setAttribute("go-like.outcome", response.status >= 400 ? "http_client_error" : "ok")
 }
 
 /** Classifies one failed operation without copying error text into span attributes. */

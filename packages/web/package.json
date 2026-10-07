@@ -16,6 +16,8 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./bun": "./src/bun.ts",
+    "./deno": "./src/deno.ts",
     "./health": "./src/health.ts",
     "./node": "./src/node.ts"
   },
@@ -26,7 +28,7 @@
     "test:unit:coverage": "bun test --isolate --no-orphans test --coverage --coverage-dir .artifacts/coverage",
     "test:e2e": "tsx test/e2e/native-e2e.ts",
     "test:e2e:bridge-dist": "bun test/e2e/bridge-dist-e2e.ts",
-    "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && tsx test/e2e/node-dist-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/portable-runtime.ts"
+    "test:e2e:runtimes": "bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts && tsx test/e2e/node-dist-runtime.ts && deno run --sloppy-imports --config ../../deno.json test/e2e/portable-runtime.ts && bun test/e2e/native-host-e2e.ts && deno run --sloppy-imports --config ../../deno.json --allow-net=127.0.0.1 test/e2e/native-host-e2e.ts && deno check --sloppy-imports --config ../../deno.json test/deno/conformance.ts"
   },
   "dependencies": {
     "@go-like/context": "0.0.1",

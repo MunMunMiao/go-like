@@ -3,11 +3,13 @@ import * as Transport from "@go-like/transport"
 import { struct } from "@go-like/struct"
 import { decodeJsonBody, encodeJsonBody } from "@go-like/transport/json"
 import * as Provider from "@go-like/transport/provider"
+import * as Sse from "@go-like/transport/sse"
 
 const expectedRootExports = [
+  "applyResponseObservers",
   "chain",
+  "defineService",
   "fromClientContext",
-  "codec",
   "endpoint",
   "isServiceError",
   "logger",
@@ -19,20 +21,22 @@ const expectedRootExports = [
   "newClientContext",
   "withConnClose",
   "newServerContext",
+  "observeResponseBody",
+  "withResponseObserver",
   "withTimeout"
 ].sort()
 
 const expectedProviderExports = [
   "decodeMetadataHeader",
-  "decodeServiceError",
+  "decodeServiceErrorResponse",
   "encodeMetadataHeader",
-  "encodeServiceError",
   "internalServiceError",
   "newTransportClosedError",
   "newTransportProtocolError",
   "newTransportStateError",
   "newUnsupportedTransportCapabilityError",
-  "snapshotMessage"
+  "observeCall",
+  "serviceErrorResponse"
 ].sort()
 
 const actualRootExports = Object.keys(Transport).sort()
@@ -46,18 +50,38 @@ if (JSON.stringify(actualProviderExports) !== JSON.stringify(expectedProviderExp
   )
 }
 if (
-  Object.keys(Headers).length !== 19 ||
-  Headers.prefix !== "Go-Like-" ||
+  Object.keys(Headers).length !== 2 ||
   Headers.metadata !== "Go-Like-Metadata" ||
-  Headers.contentType !== "Content-Type"
+  Headers.timeout !== "Go-Like-Timeout-Ms"
 ) {
   throw new Error("unexpected @go-like/transport/headers contract")
 }
-const body = new Uint8Array([1, 2])
-const snapshot = Provider.snapshotMessage({ header: { topic: "orders" }, body })
-body[0] = 99
-if (snapshot.body[0] !== 1 || snapshot.header.topic !== "orders") {
-  throw new Error("built Message snapshot is not defensive")
+const actualSseExports = Object.keys(Sse).sort()
+const expectedSseExports = [
+  "SSEParserLimitError",
+  "createLineParser",
+  "createMessageParser",
+  "defaultSSEMaxMessageBytes",
+  "encodeSSEComment",
+  "encodeSSEEvent",
+  "encodeSSEJsonEvent",
+  "eventStreamContentType",
+  "readStreamBytes"
+].sort()
+if (JSON.stringify(actualSseExports) !== JSON.stringify(expectedSseExports)) {
+  throw new Error(`unexpected @go-like/transport/sse exports: ${actualSseExports.join(",")}`)
+}
+if (Sse.eventStreamContentType !== "text/event-stream" || Sse.encodeSSEComment().byteLength < 3) {
+  throw new Error("built SSE encoder contract is invalid")
+}
+const failureResponse = Provider.serviceErrorResponse(
+  Transport.serviceError("not_found", "missing", 404)
+)
+if (
+  failureResponse.status !== 404 ||
+  failureResponse.headers.get("content-type") !== "application/json"
+) {
+  throw new Error("built ServiceError response contract is invalid")
 }
 
 const cause = new Error("runtime cause")

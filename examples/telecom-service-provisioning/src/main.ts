@@ -23,7 +23,7 @@ if (portNumber > 65_535) throw new TypeError("PORT must be a decimal integer in 
 const service = newTelecomProvisioningMicroservice(
   newProvisionTelecomService(newMemoryProvisioningRepository())
 )
-const handler = newTelecomProvisioningHandler(service.client)
+const handler = newTelecomProvisioningHandler(service.client.activate)
 const originHost = host.includes(":") ? `[${host}]` : host
 const origin = `http://${originHost}:${portNumber}`
 const webServer = newNodeServer(handler, hostname(host), port(portNumber))

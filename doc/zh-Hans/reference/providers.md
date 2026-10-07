@@ -9,7 +9,7 @@
 - **Lifecycle adapter**：围绕应用创建的原生资源包一层 Server wrapper。
 - **Evidence**：说明仓库支持的证据类型：source/export、声明过的测试，或报告过的本地命令结果。它不会把 package version 变成 npm 发布或生产可用性声明。
 
-当前 source inventory 有 45 个非 private 的 `@go-like/*` package manifest 和 25 个 public source subpath；在这个 checkout 中它们的版本都是 `0.0.1`。`examples/*` 下的 44 个 workspace 是 private applications，不是 public packages。
+当前 source inventory 有 45 个非 private 的 `@go-like/*` package manifest 和 28 个 public source subpath；在这个 checkout 中它们的版本都是 `0.0.1`。`examples/*` 下的 44 个 workspace 是 private applications，不是 public packages。
 
 ## 按任务选择
 
@@ -28,31 +28,31 @@
 
 ## 基础包
 
-| Package               | 用途                                                      | 主要 public API                                                                                                                                                                                                   | Runtime 与所有权说明                                                                     |
-| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `@go-like/context`    | 显式取消、截止时间、cause 和 value                        | `background`、`todo`、`withCancel`、`withCancelCause`、`withDeadline`、`withDeadlineCause`、`withTimeout`、`withTimeoutCause`、`cause`、`withoutCancel`、`withValue`、`afterFunc`、`canceled`、`deadlineExceeded` | Portable source contract。`Context` 内部使用 `AbortSignal`；它不是 Go ABI，也不是 DI bag |
-| `@go-like/core`       | 组合 application 与 resource lifecycle                    | `newApp`、`server`、`registrar`、`beforeStart`、`afterStart`、`beforeStop`、`afterStop`、`startTimeout`、`stopTimeout`、`context`、`id`、`name`、`version`、`metadata`、`endpoint`、`newContext`、`fromContext`   | Portable structural `Server` 和 `App`。Sibling stop calls 是并发的                       |
-| `@go-like/metadata`   | 不可变的多值 metadata 与显式传播                          | metadata types 和 propagation functions                                                                                                                                                                           | Client 与 server metadata domains 分开；metadata 不是可信 identity                       |
-| `@go-like/struct`     | typed endpoints 和 JSON 的 runtime Struct validation      | `struct`、`Infer`、`Struct`、`StructError`、`setErrorMap`                                                                                                                                                         | 当前 public package。它是 runtime validation，不是 Protobuf、IDL 或 generated code       |
-| `@go-like/health`     | Liveness 与 readiness probe registry                      | `newProbeRegistry`、`ProbeRegistry`、`Probe`、`ProbeReport`                                                                                                                                                       | 空 liveness 通过；空 readiness fail closed；默认 probe timeout 是 1,000 ms               |
-| `@go-like/resilience` | 显式 retry、circuit breaker 和 non-blocking rate limiting | `retry`、`exponentialBackoff`、`newCircuitBreaker`、`newTokenBucketLimiter`、`circuitOpen`                                                                                                                        | Retry authorization 由调用方声明；没有自动幂等判断，也没有后台 limiter task              |
+| Package               | 用途                                                      | 主要 public API                                                                                                                                                                                                   | Runtime 与所有权说明                                                                                                                           |
+| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@go-like/context`    | 显式取消、截止时间、cause 和 value                        | `background`、`todo`、`withCancel`、`withCancelCause`、`withDeadline`、`withDeadlineCause`、`withTimeout`、`withTimeoutCause`、`cause`、`withoutCancel`、`withValue`、`afterFunc`、`canceled`、`deadlineExceeded` | Portable source contract。`Context` 内部使用 `AbortSignal`；它不是 Go ABI，也不是 DI bag                                                       |
+| `@go-like/core`       | 组合 application 与 resource lifecycle                    | `newApp`、`server`、`registrar`、`beforeStart`、`afterStart`、`beforeStop`、`afterStop`、`startTimeout`、`stopTimeout`、`context`、`id`、`name`、`version`、`metadata`、`endpoint`、`newContext`、`fromContext`   | Portable structural `Server` 和 `App`。Sibling stop calls 是并发的                                                                             |
+| `@go-like/metadata`   | 不可变的多值 metadata 与显式传播                          | metadata types 和 propagation functions                                                                                                                                                                           | Client 与 server metadata domains 分开；metadata 不是可信 identity                                                                             |
+| `@go-like/struct`     | typed endpoints 和 JSON 的 runtime Struct validation      | `struct`、`Infer`、`Struct`、`StructError`                                                                                                                                                                        | 当前 public package。它是 runtime validation，不是 Protobuf、IDL 或 generated code。`struct.parse` 接受本次 `errorMap`；没有全局 `setErrorMap` |
+| `@go-like/health`     | Liveness 与 readiness probe registry                      | `newProbeRegistry`、`ProbeRegistry`、`Probe`、`ProbeReport`                                                                                                                                                       | 空 liveness 通过；空 readiness fail closed；默认 probe timeout 是 1,000 ms                                                                     |
+| `@go-like/resilience` | 显式 retry、circuit breaker 和 non-blocking rate limiting | `retry`、`exponentialBackoff`、`newCircuitBreaker`、`newTokenBucketLimiter`、`circuitOpen`                                                                                                                        | Retry authorization 由调用方声明；没有自动幂等判断，也没有后台 limiter task                                                                    |
 
 ## Web 与内部调用包
 
-| Package                              | 用途                                                                 | 主要 public API                                                                                                                                                                                                             | 不负责                                                                               |
-| ------------------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `@go-like/web`                       | 标准 Web Handler 和 request Context bridge                           | `Handler`、`ContextHandler`、`contextHandler`                                                                                                                                                                               | Routes、WebSockets、SSE policy、listener、authentication                             |
-| `@go-like/web/health`                | Health Handler routes                                                | `createHealthHandler`                                                                                                                                                                                                       | Probe registration 或 framework route mounting                                       |
-| `@go-like/web/node`                  | 围绕 Fetch Handler 的 Node listener                                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                                                                                                                                                                  | Internal HTTP Transport TLS/HTTP2；这些用 `@go-like/transport-http/node`             |
-| `@go-like/client`                    | 内部 unary calls、discovery、selection、middleware、retries、pooling | `newClient`、`withTransport`、`withAddress`、`withService`、`withDiscovery`、`withSelector`、`withFilter`、`withBlock`、`withRetry`、`middleware`、`use`、`circuitBreakerMiddleware`、`closeTimeout`、`poolSize`、`poolTtl` | Framework routes、business replay safety、physical socket limits                     |
-| `@go-like/server`                    | 内部 unary Message server 和 route dispatch                          | `newServer`、`transport`、`address`、`advertise`、`Server.registerHandler`、`httpRoute`、`middleware`、`use`、`listenOption`、`rateLimitMiddleware`                                                                         | 框架路由器与应用授权                                                                 |
-| `@go-like/transport`                 | Transport SPI 和 Message boundary                                    | `Transport`、`Client`、`Listener`、`Socket`、`Message`、`TransportInfo`、`Endpoint`、`endpoint`、`chain`、`serviceError`                                                                                                    | 除非选择 provider，否则不提供具体 wire；没有 internal full-duplex promise            |
-| `@go-like/transport-memory`          | 进程内 unary Transport                                               | `newMemoryTransport`                                                                                                                                                                                                        | 跨进程行为、持久化、网络 fallback、TLS                                               |
-| `@go-like/transport-http`            | 基于 Fetch 的内部 HTTP Transport                                     | `newHTTPTransport`、`executor`、`maxMessageBytes`                                                                                                                                                                           | 没有注入 `HTTPHost` 时，不是完整的 portable listener；也不提供原生 Node TLS controls |
-| `@go-like/transport-http/node`       | 原生 Node internal HTTP Transport                                    | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`                                                                                                                                                                          | Deno listener 或自动安全策略                                                         |
-| `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                             | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                                           | 基于 Protobuf-ES 的 Context-first 生成代码                                           |
-| `@go-like/transport-grpc-buf/native` | `/native` 提供标准 gRPC 四种调用形态                                 | `newClient`, `newServer`                                                                                                                                                                                                    | Discovery, Selector, TLS/mTLS                                                        |
-| `@go-like/protoc-gen-like`           | 构建时 Node 生成器                                                   | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                                          | Protobuf-ES                                                                          |
+| Package                              | 用途                                                                 | 主要 public API                                                                                                                                                                                               | 不负责                                                                               |
+| ------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `@go-like/web`                       | 标准 Web Handler 和 request Context bridge                           | `Handler`、`ContextHandler`、`contextHandler`                                                                                                                                                                 | Routes、WebSockets、SSE policy、listener、authentication                             |
+| `@go-like/web/health`                | Health Handler routes                                                | `createHealthHandler`                                                                                                                                                                                         | Probe registration 或 framework route mounting                                       |
+| `@go-like/web/node`                  | 围绕 Fetch Handler 的 Node listener                                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                                                                                                                                                    | Internal HTTP Transport TLS/HTTP2；这些用 `@go-like/transport-http/node`             |
+| `@go-like/client`                    | 内部 unary calls、discovery、selection、middleware、retries、pooling | `newClient`、`withTransport`、`withEndpoint`、`withDiscovery`、`withSelector`、`withFilter`、`withBlock`、`withRetry`、`middleware`、`use`、`circuitBreakerMiddleware`、`closeTimeout`、`poolSize`、`poolTtl` | Framework routes、business replay safety、physical socket limits                     |
+| `@go-like/server`                    | 内部 JSON 与 SSE server 和 route dispatch                            | `newServer`、`transport`、`address`、`advertise`、`Server.registerHandler`、`httpRoute`、`middleware`、`use`、`listenOption`、`rateLimitMiddleware`                                                           | 框架路由器与应用授权                                                                 |
+| `@go-like/transport`                 | Transport SPI 与 Fetch Request/Response                              | `Transport`、`Client`、`Listener`、`defineService`、`ServerStream`、`TransportInfo`、`Endpoint`、`endpoint`、`chain`、`serviceError`                                                                          | 除非选择 provider，否则不提供具体 wire；没有 internal full-duplex promise            |
+| `@go-like/transport-memory`          | 进程内 unary Transport                                               | `newMemoryTransport`                                                                                                                                                                                          | 跨进程行为、持久化、网络 fallback、TLS                                               |
+| `@go-like/transport-http`            | 基于 Fetch 的内部 HTTP Transport                                     | `newHTTPTransport`、`executor`、`maxMessageBytes`                                                                                                                                                             | 没有注入 `HTTPHost` 时，不是完整的 portable listener；也不提供原生 Node TLS controls |
+| `@go-like/transport-http/node`       | 原生 Node internal HTTP Transport                                    | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`                                                                                                                                                            | Deno listener 或自动安全策略                                                         |
+| `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                             | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                             | 基于 Protobuf-ES 的 Context-first 生成代码                                           |
+| `@go-like/transport-grpc-buf/native` | `/native` 提供标准 gRPC 四种调用形态                                 | `newClient`, `newServer`                                                                                                                                                                                      | Discovery, Selector, TLS/mTLS                                                        |
+| `@go-like/protoc-gen-like`           | 构建时 Node 生成器                                                   | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                            | Protobuf-ES                                                                          |
 
 ## Config 包
 
@@ -128,35 +128,38 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## 完整的 public source subpath 清单
 
-以下是当前 package manifests 声明的 25 个显式 source subpath。生成的 packages 可能额外导出 metadata-only 的 `./package.json`；那不是 source API。
+以下是当前 package manifests 声明的 28 个显式 source subpath。生成的 packages 可能额外导出 metadata-only 的 `./package.json`；那不是 source API。
 
-|   # | Subpath                              | 主要 exports                                               | 面向对象                      |
-| --: | ------------------------------------ | ---------------------------------------------------------- | ----------------------------- |
-|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`、`subscriberTerminal`         | Provider authors              |
-|   2 | `@go-like/cache/provider`            | `putOptions`                                               | Provider authors              |
-|   3 | `@go-like/config/env`                | `envSource`                                                | Application authors           |
-|   4 | `@go-like/config/file`               | `fileSource`、`jsonFileDecoder`                            | Application authors           |
-|   5 | `@go-like/config/node`               | `newNodeFileCapability`                                    | Node runtime authors          |
-|   6 | `@go-like/config/yaml`               | `decodeYaml`                                               | Application authors           |
-|   7 | `@go-like/core/lifecycle`            | `waitForContext`                                           | Lifecycle/provider authors    |
-|   8 | `@go-like/core/node`                 | `signal`                                                   | Node/Bun process integration  |
-|   9 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                        | NATS Core applications        |
-|  10 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`、`natsJetStreamCloseTimeout`      | JetStream applications        |
-|  11 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                   | JetStream Broker applications |
-|  12 | `@go-like/registry/provider`         | provider options 和 snapshot helpers                       | Provider authors              |
-|  13 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                          | Node mDNS applications        |
-|  14 | `@go-like/store/provider`            | write/delete/list options 和 snapshots                     | Provider authors              |
-|  15 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                     | Node file Store applications  |
-|  16 | `@go-like/struct/codec`              | `encodeJson`、`decodeJson`                                 | Typed contract authors        |
-|  17 | `@go-like/struct/runtime`            | introspection 和 parsing helpers                           | Runtime/provider authors      |
-|  18 | `@go-like/transport/headers`         | `Go-Like-*` header constants                               | Transport/provider authors    |
-|  19 | `@go-like/transport/json`            | `encodeJsonBody`、`decodeJsonBody`、`jsonContentType`      | Typed/raw transport authors   |
-|  20 | `@go-like/transport/provider`        | Message、metadata、ServiceError codecs 和 errors           | Provider authors              |
-|  21 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`         | Node HTTP applications        |
-|  22 | `@go-like/web/health`                | `createHealthHandler`                                      | Web applications              |
-|  23 | `@go-like/web/node`                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout` | Node Web host applications    |
-|  24 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                | 应用作者                      |
-|  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                   | 应用作者                      |
+|   # | Subpath                              | 主要 exports                                                                         | 面向对象                      |
+| --: | ------------------------------------ | ------------------------------------------------------------------------------------ | ----------------------------- |
+|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`、`subscriberTerminal`                                   | Provider authors              |
+|   2 | `@go-like/cache/provider`            | `putOptions`                                                                         | Provider authors              |
+|   3 | `@go-like/config/env`                | `envSource`                                                                          | Application authors           |
+|   4 | `@go-like/config/file`               | `fileSource`、`jsonFileDecoder`                                                      | Application authors           |
+|   5 | `@go-like/config/node`               | `newNodeFileCapability`                                                              | Node runtime authors          |
+|   6 | `@go-like/config/yaml`               | `decodeYaml`                                                                         | Application authors           |
+|   7 | `@go-like/core/lifecycle`            | `waitForContext`                                                                     | Lifecycle/provider authors    |
+|   8 | `@go-like/core/node`                 | `signal`                                                                             | Node/Bun process integration  |
+|   9 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                                                  | NATS Core applications        |
+|  10 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`、`natsJetStreamCloseTimeout`                                | JetStream applications        |
+|  11 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                                             | JetStream Broker applications |
+|  12 | `@go-like/registry/provider`         | provider options 和 snapshot helpers                                                 | Provider authors              |
+|  13 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                                                    | Node mDNS applications        |
+|  14 | `@go-like/store/provider`            | write/delete/list options 和 snapshots                                               | Provider authors              |
+|  15 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                                               | Node file Store applications  |
+|  16 | `@go-like/struct/codec`              | `encodeJson`、`decodeJson`                                                           | Typed contract authors        |
+|  17 | `@go-like/struct/runtime`            | introspection 和 parsing helpers                                                     | Runtime/provider authors      |
+|  18 | `@go-like/transport/headers`         | `Go-Like-Metadata`, `Go-Like-Timeout-Ms`                                             | Transport/provider authors    |
+|  19 | `@go-like/transport/json`            | `encodeJsonBody`、`decodeJsonBody`、`jsonContentType`                                | Typed/raw transport authors   |
+|  20 | `@go-like/transport/provider`        | metadata、ServiceError codecs、transport errors 和 `observeCall`                     | Provider authors              |
+|  21 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`                                   | Node HTTP applications        |
+|  22 | `@go-like/web/health`                | `createHealthHandler`                                                                | Web applications              |
+|  23 | `@go-like/web/node`                  | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                           | Node Web host applications    |
+|  24 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                                          | 应用作者                      |
+|  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                                             | 应用作者                      |
+|  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` | SSE server streams            |
+|  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             | Web applications              |
+|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           | Web applications              |
 
 `@go-like/otel/testing` 和 `@go-like/web/node/testing` 既不是 TypeScript path mappings，也不是当前 package manifest exports。不要把它们写成 public entrypoints。
 
@@ -177,7 +180,7 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 - 需要 Context 时，在 Web edge 使用 `contextHandler`，不要自造 framework request bag。
 - 一个进程拥有多个 admitted resource，或者需要明确 signal 和 shutdown ownership 时，使用 `newApp` 和 `server(...)`。
 - 两端都需要共享 runtime Struct validation 时，使用 typed `server.registerHandler(endpoint, handler)`；如果应用拥有另一种字节契约，则使用 raw `server.registerHandler(service, endpoint, handler)`.
-- 直连路由在构造 Client 时使用 `withAddress(...addresses)`。Discovery 同时使用 `withService(...)` 与 `withDiscovery(...)`，不要把直连地址和 Discovery 混用。两种地址源使用同一个 Selector。
+- 直连路由在构造 Client 时使用 `withEndpoint(...)`。Discovery 同时使用 `withEndpoint("discovery:///<name>")` 与 `withDiscovery(...)`，不要把直连地址和 Discovery 混用。两种地址源使用同一个 Selector。
 - 只有服务确实需要它们增加的 control-plane 行为时，才使用 `withSelector(...)`、`withFilter(...)` 和 `withBlock()`。
 - 只有写清楚 replay authorization、最大总尝试次数、failure predicate 和 business idempotency 后，才使用 `withRetry(...)`。
 - 用 `newMemoryStore` 做确定性的测试，不要用它做 durability 声明。
@@ -187,7 +190,7 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## 明确排除项
 
-`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于 unary Transport SPI 的调用路径。
+`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于内部 Fetch/SSE 路径的调用路径。
 
 这不包含浏览器标准 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用认证、Event Store/replay、ORM 或集群编排。
 

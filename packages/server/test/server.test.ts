@@ -1,19 +1,26 @@
 import { expect, test } from "bun:test"
 
-import { background, cause, withCancelCause, type Context } from "@go-like/context"
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import {
+  background,
+  canceled,
+  cause,
+  deadlineExceeded,
+  withCancelCause,
+  type Context
+} from "@go-like/context"
 import { newTokenBucketLimiter } from "@go-like/resilience"
 import { struct } from "@go-like/struct"
-import { endpoint } from "@go-like/transport"
+import { endpoint, withTimeout, type Endpoint } from "@go-like/transport"
 import type {
-  AcceptHandler,
   Client,
   ListenOption,
   Listener,
-  Message,
   Options,
-  Transport
+  Transport,
+  TransportHandler
 } from "@go-like/transport"
-import { decodeServiceError } from "@go-like/transport/provider"
+import { decodeServiceErrorResponse } from "@go-like/transport/provider"
 import { newMemoryTransport } from "@go-like/transport-memory"
 
 import {
@@ -29,18 +36,30 @@ import {
   type Middleware
 } from "../src/index"
 
+/** Copies bytes into an ArrayBuffer accepted as a Fetch body. */
+function copiedBytes(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
+}
+
+/** Builds one internal RPC request. Content-Type is whatever the caller supplies. */
+function rpcRequest(
+  service: string,
+  endpointName: string,
+  body: Uint8Array | null = new Uint8Array(),
+  headers: HeadersInit = { "content-type": "application/json" },
+  method = "POST"
+): Request {
+  const init: RequestInit = { method, headers }
+  if (body !== null) init.body = copiedBytes(body)
+  return new Request(`http://127.0.0.1/${service}/${endpointName}`, init)
+}
+
 /** Creates one listener controlled by close. */
 function fixtureListener(
-  sent: Message[],
-  requests: readonly Message[] = [
-    {
-      header: {
-        "Go-Like-Service": "orders",
-        "Go-Like-Endpoint": "get"
-      },
-      body: new Uint8Array([1])
-    }
-  ],
+  sent: Response[],
+  requests: readonly Request[] = [rpcRequest("orders", "get", new Uint8Array([1]))],
   listenerAddress = "127.0.0.1:43210",
   onAccept: (() => void) | null = null
 ): Listener {
@@ -55,27 +74,10 @@ function fixtureListener(
     async close(): Promise<void> {
       resolveDone?.()
     },
-    async accept(ctx: Context, handle: AcceptHandler): Promise<void> {
+    async serve(ctx: Context, handler: TransportHandler): Promise<void> {
       onAccept?.()
       for (const request of requests) {
-        const socket = {
-          recv(): Promise<Message> {
-            return Promise.resolve(request)
-          },
-          async send(_ctx: Context, message: Message): Promise<void> {
-            sent.push(message)
-          },
-          close(): Promise<void> {
-            return Promise.resolve()
-          },
-          local(): string {
-            return "127.0.0.1:43210"
-          },
-          remote(): string {
-            return "127.0.0.1:50000"
-          }
-        }
-        await handle(ctx, socket)
+        sent.push(await handler(ctx, request))
       }
       await done
     }
@@ -101,7 +103,6 @@ function fixtureTransport(listener: Listener, kind = "http", tls = false): Trans
     init(): void {},
     options(): Options {
       return Object.freeze({
-        codec: null,
         logger: null,
         timeoutMs: 0,
         secure: false,
@@ -128,25 +129,21 @@ function fixtureTransport(listener: Listener, kind = "http", tls = false): Trans
 }
 
 /** Exchanges one internal unary request through a real transport Client. */
-async function exchange(client: Client, service: string, endpoint: string): Promise<Message> {
-  await client.send(background(), {
-    header: {
-      "Go-Like-Service": service,
-      "Go-Like-Endpoint": endpoint
-    },
-    body: new Uint8Array()
-  })
-  return await client.recv(background())
+async function exchange(client: Client, service: string, endpointName: string): Promise<Response> {
+  return await client.fetch(
+    background(),
+    rpcRequest(service, endpointName, new Uint8Array(), { "content-type": "application/json" })
+  )
 }
 
 test("routes one unary exchange and blocks until stop", async () => {
-  const sent: Message[] = []
+  const sent: Response[] = []
   const server = newServer(
     transport(fixtureTransport(fixtureListener(sent))),
     address("127.0.0.1:0"),
     middleware((next) => async (ctx, request) => next(ctx, request))
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   const running = server.start(background())
   await Promise.resolve()
@@ -155,13 +152,13 @@ test("routes one unary exchange and blocks until stop", async () => {
   await server.stop(background())
   await running
   expect(sent).toHaveLength(1)
-  expect(sent[0]?.body).toEqual(new Uint8Array([1]))
+  expect(new Uint8Array(await sent[0]!.arrayBuffer())).toEqual(new Uint8Array([1]))
 })
 
 test("constructs without handlers and serves a typed registration", async () => {
   const NumberValue = struct.number()
   const operation = endpoint("calculator", "increment", NumberValue, NumberValue)
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const server = newServer(
     transport(
@@ -169,29 +166,13 @@ test("constructs without handlers and serves a typed registration", async () => 
         fixtureListener(
           sent,
           [
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment",
-                "content-type": "Application/JSON; charset=utf-8"
-              },
-              body: new TextEncoder().encode("1")
-            },
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment"
-              },
-              body: new TextEncoder().encode("2")
-            },
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment",
-                "Content-Type": "application/json"
-              },
-              body: new TextEncoder().encode("9")
-            }
+            rpcRequest("calculator", "increment", new TextEncoder().encode("1"), {
+              "content-type": "Application/JSON; charset=utf-8"
+            }),
+            rpcRequest("calculator", "increment", new TextEncoder().encode("2"), {}),
+            rpcRequest("calculator", "increment", new TextEncoder().encode("9"), {
+              "Content-Type": "application/json"
+            })
           ],
           "127.0.0.1:43210",
           accepting.resolve
@@ -208,24 +189,19 @@ test("constructs without handlers and serves a typed registration", async () => 
   await server.stop(background())
   await running
 
-  expect(sent[0]).toEqual({
-    header: { "Content-Type": "application/json" },
-    body: new TextEncoder().encode("2")
-  })
+  expect(sent[0]?.status).toBe(200)
+  expect(sent[0]?.headers.get("content-type")).toBe("application/json")
+  expect(new TextDecoder().decode(await sent[0]!.arrayBuffer())).toBe("2")
   const invalidRequest = sent[1]
   const invalidResponse = sent[2]
   if (invalidRequest === undefined || invalidResponse === undefined) {
     throw new Error("typed server responses are missing")
   }
-  expect(
-    decodeServiceError("unary", 200, invalidRequest.header, invalidRequest.body)
-  ).toMatchObject({
+  expect(await decodeServiceErrorResponse(invalidRequest)).toMatchObject({
     code: "invalid_request",
     status: 400
   })
-  expect(
-    decodeServiceError("unary", 200, invalidResponse.header, invalidResponse.body)
-  ).toMatchObject({
+  expect(await decodeServiceErrorResponse(invalidResponse)).toMatchObject({
     code: "internal",
     status: 500
   })
@@ -242,7 +218,7 @@ test("preserves a class receiver through typed service registration glue", async
     }
   }
   const implementation = new Calculator(2)
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const server = newServer(
     transport(
@@ -250,14 +226,9 @@ test("preserves a class receiver through typed service registration glue", async
         fixtureListener(
           sent,
           [
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment",
-                "Content-Type": "application/json"
-              },
-              body: new TextEncoder().encode("1")
-            }
+            rpcRequest("calculator", "increment", new TextEncoder().encode("1"), {
+              "Content-Type": "application/json"
+            })
           ],
           "127.0.0.1:43210",
           accepting.resolve
@@ -272,12 +243,9 @@ test("preserves a class receiver through typed service registration glue", async
   await server.stop(background())
   await running
 
-  expect(sent).toEqual([
-    {
-      header: { "Content-Type": "application/json" },
-      body: new TextEncoder().encode("3")
-    }
-  ])
+  expect(sent[0]?.status).toBe(200)
+  expect(sent[0]?.headers.get("content-type")).toBe("application/json")
+  expect(new TextDecoder().decode(await sent[0]!.arrayBuffer())).toBe("3")
 })
 
 test("rejects malformed typed request metadata and handler values", async () => {
@@ -287,7 +255,7 @@ test("rejects malformed typed request metadata and handler values", async () => 
     Reflect.apply(invalidServer.registerHandler, invalidServer, [operation, "invalid"])
   ).toThrow("server typed handler must be a function")
 
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const server = newServer(
     transport(
@@ -295,23 +263,13 @@ test("rejects malformed typed request metadata and handler values", async () => 
         fixtureListener(
           sent,
           [
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment",
-                "Content-Type": "application/json",
-                "content-type": "application/json"
-              },
-              body: new TextEncoder().encode("1")
-            },
-            {
-              header: {
-                "Go-Like-Service": "calculator",
-                "Go-Like-Endpoint": "increment",
-                "Content-Type": "application/json"
-              },
-              body: new TextEncoder().encode("1")
-            }
+            rpcRequest("calculator", "increment", new TextEncoder().encode("1"), {
+              "Content-Type": "application/json",
+              "content-type": "application/json"
+            }),
+            rpcRequest("calculator", "increment", new TextEncoder().encode("1"), {
+              "Content-Type": "application/json"
+            })
           ],
           "127.0.0.1:43210",
           accepting.resolve
@@ -326,7 +284,7 @@ test("rejects malformed typed request metadata and handler values", async () => 
   await running
 
   for (const response of sent) {
-    expect(decodeServiceError("unary", 200, response.header, response.body)).toMatchObject({
+    expect(await decodeServiceErrorResponse(response)).toMatchObject({
       code: "invalid_request",
       status: 400
     })
@@ -349,9 +307,9 @@ test("rejects an empty endpoint seal before listen", async () => {
   const sealing = expect(server.endpoint(background())).rejects.toThrow(
     "server requires at least one registered handler"
   )
-  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
-    "server registration is sealed"
-  )
+  expect(() =>
+    server.registerHandler("orders", "late", (_ctx, request) => new Response(request.body))
+  ).toThrow("server registration is sealed")
   await sealing
   expect(listens).toBe(0)
 })
@@ -378,7 +336,7 @@ test("rejects an empty direct start before listen", async () => {
 test("rejects typed and raw duplicate registrations synchronously", () => {
   const NumberValue = struct.number()
   const operation = endpoint("calculator", "increment", NumberValue, NumberValue)
-  const raw: Handler = (_ctx, request) => request
+  const raw: Handler = (_ctx, request) => new Response(request.body)
 
   const typedFirst = newServer(transport(fixtureTransport(fixtureListener([]))))
   typedFirst.registerHandler(operation, (_ctx, request) => request + 1)
@@ -403,12 +361,12 @@ test("endpoint seals registration while its bind is pending", async () => {
       listen: () => deferred.promise
     })
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   const pending = server.endpoint(background())
-  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
-    "server registration is sealed"
-  )
+  expect(() =>
+    server.registerHandler("orders", "late", (_ctx, request) => new Response(request.body))
+  ).toThrow("server registration is sealed")
   deferred.resolve(listener)
   await expect(pending).resolves.toBe("http://127.0.0.1:43210/")
   await server.stop(background())
@@ -424,12 +382,12 @@ test("start seals registration while its bind is pending", async () => {
       listen: () => deferred.promise
     })
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   const running = server.start(background())
-  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
-    "server registration is sealed"
-  )
+  expect(() =>
+    server.registerHandler("orders", "late", (_ctx, request) => new Response(request.body))
+  ).toThrow("server registration is sealed")
   deferred.resolve(listener)
   await Promise.resolve()
   await server.stop(background())
@@ -445,18 +403,18 @@ test("a failed bind leaves registration sealed", async () => {
       listen: () => Promise.reject(failure)
     })
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   await expect(server.endpoint(background())).rejects.toBe(failure)
-  expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
-    "server registration is sealed"
-  )
+  expect(() =>
+    server.registerHandler("orders", "late", (_ctx, request) => new Response(request.body))
+  ).toThrow("server registration is sealed")
 })
 
 test("shares one composed dispatcher and bind between concurrent endpoint and start", async () => {
   let listens = 0
   let compositions = 0
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const listener = fixtureListener(sent, undefined, "127.0.0.1:43210", accepting.resolve)
   const deferred = Promise.withResolvers<Listener>()
@@ -475,7 +433,7 @@ test("shares one composed dispatcher and bind between concurrent endpoint and st
       return (ctx, request) => next(ctx, request)
     })
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   const advertised = server.endpoint(background())
   const running = server.start(background())
@@ -487,7 +445,7 @@ test("shares one composed dispatcher and bind between concurrent endpoint and st
   await server.stop(background())
   await running
   expect(sent).toHaveLength(1)
-  expect(sent[0]?.body).toEqual(new Uint8Array([1]))
+  expect(new Uint8Array(await sent[0]!.arrayBuffer())).toEqual(new Uint8Array([1]))
 })
 
 test.each([
@@ -512,12 +470,12 @@ test.each([
         throw reason
       })
     )
-    server.registerHandler("orders", "get", (_ctx, request) => request)
+    server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
     const endpointOutcome = Promise.allSettled([server.endpoint(background())])
-    expect(() => server.registerHandler("orders", "late", (_ctx, request) => request)).toThrow(
-      "server registration is sealed"
-    )
+    expect(() =>
+      server.registerHandler("orders", "late", (_ctx, request) => new Response(request.body))
+    ).toThrow("server registration is sealed")
     const startOutcome = Promise.allSettled([server.start(background())])
     const [[endpointResult], [startResult]] = await Promise.all([endpointOutcome, startOutcome])
     if (endpointResult.status !== "rejected" || startResult.status !== "rejected") {
@@ -539,8 +497,8 @@ test("stop owns an in-flight bind and closes the late listener once without acce
     addr(): string {
       return "127.0.0.1:43210"
     },
-    /** Records the forbidden post-stop accept. */
-    accept(): Promise<void> {
+    /** Records the forbidden post-stop serve. */
+    serve(): Promise<void> {
       accepts += 1
       return Promise.resolve()
     },
@@ -558,7 +516,7 @@ test("stop owns an in-flight bind and closes the late listener once without acce
     }
   }
   const server = newServer(transport(transportValue))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   const running = server.start(background())
   await Promise.resolve()
@@ -586,7 +544,7 @@ test("settles start cleanly when stop cancels a cancellation-aware bind", async 
     }
   }
   const server = newServer(transport(transportValue))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   const running = server.start(background())
   void running.catch(() => {})
   await bound.promise
@@ -607,7 +565,7 @@ test("preserves an external bind failure that races stop", async () => {
       }
     })
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   const running = server.start(background())
   void running.catch(() => {})
   await Promise.resolve()
@@ -628,7 +586,7 @@ test("keeps a shared bind alive when one endpoint waiter cancels", async () => {
     addr(): string {
       return "127.0.0.1:43210"
     },
-    async accept(): Promise<void> {
+    async serve(): Promise<void> {
       accepted.resolve()
       await stopped.promise
     },
@@ -650,7 +608,7 @@ test("keeps a shared bind alive when one endpoint waiter cancels", async () => {
     }
   }
   const server = newServer(transport(transportValue))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   const [caller, cancel] = withCancelCause(background())
   const cancellation = new Error("endpoint waiter canceled")
   const endpoint = server.endpoint(caller)
@@ -676,8 +634,8 @@ test("starts one owner close when the first stop caller is already canceled", as
     addr(): string {
       return "127.0.0.1:43210"
     },
-    /** Keeps the unused accept loop pending. */
-    accept(): Promise<void> {
+    /** Keeps the unused serve loop pending. */
+    serve(): Promise<void> {
       return new Promise(() => {})
     },
     /** Records and delays the single owner-scoped close. */
@@ -688,7 +646,7 @@ test("starts one owner close when the first stop caller is already canceled", as
     }
   }
   const server = newServer(transport(fixtureTransport(listener)))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   await server.endpoint(background())
   const [caller, cancel] = withCancelCause(background())
   const reason = new Error("stop caller canceled")
@@ -718,8 +676,8 @@ test("closes once after start Context cancellation ends accept", async () => {
     addr(): string {
       return "127.0.0.1:43210"
     },
-    /** Ends acceptance when the Server start Context is canceled. */
-    async accept(ctx): Promise<void> {
+    /** Ends serve when the Server start Context is canceled. */
+    async serve(ctx): Promise<void> {
       accepting.resolve()
       const signal = ctx.done()
       if (signal === null) throw new Error("start Context must be cancelable")
@@ -735,7 +693,7 @@ test("closes once after start Context cancellation ends accept", async () => {
     }
   }
   const server = newServer(transport(fixtureTransport(listener)))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   const [startContext, cancelStart] = withCancelCause(background())
   const running = server.start(startContext)
   await accepting.promise
@@ -766,7 +724,7 @@ test("separates bind and advertise while preserving the actual bound port", asyn
     address("0.0.0.0:0"),
     advertise("orders.internal")
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   expect(server.options().address).toBe("0.0.0.0:0")
   expect(server.options().advertise).toBe("orders.internal")
@@ -784,7 +742,7 @@ test("accepts an explicit advertise address or absolute endpoint", async () => {
       transport(fixtureTransport(fixtureListener([], [], "0.0.0.0:43210"))),
       advertise(selected)
     )
-    server.registerHandler("orders", "get", (_ctx, request) => request)
+    server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
     await expect(server.endpoint(background())).resolves.toBe(expected)
     await server.stop(background())
   }
@@ -793,7 +751,7 @@ test("accepts an explicit advertise address or absolute endpoint", async () => {
 test("requires an explicit usable advertise value for wildcard binds", async () => {
   for (const listenerAddress of ["0.0.0.0:43210", "[::]:43210"]) {
     const server = newServer(transport(fixtureTransport(fixtureListener([], [], listenerAddress))))
-    server.registerHandler("orders", "get", (_ctx, request) => request)
+    server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
     await expect(server.endpoint(background())).rejects.toThrow("requires explicit advertise")
     await server.stop(background())
   }
@@ -802,7 +760,7 @@ test("requires an explicit usable advertise value for wildcard binds", async () 
     transport(fixtureTransport(fixtureListener([], [], "127.0.0.1:43210"))),
     advertise("0.0.0.0")
   )
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
   await expect(server.endpoint(background())).rejects.toThrow(
     "advertise must not use a wildcard host"
   )
@@ -811,7 +769,7 @@ test("requires an explicit usable advertise value for wildcard binds", async () 
 
 test("advertises a TLS-configured HTTP authority with its real HTTPS scheme", async () => {
   const server = newServer(transport(fixtureTransport(fixtureListener([]), "http", true)))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   await expect(server.endpoint(background())).resolves.toBe("https://127.0.0.1:43210/")
   await server.stop(background())
@@ -830,7 +788,7 @@ test("forwards listen options and exposes the construction snapshot", async () =
     }
   }
   const server = newServer(transport(transportValue), listenOption(option))
-  server.registerHandler("orders", "get", (_ctx, request) => request)
+  server.registerHandler("orders", "get", (_ctx, request) => new Response(request.body))
 
   expect(server.options().listenOptions).toEqual([option])
   expect(server.string()).toBe("server")
@@ -840,12 +798,12 @@ test("forwards listen options and exposes the construction snapshot", async () =
 })
 
 test("keeps routing state isolated from returned option snapshots", async () => {
-  const sent: Message[] = []
+  const sent: Response[] = []
   const events: string[] = []
   const accepting = Promise.withResolvers<void>()
   const operation: Handler = (_ctx, request) => {
     events.push("handler")
-    return request
+    return new Response(request.body)
   }
   const selectedMiddleware = recordingMiddleware("operation", events)
   const server = newServer(
@@ -872,107 +830,121 @@ test("keeps routing state isolated from returned option snapshots", async () => 
 })
 
 test("encodes routing and handler failures without leaking internal errors", async () => {
-  const cases: readonly [
-    request: Message,
-    operation: (_ctx: Context, request: Message) => Message | Promise<Message>,
-    code: string
-  ][] = [
+  const cases: readonly [Request, string, number][] = [
+    [new Request("http://127.0.0.1/", { method: "POST" }), "not_found", 404],
+    [new Request("http://127.0.0.1/orders/get*", { method: "POST" }), "not_found", 404],
+    [new Request("http://127.0.0.1/%E8%AE%A2%E5%8D%95/get", { method: "POST" }), "not_found", 404],
     [
-      {
-        header: { "Go-Like-Endpoint": "get" },
-        body: new Uint8Array()
-      },
-      (_ctx, request) => request,
-      "invalid_request"
-    ],
-    ...[
-      { "Go-Like-Service": "orders/admin", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get*" },
-      { "Go-Like-Service": "orders\u0000", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get\u001f" },
-      { "Go-Like-Service": "orders\u007f", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get\udfff" },
-      { "Go-Like-Service": " orders", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get " },
-      { "Go-Like-Service": "orders admin", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "订单", "Go-Like-Endpoint": "get" },
-      { "Go-Like-Service": "orders", "Go-Like-Endpoint": "😀" }
-    ].map(
-      (header) =>
-        [
-          { header, body: new Uint8Array() },
-          (_ctx: Context, request: Message) => request,
-          "invalid_request"
-        ] as [Message, (_ctx: Context, request: Message) => Message, string]
-    ),
-    [
-      {
-        header: {
-          "Go-Like-Service": "orders",
-          "Go-Like-Endpoint": "get",
-          "Go-Like-Metadata": "v1.%5B%5B%22trace%22%2C%5B%22one%22%5D%5D%5D",
-          "go-like-metadata": "v1.%5B%5B%22trace%22%2C%5B%22two%22%5D%5D%5D"
-        },
-        body: new Uint8Array()
-      },
-      (_ctx, request) => request,
-      "invalid_metadata"
+      rpcRequest("inventory", "get", new Uint8Array(), { "content-type": "application/json" }),
+      "not_found",
+      404
     ],
     [
-      {
-        header: {
-          "Go-Like-Service": "inventory",
-          "Go-Like-Endpoint": "get"
-        },
-        body: new Uint8Array()
-      },
-      (_ctx, request) => request,
-      "not_found"
+      rpcRequest("orders", "get", new Uint8Array(), { "content-type": "text/plain" }),
+      "invalid_request",
+      400
     ],
     [
-      {
-        header: {
-          "Go-Like-Service": "orders",
-          "Go-Like-Endpoint": "get",
-          "Go-Like-Metadata": "invalid"
-        },
-        body: new Uint8Array()
-      },
-      (_ctx, request) => request,
-      "invalid_metadata"
+      rpcRequest("orders", "get", new Uint8Array(), {
+        "content-type": "application/json",
+        "Go-Like-Metadata": "invalid"
+      }),
+      "invalid_metadata",
+      400
     ],
     [
-      {
-        header: {
-          "Go-Like-Service": "orders",
-          "Go-Like-Endpoint": "get"
-        },
-        body: new Uint8Array()
-      },
-      () => {
-        throw new Error("secret")
-      },
-      "internal"
+      rpcRequest("orders", "get", new Uint8Array(), {
+        "content-type": "application/json",
+        "Go-Like-Timeout-Ms": "nope"
+      }),
+      "invalid_request",
+      400
+    ],
+    [
+      rpcRequest("orders", "missing", new Uint8Array(), { "Go-Like-Timeout-Ms": "-1" }),
+      "invalid_request",
+      400
+    ],
+    [
+      rpcRequest("orders", "get", new Uint8Array(), {
+        "content-type": "application/json",
+        "Go-Like-Timeout-Ms": "99999999999999999999"
+      }),
+      "invalid_request",
+      400
+    ],
+    [
+      new Request("http://127.0.0.1/orders/get", {
+        method: "GET",
+        headers: { "content-type": "application/json" }
+      }),
+      "method_not_allowed",
+      405
+    ],
+    [
+      rpcRequest("orders", "get", new Uint8Array(), { "content-type": "application/json" }),
+      "internal",
+      500
     ]
   ]
 
-  for (const [request, operation, code] of cases) {
-    const sent: Message[] = []
+  for (const [request, code, status] of cases) {
+    const sent: Response[] = []
     const accepting = Promise.withResolvers<void>()
     const server = newServer(
       transport(
         fixtureTransport(fixtureListener(sent, [request], "127.0.0.1:43210", accepting.resolve))
       )
     )
-    server.registerHandler("orders", "get", operation)
+    server.registerHandler("orders", "get", () => {
+      throw new Error("secret")
+    })
     const running = server.start(background())
     await accepting.promise
     await server.stop(background())
     await running
     const response = sent[0]
     if (response === undefined) throw new Error("server omitted its failure response")
-    expect(decodeServiceError("unary", 200, response.header, response.body)?.code).toBe(code)
+    const failure = await decodeServiceErrorResponse(response.clone())
+    expect(response.status).toBe(status)
+    expect(failure?.code).toBe(code)
+    expect(failure?.status).toBe(status)
+    expect(failure?.message).not.toContain("secret")
+    if (code === "method_not_allowed") expect(response.headers.get("allow")).toBe("POST")
   }
+})
+
+test("cancels the handler context immediately when Go-Like-Timeout-Ms is zero", async () => {
+  let seen = null as Error | null
+  const sent: Response[] = []
+  const accepting = Promise.withResolvers<void>()
+  const server = newServer(
+    transport(
+      fixtureTransport(
+        fixtureListener(
+          sent,
+          [
+            rpcRequest("orders", "get", new Uint8Array(), {
+              "content-type": "application/json",
+              "Go-Like-Timeout-Ms": "0"
+            })
+          ],
+          "127.0.0.1:43210",
+          accepting.resolve
+        )
+      )
+    )
+  )
+  server.registerHandler("orders", "get", (ctx) => {
+    seen = ctx.err()
+    return new Response(null, { status: 204 })
+  })
+  const running = server.start(background())
+  await accepting.promise
+  await server.stop(background())
+  await running
+  expect(seen).toBe(deadlineExceeded)
+  expect(sent[0]?.status).toBe(204)
 })
 
 test("validates server construction and raw registrations", () => {
@@ -995,11 +967,19 @@ test("validates server construction and raw registrations", () => {
   }
   const registrationServer = newServer(transport(fixtureTransport(fixtureListener([]))))
   expect(() =>
-    registrationServer.registerHandler("", "get", async (_ctx, request) => request)
-  ).toThrow("server service must be a visible ASCII route token")
+    registrationServer.registerHandler(
+      "",
+      "get",
+      async (_ctx, request) => new Response(request.body)
+    )
+  ).toThrow("server service must be a URL unreserved route token")
   expect(() =>
-    registrationServer.registerHandler("orders", "", async (_ctx, request) => request)
-  ).toThrow("server endpoint must be a visible ASCII route token")
+    registrationServer.registerHandler(
+      "orders",
+      "",
+      async (_ctx, request) => new Response(request.body)
+    )
+  ).toThrow("server endpoint must be a URL unreserved route token")
   for (const [service, endpoint] of [
     ["a/b", "c"],
     ["a", "b/c"],
@@ -1015,12 +995,20 @@ test("validates server construction and raw registrations", () => {
     ["a", "b c"],
     ["订单", "c"],
     ["a", "é"],
-    ["a", "😀"]
+    ["a", "😀"],
+    ["a!", "c"]
   ] as const) {
     expect(() =>
-      registrationServer.registerHandler(service, endpoint, async (_ctx, request) => request)
+      registrationServer.registerHandler(
+        service,
+        endpoint,
+        async (_ctx, request) => new Response(request.body)
+      )
     ).toThrow("route token")
   }
+  expect(() =>
+    registrationServer.registerHandler("orders.v1", "pay_now~1-ok", async () => new Response(null))
+  ).not.toThrow()
   expect(() => transport({} as never)).toThrow("server transport must implement Transport")
   expect(() => listenOption(null as never)).toThrow("server listen option must be a function")
   expect(() =>
@@ -1031,13 +1019,320 @@ test("validates server construction and raw registrations", () => {
       middleware: options.middleware,
       operationMiddleware: options.operationMiddleware,
       listenOptions: [null as never],
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     }))
   ).toThrow("server listen option must be a function")
 })
 
+test("registerHandlers writes every endpoint only after the whole list validates", async () => {
+  const request = struct.number()
+  const response = struct.number()
+  const keep = endpoint("catalog", "keep", request, response)
+  const add = endpoint("catalog", "add", request, response)
+  const watch = endpoint("catalog", "watch", request, response, true)
+  const other = endpoint("inventory", "get", request, response)
+  const unary = (): number => 1
+  const stream = async function* (): AsyncGenerator<number> {
+    yield 1
+  }
+
+  /** Binds the batch registrar without assuming it already exists on the type. */
+  function batchOf(server: ReturnType<typeof newServer>): (
+    handlers: readonly {
+      readonly endpoint: Endpoint
+      readonly handler: (ctx: Context, request: unknown) => unknown
+    }[]
+  ) => void {
+    const candidate: unknown = Reflect.get(server, "registerHandlers")
+    if (typeof candidate !== "function") {
+      throw new TypeError("server registerHandlers is missing")
+    }
+    return candidate.bind(server) as (
+      handlers: readonly {
+        readonly endpoint: Endpoint
+        readonly handler: (ctx: Context, request: unknown) => unknown
+      }[]
+    ) => void
+  }
+
+  const server = newServer(transport(fixtureTransport(fixtureListener([]))))
+  const batch = batchOf(server)
+  server.registerHandler(keep, unary)
+  expect(() =>
+    batch([
+      { endpoint: add, handler: unary },
+      { endpoint: keep, handler: unary }
+    ])
+  ).toThrow("server handler is duplicated: catalog/keep")
+  server.registerHandler(add, unary)
+  expect(() => server.registerHandler(keep, unary)).toThrow(
+    "server handler is duplicated: catalog/keep"
+  )
+
+  const fresh = newServer(transport(fixtureTransport(fixtureListener([]))))
+  expect(() =>
+    batchOf(fresh)([
+      { endpoint: add, handler: unary },
+      { endpoint: add, handler: unary }
+    ])
+  ).toThrow("server handler is duplicated: catalog/add")
+  fresh.registerHandler(add, unary)
+
+  const invalid = newServer(transport(fixtureTransport(fixtureListener([]))))
+  const invalidBatch = batchOf(invalid)
+  expect(() =>
+    invalidBatch([
+      { endpoint: add, handler: unary },
+      {
+        endpoint: {
+          service: "bad/name",
+          endpoint: "add",
+          request,
+          response,
+          stream: false
+        },
+        handler: unary
+      }
+    ])
+  ).toThrow("route token")
+  invalid.registerHandler(add, unary)
+  expect(() =>
+    invalidBatch([
+      { endpoint: other, handler: unary },
+      {
+        endpoint: {
+          service: "inventory",
+          endpoint: "broken",
+          request: {},
+          response,
+          stream: false
+        } as never,
+        handler: unary
+      }
+    ])
+  ).toThrow("must be a Struct")
+  invalid.registerHandler(other, unary)
+  expect(() => invalidBatch(null as never)).toThrow("server handler registrations must be an array")
+  expect(() => invalidBatch([{ endpoint: watch, handler: "no" as never }])).toThrow(
+    "server typed handler must be a function"
+  )
+  expect(() => invalidBatch([null as never])).toThrow(
+    "server handler registration must be an object"
+  )
+  expect(() => invalidBatch([{ endpoint: "catalog", handler: unary } as never])).toThrow(
+    "server handler registration endpoint must be an object"
+  )
+  expect(() => invalid.registerHandler(watch, stream)).not.toThrow()
+
+  const open = newServer(transport(fixtureTransport(fixtureListener([]))))
+  open.registerHandler(keep, unary)
+  batchOf(open)([
+    { endpoint: add, handler: unary },
+    { endpoint: watch, handler: stream },
+    { endpoint: other, handler: unary }
+  ])
+  expect(() => open.registerHandler(add, unary)).toThrow("duplicated")
+  expect(() => open.registerHandler(watch, stream)).toThrow("duplicated")
+  expect(() => open.registerHandler(other, unary)).toThrow("duplicated")
+  expect(() => open.registerHandler("catalog", "extra", () => new Response(null))).not.toThrow()
+
+  const sealed = newServer(transport(fixtureTransport(fixtureListener([]))))
+  sealed.registerHandler(keep, unary)
+  const pending = sealed.endpoint(background())
+  expect(() => batchOf(sealed)([{ endpoint: add, handler: unary }])).toThrow(
+    "server registration is sealed"
+  )
+  await pending
+  expect(() => sealed.registerHandler(add, unary)).toThrow("server registration is sealed")
+  await sealed.stop(background())
+})
+
+test("registerHandlers does not overwrite a handler committed by a reentrant getter", async () => {
+  const dto = struct.object({ n: struct.number() })
+  const first = endpoint("reentry", "first", dto, dto)
+  const second = endpoint("reentry", "second", dto, dto)
+  const outer = (_ctx: Context, request: unknown): { n: number } => ({
+    n: (request as { n: number }).n + 1
+  })
+  const memory = newMemoryTransport()
+  const url = "memory://reentry-overwrite"
+  const server = newServer(transport(memory), address(url))
+  const batch: {
+    readonly endpoint: Endpoint
+    readonly handler: (ctx: Context, request: unknown) => unknown
+  }[] = [
+    { endpoint: first, handler: outer },
+    {
+      get endpoint(): Endpoint {
+        server.registerHandler(first, () => ({ n: 99 }))
+        return second
+      },
+      handler: outer
+    }
+  ]
+
+  expect(() => server.registerHandlers(batch)).toThrow(
+    "server handler is duplicated: reentry/first"
+  )
+
+  const running = server.start(background())
+  await server.endpoint(background())
+  const conn = newClient(withTransport(memory), withEndpoint(url))
+  try {
+    await expect(conn.call(background(), first, { n: 1 })).resolves.toEqual({ n: 99 })
+    await expect(conn.call(background(), second, { n: 1 })).rejects.toThrow(
+      "unknown service endpoint: reentry/second"
+    )
+  } finally {
+    await conn.close(background())
+    await server.stop(background())
+    await running
+  }
+})
+
+test("registerHandlers rejects the batch when a getter seals the server", async () => {
+  const dto = struct.object({ n: struct.number() })
+  const keep = endpoint("reentry", "keep", dto, dto)
+  const first = endpoint("reentry", "first", dto, dto)
+  const second = endpoint("reentry", "second", dto, dto)
+  const unary = (_ctx: Context, request: unknown): { n: number } => ({
+    n: (request as { n: number }).n + 1
+  })
+  const memory = newMemoryTransport()
+  const url = "memory://reentry-seal"
+  const server = newServer(transport(memory), address(url))
+  server.registerHandler(keep, unary)
+  let pending: Promise<string> | undefined
+  const batch: {
+    readonly endpoint: Endpoint
+    readonly handler: (ctx: Context, request: unknown) => unknown
+  }[] = [
+    { endpoint: first, handler: unary },
+    {
+      get endpoint(): Endpoint {
+        pending = server.endpoint(background())
+        return second
+      },
+      handler: unary
+    }
+  ]
+
+  expect(() => server.registerHandlers(batch)).toThrow("server registration is sealed")
+  await pending
+
+  const running = server.start(background())
+  await server.endpoint(background())
+  const conn = newClient(withTransport(memory), withEndpoint(url))
+  try {
+    await expect(conn.call(background(), keep, { n: 2 })).resolves.toEqual({ n: 3 })
+    await expect(conn.call(background(), first, { n: 2 })).rejects.toThrow(
+      "unknown service endpoint: reentry/first"
+    )
+  } finally {
+    await conn.close(background())
+    await server.stop(background())
+    await running
+  }
+})
+
+test("registerHandlers keeps a distinct handler committed by a registration getter", () => {
+  const dto = struct.object({ n: struct.number() })
+  const inner = endpoint("reentry", "inner", dto, dto)
+  const outer = endpoint("reentry", "outer", dto, dto)
+  const server = newServer(transport(fixtureTransport(fixtureListener([]))))
+  let ran = false
+  const batch: {
+    readonly endpoint: Endpoint
+    readonly handler: (ctx: Context, request: unknown) => unknown
+  }[] = [
+    {
+      get endpoint(): Endpoint {
+        server.registerHandler(inner, () => ({ n: 7 }))
+        ran = true
+        return outer
+      },
+      handler: () => ({ n: 1 })
+    }
+  ]
+
+  expect(() => server.registerHandlers(batch)).not.toThrow()
+  expect(ran).toBe(true)
+  expect(() => server.registerHandler(inner, () => ({ n: 0 }))).toThrow("duplicated")
+  expect(() => server.registerHandler(outer, () => ({ n: 0 }))).toThrow("duplicated")
+})
+
+test("Q3-04 registerHandler rechecks the seal after an endpoint getter runs", async () => {
+  const dto = struct.object({ n: struct.number() })
+  const memory = newMemoryTransport()
+  const url = "memory://single-seal"
+  const server = newServer(transport(memory), address(url))
+  const keep = endpoint("single", "keep", dto, dto)
+  const late = endpoint("single", "late", dto, dto)
+  server.registerHandler(keep, () => ({ n: 1 }))
+  let pending: Promise<string> | undefined
+  const hostile = {
+    ...late,
+    get response(): typeof dto {
+      pending = server.endpoint(background())
+      return dto
+    }
+  }
+  let thrown: unknown
+  try {
+    server.registerHandler(hostile, () => ({ n: 2 }))
+  } catch (error) {
+    thrown = error
+  }
+  await pending
+  const running = server.start(background())
+  const conn = newClient(withTransport(memory), withEndpoint(await server.endpoint(background())))
+  try {
+    expect(thrown).toBeInstanceOf(TypeError)
+    expect((thrown as Error).message).toContain("sealed")
+    await expect(conn.call(background(), keep, { n: 0 })).resolves.toEqual({ n: 1 })
+    await expect(conn.call(background(), late, { n: 0 })).rejects.toThrow(
+      "unknown service endpoint: single/late"
+    )
+  } finally {
+    await conn.close(background())
+    await server.stop(background())
+    await running
+  }
+})
+
+test("rejects exact dot-segment route tokens and accepts embedded dots", () => {
+  const registrationServer = newServer(transport(fixtureTransport(fixtureListener([]))))
+  const handler = async (): Promise<Response> => new Response(null)
+  expect(() => registrationServer.registerHandler(".", "ok", handler)).toThrow(
+    "server service must be a URL unreserved route token"
+  )
+  expect(() => registrationServer.registerHandler("..", "ok", handler)).toThrow(
+    "server service must be a URL unreserved route token"
+  )
+  expect(() => registrationServer.registerHandler("orders", ".", handler)).toThrow(
+    "server endpoint must be a URL unreserved route token"
+  )
+  expect(() => registrationServer.registerHandler("orders", "..", handler)).toThrow(
+    "server endpoint must be a URL unreserved route token"
+  )
+  expect(() => registrationServer.registerHandler("a.b", "a..b", handler)).not.toThrow()
+  expect(() => registrationServer.registerHandler("...", ".a", handler)).not.toThrow()
+  expect(() => registrationServer.registerHandler("a.", "~_.-", handler)).not.toThrow()
+  for (const selector of ["./ok", "../ok", "ok/.", "ok/..", "./", "../"]) {
+    expect(() => use(selector)).toThrow(
+      "server middleware selector must identify a canonical operation or trailing wildcard"
+    )
+  }
+  expect(() => use("a.b/a..b")).not.toThrow()
+  expect(() => use(".../*")).not.toThrow()
+  expect(() => use(".a/ok")).not.toThrow()
+})
+
 test("rejects duplicate routes", () => {
-  const operation = async (_ctx: Context, request: Message): Promise<Message> => request
+  const operation = async (_ctx: Context, request: Request): Promise<Response> =>
+    new Response(request.body)
   const server = newServer(transport(fixtureTransport(fixtureListener([]))))
   server.registerHandler("orders", "get", operation)
   expect(() => server.registerHandler("orders", "get", operation)).toThrow(
@@ -1046,7 +1341,7 @@ test("rejects duplicate routes", () => {
 })
 
 test("keeps service and endpoint identities separate", async () => {
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const server = newServer(
     transport(
@@ -1054,14 +1349,8 @@ test("keeps service and endpoint identities separate", async () => {
         fixtureListener(
           sent,
           [
-            {
-              header: { "Go-Like-Service": "a.b", "Go-Like-Endpoint": "c" },
-              body: new Uint8Array()
-            },
-            {
-              header: { "Go-Like-Service": "a", "Go-Like-Endpoint": "b.c" },
-              body: new Uint8Array()
-            }
+            rpcRequest("a.b", "c", new Uint8Array(), { "content-type": "application/json" }),
+            rpcRequest("a", "b.c", new Uint8Array(), { "content-type": "application/json" })
           ],
           "127.0.0.1:43210",
           accepting.resolve
@@ -1069,50 +1358,36 @@ test("keeps service and endpoint identities separate", async () => {
       )
     )
   )
-  server.registerHandler("a.b", "c", () => ({ header: {}, body: new Uint8Array([1]) }))
-  server.registerHandler("a", "b.c", () => ({ header: {}, body: new Uint8Array([2]) }))
+  server.registerHandler("a.b", "c", () => new Response(copiedBytes(new Uint8Array([1]))))
+  server.registerHandler("a", "b.c", () => new Response(copiedBytes(new Uint8Array([2]))))
 
   const running = server.start(background())
   await accepting.promise
   await server.stop(background())
   await running
-  expect(sent.map((message) => message.body)).toEqual([new Uint8Array([1]), new Uint8Array([2])])
+  expect(sent).toHaveLength(2)
+  expect(new Uint8Array(await sent[0]!.arrayBuffer())).toEqual(new Uint8Array([1]))
+  expect(new Uint8Array(await sent[1]!.arrayBuffer())).toEqual(new Uint8Array([2]))
 })
 
 test("selects one operation middleware sequence while global middleware stays outermost", async () => {
   const events: string[] = []
-  const sent: Message[] = []
+  const sent: Response[] = []
   const accepting = Promise.withResolvers<void>()
   const exact = recordingMiddleware("exact", events)
   const exactSecond = recordingMiddleware("exact-second", events)
   const staleExact = recordingMiddleware("stale-exact", events)
   const terminal: Handler = (_ctx, request) => {
-    const service = request.header["Go-Like-Service"] ?? ""
-    const endpoint = request.header["Go-Like-Endpoint"] ?? ""
-    events.push(`handler:${service}/${endpoint}`)
-    return request
+    const [service, endpointName] = new URL(request.url).pathname.slice(1).split("/")
+    events.push(`handler:${service}/${endpointName}`)
+    return new Response(null)
   }
   const requests = [
-    {
-      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "get" },
-      body: new Uint8Array()
-    },
-    {
-      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "getById" },
-      body: new Uint8Array()
-    },
-    {
-      header: { "Go-Like-Service": "orders", "Go-Like-Endpoint": "list" },
-      body: new Uint8Array()
-    },
-    {
-      header: { "Go-Like-Service": "inventory", "Go-Like-Endpoint": "list" },
-      body: new Uint8Array()
-    },
-    {
-      header: { "Go-Like-Service": "blocked", "Go-Like-Endpoint": "list" },
-      body: new Uint8Array()
-    }
+    rpcRequest("orders", "get", new Uint8Array(), { "content-type": "application/json" }),
+    rpcRequest("orders", "getById", new Uint8Array(), { "content-type": "application/json" }),
+    rpcRequest("orders", "list", new Uint8Array(), { "content-type": "application/json" }),
+    rpcRequest("inventory", "list", new Uint8Array(), { "content-type": "application/json" }),
+    rpcRequest("blocked", "list", new Uint8Array(), { "content-type": "application/json" })
   ]
   const server = newServer(
     transport(
@@ -1180,7 +1455,14 @@ test("selects one operation middleware sequence while global middleware stays ou
 })
 
 test("validates operation middleware selectors and functions", () => {
-  for (const selector of ["*", "orders*", "orders/*", "orders/Get*", "orders/Get"]) {
+  for (const selector of [
+    "*",
+    "orders*",
+    "orders/*",
+    "orders/Get*",
+    "orders/Get",
+    "orders.v1/pay_now~1-ok"
+  ]) {
     expect(() => use(selector)).not.toThrow()
   }
   expect(() => use(null as never)).toThrow("server middleware selector must be a non-empty string")
@@ -1210,7 +1492,9 @@ test("validates operation middleware injected by custom ServerOption values", ()
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/*/get", Object.freeze([])]]),
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     }))
   ).toThrow("server middleware selector must be exact or end with one *")
   expect(() =>
@@ -1221,7 +1505,9 @@ test("validates operation middleware injected by custom ServerOption values", ()
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/", Object.freeze([])]]),
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     }))
   ).toThrow("server middleware selector must identify a canonical operation or trailing wildcard")
   expect(() =>
@@ -1232,7 +1518,9 @@ test("validates operation middleware injected by custom ServerOption values", ()
       middleware: options.middleware,
       operationMiddleware: new Map([["orders/get", Object.freeze([null as never])]]),
       listenOptions: options.listenOptions,
-      httpRoutes: options.httpRoutes
+      httpRoutes: options.httpRoutes,
+      streamKeepAliveMs: options.streamKeepAliveMs,
+      maxSendMessageBytes: options.maxSendMessageBytes
     }))
   ).toThrow("server middleware must be a function")
 })
@@ -1255,13 +1543,13 @@ test("shares one limiter per middleware and stops before the denied handler", as
         nextRefillInMs: 250
       })
     }
-  })(async (_ctx, request) => {
+  })(async () => {
     handled += 1
-    return request
+    return new Response(null, { status: 204 })
   })
-  const request: Message = { header: {}, body: new Uint8Array() }
+  const request = new Request("http://127.0.0.1/orders/get", { method: "POST" })
 
-  await expect(limited(background(), request)).resolves.toBe(request)
+  await expect(limited(background(), request)).resolves.toMatchObject({ status: 204 })
   await expect(limited(background(), request)).rejects.toMatchObject({
     code: "rate_limited",
     message: "rate limit exceeded",
@@ -1292,21 +1580,21 @@ test("enforces operation buckets through the real memory transport wire", async 
     use("orders/b", rateLimitMiddleware(newTokenBucketLimiter(limiterOptions))),
     use("guard/*", rateLimitMiddleware(newTokenBucketLimiter(limiterOptions)))
   )
-  server.registerHandler("orders", "a", (_ctx, request) => {
+  server.registerHandler("orders", "a", () => {
     calls.push("orders/a")
-    return request
+    return new Response(null, { status: 204 })
   })
-  server.registerHandler("orders", "b", (_ctx, request) => {
+  server.registerHandler("orders", "b", () => {
     calls.push("orders/b")
-    return request
+    return new Response(null, { status: 204 })
   })
-  server.registerHandler("orders", "unmatched", (_ctx, request) => {
+  server.registerHandler("orders", "unmatched", () => {
     calls.push("orders/unmatched")
-    return request
+    return new Response(null, { status: 204 })
   })
-  server.registerHandler("guard", "known", (_ctx, request) => {
+  server.registerHandler("guard", "known", () => {
     calls.push("guard/known")
-    return request
+    return new Response(null, { status: 204 })
   })
   const endpoint = await server.endpoint(background())
   const running = server.start(background())
@@ -1316,12 +1604,12 @@ test("enforces operation buckets through the real memory transport wire", async 
 
   try {
     const guardUnknown = await exchange(client, "guard", "missing")
-    expect(decodeServiceError("unary", 200, guardUnknown.header, guardUnknown.body)).toMatchObject({
+    expect(await decodeServiceErrorResponse(guardUnknown)).toMatchObject({
       code: "not_found",
       status: 404
     })
     const guardKnown = await exchange(client, "guard", "known")
-    expect(decodeServiceError("unary", 200, guardKnown.header, guardKnown.body)).toBeNull()
+    expect(await decodeServiceErrorResponse(guardKnown)).toBeNull()
 
     const firstA = await exchange(client, "orders", "a")
     const deniedA = await exchange(client, "orders", "a")
@@ -1331,14 +1619,12 @@ test("enforces operation buckets through the real memory transport wire", async 
     const unmatchedSecond = await exchange(client, "orders", "unmatched")
     const deniedGuard = await exchange(client, "guard", "known")
 
-    expect(decodeServiceError("unary", 200, firstA.header, firstA.body)).toBeNull()
-    expect(decodeServiceError("unary", 200, firstB.header, firstB.body)).toBeNull()
-    expect(decodeServiceError("unary", 200, unmatchedFirst.header, unmatchedFirst.body)).toBeNull()
-    expect(
-      decodeServiceError("unary", 200, unmatchedSecond.header, unmatchedSecond.body)
-    ).toBeNull()
+    expect(await decodeServiceErrorResponse(firstA)).toBeNull()
+    expect(await decodeServiceErrorResponse(firstB)).toBeNull()
+    expect(await decodeServiceErrorResponse(unmatchedFirst)).toBeNull()
+    expect(await decodeServiceErrorResponse(unmatchedSecond)).toBeNull()
     for (const response of [deniedA, deniedB, deniedGuard]) {
-      const failure = decodeServiceError("unary", 200, response.header, response.body)
+      const failure = await decodeServiceErrorResponse(response)
       expect(failure).toMatchObject({
         code: "rate_limited",
         message: "rate limit exceeded",
@@ -1379,9 +1665,150 @@ test("reports a non-empty transport protocol and rejects missing or empty kinds"
     expect(() => server.protocol()).toThrow("server transport kind must be a non-empty string")
   }
 
-  empty.registerHandler("orders", "get", async (_ctx, request) => request)
+  empty.registerHandler("orders", "get", async (_ctx, request) => new Response(request.body))
   await expect(empty.endpoint(background())).rejects.toThrow(
     "server transport kind must be a non-empty string"
   )
   await empty.stop(background())
+})
+
+/** Builds one timed internal RPC request. */
+function timedRequest(timeoutMs: string): Request {
+  return rpcRequest("orders", "get", new Uint8Array(), {
+    "content-type": "application/json",
+    "Go-Like-Timeout-Ms": timeoutMs
+  })
+}
+
+test("cancels a positive Go-Like-Timeout-Ms when the Response body reaches EOF", async () => {
+  const transportValue = newMemoryTransport()
+  const seen: { ctx: Context | null } = { ctx: null }
+  const server = newServer(transport(transportValue), address("memory://deadline-body"))
+  server.registerHandler("orders", "get", (ctx) => {
+    seen.ctx = ctx
+    return new Response("ok", { status: 200 })
+  })
+  const endpointAddress = await server.endpoint(background())
+  const running = server.start(background())
+  await Promise.resolve()
+  await Promise.resolve()
+  const client = await transportValue.dial(background(), endpointAddress, withTimeout(0))
+  let response: Response | null = null
+  try {
+    response = await client.fetch(background(), timedRequest("60000"))
+    expect(seen.ctx?.err() ?? null).toBeNull()
+    expect(seen.ctx?.deadline()[1]).toBe(true)
+    expect(await response.text()).toBe("ok")
+    expect(seen.ctx?.err() ?? null).toBe(canceled)
+  } finally {
+    await response?.body?.cancel().catch(function ignore(): void {})
+    await client.close(background())
+    await server.stop(background())
+    await running
+  }
+})
+
+test("cancels a positive Go-Like-Timeout-Ms when a handler failure body ends", async () => {
+  const transportValue = newMemoryTransport()
+  const seen: { ctx: Context | null } = { ctx: null }
+  const server = newServer(transport(transportValue), address("memory://deadline-error"))
+  server.registerHandler("orders", "get", (ctx) => {
+    seen.ctx = ctx
+    throw new Error("secret")
+  })
+  const endpointAddress = await server.endpoint(background())
+  const running = server.start(background())
+  await Promise.resolve()
+  await Promise.resolve()
+  const client = await transportValue.dial(background(), endpointAddress, withTimeout(0))
+  let response: Response | null = null
+  try {
+    response = await client.fetch(background(), timedRequest("60000"))
+    expect(seen.ctx?.err() ?? null).toBeNull()
+    const failure = await decodeServiceErrorResponse(response)
+    expect(failure?.code).toBe("internal")
+    expect(failure?.message).not.toContain("secret")
+    expect(seen.ctx?.err() ?? null).toBe(canceled)
+  } finally {
+    await response?.body?.cancel().catch(function ignore(): void {})
+    await client.close(background())
+    await server.stop(background())
+    await running
+  }
+})
+
+test("cancels a positive Go-Like-Timeout-Ms when the Response body is canceled or errors", async () => {
+  const transportValue = newMemoryTransport()
+  const seen = new Map<string, Context>()
+  let release = function noop(): void {}
+  const gate = new Promise<void>(function capture(resolve): void {
+    release = resolve
+  })
+  const server = newServer(transport(transportValue), address("memory://deadline-stream"))
+  server.registerHandler("orders", "get", (ctx, request) => {
+    const mode = request.headers.get("x-stream")
+    seen.set(mode ?? "", ctx)
+    if (mode === "broken") {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          /** Fails the first read. */
+          start(controller): void {
+            controller.error(new Error("broke"))
+          }
+        })
+      )
+    }
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        /** Stays open until the test releases or the consumer cancels. */
+        async pull(controller): Promise<void> {
+          await gate
+          try {
+            controller.close()
+          } catch {
+            // Consumer cancellation already terminated the body.
+          }
+        }
+      })
+    )
+  })
+  const endpointAddress = await server.endpoint(background())
+  const running = server.start(background())
+  await Promise.resolve()
+  await Promise.resolve()
+  const client = await transportValue.dial(background(), endpointAddress, withTimeout(0))
+  let hanging: Response | null = null
+  let broken: Response | null = null
+  try {
+    hanging = await client.fetch(
+      background(),
+      rpcRequest("orders", "get", new Uint8Array(), {
+        "content-type": "application/json",
+        "Go-Like-Timeout-Ms": "60000",
+        "x-stream": "hang"
+      })
+    )
+    expect(seen.get("hang")?.err() ?? null).toBeNull()
+    await hanging.body?.cancel(new Error("stop"))
+    expect(seen.get("hang")?.err() ?? null).toBe(canceled)
+
+    broken = await client.fetch(
+      background(),
+      rpcRequest("orders", "get", new Uint8Array(), {
+        "content-type": "application/json",
+        "Go-Like-Timeout-Ms": "60000",
+        "x-stream": "broken"
+      })
+    )
+    expect(seen.get("broken")?.err() ?? null).toBeNull()
+    await expect(broken.text()).rejects.toThrow("broke")
+    expect(seen.get("broken")?.err() ?? null).toBe(canceled)
+  } finally {
+    release()
+    await hanging?.body?.cancel().catch(function ignore(): void {})
+    await broken?.body?.cancel().catch(function ignore(): void {})
+    await client.close(background())
+    await server.stop(background())
+    await running
+  }
 })

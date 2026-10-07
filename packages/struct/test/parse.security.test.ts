@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { decodeJson, encodeJson } from "../src/codec/json"
-import { struct } from "../src/index"
+import { StructError, struct } from "../src/index"
 import { encodeStructValue, parseStructTuple as parse } from "../src/introspection"
 import type { StructLike } from "../src/types"
 import { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "../src/value-graph"
@@ -67,11 +67,9 @@ describe("parse.ts prototype pollution defense", () => {
 
     try {
       const [err, val] = parse(s, {})
-      if (err) {
-        throw err
-      }
-
-      expect(val).toEqual({ pollutedId: "" })
+      expect(err).toBeInstanceOf(StructError)
+      expect(err?.issues[0]?.code).toBe("missing_key")
+      expect(val).toBeUndefined()
     } finally {
       delete (Object.prototype as { [key: string]: unknown })["pollutedId"]
     }
@@ -86,11 +84,9 @@ describe("parse.ts prototype pollution defense", () => {
 
     try {
       const [err, val] = parse(s, {})
-      if (err) {
-        throw err
-      }
-
-      expect(val).toEqual({ pollutedId: "" })
+      expect(err).toBeInstanceOf(StructError)
+      expect(err?.issues[0]?.code).toBe("missing_key")
+      expect(val).toBeUndefined()
     } finally {
       delete (Object.prototype as { [key: string]: unknown })["pollutedId"]
     }
@@ -102,7 +98,7 @@ describe("parse.ts prototype pollution defense", () => {
     })
     const wire = Object.create({ user_name: "admin" })
 
-    expect(decodeJson(s, wire)).toEqual({ name: "" })
+    expect(() => decodeJson(s, wire)).toThrow(StructError)
   })
 
   test("JSON aliases for dangerous keys do not pollute prototypes", () => {
@@ -195,5 +191,78 @@ describe("parse.ts prototype pollution defense", () => {
     }
     expect(encodeError).toBeInstanceOf(Error)
     expect(encodeError).not.toBeInstanceOf(RangeError)
+  })
+
+  test("rejects a getter cycle with StructError instead of RangeError", () => {
+    const node = struct.object({
+      get next(): StructLike<unknown, unknown, boolean> {
+        return node.null()
+      }
+    })
+    const cyclic = {
+      get next(): unknown {
+        return cyclic
+      }
+    }
+
+    const [error] = parse(node, cyclic)
+
+    expect(error).toBeInstanceOf(StructError)
+    expect(error).not.toBeInstanceOf(RangeError)
+    expect(error?.message).toBe("struct value contains a cycle")
+  })
+
+  test("rejects a getter chain past the portable depth limit and accepts 1000", () => {
+    const node = struct.object({
+      get next(): StructLike<unknown, unknown, boolean> {
+        return node.null()
+      }
+    })
+
+    let acceptedValue: unknown = null
+    for (let index = 0; index < PORTABLE_VALUE_GRAPH_DEPTH_LIMIT; index += 1) {
+      const child = acceptedValue
+      acceptedValue = {
+        get next(): unknown {
+          return child
+        }
+      }
+    }
+    let rejectedValue: unknown = null
+    for (let index = 0; index < PORTABLE_VALUE_GRAPH_DEPTH_LIMIT + 1; index += 1) {
+      const child = rejectedValue
+      rejectedValue = {
+        get next(): unknown {
+          return child
+        }
+      }
+    }
+
+    const [accepted] = parse(node, acceptedValue)
+    const [rejected] = parse(node, rejectedValue)
+
+    expect(accepted).toBeNull()
+    expect(rejected).toBeInstanceOf(StructError)
+    expect(rejected).not.toBeInstanceOf(RangeError)
+    expect(rejected?.message).toBe(
+      `struct value exceeds portable container depth limit ${PORTABLE_VALUE_GRAPH_DEPTH_LIMIT}`
+    )
+  })
+
+  test("security prescan does not invoke getters after the first failing field", () => {
+    let reads = 0
+    const input = {
+      first: 1,
+      get second(): string {
+        reads += 1
+        return "later"
+      }
+    }
+
+    const [error] = parse(struct.object({ first: struct.string(), second: struct.string() }), input)
+
+    expect(error).toBeInstanceOf(StructError)
+    expect(error?.issues).toHaveLength(1)
+    expect(reads).toBe(0)
   })
 })

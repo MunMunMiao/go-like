@@ -31,7 +31,7 @@ Fetch Request
 
 ## go-like 能力
 
-本例实际使用 `@go-like/transport-memory` 的 `listen`、`dial`、`send`、`recv` 和关闭流程，并由 `@go-like/core` 承接内部 Server。测试通过真实内存传输执行席位预占，不是直接函数调用伪装 RPC。
+内部契约是 `defineService("learning-capacity.v1", { reserve })`，调用写成 `client.reserve(ctx, req)`。Enrollment 经 `@go-like/client` 的 `withEndpoint`、`@go-like/server` 与 `@go-like/transport-memory` 完成进程内 unary 调用，并由 `@go-like/core` 承接内部 Server。测试通过真实内存传输执行席位预占，不是直接函数调用伪装 RPC。
 
 ## 验证
 

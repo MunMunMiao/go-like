@@ -29,18 +29,18 @@
 
 ## مصفوفة الملكية
 
-| الاهتمام               | NestJS                                  | Fastify                           | Hono / Elysia / Koa                               | tRPC                                     | go-like                                                                                   |
-| ---------------------- | --------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| جدول المسارات الخارجية | Controllers وdecorators                 | Fastify instance                  | Framework instance أو external router             | Procedure router، وليس REST routes عادية | External framework أو التطبيق                                                             |
-| ABI لمعالج Web         | تجريد request/reply يملكه المحوّل       | Node request/reply                | Fetch القياسي محوري في Hono ومحوّلات Web Standard | Fetch/Node/Express/Fastify adapters      | `(Request) => Response \| Promise<Response>` القياسي                                      |
-| دورة حياة التطبيق      | Application context وhooks              | `ready` و`listen` و`close` وhooks | يختلف محوّل بيئة التشغيل ودورة الإطار             | مسؤولية المضيف/المحوّل                   | `newApp` و`App.run` و`App.stop` وhooks وServers بنيوية                                    |
-| دورة حياة المورد       | Hooks الحاوية/الإطار                    | Plugin وserver hooks              | مسؤولية التطبيق/بيئة التشغيل                      | مسؤولية التطبيق/المحوّل                  | عقود `Server.start(ctx)` / `stop(ctx)` الصريحة وملكية المكيّف                             |
-| تركيب الاعتماديات      | Nest container/providers                | Plugin decoration وencapsulation  | Context/env والتركيب؛ لا حاوية DI عامة            | Context factory صريح وتركيب router       | Constructors وخيارات وظيفية صريحة؛ لا حاوية DI                                            |
-| النقل الداخلي          | Microservice transports ومحوّلات الإطار | ليس تجريداً لاكتشاف الخدمات       | ليس تجريداً لاكتشاف الخدمات                       | Procedure adapters وWebSocket اختياري    | `Transport` و`Client` و`Listener` و`Socket` و`Message` الأحادية                           |
-| الاكتشاف والاختيار     | خاص بالنقل أو خارجي                     | خارجي                             | خارجي                                             | خارجي                                    | `Registry` و`Discovery` و`Watcher` وFilters وسياسات Selector الخمس                        |
-| إعادة المحاولة         | خاص بالإطار أو المزوّد                  | خاص بالتطبيق/الإضافة              | خاص بالتطبيق                                      | خاص بالmiddleware/المحوّل                | محاولة واحدة افتراضياً؛ و`withRetry` يتطلب تفويضاً وعدد محاولات إجمالياً                  |
-| التدفق                 | خيارات الإطار/المزوّد                   | خيارات Node/Web stream            | Web Streams الأصلية وواجهات الإطار                | يعتمد على المحوّل HTTP/WS                | Web Streams; Message unary; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| القياس العام           | تكامل الإطار/المزوّد                    | منظومة Plugins                    | منظومة Middleware                                 | Middleware/adapters                      | أغلفة صريحة؛ لا تثبيت لمزوّد عام                                                          |
+| الاهتمام               | NestJS                                  | Fastify                           | Hono / Elysia / Koa                               | tRPC                                     | go-like                                                                                               |
+| ---------------------- | --------------------------------------- | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| جدول المسارات الخارجية | Controllers وdecorators                 | Fastify instance                  | Framework instance أو external router             | Procedure router، وليس REST routes عادية | External framework أو التطبيق                                                                         |
+| ABI لمعالج Web         | تجريد request/reply يملكه المحوّل       | Node request/reply                | Fetch القياسي محوري في Hono ومحوّلات Web Standard | Fetch/Node/Express/Fastify adapters      | `(Request) => Response \| Promise<Response>` القياسي                                                  |
+| دورة حياة التطبيق      | Application context وhooks              | `ready` و`listen` و`close` وhooks | يختلف محوّل بيئة التشغيل ودورة الإطار             | مسؤولية المضيف/المحوّل                   | `newApp` و`App.run` و`App.stop` وhooks وServers بنيوية                                                |
+| دورة حياة المورد       | Hooks الحاوية/الإطار                    | Plugin وserver hooks              | مسؤولية التطبيق/بيئة التشغيل                      | مسؤولية التطبيق/المحوّل                  | عقود `Server.start(ctx)` / `stop(ctx)` الصريحة وملكية المكيّف                                         |
+| تركيب الاعتماديات      | Nest container/providers                | Plugin decoration وencapsulation  | Context/env والتركيب؛ لا حاوية DI عامة            | Context factory صريح وتركيب router       | Constructors وخيارات وظيفية صريحة؛ لا حاوية DI                                                        |
+| النقل الداخلي          | Microservice transports ومحوّلات الإطار | ليس تجريداً لاكتشاف الخدمات       | ليس تجريداً لاكتشاف الخدمات                       | Procedure adapters وWebSocket اختياري    | `Transport` و`Client` و`Listener` و`defineService` وSSE `ServerStream`                                |
+| الاكتشاف والاختيار     | خاص بالنقل أو خارجي                     | خارجي                             | خارجي                                             | خارجي                                    | `Registry` و`Discovery` و`Watcher` وFilters وسياسات Selector الخمس                                    |
+| إعادة المحاولة         | خاص بالإطار أو المزوّد                  | خاص بالتطبيق/الإضافة              | خاص بالتطبيق                                      | خاص بالmiddleware/المحوّل                | محاولة واحدة افتراضياً؛ و`withRetry` يتطلب تفويضاً وعدد محاولات إجمالياً                              |
+| التدفق                 | خيارات الإطار/المزوّد                   | خيارات Node/Web stream            | Web Streams الأصلية وواجهات الإطار                | يعتمد على المحوّل HTTP/WS                | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
+| القياس العام           | تكامل الإطار/المزوّد                    | منظومة Plugins                    | منظومة Middleware                                 | Middleware/adapters                      | أغلفة صريحة؛ لا تثبيت لمزوّد عام                                                                      |
 
 تصف الصفوف الخمسة الأولى مواقع معمارية، لا ترتيب جودة. قد تكون ملكية إطار لجدول المسارات مفيدة عندما تكون مشكلة تركيب المسارات هي الأساس. لكنها ببساطة اختيار ملكية مختلف عن ترك go-like المسارات للتطبيق.
 
@@ -79,13 +79,13 @@ Client
   -> Selector.select
   -> opaque ServiceEndpoint URL
   -> Transport.dial or resident logical owner
-  -> send(Message)
+  -> fetch(Request)
   -> @go-like/server route and unary handler
-  -> recv(Message)
+  -> read Response
   -> feedback and owner release
 ```
 
-يربط `Endpoint` typed تحقق `Struct` من الطلب والاستجابة بحدّ `Message` الموجود. وليس هو IDL ولا بروتوكولاً مولّداً. يختار `withAddress(...addresses)` لقطة مباشرة وقت الإنشاء؛ وتستخدم اللقطات المباشرة والمكتشفة Selector نفسه. لذلك يبقى مسار Memory Transport داخل العملية اختباراً أولياً مفيداً.
+يربط `Endpoint` typed تحقق `Struct` من الطلب والاستجابة بجسم JSON لـ Fetch. وليس هو IDL ولا بروتوكولاً مولّداً. يختار `withEndpoint(...)` لقطة مباشرة وقت الإنشاء؛ وتستخدم اللقطات المباشرة والمكتشفة Selector نفسه. لذلك يبقى مسار Memory Transport داخل العملية اختباراً أولياً مفيداً.
 
 لا تتطابق خيارات نقل microservice في NestJS أو محوّلات إجراءات tRPC أو نقولات أطر Go مع هذا الرسم البياني بالضرورة. فقد يملك كل منها هوية مسار أو نموذج تسلسل أو pool اتصالات أو طبقة retry مختلفة. يجب أن تسجل المقارنة هذه الفروق بدلاً من تعليم كل مربعات «RPC» بأنها الميزة نفسها.
 
@@ -108,15 +108,15 @@ Web framework or Fetch Handler
   -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
 
 go-like internal Client/Transport
-  -> one unary Message request and one unary Message response
-  -> no full-duplex RPC Stream SPI
+  -> one JSON body, or one SSE server stream when `stream: true`
+  -> not a bidirectional multi-frame protocol
 
 @go-like/transport-grpc-buf
   -> Fetch: Connect/gRPC-Web unary and server-streaming
   -> /native: standard gRPC unary, server-streaming, client-streaming, bidi
 ```
 
-إن `ReadableStream` في Web ليس قناة RPC داخلية. لا تقارن جسم HTTP متدفقاً بتبادل نقل متعدد الإطارات من `send` و`recv` وكأنهما ميزة واحدة.
+إن `ReadableStream` في Web ليس قناة RPC داخلية. لا تقارن جسم HTTP متدفقاً بتبادل نقل متعدد الإطارات من `fetch` وكأنهما ميزة واحدة.
 
 ## مقارنة بيئات التشغيل
 
@@ -158,7 +158,7 @@ Koa نواة Middleware صغيرة في Node ولا تتضمن موجّهاً. �
 
 ### tRPC
 
-tRPC يملك router typed للإجراءات وmiddleware الإجراءات. ويمكنه استخدام محوّلات Fetch أو Node أو Express أو Fastify أو WebSocket، لكنه ليس Registry ولا Selector ولا pool اتصالات ولا مدير دورة حياة تطبيق. إن `Endpoint` typed في go-like ربط Struct أصغر وقت التشغيل فوق Message أحادية، وليس DSL لإجراءات منافساً ولا IDL مولّداً.
+tRPC يملك router typed للإجراءات وmiddleware الإجراءات. ويمكنه استخدام محوّلات Fetch أو Node أو Express أو Fastify أو WebSocket، لكنه ليس Registry ولا Selector ولا pool اتصالات ولا مدير دورة حياة تطبيق. إن `Endpoint` typed في go-like ربط Struct أصغر وقت التشغيل فوق جسم JSON لـ Fetch، وليس DSL لإجراءات منافساً ولا IDL مولّداً.
 
 ### go-micro وgo-kratos
 
@@ -193,7 +193,7 @@ tRPC يملك router typed للإجراءات وmiddleware الإجراءات. �
 - `packages/web/src/context.ts` لـ Handler القياسي وجسر Context؛
 - `packages/client/src/index.ts` لخيارات Client وpooling وretry ومسار المحاولة؛
 - `packages/server/src/index.ts` للمعالجات الداخلية الأحادية وتوجيه المسارات؛
-- `packages/transport/src/types.ts` و`packages/transport/src/endpoint.ts` لحدود Message وtyped Endpoint؛
+- `packages/transport/src/types.ts` و`packages/transport/src/endpoint.ts` لحدود Fetch Request/Response وdefineService؛
 - `packages/registry/src/types.ts` و`packages/registry/src/selector.ts` للقطات والمرشحات والمحدّدات وfeedback.
 
 ويخزّن سجل البحث أيضاً مدخلات المقارنة الخارجية المثبتة التالية:

@@ -10,7 +10,6 @@ import type {
 /** Returns the approved common defaults for test-owned structural providers. */
 export function defaultTestOptions(): Options {
   return Object.freeze({
-    codec: null,
     logger: null,
     timeoutMs: 0,
     secure: false,

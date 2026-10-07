@@ -1,14 +1,14 @@
-import type { CallOption, CallRequest, Client } from "@go-like/client"
+import type { CallOption, Client } from "@go-like/client"
 import { describe, expect, test } from "bun:test"
 
 import { newConfig, objectSource, schema, source as configSource } from "@go-like/config"
 import { background, type Context } from "@go-like/context"
 import { newProbeRegistry } from "@go-like/health"
-import type { Handler, HandlerRegistrar } from "@go-like/server"
 import { createHealthHandler } from "@go-like/web/health"
 
 import { runtimeConfigSchema } from "../../src/config"
-import { newEchoClient, newEchoHandler, registerEchoHandler } from "../../src/echo"
+import { echoService } from "../../src/contract"
+import { newEchoHandler } from "../../src/echo"
 import { newManagementHandler } from "../../src/management"
 import { registerRuntimeProbes } from "../../src/probes"
 
@@ -47,14 +47,10 @@ test("echo handler reads the latest validated configuration", async () => {
     let calls = 0
     const response = await newEchoHandler(config, () => {
       calls += 1
-    })(background(), { header: {}, body: new Uint8Array() })
-    expect(new TextDecoder().decode(response.body)).toBe("pong:3")
+    }).ping(background())
+    expect(response).toBe("pong:3")
     expect(calls).toBe(1)
-    expect(
-      new TextDecoder().decode(
-        (await newEchoHandler(config)(background(), { header: {}, body: new Uint8Array() })).body
-      )
-    ).toBe("pong:3")
+    expect(await newEchoHandler(config).ping(background())).toBe("pong:3")
   } finally {
     await config.close(background())
   }
@@ -65,23 +61,39 @@ test("echo handler rejects calls before configuration is available", () => {
     configSource(objectSource("test", { release: 1, feature: { enabled: true } })),
     schema(runtimeConfigSchema)
   )
-  expect(() =>
-    newEchoHandler(config)(background(), { header: {}, body: new Uint8Array() })
-  ).toThrow(/runtime configuration is not ready/)
+  expect(() => newEchoHandler(config).ping(background())).toThrow(
+    /runtime configuration is not ready/
+  )
 })
 
 test("registers the Echo handler on its exact service endpoint", () => {
-  const handler: Handler = (_ctx, request) => request
-  let registration: readonly unknown[] = Object.freeze([])
-  const server: HandlerRegistrar = {
-    registerHandler(...args: readonly unknown[]): void {
-      registration = args
+  let registration: readonly { readonly endpoint: unknown; readonly handler: unknown }[] =
+    Object.freeze([])
+  let invoked = false
+  const echoServer = {
+    registerHandlers(
+      handlers: readonly { readonly endpoint: unknown; readonly handler: unknown }[]
+    ): void {
+      registration = handlers
     }
   }
 
-  registerEchoHandler(server, handler)
+  expect({
+    name: echoService.name,
+    endpoint: echoService.endpoints.ping?.endpoint
+  }).toEqual({ name: "platform-echo.v1", endpoint: "ping" })
+  echoService.registerHandler(echoServer, {
+    ping() {
+      invoked = true
+      return "pong:0"
+    }
+  })
 
-  expect(registration).toEqual(["platform.echo", "Ping", handler])
+  expect(registration[0]?.endpoint).toEqual(echoService.endpoints.ping)
+  expect(typeof registration[0]?.handler).toBe("function")
+  const registered = registration[0]?.handler as (ctx: Context) => string
+  expect(registered(background())).toBe("pong:0")
+  expect(invoked).toBe(true)
 })
 
 test("creates a typed Echo client that preserves calls and errors", async () => {
@@ -91,26 +103,17 @@ test("creates a typed Echo client that preserves calls and errors", async () => 
   let rejected = false
   let observed: readonly unknown[] = Object.freeze([])
   const client = Object.freeze({
-    async call(ctxValue: unknown, request: CallRequest, ...options: readonly unknown[]) {
-      observed = [ctxValue, request, ...options]
+    async call(...args: readonly unknown[]) {
+      observed = args
       if (rejected) throw failure
-      return {
-        header: Object.freeze({}),
-        body: new TextEncoder().encode("pong:7")
-      }
+      return "pong:7"
     },
     async close(): Promise<void> {}
   }) as unknown as Client
-  const { ping } = newEchoClient(client)
+  const { ping } = echoService.newClient(client)
 
   expect(await ping(ctx, option)).toBe("pong:7")
-  expect(observed[0]).toBe(ctx)
-  expect(observed[1]).toEqual({
-    service: "platform.echo",
-    endpoint: "Ping",
-    message: { header: {}, body: new Uint8Array() }
-  })
-  expect(observed.slice(2)).toEqual([option])
+  expect(observed).toEqual([ctx, echoService.endpoints.ping, {}, option])
   rejected = true
   await expect(ping(ctx)).rejects.toBe(failure)
 })

@@ -1,5 +1,7 @@
 # UX 摩擦摘要
 
+> 文中 `Go-Like-Service` / `Go-Like-Endpoint` 是当时 dest 上的旧路由头。当前内部 RPC 按 path `/<service>/<endpoint>` 路由，见 [service-call](../../doc/guide/service-call.md)。
+
 行集来自 21 条含 verify 的已接纳 dest 上的 `ux/golike.json` 与 `ux/competitor.json`。first-wave 四条 dest 也有 UX 文件，但未进入本收获行集。工作区 `/Users/munmunmiao/Documents/web/likego/ux/` 不存在对照文件。
 
 安装与 `tsc` 在已记录的 go-like dest 上普遍完成；重复摩擦集中在冻结闭包、Docker Desktop 发布端口、启动/恢复顺序，以及 REST 与 go-like 服务信封的心智差。通过 dest 的 surprise 仍然有用，因为它们解释了哪些 workaround 已经被战役侧消化、不应再写进库 API。

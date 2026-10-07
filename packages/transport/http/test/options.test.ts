@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 
 import { secure, timeout, withTimeout } from "@go-like/transport"
-import type { Message, Options } from "@go-like/transport"
+import type { Options } from "@go-like/transport"
 import {
   executor,
   maxMessageBytes,
@@ -120,24 +120,9 @@ test("rejects timeout values that platform timers would truncate", () => {
   expect(() => applyHTTPDialOptions([withTimeout(overflow)])).toThrow(RangeError)
 })
 
-test("common snapshots detach TLS, codec, logger, and their outputs", () => {
+test("common snapshots detach TLS, logger, and their outputs", () => {
   const tlsBytes = new Uint8Array([1, 2])
-  let marshaledHeader = ""
   let loggedFields: Readonly<Record<string, unknown>> | undefined
-  const codec = Object.freeze({
-    /** Encodes one fixture while observing the borrowed receiver. */
-    marshal(message: Message): Uint8Array {
-      marshaledHeader = message.header.topic ?? ""
-      return new Uint8Array([message.body[0] ?? 0])
-    },
-    /** Decodes one fixture Message. */
-    unmarshal(bytes: Uint8Array): Message {
-      return Object.freeze({
-        header: Object.freeze({ topic: "decoded" }),
-        body: new Uint8Array(bytes)
-      })
-    }
-  })
   const logger = Object.freeze({
     /** Captures one detached fields record. */
     log(
@@ -149,7 +134,6 @@ test("common snapshots detach TLS, codec, logger, and their outputs", () => {
     }
   })
   const raw: Options = Object.freeze({
-    codec,
     logger,
     timeoutMs: 10,
     secure: true,
@@ -167,16 +151,6 @@ test("common snapshots detach TLS, codec, logger, and their outputs", () => {
   exposedTLS?.fill(7)
   expect(snapshot.tlsConfig?.caCertificate?.bytes[0]).toBe(1)
 
-  const encoded = snapshot.codec?.marshal(
-    Object.freeze({
-      header: Object.freeze({ topic: "before" }),
-      body: new Uint8Array([3])
-    })
-  )
-  encoded?.fill(8)
-  expect(marshaledHeader).toBe("before")
-  expect(snapshot.codec?.unmarshal(new Uint8Array([4])).body).toEqual(new Uint8Array([4]))
-
   const fields = { key: "value" }
   snapshot.logger?.log("info", "message", fields)
   fields.key = "mutated"
@@ -185,7 +159,6 @@ test("common snapshots detach TLS, codec, logger, and their outputs", () => {
   expect(loggedFields).toBeUndefined()
   const throwingLogger = snapshotHTTPCommonOptions(
     Object.freeze({
-      codec: null,
       logger: Object.freeze({
         /** Exercises diagnostic isolation. */
         log(): never {
@@ -267,7 +240,6 @@ test("raw HTTP logger snapshots observe asynchronous and hostile thenable failur
     for (const value of loggers) {
       const snapshot = snapshotHTTPCommonOptions(
         Object.freeze({
-          codec: null,
           logger: value,
           timeoutMs: 0,
           secure: false,
@@ -297,35 +269,24 @@ test("common option snapshots reject every malformed structural boundary", () =>
   const invalid: unknown[] = [
     null,
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: -1,
       secure: false,
       tlsConfig: null
     }),
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: "false",
       tlsConfig: null
     }),
     Object.freeze({
-      codec: Object.freeze({ marshal: null, unmarshal: null }),
-      logger: null,
-      timeoutMs: 0,
-      secure: false,
-      tlsConfig: null
-    }),
-    Object.freeze({
-      codec: null,
       logger: Object.freeze({ log: null }),
       timeoutMs: 0,
       secure: false,
       tlsConfig: null
     }),
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,
@@ -337,7 +298,6 @@ test("common option snapshots reject every malformed structural boundary", () =>
       })
     }),
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,
@@ -349,7 +309,6 @@ test("common option snapshots reject every malformed structural boundary", () =>
       })
     }),
     Object.freeze({
-      codec: null,
       logger: null,
       timeoutMs: 0,
       secure: false,
@@ -364,31 +323,6 @@ test("common option snapshots reject every malformed structural boundary", () =>
   for (const value of invalid) {
     expect(() => Reflect.apply(snapshotHTTPCommonOptions, undefined, [value])).toThrow()
   }
-
-  const badMarshal = snapshotHTTPCommonOptions(
-    Object.freeze({
-      codec: Object.freeze({
-        /** Returns an invalid codec result for boundary validation. */
-        marshal(): Uint8Array {
-          return Reflect.get({}, "missing")
-        },
-        /** Returns a valid unused Message. */
-        unmarshal(): Message {
-          return Object.freeze({ header: Object.freeze({}), body: new Uint8Array() })
-        }
-      }),
-      logger: null,
-      timeoutMs: 0,
-      secure: false,
-      tlsConfig: null
-    })
-  )
-  expect(() =>
-    badMarshal.codec?.marshal(Object.freeze({ header: Object.freeze({}), body: new Uint8Array() }))
-  ).toThrow()
-  expect(() =>
-    Reflect.apply(badMarshal.codec?.unmarshal ?? function missing(): void {}, undefined, [[]])
-  ).toThrow()
 })
 
 test("structural reducers validate common, dial, construction, and listen outputs", () => {

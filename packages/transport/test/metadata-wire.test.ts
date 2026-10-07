@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { newMetadata } from "@go-like/metadata"
+import { background } from "@go-like/context"
+import { append, fromServerContext, newMetadata, newServerContext } from "@go-like/metadata"
 
 import { decodeMetadataHeader, encodeMetadataHeader } from "../src/provider"
 
@@ -22,6 +23,31 @@ test("metadata header round-trips ordered multi-values through canonical ASCII",
 test("metadata header omits and restores the canonical empty snapshot", () => {
   expect(encodeMetadataHeader(newMetadata())).toBeNull()
   expect(decodeMetadataHeader(null)).toEqual({})
+})
+
+test("metadata header decodes an absent header to one shared immutable empty snapshot", () => {
+  const empty = decodeMetadataHeader(null)
+  const record = empty as Record<string, unknown>
+
+  expect(empty).toEqual({})
+  expect(Object.keys(empty)).toEqual([])
+  expect(Object.isFrozen(empty)).toBe(true)
+  expect(decodeMetadataHeader(null)).toBe(empty)
+  expect(() => {
+    record.trace = ["one"]
+  }).toThrow(TypeError)
+  expect(() => Object.defineProperty(record, "trace", { value: ["one"] })).toThrow(TypeError)
+
+  const attached = fromServerContext(newServerContext(background(), empty))
+  expect(attached).toEqual({})
+  expect(attached).not.toBe(empty)
+  expect(append(empty, "trace", "one")).toEqual({ trace: ["one"] })
+  expect(encodeMetadataHeader(empty)).toBeNull()
+  expect(Object.keys(decodeMetadataHeader(null))).toEqual([])
+
+  expect(() => decodeMetadataHeader("")).toThrow(
+    expect.objectContaining({ name: "TransportProtocolError" })
+  )
 })
 
 test("metadata header rejects malformed, duplicate, non-canonical, and oversized wires", () => {

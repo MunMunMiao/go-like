@@ -1,15 +1,13 @@
 # Streaming
 
-go-like has three distinct call and streaming boundaries:
+go-like has three distinct streaming boundaries:
 
 1. **Public Web streaming** uses the standard Fetch `Request`/`Response` body and Web Streams APIs.
-2. **Message SPI service calls** use one unary request `Message` and one unary response `Message`.
+2. **Internal service calls** use one Fetch `Request` and one Fetch `Response`. A unary call carries one JSON body. A server stream sets `stream: true` and returns SSE. This is not a general bidirectional multi-frame protocol, and it has no client-stream or bidi SPI.
 3. **Generated Protobuf RPC** uses `@go-like/transport-grpc-buf`: portable Fetch supports Connect/gRPC-Web unary and server-streaming; `/native` supports standard gRPC unary, server-streaming, client-streaming, and bidi. `@go-like/protoc-gen-like` generates ctx-first client and handler glue over upstream Protobuf-ES descriptors.
 
-The second boundary is deliberately not called an RPC stream. `@go-like/transport` does not publish a full-duplex stream SPI, frame protocol, half-close operation, backpressure contract, or stream retry rule.
-
 > [!IMPORTANT]
-> A `ReadableStream`, SSE response, WebSocket upgrade, or long-lived Fetch response is Web streaming. It does not establish the separate generated RPC path or its cancellation guarantees.
+> A public `ReadableStream`, framework SSE response, WebSocket upgrade, or long-lived Fetch response is Web streaming. It is not an internal RPC. An internal server stream is SSE on `POST /<service>/<endpoint>`, with `accept: text/event-stream`. Client-streaming and bidi stay on `@go-like/transport-grpc-buf/native`.
 
 See the [observed cancellation and drain limits](/reference/claims#stream-cancellation-limits) for Connect 2.1.2, Bun 1.4.2 Fetch, and Deno native HTTP/2. Interoperability alone does not prove stream cleanup. Generated RPC does not add automatic retries or stream replay.
 
@@ -41,49 +39,107 @@ The application or Web framework owns stream format, flushing, SSE conventions, 
 ```ts
 import { contextHandler } from "@go-like/web"
 
+declare function buildStream(request: Request): Promise<ReadableStream<Uint8Array>>
+
 const handler = contextHandler(async (_ctx, request) => {
   const body = await buildStream(request)
   return new Response(body)
 })
+void handler
 ```
 
-The application must decide how a canceled request affects its generator, upstream subscription, or native socket. A stream body is one-shot; middleware that consumes a body must replace it if downstream code still needs to read it. `contextHandler` cleans its private Context when the handler returns the `Response`; that Context does not automatically live for the whole body stream. A long-lived source should therefore observe `request.signal` or own a separate cancellation scope.
+The application must decide how a canceled request affects its generator, upstream subscription, or native socket. A stream body is one-shot; middleware that consumes a body must replace it if downstream code still needs to read it. `contextHandler` cleans its private Context when the handler returns the `Response`; that Context does not automatically live for the whole body stream. A long-lived public producer should therefore observe `request.signal` or own a separate cancellation scope. That cleanup rule is only for the public Web bridge. An internal RPC request Context lives until the response body ends.
 
 Hono, Elysia, and H3 can create streamed responses or runtime-specific WebSocket behavior through their own native APIs. Pass their Fetch handler to `@go-like/web` when you want the go-like host and lifecycle boundary. Do not describe that composition as a go-like WebSocket or SSE framework.
 
-## Internal unary transport
+## Internal server streams
 
-The internal `@go-like/transport` SPI has `Transport`, `Client`, `Listener`, `Socket`, and `Message` types. A Socket can expose `send` and `recv`, but the current `@go-like/server` dispatcher and implemented HTTP and Memory providers perform one admitted `recv -> handler -> send` exchange per call. There is no general multi-frame protocol.
+Declare `stream: true` on the contract. The handler is an `async` generator. The client awaits the `ServerStream`, then reads it with `for await`. `ServerStream.close()` and `await using` both stop the call. `break`, `close`, disposal, and caller cancellation abort the request.
 
-The current internal path is:
+```ts
+/// <reference lib="esnext.disposable" />
 
-```text
-Client.call(ctx, operation, input)
-  -> one outbound Message
-  -> one server route and handler invocation
-  -> one response Message
-  -> one Client result
+import { newClient, withEndpoint, withTransport } from "@go-like/client"
+import { background } from "@go-like/context"
+import {
+  address,
+  maxSendMessageBytes,
+  newServer,
+  streamKeepAlive,
+  transport as serverTransport
+} from "@go-like/server"
+import { struct } from "@go-like/struct"
+import { defineService } from "@go-like/transport"
+import { newMemoryTransport } from "@go-like/transport-memory"
+
+const orders = defineService("orders", {
+  watch: {
+    request: struct.object({ after: struct.string() }),
+    response: struct.object({ id: struct.string() }),
+    stream: true
+  }
+})
+
+const wire = newMemoryTransport()
+const rpc = newServer(
+  serverTransport(wire),
+  address("memory://orders"),
+  streamKeepAlive(15_000),
+  maxSendMessageBytes(4 * 1024 * 1024)
+)
+orders.registerHandler(rpc, {
+  async *watch(_ctx, request) {
+    yield { id: request.after }
+  }
+})
+
+const client = newClient(withTransport(wire), withEndpoint("memory://orders"))
+const api = orders.newClient(client)
+const ctx = background()
+const opened = await api.watch(ctx, { after: "0" })
+try {
+  for await (const event of opened) {
+    void event.id
+  }
+} finally {
+  await opened.close()
+}
+
+await using stream = await api.watch(ctx, { after: "0" })
+for await (const event of stream) {
+  void event.id
+}
+await client.close(ctx)
+void rpc
 ```
 
-`@go-like/transport-memory` is instance-private and process-local. `@go-like/transport-http` carries the unary exchange over an HTTP wire. `@go-like/transport-http/node` adds the Node host, native HTTP/1.1 and HTTP/2, TLS, mTLS, and pooling. None of those statements adds internal full-duplex RPC semantics.
+The server must be started before `watch` can complete. The snippet shows the types and the ownership shape.
+
+- The request is the same POST JSON call as unary, plus `accept: text/event-stream`. A successful response is `text/event-stream`.
+- The handshake, response headers and the initial comment, is sent when the handler returns an async iterable. Routing, decode, and middleware failures before that return are ordinary HTTP `ServiceError` responses. Failures inside the generator, including before the first `yield`, arrive as SSE `error` events and are thrown by `for await`.
+- `streamKeepAlive(intervalMs)` defaults to `15000`. `streamKeepAlive(0)` disables later comments and still sends the initial comment.
+- `maxSendMessageBytes` defaults to 4 MiB. The counted size is the full UTF-8 SSE event, including prefixes and the trailing blank line. There is no total stream size limit. The client receive ceiling is the transport `maxMessageBytes`. An oversize event uses code `resource_exhausted` and HTTP 429. The message includes the actual byte count, the limit, and which side rejected it.
+- A stream is one-shot. go-like does not reconnect, and it ignores SSE `id` and `retry`. Resuming is a business cursor on the next explicit call.
+- Retry applies only before the handshake. A failure after headers and the initial comment is not replayed.
+- The server writes a pull-mode `ReadableStream`. Memory maps one client read to one server pull and stays at most one event ahead. HTTP may prefetch a bounded number of events because of the runtime and socket buffers. That prefetch does not promise a one-to-one match with `for await`.
+- Do not perform a side effect in the generator that assumes the client has received the event. A client that stops can leave a prefetched event undelivered after the side effect has already run. Confirm delivery with a later unary call that commits a cursor.
+- The request Context lives until the stream ends, errors, the client cancels, the deadline fires, or the server shuts down. It is tied to the response body. Then go-like cancels that Context, calls the iterator `return()`, and releases the deadline timer.
 
 ## Why the distinction matters
 
-| Question      | Public Web stream                                          | Internal go-like call                                          |
-| ------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| Message shape | Web `Request`/`Response` body                              | `Message` headers plus `Uint8Array` body                       |
-| Direction     | Request body and response body; framework may add upgrades | One unary request and one unary response                       |
-| Framing       | Web/runtime/framework-defined                              | Provider's unary Message boundary                              |
-| Cancellation  | `Request.signal`, handler Context, stream cancellation     | call Context through `send`/`recv` and owner cleanup           |
-| Retry         | Application decides whether a Web request can be replayed  | `withRetry` requires explicit authorization and total attempts |
-| Backpressure  | Web Streams/framework/runtime contract                     | No internal stream backpressure SPI is promised                |
-| Full duplex   | Possible through a framework or Web API                    | Outside the unary Message SPI                                  |
-
-A Fetch body can be streamed while a request is in flight. That does not imply the transport can exchange arbitrary frames in both directions, nor that a retry can safely recreate the body. If an application builds an internal stream protocol, it owns that protocol and should not label it as go-like's current Transport contract.
+| Question      | Public Web stream                                          | Internal server stream                                      |
+| ------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| Message shape | Web `Request`/`Response` body                              | POST JSON request and `text/event-stream` response          |
+| Direction     | Request body and response body; framework may add upgrades | One request, then server events only                        |
+| Framing       | Web/runtime/framework-defined                              | SSE events from `@go-like/transport/sse`                    |
+| Cancellation  | `Request.signal`; `contextHandler` ends when it returns    | Request Context until the response body ends                |
+| Retry         | Application decides whether a Web request can be replayed  | `withRetry` only before the SSE handshake                   |
+| Backpressure  | Web Streams/framework/runtime contract                     | Memory is at most one ahead; HTTP prefetch is bounded       |
+| Full duplex   | Possible through a framework or Web API                    | Not this SPI; use grpc-buf `/native` for client-stream/bidi |
 
 ## Cancellation and cleanup
 
-Use the operation Context as the first argument for internal work. For public Web work, `contextHandler` maps `Request.signal` to a private Context and cleans its listeners and timeout when the handler settles. For a long-lived stream, keep the source owner explicit and observe the request signal instead of the settled Handler Context:
+Use the operation Context as the first argument for internal work. For public Web work, `contextHandler` maps `Request.signal` to a private Context and cleans its listeners and timeout when the handler settles. For a long-lived public stream, keep the source owner explicit and observe the request signal instead of the settled Handler Context:
 
 ```ts
 async function buildStream(request: Request): Promise<ReadableStream<Uint8Array>> {
@@ -99,14 +155,10 @@ async function buildStream(request: Request): Promise<ReadableStream<Uint8Array>
       controller.enqueue(encoder.encode(`chunk-${3 - remaining}\n`))
     },
     cancel() {
-      // Release the application-owned upstream source here.
+      remaining = 0
     }
   })
 }
 ```
 
-The snippet illustrates the ownership decision; an application should add a real termination condition instead of producing an endless stream. Internal Client cleanup is separate: call `client.close(ctx)` when the logical Client is no longer used.
-
-## Extending the Message SPI
-
-Adding streams to `@go-like/transport` would change that SPI. The separate generated RPC path already uses upstream Connect/gRPC semantics. It would need a defined wire frame model, message ordering, backpressure, half-close semantics, terminal errors, cancellation propagation, provider capability negotiation, retry prohibition after partial exchange, and runtime-specific providers. Those guarantees must not be inferred for the unary Message SPI.
+The snippet illustrates the ownership decision. Internal Client cleanup is separate: call `stream.close()` or dispose the `ServerStream`, then `client.close(ctx)` when the logical Client is no longer used.
