@@ -67,7 +67,7 @@
     "@bufbuild/protobuf": "2.14.0",
     "@bufbuild/protoc-gen-es": "2.14.0",
     "@connectrpc/connect": "2.1.2",
-    "@types/bun": "1.4.0",
+    "@types/bun": "1.4.2",
     "@types/k6": "2.2.0",
     "oxfmt": "0.65.0",
     "oxlint": "1.81.0",
