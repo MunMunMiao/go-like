@@ -19,7 +19,7 @@
     "@go-like/croner": "workspace:*",
     "@go-like/store": "workspace:*",
     "@go-like/store-file": "workspace:*",
-    "bullmq": "6.3.4",
+    "bullmq": "6.3.11",
     "croner": "10.0.1",
     "ioredis": "6.0.0"
   },
