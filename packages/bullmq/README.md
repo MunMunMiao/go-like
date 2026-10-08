@@ -114,7 +114,7 @@ const jobs = newBullMqWorkerServer(
 
 ## 真实服务测试
 
-本包 manifest 固定 BullMQ 6.3.4，并显式安装其默认 Redis adapter 所需的 ioredis 6.0.0。仓库示例和测试连接显式使用
+本包 manifest 固定 BullMQ 6.3.11，并显式安装其默认 Redis adapter 所需的 ioredis 6.0.0。仓库示例和测试连接显式使用
 `protocol: 2`，不依赖 ioredis 6 的 RESP3 默认值。Docker E2E 使用固定 digest 的 Redis 8.10.0，通过应用层官方三参数 processor 验证：
 
 - raw Job、非空 native token 与 native AbortSignal；
