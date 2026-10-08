@@ -152,6 +152,29 @@ function failingHTTP1Request(): ClientRequest {
   return request as unknown as ClientRequest
 }
 
+/** Records one plaintext admission and stops before a response body. */
+function recordingHTTP1(payloads: Uint8Array[]): NodeHTTPClientRuntime["requestHTTP"] {
+  return function request(): ClientRequest {
+    let destroyed = false
+    let fail: ((error: Error) => void) | null = null
+    return {
+      get destroyed(): boolean {
+        return destroyed
+      },
+      once(_event: "error", listener: (error: Error) => void): void {
+        fail = listener
+      },
+      end(body: Uint8Array): void {
+        payloads.push(body)
+        fail?.(new Error("stop after buffered admission"))
+      },
+      destroy(): void {
+        destroyed = true
+      }
+    } as unknown as ClientRequest
+  }
+}
+
 /** Creates one runtime around supplied deterministic TLS and HTTP/2 constructors. */
 function ownerRuntime(
   agent: HTTPAgent,
@@ -160,6 +183,7 @@ function ownerRuntime(
   requestHTTP: NodeHTTPClientRuntime["requestHTTP"] = failingHTTP1Request
 ): NodeHTTPClientRuntime {
   return Object.freeze({
+    bufferedBody: true,
     newHTTPAgent(): HTTPAgent {
       return agent
     },
@@ -1214,4 +1238,326 @@ test("Node owner close wins after a TLS socket has already negotiated", async ()
   )
   expect(await rejection(result)).toBeInstanceOf(Error)
   await owner.close()
+})
+
+test("Node standard owner preserves URL init and instance body reads despite extra arguments", async () => {
+  const payloads: Uint8Array[] = []
+  const runtime = ownerRuntime(
+    new HTTPAgent({ keepAlive: true }),
+    function unusedTLS(): never {
+      throw new Error("unexpected TLS")
+    },
+    function unusedHTTP2(): never {
+      throw new Error("unexpected HTTP/2")
+    },
+    recordingHTTP1(payloads)
+  )
+  const owner = newNodeHTTPExecutor(
+    normalizeHTTPDialTarget("http://localhost:1", false),
+    defaultHTTPCommonOptions(),
+    applyHTTPDialOptions([]),
+    runtime
+  )
+  expect(owner.executor.length).toBe(2)
+
+  const urlBody = new Uint8Array([1, 2])
+  expect(
+    await rejection(
+      owner.executor("http://localhost:1/internal", {
+        method: "POST",
+        body: urlBody
+      })
+    )
+  ).toMatchObject({ message: "stop after buffered admission" })
+  expect(payloads[0]).toEqual(urlBody)
+
+  const secret = new Uint8Array([9])
+  const request = new Request("http://localhost:1/internal", {
+    method: "POST",
+    body: new Uint8Array([4, 5])
+  })
+  let reads = 0
+  const readBody = request.arrayBuffer
+  Object.defineProperty(request, "arrayBuffer", {
+    configurable: true,
+    value(): Promise<ArrayBuffer> {
+      reads += 1
+      return readBody.call(request)
+    }
+  })
+  expect(
+    await rejection(Reflect.apply(owner.executor, owner, [request, undefined, secret]))
+  ).toMatchObject({
+    message: "stop after buffered admission"
+  })
+  expect(reads).toBe(1)
+  expect(payloads[1]).toEqual(new Uint8Array([4, 5]))
+  await owner.close()
+})
+
+test("Node buffered owner reuses prepared bytes without reading the request body", async () => {
+  const payloads: Uint8Array[] = []
+  const runtime = ownerRuntime(
+    new HTTPAgent({ keepAlive: true }),
+    function unusedTLS(): never {
+      throw new Error("unexpected TLS")
+    },
+    function unusedHTTP2(): never {
+      throw new Error("unexpected HTTP/2")
+    },
+    recordingHTTP1(payloads)
+  )
+  const owner = newNodeHTTPExecutor(
+    normalizeHTTPDialTarget("http://localhost:1", false),
+    defaultHTTPCommonOptions(),
+    applyHTTPDialOptions([]),
+    runtime
+  )
+  /** Counts body access on one Request without replacing its bytes. */
+  function spyBody(request: Request): { arrayBufferCalls: number; bodyReads: number } {
+    const stats = { arrayBufferCalls: 0, bodyReads: 0 }
+    const readBody = request.arrayBuffer
+    const currentBody = request.body
+    Object.defineProperty(request, "arrayBuffer", {
+      configurable: true,
+      value(): Promise<ArrayBuffer> {
+        stats.arrayBufferCalls += 1
+        return readBody.call(request)
+      }
+    })
+    Object.defineProperty(request, "body", {
+      configurable: true,
+      get(): ReadableStream<Uint8Array> | null {
+        stats.bodyReads += 1
+        return currentBody
+      }
+    })
+    return stats
+  }
+  const prepared = new Uint8Array([1, 2, 3])
+  const request = new Request("http://localhost:1/internal", {
+    method: "POST",
+    body: new Uint8Array([7, 8, 9])
+  })
+  const stats = spyBody(request)
+  const executeBuffered = owner.executeBuffered
+  expect(typeof executeBuffered).toBe("function")
+  expect(executeBuffered?.length).toBe(2)
+  if (executeBuffered === undefined) throw new Error("buffered entry missing")
+  expect(await rejection(executeBuffered(request, prepared))).toMatchObject({
+    message: "stop after buffered admission"
+  })
+  expect(stats.arrayBufferCalls).toBe(0)
+  expect(stats.bodyReads).toBe(0)
+  expect(payloads[0]).toBe(prepared)
+
+  const empty = new Uint8Array(0)
+  const emptyRequest = new Request("http://localhost:1/internal", {
+    method: "POST",
+    body: new Uint8Array([4])
+  })
+  const emptyStats = spyBody(emptyRequest)
+  expect(await rejection(executeBuffered(emptyRequest, empty))).toMatchObject({
+    message: "stop after buffered admission"
+  })
+  expect(emptyStats.arrayBufferCalls).toBe(0)
+  expect(emptyStats.bodyReads).toBe(0)
+  expect(payloads[1]).toBe(empty)
+
+  const nullRequest = new Request("http://localhost:1/internal", { method: "POST" })
+  const nullStats = spyBody(nullRequest)
+  expect(await rejection(executeBuffered(nullRequest, null))).toMatchObject({
+    message: "stop after buffered admission"
+  })
+  expect(nullStats.arrayBufferCalls).toBe(0)
+  expect(nullStats.bodyReads).toBe(0)
+  expect(payloads[2]).toEqual(new Uint8Array(0))
+  expect(payloads[2]).not.toBe(empty)
+  expect(payloads).toHaveLength(3)
+
+  const foreign = new Request("http://other.test/internal", { method: "POST" })
+  const foreignStats = spyBody(foreign)
+  const originFailure = await rejection(executeBuffered(foreign, prepared))
+  expect(originFailure).toBeInstanceOf(TypeError)
+  expect((originFailure as TypeError).message).toContain("dial origin")
+  expect(foreignStats.arrayBufferCalls).toBe(0)
+  expect(foreignStats.bodyReads).toBe(0)
+  expect(payloads).toHaveLength(3)
+
+  await owner.close()
+  const closedStats = spyBody(request)
+  const closedFailure = await rejection(executeBuffered(request, prepared))
+  expect(closedFailure).toMatchObject({ message: "Node HTTP executor is closed" })
+  expect(closedStats.arrayBufferCalls).toBe(0)
+  expect(closedStats.bodyReads).toBe(0)
+  expect(payloads).toHaveLength(3)
+})
+
+test("Node buffered owner rejects close and request abort before native admission", async () => {
+  /** Opens one plaintext owner whose native admission is observable. */
+  function open(): {
+    owner: ReturnType<typeof newNodeHTTPExecutor>
+    payloads: Uint8Array[]
+  } {
+    const payloads: Uint8Array[] = []
+    const runtime = ownerRuntime(
+      new HTTPAgent({ keepAlive: true }),
+      function unusedTLS(): never {
+        throw new Error("unexpected TLS")
+      },
+      function unusedHTTP2(): never {
+        throw new Error("unexpected HTTP/2")
+      },
+      recordingHTTP1(payloads)
+    )
+    return {
+      owner: newNodeHTTPExecutor(
+        normalizeHTTPDialTarget("http://localhost:1", false),
+        defaultHTTPCommonOptions(),
+        applyHTTPDialOptions([]),
+        runtime
+      ),
+      payloads
+    }
+  }
+  /** Counts body access on one Request. */
+  function spyBody(request: Request): { arrayBufferCalls: number; bodyReads: number } {
+    const stats = { arrayBufferCalls: 0, bodyReads: 0 }
+    const readBody = request.arrayBuffer
+    const currentBody = request.body
+    Object.defineProperty(request, "arrayBuffer", {
+      configurable: true,
+      value(): Promise<ArrayBuffer> {
+        stats.arrayBufferCalls += 1
+        return readBody.call(request)
+      }
+    })
+    Object.defineProperty(request, "body", {
+      configurable: true,
+      get(): ReadableStream<Uint8Array> | null {
+        stats.bodyReads += 1
+        return currentBody
+      }
+    })
+    return stats
+  }
+  const prepared = new Uint8Array([1])
+  const closedOwner = open()
+  const closingRequest = new Request("http://localhost:1/internal", {
+    method: "POST",
+    body: new Uint8Array([9])
+  })
+  const closingStats = spyBody(closingRequest)
+  const executeBuffered = closedOwner.owner.executeBuffered
+  if (executeBuffered === undefined) throw new Error("buffered entry missing")
+  const closingWork = executeBuffered(closingRequest, prepared)
+  const closing = closedOwner.owner.close()
+  const closedFailure = await rejection(closingWork)
+  await closing
+  expect(closedOwner.payloads).toHaveLength(0)
+  expect(closedFailure).toMatchObject({ message: "Node HTTP executor is closed" })
+  expect(closingStats.arrayBufferCalls).toBe(0)
+  expect(closingStats.bodyReads).toBe(0)
+
+  const abortOwner = open()
+  const abortBuffered = abortOwner.owner.executeBuffered
+  if (abortBuffered === undefined) throw new Error("buffered entry missing")
+  const reason = new Error("abort before native admission")
+  const controller = new AbortController()
+  const aborting = new Request("http://localhost:1/internal", {
+    method: "POST",
+    signal: controller.signal,
+    body: new Uint8Array([9])
+  })
+  const abortStats = spyBody(aborting)
+  const abortingWork = abortBuffered(aborting, prepared)
+  controller.abort(reason)
+  expect(await rejection(abortingWork)).toBe(reason)
+  expect(abortOwner.payloads).toHaveLength(0)
+  expect(abortStats.arrayBufferCalls).toBe(0)
+  expect(abortStats.bodyReads).toBe(0)
+  await abortOwner.owner.close()
+
+  const bothOwner = open()
+  const bothBuffered = bothOwner.owner.executeBuffered
+  if (bothBuffered === undefined) throw new Error("buffered entry missing")
+  const bothReason = new Error("abort loses to owner close")
+  const bothController = new AbortController()
+  const bothRequest = new Request("http://localhost:1/internal", {
+    method: "POST",
+    signal: bothController.signal,
+    body: new Uint8Array([9])
+  })
+  const bothStats = spyBody(bothRequest)
+  const bothWork = bothBuffered(bothRequest, prepared)
+  bothController.abort(bothReason)
+  const bothClose = bothOwner.owner.close()
+  const bothFailure = await rejection(bothWork)
+  await bothClose
+  expect(bothFailure).not.toBe(bothReason)
+  expect(bothFailure).toMatchObject({ message: "Node HTTP executor is closed" })
+  expect(bothOwner.payloads).toHaveLength(0)
+  expect(bothStats.arrayBufferCalls).toBe(0)
+  expect(bothStats.bodyReads).toBe(0)
+})
+
+test("Node owner omits executeBuffered when runtime bufferedBody is false", async () => {
+  const payloads: Uint8Array[] = []
+  const runtime = Object.freeze({
+    ...ownerRuntime(
+      new HTTPAgent({ keepAlive: true }),
+      function unusedTLS(): never {
+        throw new Error("unexpected TLS")
+      },
+      function unusedHTTP2(): never {
+        throw new Error("unexpected HTTP/2")
+      },
+      recordingHTTP1(payloads)
+    ),
+    bufferedBody: false
+  })
+  const owner = newNodeHTTPExecutor(
+    normalizeHTTPDialTarget("http://localhost:1", false),
+    defaultHTTPCommonOptions(),
+    applyHTTPDialOptions([]),
+    runtime
+  )
+  expect(owner.executeBuffered).toBeUndefined()
+  expect(typeof owner.executor).toBe("function")
+  expect(owner.executor.length).toBe(2)
+
+  const body = new Uint8Array([1, 2, 3])
+  const request = new Request("http://localhost:1/internal", {
+    method: "POST",
+    body
+  })
+  let reads = 0
+  const readBody = request.arrayBuffer
+  Object.defineProperty(request, "arrayBuffer", {
+    configurable: true,
+    value(): Promise<ArrayBuffer> {
+      reads += 1
+      return readBody.call(request)
+    }
+  })
+  expect(await rejection(owner.executor(request))).toMatchObject({
+    message: "stop after buffered admission"
+  })
+  expect(reads).toBe(1)
+  expect(payloads[0]).toEqual(body)
+  await owner.close()
+})
+
+test("native Node owner provides executeBuffered only when Bun is absent", async () => {
+  const owner = newNodeHTTPExecutor(
+    normalizeHTTPDialTarget("http://localhost:1", false),
+    defaultHTTPCommonOptions(),
+    applyHTTPDialOptions([])
+  )
+  try {
+    expect(typeof owner.executeBuffered).toBe("Bun" in globalThis ? "undefined" : "function")
+    expect(typeof owner.executor).toBe("function")
+  } finally {
+    await owner.close()
+  }
 })

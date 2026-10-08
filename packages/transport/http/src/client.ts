@@ -188,7 +188,8 @@ export function newHTTPClient(
   closeExecutor: () => Promise<void>,
   common: Options,
   dial: DialOptions,
-  maxMessageBytes: number
+  maxMessageBytes: number,
+  executeBuffered?: (request: Request, body: Uint8Array | null) => Promise<Response>
 ): Client {
   const inflight = new Set<Inflight>()
   const closedError: TransportClosedError = newTransportClosedError("HTTP client is closed")
@@ -329,11 +330,24 @@ export function newHTTPClient(
         if (abortedDuringRead !== null) {
           await waitForExecutor(Promise.resolve(new Response(null)), entry.controller.signal)
         }
-        const outbound = outboundRequest(request, body, entry.controller.signal)
-        try {
-          execution = Promise.resolve(executor(outbound))
-        } catch (error) {
-          execution = Promise.reject(error)
+        const method = request.method.toUpperCase()
+        if (
+          executeBuffered !== undefined &&
+          !((method === "GET" || method === "HEAD") && body !== null)
+        ) {
+          const metadata = outboundRequest(request, null, entry.controller.signal)
+          try {
+            execution = Promise.resolve(executeBuffered(metadata, body))
+          } catch (error) {
+            execution = Promise.reject(error)
+          }
+        } else {
+          const outbound = outboundRequest(request, body, entry.controller.signal)
+          try {
+            execution = Promise.resolve(executor(outbound))
+          } catch (error) {
+            execution = Promise.reject(error)
+          }
         }
         const response = await waitForExecutor(execution, entry.controller.signal)
         const aborted = abortedError(entry)

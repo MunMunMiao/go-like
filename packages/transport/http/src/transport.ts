@@ -28,6 +28,8 @@ import type {
 /** Owns one dial-scoped executor and its runtime resources. */
 export interface HTTPDialExecutorHandle {
   readonly executor: HTTPExecutor
+  /** Reuses bytes already read by the shared client. Omitted by portable owners. */
+  readonly executeBuffered?: (request: Request, body: Uint8Array | null) => Promise<Response>
   /** Releases every runtime resource owned by this dial. */
   close(): Promise<void>
 }
@@ -245,6 +247,7 @@ function createHTTPTransport(
       let closeExecutor = function closePortableExecutor(): Promise<void> {
         return Promise.resolve()
       }
+      let executeBuffered: HTTPDialExecutorHandle["executeBuffered"] = undefined
       if (dialExecutorFactory !== null) {
         try {
           const owner = dialExecutorFactory(
@@ -263,6 +266,16 @@ function createHTTPTransport(
           }
           selectedExecutor = owner.executor
           closeExecutor = owner.close.bind(owner)
+          const admittedExecuteBuffered = owner.executeBuffered
+          if (
+            admittedExecuteBuffered !== undefined &&
+            typeof admittedExecuteBuffered !== "function"
+          ) {
+            throw new TypeError("HTTP dial executor executeBuffered must be a function")
+          }
+          if (typeof admittedExecuteBuffered === "function") {
+            executeBuffered = admittedExecuteBuffered.bind(owner)
+          }
         } catch (error) {
           return Promise.reject(error)
         }
@@ -274,7 +287,8 @@ function createHTTPTransport(
           closeExecutor,
           common,
           dialOptions,
-          httpOptions.maxMessageBytes
+          httpOptions.maxMessageBytes,
+          executeBuffered
         )
       )
     },

@@ -53,8 +53,10 @@ interface HTTP2SessionFactory {
   (origin: string, socket: TLSSocket): ClientHttp2Session
 }
 
-/** Supplies the four Node constructors needed by one deterministic client owner. */
+/** Supplies the Node constructors and byte-reuse switch for one deterministic client owner. */
 export interface NodeHTTPClientRuntime {
+  /** Enables caller-owned request-body byte reuse for this runtime. */
+  readonly bufferedBody: boolean
   /** Creates one client-owned HTTP/1 keep-alive agent. */
   newHTTPAgent(): HTTPAgent
   /** Opens one TLS socket from validated Node options. */
@@ -79,6 +81,11 @@ function requestNativeHTTP1(
 }
 
 const nativeHTTPClientRuntime: NodeHTTPClientRuntime = Object.freeze({
+  /**
+   * Bun 1.4.2 measured higher CPU for the no-body metadata Request path on 256KiB
+   * chunked concurrent exchanges. The cause is unknown; revisit when Bun changes.
+   */
+  bufferedBody: !("Bun" in globalThis),
   newHTTPAgent: newNativeHTTPAgent,
   connectTLS,
   connectHTTP2: openHTTP2Session,
@@ -894,14 +901,26 @@ export function newNodeHTTPExecutor(
   }
 
   /** Executes one request using only resources owned by this dial. */
-  const executor: HTTPExecutor = async function execute(input, init): Promise<Response> {
+  async function executeCore(
+    input: Parameters<HTTPExecutor>[0],
+    init: Parameters<HTTPExecutor>[1],
+    prepared?: Uint8Array | null
+  ): Promise<Response> {
     if (closed) throw new Error("Node HTTP executor is closed")
     const request =
       input instanceof Request && init === undefined ? input : new Request(input, init)
     if (new URL(request.url).origin !== target.origin)
       throw new TypeError("Node HTTP executor request must remain on its dial origin")
-    const body = new Uint8Array(await request.arrayBuffer())
-    closeController.signal.throwIfAborted()
+    let body: Uint8Array
+    if (prepared === undefined) {
+      body = new Uint8Array(await request.arrayBuffer())
+      closeController.signal.throwIfAborted()
+    } else {
+      await Promise.resolve()
+      closeController.signal.throwIfAborted()
+      if (request.signal.aborted) throw abortError(request.signal)
+      body = prepared === null ? new Uint8Array(0) : prepared
+    }
     const url = new URL(request.url)
     if (dial.connectionClose) {
       if (url.protocol === "http:") {
@@ -948,8 +967,19 @@ export function newNodeHTTPExecutor(
     })
   }
 
+  /** Standard Fetch entry. A third argument cannot select the prepared body. */
+  const executor: HTTPExecutor = function execute(input, init): Promise<Response> {
+    return executeCore(input, init)
+  }
+
+  /** Reuses caller-owned bytes and does not read Request.body. */
+  function executeBuffered(request: Request, body: Uint8Array | null): Promise<Response> {
+    return executeCore(request, undefined, body)
+  }
+
   return Object.freeze({
     executor,
+    ...(runtime.bufferedBody ? { executeBuffered } : {}),
     /** Atomically prevents admission and releases every agent, session, and late handshake. */
     close(): Promise<void> {
       if (closeWork !== null) return closeWork

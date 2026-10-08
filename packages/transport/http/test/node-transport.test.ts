@@ -586,3 +586,474 @@ test("Node client rejects invalid TLS identity material before network I/O", asy
   )
   await derClient.close(background())
 })
+
+test("runtime dial owner preserves buffered capability getter failures", async () => {
+  const failure = new Error("buffered getter failed")
+  let closes = 0
+  const throwing = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      executor(): Promise<Response> {
+        return Promise.resolve(new Response())
+      },
+      get executeBuffered(): never {
+        throw failure
+      },
+      close(): Promise<void> {
+        closes += 1
+        return Promise.resolve()
+      }
+    }
+  })
+  let published: Awaited<ReturnType<(typeof throwing)["dial"]>> | null = null
+  let thrown: unknown = null
+  try {
+    published = await throwing.dial(background(), "127.0.0.1:1")
+  } catch (error) {
+    thrown = error
+  }
+  if (published !== null) await published.close(background())
+  expect(thrown).toBe(failure)
+  expect(closes).toBe(0)
+
+  const raw = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      executor(): Promise<Response> {
+        return Promise.resolve(new Response())
+      },
+      get executeBuffered(): never {
+        throw "buffered getter failed"
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+  })
+  let rawClient: Awaited<ReturnType<(typeof raw)["dial"]>> | null = null
+  let rawFailure: unknown = null
+  try {
+    rawClient = await raw.dial(background(), "127.0.0.1:1")
+  } catch (error) {
+    rawFailure = error
+  }
+  if (rawClient !== null) await rawClient.close(background())
+  expect(rawFailure).toBe("buffered getter failed")
+})
+
+test("runtime dial owner without buffered capability keeps the standard request body", async () => {
+  const requests: Request[] = []
+  const transport = newHTTPTransportWithDialExecutor(function owner() {
+    const handle = {
+      executor(input: RequestInfo | URL): Promise<Response> {
+        requests.push(input instanceof Request ? input : new Request(input))
+        return Promise.resolve(new Response("ok"))
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+    Object.defineProperty(handle, "executeBuffered", { value: undefined })
+    return handle
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  const response = await client.fetch(background(), posted("127.0.0.1:1", "hello"))
+  expect(await response.text()).toBe("ok")
+  expect(requests).toHaveLength(1)
+  expect(await requests[0]?.text()).toBe("hello")
+  await client.close(background())
+})
+
+test("runtime dial owner preserves request construction failures for buffered execution", async () => {
+  const NativeRequest = globalThis.Request
+  const rejected = new Error("rejected request")
+  let requestMode: "error" | "raw" = "error"
+  let standardCalls = 0
+  let bufferedCalls = 0
+  globalThis.Request = class ThrowingRequest extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      if (init?.redirect === "manual") {
+        if (requestMode === "error") throw rejected
+        throw "rejected request"
+      }
+      super(input, init)
+    }
+  }
+  try {
+    const transport = newHTTPTransportWithDialExecutor(function owner() {
+      return {
+        executor(): Promise<Response> {
+          standardCalls += 1
+          return Promise.resolve(new Response())
+        },
+        executeBuffered(): Promise<Response> {
+          bufferedCalls += 1
+          return Promise.resolve(new Response())
+        },
+        close(): Promise<void> {
+          return Promise.resolve()
+        }
+      }
+    })
+    const client = await transport.dial(background(), "127.0.0.1:1")
+    try {
+      const errorFailure = await rejection(
+        client.fetch(
+          background(),
+          new Request("http://127.0.0.1:1/echo/call", { method: "POST", body: "x" })
+        )
+      )
+      expect(errorFailure).toMatchObject({
+        code: "GO_LIKE_TRANSPORT_PROTOCOL",
+        message: "invalid HTTP Fetch request"
+      })
+      expect(Reflect.get(errorFailure as object, "cause")).toBe(rejected)
+      requestMode = "raw"
+      const rawFailure = await rejection(
+        client.fetch(
+          background(),
+          new Request("http://127.0.0.1:1/echo/call", { method: "POST", body: "x" })
+        )
+      )
+      expect(rawFailure).toMatchObject({
+        code: "GO_LIKE_TRANSPORT_PROTOCOL",
+        message: "invalid HTTP Fetch request"
+      })
+      expect(Reflect.get(rawFailure as object, "cause")).toBeUndefined()
+      expect(standardCalls).toBe(0)
+      expect(bufferedCalls).toBe(0)
+    } finally {
+      await client.close(background())
+    }
+  } finally {
+    globalThis.Request = NativeRequest
+  }
+})
+
+test("runtime dial owner does not start execution when the request aborts during the body read", async () => {
+  let releaseBody = function pending(): void {}
+  let markStarted = function pending(): void {}
+  const started = new Promise<void>(function capture(resolve): void {
+    markStarted = resolve
+  })
+  const gate = new Promise<void>(function capture(resolve): void {
+    releaseBody = resolve
+  })
+  let standardCalls = 0
+  let bufferedCalls = 0
+  const transport = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      executor(): Promise<Response> {
+        standardCalls += 1
+        return Promise.resolve(new Response())
+      },
+      executeBuffered(): Promise<Response> {
+        bufferedCalls += 1
+        return Promise.resolve(new Response())
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  const controller = new AbortController()
+  const reason = new Error("abort during read")
+  const fetching = client.fetch(
+    background(),
+    new Request("http://127.0.0.1:1/echo/call", {
+      method: "POST",
+      signal: controller.signal,
+      body: new ReadableStream<Uint8Array>({
+        async pull(stream): Promise<void> {
+          markStarted()
+          await gate
+          stream.enqueue(new Uint8Array([1]))
+          stream.close()
+        }
+      })
+    })
+  )
+  try {
+    await started
+    controller.abort(reason)
+    expect(await rejection(fetching)).toBe(reason)
+    expect(standardCalls).toBe(0)
+    expect(bufferedCalls).toBe(0)
+  } finally {
+    releaseBody()
+    await client.close(background())
+  }
+})
+
+test("runtime dial owner selects buffered execution after the bounded request read", async () => {
+  const original = new Uint8Array([1, 2, 3])
+  const caller = new AbortController()
+  let releaseBody = function pending(): void {}
+  let markStarted = function pending(): void {}
+  const started = new Promise<void>(function capture(resolve): void {
+    markStarted = resolve
+  })
+  const gate = new Promise<void>(function capture(resolve): void {
+    releaseBody = resolve
+  })
+  let reads = 0
+  let bufferedCalls = 0
+  let executorCalls = 0
+  let replacedCalls = 0
+  let phase: "original" | "replaced" = "original"
+  let sent: Request | null = null
+  const transport = newHTTPTransportWithDialExecutor(function factory() {
+    const record = {
+      executor(): Promise<Response> {
+        executorCalls += 1
+        return Promise.resolve(new Response("standard"))
+      },
+      get executeBuffered(): (request: Request, body: Uint8Array | null) => Promise<Response> {
+        reads += 1
+        if (phase === "replaced") {
+          return function replaced(): Promise<Response> {
+            replacedCalls += 1
+            return Promise.resolve(new Response("replaced"))
+          }
+        }
+        return function executeBuffered(
+          this: object,
+          request: Request,
+          body: Uint8Array | null
+        ): Promise<Response> {
+          bufferedCalls += 1
+          expect(this).toBe(record)
+          sent?.headers.set("X-Topic", "mutated")
+          original.fill(9)
+          expect(request.method).toBe("POST")
+          expect(request.url).toBe("http://127.0.0.1:1/echo/call")
+          expect(request.redirect).toBe("manual")
+          expect(request.body).toBeNull()
+          expect(request.signal).not.toBe(caller.signal)
+          expect(request.headers.get("x-topic")).toBe("greeting")
+          expect(request.headers.get("connection")).toBeNull()
+          expect(request.headers.get("host")).toBeNull()
+          expect(body).toEqual(new Uint8Array([1, 2, 3]))
+          expect(body).not.toBe(original)
+          return Promise.resolve(new Response("buffered"))
+        }
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+    return record
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  phase = "replaced"
+  expect(reads).toBe(1)
+  sent = new Request("http://127.0.0.1:1/echo/call", {
+    method: "POST",
+    headers: { "X-Topic": "greeting", Connection: "close", Host: "evil.test" },
+    signal: caller.signal,
+    body: new ReadableStream<Uint8Array>({
+      async pull(stream): Promise<void> {
+        markStarted()
+        await gate
+        stream.enqueue(original)
+        stream.close()
+      }
+    })
+  })
+  const fetching = client.fetch(background(), sent)
+  try {
+    await started
+    expect(bufferedCalls).toBe(0)
+    expect(executorCalls).toBe(0)
+    releaseBody()
+    const response = await fetching
+    expect(await response.text()).toBe("buffered")
+    expect(bufferedCalls).toBe(1)
+    expect(executorCalls).toBe(0)
+    expect(replacedCalls).toBe(0)
+    expect(reads).toBe(1)
+  } finally {
+    releaseBody()
+    await client.close(background())
+  }
+})
+
+test("runtime dial owner distinguishes a null body from an empty buffered body", async () => {
+  const bodies: Array<Uint8Array | null> = []
+  let executorCalls = 0
+  const transport = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      executor(): Promise<Response> {
+        executorCalls += 1
+        return Promise.resolve(new Response())
+      },
+      executeBuffered(_request: Request, body: Uint8Array | null): Promise<Response> {
+        bodies.push(body)
+        return Promise.resolve(new Response(null))
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  try {
+    await client.fetch(
+      background(),
+      new Request("http://127.0.0.1:1/echo/call", { method: "POST" })
+    )
+    await client.fetch(
+      background(),
+      new Request("http://127.0.0.1:1/echo/call", {
+        method: "POST",
+        body: new ReadableStream<Uint8Array>({
+          start(stream): void {
+            stream.close()
+          }
+        })
+      })
+    )
+    expect(bodies).toHaveLength(2)
+    expect(bodies[0]).toBeNull()
+    expect(bodies[1]).toBeInstanceOf(Uint8Array)
+    expect(bodies[1]).not.toBeNull()
+    expect(bodies[1]?.byteLength).toBe(0)
+    expect(executorCalls).toBe(0)
+  } finally {
+    await client.close(background())
+  }
+})
+
+test("runtime dial owner preserves a synchronous buffered executor failure", async () => {
+  const failure = new Error("buffered executor threw")
+  let executorCalls = 0
+  const transport = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      executor(): Promise<Response> {
+        executorCalls += 1
+        return Promise.resolve(new Response("standard"))
+      },
+      executeBuffered(): Promise<Response> {
+        throw failure
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  try {
+    expect(await rejection(client.fetch(background(), posted("127.0.0.1:1", "x")))).toBe(failure)
+    expect(executorCalls).toBe(0)
+  } finally {
+    await client.close(background())
+  }
+})
+
+test("runtime dial owner keeps GET and HEAD bodies on the standard executor", async () => {
+  const calls: Array<{
+    kind: "standard" | "buffered"
+    method: string
+    body: Uint8Array | null
+  }> = []
+  const transport = newHTTPTransportWithDialExecutor(function owner() {
+    return {
+      async executor(input: RequestInfo | URL): Promise<Response> {
+        const request = input instanceof Request ? input : new Request(input)
+        calls.push({
+          kind: "standard",
+          method: request.method,
+          body: new Uint8Array(await request.arrayBuffer())
+        })
+        return new Response(null)
+      },
+      executeBuffered(request: Request, body: Uint8Array | null): Promise<Response> {
+        calls.push({ kind: "buffered", method: request.method, body })
+        return Promise.resolve(new Response(null))
+      },
+      close(): Promise<void> {
+        return Promise.resolve()
+      }
+    }
+  })
+  const client = await transport.dial(background(), "127.0.0.1:1")
+  /** Sends one request whose method and body are whatever the runtime stored. */
+  async function send(request: Request): Promise<void> {
+    await client.fetch(background(), request)
+  }
+  /** Attaches one method and byte stream without using a forbidden Fetch init. */
+  function withMethodBody(method: string, bytes: Uint8Array): Request {
+    const request = new Request("http://127.0.0.1:1/echo/call")
+    Object.defineProperties(request, {
+      method: { value: method },
+      body: {
+        value: new ReadableStream<Uint8Array>({
+          start(stream): void {
+            if (bytes.byteLength > 0) stream.enqueue(bytes)
+            stream.close()
+          }
+        })
+      }
+    })
+    return request
+  }
+  try {
+    const lowercase = withMethodBody("get", new Uint8Array([1]))
+    const head = withMethodBody("head", new Uint8Array([2]))
+    expect(lowercase.method).toBe("get")
+    expect(head.method).toBe("head")
+    await send(withMethodBody("GET", new Uint8Array([65])))
+    await send(withMethodBody("HEAD", new Uint8Array(0)))
+    await send(lowercase)
+    await send(head)
+    expect(calls).toEqual([
+      { kind: "standard", method: "GET", body: new Uint8Array([65]) },
+      { kind: "standard", method: "HEAD", body: new Uint8Array(0) },
+      { kind: "standard", method: "GET", body: new Uint8Array([1]) },
+      { kind: "standard", method: "HEAD", body: new Uint8Array([2]) }
+    ])
+
+    calls.length = 0
+    await send(new Request("http://127.0.0.1:1/echo/call", { method: "GET" }))
+    await send(new Request("http://127.0.0.1:1/echo/call", { method: "HEAD" }))
+    expect(calls).toEqual([
+      { kind: "buffered", method: "GET", body: null },
+      { kind: "buffered", method: "HEAD", body: null }
+    ])
+  } finally {
+    await client.close(background())
+  }
+})
+
+test("runtime dial owner rejects non-callable buffered capabilities", async () => {
+  for (const value of [null, 1, false, "buffered", { not: "callable" }]) {
+    let closes = 0
+    let executorCalls = 0
+    const transport = newHTTPTransportWithDialExecutor(function owner() {
+      return {
+        executor(): Promise<Response> {
+          executorCalls += 1
+          return Promise.resolve(new Response())
+        },
+        executeBuffered: value as never,
+        close(): Promise<void> {
+          closes += 1
+          return Promise.resolve()
+        }
+      }
+    })
+    let client: Awaited<ReturnType<(typeof transport)["dial"]>> | null = null
+    let failure: unknown = null
+    try {
+      client = await transport.dial(background(), "127.0.0.1:1")
+    } catch (error) {
+      failure = error
+    }
+    if (client !== null) await client.close(background())
+    expect(failure).toBeInstanceOf(TypeError)
+    expect((failure as TypeError).message).toBe(
+      "HTTP dial executor executeBuffered must be a function"
+    )
+    expect(closes).toBe(0)
+    expect(executorCalls).toBe(0)
+  }
+})
