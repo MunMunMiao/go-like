@@ -5,6 +5,7 @@ import { compileJsonEncoder } from "../src/compile-encode"
 import { StructError } from "../src/errors"
 import { getStructFields, parseStructValue } from "../src/introspection"
 import { struct } from "../src/index"
+import { createPrimitiveStruct } from "../src/runtime"
 import { DEFINITION } from "../src/symbols"
 import type { AnyStruct, AnyStructLike, RuntimeStruct, StructDefinition } from "../src/types"
 import { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "../src/value-graph"
@@ -277,7 +278,10 @@ test("hand-written encode fast path matches the interpreter", () => {
     expectSame(schema, input, name)
   }
   expect(reads).toBe(2)
-  expect(compileJsonEncoder(struct.string().alias("wire"))).toBeNull()
+  const aliasedWire = struct.string().alias("wire")
+  expect(typeof compileJsonEncoder(aliasedWire)).toBe("function")
+  expect(compileJsonEncoder(aliasedWire)).toBe(compileJsonEncoder(aliasedWire))
+  expect(encodeValidatedJson(aliasedWire, "ada")).toBe(oracle(aliasedWire, "ada"))
   expect(compileJsonEncoder(user)).toEqual(expect.any(Function))
   const anyOut = encodeValidatedJson(struct.object({ body: struct.any() }), { body }) as {
     body: unknown
@@ -308,32 +312,94 @@ function modifySchema(schema: AnyStruct, rand: () => number): AnyStruct {
   return schema
 }
 
+function hookedString(): AnyStruct {
+  return createPrimitiveStruct({
+    decode: (value: string) => ({ ok: true as const, value: `${value}!` }),
+    encode: (value: string) => value.toUpperCase(),
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+}
+
+function lazyObject(): AnyStruct {
+  return struct.object({
+    id: struct.string(),
+    get child() {
+      return struct.array(struct.string())
+    }
+  })
+}
+
 function randomLeaf(rand: () => number): AnyStruct {
   const roll = rand()
-  if (roll < 0.16) return struct.string()
-  if (roll < 0.32) return struct.number()
-  if (roll < 0.44) return struct.boolean()
-  if (roll < 0.52) return struct.null()
-  if (roll < 0.62) return struct.literal(rand() < 0.5 ? "ok" : 0)
-  if (roll < 0.7) return struct.literal(false)
-  if (roll < 0.76) return struct.literal(null)
-  if (roll < 0.86) return struct.enum(["a", "b", "c"])
-  if (roll < 0.93) return struct.enum({ off: 0, on: 1 })
-  if (roll < 0.97) return struct.any()
-  return struct.unknown()
+  if (roll < 0.14) return struct.string()
+  if (roll < 0.26) return struct.number()
+  if (roll < 0.36) return struct.boolean()
+  if (roll < 0.42) return struct.null()
+  if (roll < 0.52) return struct.literal(rand() < 0.5 ? "ok" : 0)
+  if (roll < 0.58) return struct.literal(false)
+  if (roll < 0.64) return struct.literal(null)
+  if (roll < 0.74) return struct.enum(["a", "b", "c"])
+  if (roll < 0.8) return struct.enum({ off: 0, on: 1 })
+  if (roll < 0.86) return struct.any()
+  if (roll < 0.9) return struct.unknown()
+  if (roll < 0.95) return struct.date()
+  return struct.bigint()
+}
+
+function randomObject(rand: () => number, depth: number): AnyStruct {
+  const count = 1 + Math.floor(rand() * 3)
+  const shape: { [key: string]: AnyStructLike } = {}
+  for (let index = 0; index < count; index += 1) {
+    let child = randomSchema(rand, depth - 1)
+    if (index === 0 && rand() < 0.08) child = child.alias("__proto__")
+    else if (index === 0 && rand() < 0.12) child = child.alias("")
+    else if (rand() < 0.35) child = child.alias(`w${index}`)
+    shape[`f${index}`] = child
+  }
+  return struct.object(shape)
 }
 
 function randomSchema(rand: () => number, depth: number): AnyStruct {
-  if (depth <= 0 || rand() < 0.55) return modifySchema(randomLeaf(rand), rand)
-  if (rand() < 0.45) return modifySchema(struct.array(randomSchema(rand, depth - 1)), rand)
-  const count = 1 + Math.floor(rand() * 3)
-  const shared = rand() < 0.35 ? randomSchema(rand, depth - 1) : undefined
-  const shape: { [key: string]: AnyStructLike } = {}
-  for (let index = 0; index < count; index += 1) {
-    shape[`f${index}`] =
-      shared !== undefined && (index === 0 || rand() < 0.4) ? shared : randomSchema(rand, depth - 1)
+  if (depth <= 0 || rand() < 0.34) return modifySchema(randomLeaf(rand), rand)
+  const roll = rand()
+  if (roll < 0.12) return modifySchema(struct.array(randomSchema(rand, depth - 1)), rand)
+  if (roll < 0.24)
+    return modifySchema(
+      struct.tuple([randomSchema(rand, depth - 1), randomSchema(rand, depth - 1)]),
+      rand
+    )
+  if (roll < 0.36) return modifySchema(struct.record(randomSchema(rand, depth - 1)), rand)
+  if (roll < 0.5)
+    return modifySchema(
+      struct.or(randomSchema(rand, depth - 1), randomSchema(rand, depth - 1)),
+      rand
+    )
+  if (roll < 0.62) {
+    return modifySchema(
+      struct.discriminatedUnion("kind", [
+        struct.object({ kind: struct.literal("a"), body: randomSchema(rand, depth - 1) }),
+        struct.object({
+          kind: struct.literal("b").alias(rand() < 0.5 ? "type" : "kind"),
+          note: randomSchema(rand, depth - 1)
+        })
+      ]),
+      rand
+    )
   }
-  return modifySchema(struct.object(shape), rand)
+  if (roll < 0.74) {
+    return modifySchema(
+      struct.intersection(
+        struct.object({ a: randomSchema(rand, depth - 1) }),
+        struct.object({ b: randomSchema(rand, depth - 1) })
+      ),
+      rand
+    )
+  }
+  if (roll < 0.84) return modifySchema(hookedString(), rand)
+  if (roll < 0.9) return lazyObject()
+  return modifySchema(randomObject(rand, depth), rand)
 }
 
 function validValue(schema: AnyStructLike, rand: () => number): unknown {
@@ -370,6 +436,39 @@ function validValue(schema: AnyStructLike, rand: () => number): unknown {
       }
       return output
     }
+    case "tuple":
+      return definition.items.map((item) => validValue(item, rand))
+    case "record": {
+      const output: { [key: string]: unknown } = {}
+      const count = Math.floor(rand() * 3)
+      for (let index = 0; index < count; index += 1) {
+        output[`k${index}`] = validValue(definition.value as AnyStructLike, rand)
+      }
+      return output
+    }
+    case "or":
+      return validValue(
+        definition.options[Math.floor(rand() * definition.options.length)] as AnyStructLike,
+        rand
+      )
+    case "discriminatedUnion":
+      return validValue(
+        definition.options[Math.floor(rand() * definition.options.length)] as AnyStructLike,
+        rand
+      )
+    case "intersection": {
+      if (!definition.objectSides) return validValue(definition.options[0] as AnyStructLike, rand)
+      const output: { [key: string]: unknown } = {}
+      for (const option of definition.options) {
+        const side = validValue(option as AnyStructLike, rand)
+        if (side !== null && typeof side === "object") Object.assign(output, side)
+      }
+      return output
+    }
+    case "date":
+      return new Date(0)
+    case "bigint":
+      return 42n
     case "object": {
       const output: { [key: string]: unknown } = {}
       for (const field of getStructFields(schema)) {
@@ -383,6 +482,30 @@ function validValue(schema: AnyStructLike, rand: () => number): unknown {
   }
 }
 
+function schemaHasLazy(schema: AnyStructLike): boolean {
+  const definition = definitionOf(schema)
+  if (definition.kind === "object") {
+    for (const descriptor of Object.values(definition.cache.declaredDescriptors)) {
+      if (typeof descriptor?.get === "function") return true
+    }
+    for (const field of getStructFields(schema)) {
+      if (schemaHasLazy(field.struct)) return true
+    }
+    return false
+  }
+  if (definition.kind === "array") return schemaHasLazy(definition.item as AnyStructLike)
+  if (definition.kind === "tuple") return definition.items.some((item) => schemaHasLazy(item))
+  if (definition.kind === "record") return schemaHasLazy(definition.value as AnyStructLike)
+  if (
+    definition.kind === "or" ||
+    definition.kind === "intersection" ||
+    definition.kind === "discriminatedUnion"
+  ) {
+    return definition.options.some((option) => schemaHasLazy(option))
+  }
+  return false
+}
+
 function describeSchema(schema: AnyStructLike): string {
   const definition = definitionOf(schema)
   const flags = `${definition.flags.optional ? "?" : ""}${definition.flags.nullable ? "|null" : ""}`
@@ -394,9 +517,20 @@ function describeSchema(schema: AnyStructLike): string {
   }
   if (definition.kind === "array")
     return `${describeSchema(definition.item as AnyStructLike)}[]${flags}`
+  if (definition.kind === "tuple")
+    return `[${definition.items.map((item) => describeSchema(item)).join(",")}]${flags}`
+  if (definition.kind === "record")
+    return `record<${describeSchema(definition.value as AnyStructLike)}>${flags}`
+  if (definition.kind === "or" || definition.kind === "intersection") {
+    return `${definition.kind}(${definition.options.map((option) => describeSchema(option)).join("|")})${flags}`
+  }
+  if (definition.kind === "discriminatedUnion") {
+    return `du(${definition.options.map((option) => describeSchema(option)).join("|")})${flags}`
+  }
   if (definition.kind === "literal") return `literal:${JSON.stringify(definition.value)}${flags}`
   if (definition.kind === "enum") return `enum:${definition.values.join("|")}${flags}`
-  return `${definition.kind}${flags}`
+  const alias = definition.alias === undefined ? "" : `@${JSON.stringify(definition.alias)}`
+  return `${definition.kind}${alias}${flags}`
 }
 
 function showInput(input: unknown): string {
@@ -467,14 +601,47 @@ function mutants(value: unknown): unknown[] {
     const reversedKey = keys[index] as string
     reversed[reversedKey] = record[reversedKey]
   }
+  const proto = Object.create(null) as { [key: string]: unknown }
+  for (const key of keys) proto[key] = record[key]
+  proto["__proto__"] = "p"
+  const cycle = {} as { self?: unknown }
+  cycle.self = cycle
   samples.push(
     deleted,
     { ...record, [key]: null },
     { ...record, [key]: undefined },
     { ...record, [key]: "nope" },
     { ...record, [key]: NaN },
-    reversed
+    { ...record, [key]: cycle },
+    reversed,
+    proto
   )
+  return samples
+}
+
+function boundarySamples(schema: AnyStructLike, rand: () => number): unknown[] {
+  const samples: unknown[] = []
+  const definition = definitionOf(schema)
+  if (definition.kind === "or" || definition.kind === "discriminatedUnion") {
+    for (const option of definition.options) samples.push(validValue(option, rand))
+    samples.push({ kind: "missing" }, { type: "nope" }, null, undefined)
+  }
+  if (definition.kind === "tuple") samples.push([], [null], ["only"])
+  if (definition.kind === "record") {
+    const proto = Object.create(null) as { [key: string]: unknown }
+    proto["__proto__"] = "x"
+    samples.push(proto, { k0: null })
+  }
+  if (definition.kind === "object" && !schemaHasLazy(schema)) {
+    const base = validValue(schema, rand)
+    if (base !== null && typeof base === "object" && !Array.isArray(base)) {
+      const record = base as { [key: string]: unknown }
+      samples.push(
+        { ...record, extra: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 1) },
+        { ...record, extra: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT) }
+      )
+    }
+  }
   return samples
 }
 
@@ -482,8 +649,13 @@ test(`seeded encode fast path matches interpreter seed ${DIFFERENTIAL_SEED}`, ()
   const rand = mulberry32(DIFFERENTIAL_SEED)
   for (let iteration = 0; iteration < DIFFERENTIAL_ITERATIONS; iteration += 1) {
     const schema = randomSchema(rand, 3)
-    expect(compileJsonEncoder(schema), `iteration ${iteration}`).toEqual(expect.any(Function))
-    const samples = mutants(validValue(schema, rand))
+    const encoder = compileJsonEncoder(schema)
+    if (schemaHasLazy(schema)) expect(encoder, `iteration ${iteration}`).toBeNull()
+    else {
+      expect(encoder, `iteration ${iteration}`).toEqual(expect.any(Function))
+      expect(compileJsonEncoder(schema), `iteration ${iteration}`).toBe(encoder)
+    }
+    const samples = [...mutants(validValue(schema, rand)), ...boundarySamples(schema, rand)]
     for (let index = 0; index < samples.length; index += 1) {
       const input = samples[index]
       const actual = outcome(() => encodeValidatedJson(schema, input))

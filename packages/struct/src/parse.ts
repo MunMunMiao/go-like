@@ -109,6 +109,15 @@ export function parseStructQuiet(
   return withParseGraph(input, () => drive(struct, input, [...path], "value", true, false))
 }
 
+/** Encode-island probe. Value mode, aliases off, quiet failures. */
+export function parseEncodeQuiet(
+  struct: RuntimeStruct,
+  input: unknown,
+  path: Path
+): InternalParseResult<unknown> {
+  return withParseGraph(input, () => drive(struct, input, [...path], "value", false, false))
+}
+
 type ParsePhase = "array" | "intersection" | "object" | "record" | "tuple" | "union"
 type ParseStart = "object" | "value"
 

@@ -1,7 +1,9 @@
 import { encodeObjectByAlias } from "./codec/common"
+import { StructError } from "./errors"
 import { resolveStructFields } from "./fields"
 import { isStruct } from "./guards"
 import { parseStructValue } from "./introspection"
+import { parseEncodeQuiet } from "./parse"
 import { DEFINITION } from "./symbols"
 import type {
   AnyStructLike,
@@ -10,6 +12,7 @@ import type {
   LiteralDefinition,
   LiteralValue,
   ObjectDefinition,
+  Path,
   PrimitiveDefinition,
   PrimitiveKind,
   RuntimeStruct,
@@ -27,7 +30,9 @@ interface EncodeGraph {
   trusted: boolean
 }
 
-type JsonStep = (value: unknown, graph: EncodeGraph) => unknown
+type JsonStep = ((value: unknown, graph: EncodeGraph, path?: Path) => unknown) & {
+  needsPath?: true
+}
 
 interface CoverCursor {
   seen: WeakSet<object>
@@ -39,6 +44,7 @@ interface CoverCursor {
 type CoverStep = (value: unknown, cursor: CoverCursor) => boolean
 
 const INVALID: unique symbol = Symbol("struct.json.encode.invalid")
+const SKIP_ENCODE: unique symbol = Symbol("struct.json.encode.skip")
 const covers = new WeakMap<RuntimeStruct, CoverStep>()
 const roots = new WeakMap<RuntimeStruct, JsonEncoder | null>()
 const steps = new WeakMap<RuntimeStruct, JsonStep | null>()
@@ -52,6 +58,10 @@ export function encodeCompiledJson(struct: AnyStructLike, value: unknown): unkno
   const encoder = compileJsonEncoder(struct)
   if (encoder === null) return interpret(struct, value)
   const encoded = encoder(value)
+  // An island parses its subtree and then encodes that subtree. The interpreter
+  // parses the whole value before encoding it, so hook order can differ. A hook
+  // that already succeeded runs again when INVALID falls back to the interpreter.
+  // StructError and TypeError results still come only from that rerun.
   if (encoded !== INVALID) return encoded
   return interpret(struct, value)
 }
@@ -63,12 +73,30 @@ export function compileJsonEncoder(struct: AnyStructLike): JsonEncoder | null {
   const cached = roots.get(runtime)
   if (cached !== undefined) return cached
   const step = compileStep(runtime)
-  const encoder = step === null ? null : bindRoot(step, covers.get(runtime) as CoverStep)
+  const encoder = step === null ? null : bindRoot(runtime, step, covers.get(runtime) as CoverStep)
   roots.set(runtime, encoder)
   return encoder
 }
 
-function bindRoot(step: JsonStep, cover: CoverStep): JsonEncoder {
+function publishSkipped(struct: RuntimeStruct, encoded: unknown): unknown {
+  if (encoded !== SKIP_ENCODE) return encoded
+  try {
+    return encodeObjectByAlias(struct, undefined, "json", true)
+  } catch (error) {
+    if (error instanceof StructError || error instanceof TypeError) return INVALID
+    throw error
+  }
+}
+
+function bindRoot(struct: RuntimeStruct, step: JsonStep, cover: CoverStep): JsonEncoder {
+  if (step.needsPath === true) {
+    return (value) => {
+      if (runCover(value, cover))
+        return publishSkipped(struct, step(value, enterRoot(value, true), []))
+      if (portableValueGraphError(value) !== undefined) return INVALID
+      return publishSkipped(struct, step(value, enterRoot(value, false), []))
+    }
+  }
   return (value) => {
     // Schema traversal already accounts for cycles and depth on containers it enters.
     // Keep the root walk when that traversal would miss part of the graph.
@@ -174,6 +202,25 @@ function isArrayIndex(key: string, length: number): boolean {
 }
 
 function nested(step: JsonStep): JsonStep {
+  if (step.needsPath === true) {
+    const run: JsonStep = (value, graph, path) => {
+      const container = valueContainer(value)
+      if (container === undefined) return step(value, graph, path)
+      const depth = graph.depth + 1
+      if (depth > PORTABLE_VALUE_GRAPH_DEPTH_LIMIT) return INVALID
+      if (graph.active.has(container)) return INVALID
+      graph.depth = depth
+      graph.active.add(container)
+      try {
+        return step(value, graph, path)
+      } finally {
+        graph.active.delete(container)
+        graph.depth -= 1
+      }
+    }
+    run.needsPath = true
+    return run
+  }
   return (value, graph) => {
     const container = valueContainer(value)
     if (container === undefined) return step(value, graph)
@@ -206,8 +253,7 @@ function remember(struct: RuntimeStruct, step: JsonStep, cover: CoverStep): Json
 
 function compileDefinition(struct: RuntimeStruct): JsonStep | null {
   const definition = struct[DEFINITION]
-  if (definition.alias !== undefined) return null
-
+  // alias selects the parent object's output key. It does not change this node's encoding.
   switch (definition.kind) {
     case "any":
     case "unknown":
@@ -237,12 +283,55 @@ function compileDefinition(struct: RuntimeStruct): JsonStep | null {
     case "string":
       return compilePrimitive(struct, definition)
     case "discriminatedUnion":
+      return compileIsland(struct, [...definition.map.values()] as RuntimeStruct[])
     case "intersection":
     case "or":
+      return compileIsland(struct, definition.options as unknown as readonly RuntimeStruct[])
     case "record":
+      return compileIsland(struct, [definition.value as RuntimeStruct])
     case "tuple":
-      return null
+      return compileIsland(struct, definition.items as unknown as readonly RuntimeStruct[])
   }
+}
+
+function compileIsland(struct: RuntimeStruct, children: readonly RuntimeStruct[]): JsonStep | null {
+  for (const child of children) {
+    if (compileStep(child) === null) return null
+  }
+  // The fast path does not walk an island. A container must fail this cover so
+  // bindRoot keeps the root graph scan; a non-container counts as covered.
+  return remember(struct, islandStep(struct), leafCover)
+}
+
+function islandStep(struct: RuntimeStruct): JsonStep {
+  const definition = struct[DEFINITION]
+  const optional = definition.flags.optional
+  const nullOk = acceptsNull(definition)
+  const passNull = definition.kind === "or" || definition.kind === "intersection"
+  const run: JsonStep = (value, _graph, path = []) => {
+    if (value === undefined) return optional ? undefined : INVALID
+    if (value === null) {
+      if (nullOk) return null
+      if (!passNull) return INVALID
+    }
+    let parsed: ReturnType<typeof parseEncodeQuiet>
+    try {
+      parsed = parseEncodeQuiet(struct, value, path)
+    } catch (error) {
+      if (error instanceof StructError) return INVALID
+      throw error
+    }
+    if (!parsed.ok) return INVALID
+    if (parsed.value === undefined) return SKIP_ENCODE
+    try {
+      return encodeObjectByAlias(struct, parsed.value, "json", true)
+    } catch (error) {
+      if (error instanceof StructError || error instanceof TypeError) return INVALID
+      throw error
+    }
+  }
+  run.needsPath = true
+  return run
 }
 
 function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): JsonStep | null {
@@ -250,6 +339,37 @@ function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): JsonS
   const item = compileStep(itemStruct)
   if (item === null) return null
   const element = nested(item)
+  const cover = arrayCover(covers.get(itemStruct) as CoverStep)
+  if (element.needsPath === true) {
+    const accept: JsonStep = (value, graph, path = []) => {
+      if (!Array.isArray(value)) return INVALID
+      const output: unknown[] = []
+      for (let index = 0; index < value.length; index += 1) {
+        const raw = readIndex(value, index, graph.trusted)
+        if (raw === INVALID) return INVALID
+        path.push(index)
+        let encoded: unknown
+        try {
+          encoded = element(raw, graph, path)
+        } finally {
+          path.pop()
+        }
+        if (encoded === INVALID) return INVALID
+        if (encoded === SKIP_ENCODE) {
+          try {
+            encoded = encodeObjectByAlias(itemStruct, undefined, "json", true)
+          } catch (error) {
+            if (error instanceof StructError || error instanceof TypeError) return INVALID
+            throw error
+          }
+        }
+        output.push(encoded)
+      }
+      return output
+    }
+    accept.needsPath = true
+    return remember(struct, compileChecked(definition, accept), cover)
+  }
   return remember(
     struct,
     compileChecked(definition, (value, graph) => {
@@ -264,7 +384,7 @@ function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): JsonS
       }
       return output
     }),
-    arrayCover(covers.get(itemStruct) as CoverStep)
+    cover
   )
 }
 
@@ -283,13 +403,57 @@ function compileObject(struct: RuntimeStruct, definition: ObjectDefinition): Jso
     if (typeof descriptors[key]?.get === "function") return null
   }
 
-  const compiledFields: Array<{ key: string; step: JsonStep }> = []
+  const compiledFields: Array<{
+    key: string
+    optional: boolean
+    step: JsonStep
+    wireKey: string
+  }> = []
   const covered: Array<{ cover: CoverStep; key: string }> = []
+  let needsPath = false
   for (const field of resolveStructFields(struct, definition)) {
     const step = compileStep(field.struct)
     if (step === null) return null
-    compiledFields.push({ key: field.key, step: nested(step) })
+    const nestedStep = nested(step)
+    if (nestedStep.needsPath === true) needsPath = true
+    compiledFields.push({
+      key: field.key,
+      optional: field.struct[DEFINITION].flags.optional,
+      step: nestedStep,
+      wireKey: field.wireKey
+    })
     covered.push({ cover: covers.get(field.struct) as CoverStep, key: field.key })
+  }
+
+  const cover = objectCover(covered)
+  if (needsPath) {
+    const accept: JsonStep = (value, graph, path = []) => {
+      if (!isPlainObject(value)) return INVALID
+      const output: { [key: string]: unknown } = Object.create(null)
+      for (const field of compiledFields) {
+        const raw = readOwn(value, field.key, graph.trusted)
+        if (raw === INVALID) return INVALID
+        if (raw === undefined) {
+          if (!field.optional) return INVALID
+          continue
+        }
+        let encoded: unknown
+        if (field.step.needsPath === true) {
+          path.push(field.key)
+          try {
+            encoded = field.step(raw, graph, path)
+          } finally {
+            path.pop()
+          }
+        } else encoded = field.step(raw, graph)
+        if (encoded === INVALID) return INVALID
+        if (encoded === SKIP_ENCODE) continue
+        output[field.wireKey] = encoded
+      }
+      return output
+    }
+    accept.needsPath = true
+    return remember(struct, compileChecked(definition, accept), cover)
   }
 
   return remember(
@@ -302,11 +466,11 @@ function compileObject(struct: RuntimeStruct, definition: ObjectDefinition): Jso
         if (raw === INVALID) return INVALID
         const encoded = field.step(raw, graph)
         if (encoded === INVALID) return INVALID
-        if (encoded !== undefined) output[field.key] = encoded
+        if (encoded !== undefined) output[field.wireKey] = encoded
       }
       return output
     }),
-    objectCover(covered)
+    cover
   )
 }
 
@@ -314,7 +478,9 @@ function compilePrimitive(
   struct: RuntimeStruct,
   definition: PrimitiveDefinition<PrimitiveKind, unknown, unknown>
 ): JsonStep | null {
-  if (definition.decode !== undefined || definition.encode !== undefined) return null
+  if (definition.decode !== undefined || definition.encode !== undefined) {
+    return remember(struct, islandStep(struct), leafCover)
+  }
   const check = definition.is
   return remember(
     struct,
@@ -326,6 +492,15 @@ function compilePrimitive(
 function compileChecked(definition: StructDefinition, accept: JsonStep): JsonStep {
   const optional = definition.flags.optional
   const nullOk = acceptsNull(definition)
+  if (accept.needsPath === true) {
+    const run: JsonStep = (value, graph, path) => {
+      if (value === undefined) return optional ? undefined : INVALID
+      if (value === null) return nullOk ? null : INVALID
+      return accept(value, graph, path)
+    }
+    run.needsPath = true
+    return run
+  }
   return (value, graph) => {
     if (value === undefined) return optional ? undefined : INVALID
     if (value === null) return nullOk ? null : INVALID
