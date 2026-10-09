@@ -5,6 +5,7 @@ import { compileJsonDecoder } from "../src/compile-decode"
 import { StructError } from "../src/errors"
 import { getStructFields } from "../src/introspection"
 import { struct } from "../src/index"
+import { createPrimitiveStruct } from "../src/runtime"
 import { DEFINITION } from "../src/symbols"
 import type { AnyStruct, AnyStructLike, RuntimeStruct, StructDefinition } from "../src/types"
 import { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "../src/value-graph"
@@ -208,7 +209,7 @@ test("failed input matches StructError from the interpreter", () => {
   }
 })
 
-test("unsupported schema stays on the interpreter", () => {
+test("island and union schemas match the interpreter", () => {
   const recursive = struct.object({
     id: struct.string(),
     get child() {
@@ -262,9 +263,19 @@ test("unsupported schema stays on the interpreter", () => {
   ]
 
   for (const [name, schema, input] of cases) {
-    expect(compileJsonDecoder(schema)).toBeNull()
+    const decoder = compileJsonDecoder(schema)
+    const lazy = name.startsWith("getter")
+    if (lazy) expect(decoder).toBeNull()
+    else {
+      expect(decoder).toEqual(expect.any(Function))
+      expect(compileJsonDecoder(schema)).toBe(decoder)
+    }
     try {
-      expectSameInterpreter(schema, input)
+      const expected = outcome(() => decodeJson(schema, input))
+      expect(outcome(() => decodeJsonTree(schema, input))).toBe(expected)
+      if (!lazy && expected.startsWith("ok:") && decoder !== null) {
+        expect(outcome(() => decoder(input))).toBe(expected)
+      }
     } catch (error) {
       throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`, {
         cause: error
@@ -298,32 +309,202 @@ function modifySchema(schema: AnyStruct, rand: () => number): AnyStruct {
   return schema
 }
 
+function markedString(): AnyStruct {
+  return createPrimitiveStruct({
+    decode: (value: string, path) => ({ ok: true as const, value: `${path.join(".")}:${value}` }),
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+}
+
+test("union declaration order matches the interpreter", () => {
+  const marked = createPrimitiveStruct({
+    decode: (value: string) => ({ ok: true as const, value: `${value}!` }),
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+  const dated = struct.date()
+  const rows: Array<[string, AnyStructLike, unknown]> = [
+    ["hook then string", struct.or(marked, struct.string()), "ab"],
+    ["string then hook", struct.or(struct.string(), marked), "ab"],
+    ["number then string keeps the string", struct.or(struct.number(), struct.string()), "1"],
+    ["string then number keeps the string", struct.or(struct.string(), struct.number()), "1"],
+    ["number then string keeps the number", struct.or(struct.number(), struct.string()), 1],
+    [
+      "wider object does not steal an earlier object",
+      struct.or(
+        struct.object({ a: struct.string() }),
+        struct.object({ a: struct.string(), b: struct.number() })
+      ),
+      { a: "x", b: 1 }
+    ],
+    [
+      "earlier wider object keeps its field",
+      struct.or(
+        struct.object({ a: struct.string(), b: struct.number() }),
+        struct.object({ a: struct.string() })
+      ),
+      { a: "x", b: 1 }
+    ],
+    ["null reaches a later literal", struct.or(struct.string(), struct.literal(null)), null],
+    ["null reaches an earlier literal", struct.or(struct.literal(null), struct.string()), null],
+    ["nullable union returns null", struct.or(struct.string(), struct.number()).nullable(), null],
+    ["date hook wins before string", struct.or(dated, struct.string()), "2020-01-02T00:00:00.000Z"],
+    ["string wins before date", struct.or(struct.string(), dated), "2020-01-02T00:00:00.000Z"],
+    [
+      "nested union keeps the inner order",
+      struct.or(struct.or(marked, struct.number()), struct.string()),
+      "z"
+    ],
+    [
+      "tuple island inside a union",
+      struct.or(struct.tuple([struct.string(), struct.number()]), struct.array(struct.string())),
+      ["a", 1]
+    ],
+    [
+      "array wins when the tuple length is wrong",
+      struct.or(struct.tuple([struct.string(), struct.number()]), struct.array(struct.string())),
+      ["a"]
+    ],
+    [
+      "record island inside a union",
+      struct.or(struct.record(struct.number()), struct.object({ a: struct.string() })),
+      { a: 1, b: 2 }
+    ],
+    [
+      "hook path is the field key",
+      struct.object({ name: markedString().alias("n") }),
+      { n: "ada" }
+    ],
+    [
+      "hook path continues through a tuple island",
+      struct.object({ pair: struct.tuple([markedString()]) }),
+      { pair: ["ada"] }
+    ],
+    [
+      "missing discriminator",
+      struct.discriminatedUnion("kind", [
+        struct.object({ kind: struct.literal("a"), n: struct.number() }),
+        struct.object({ kind: struct.literal("b").alias("type"), s: struct.string() })
+      ]),
+      { n: 1 }
+    ],
+    [
+      "wrong discriminator wire key",
+      struct.discriminatedUnion("kind", [
+        struct.object({ kind: struct.literal("a"), n: struct.number() }),
+        struct.object({ kind: struct.literal("b").alias("type"), s: struct.string() })
+      ]),
+      { kind: "b", s: "ok" }
+    ],
+    [
+      "undefined discriminator value",
+      struct.discriminatedUnion("kind", [
+        struct.object({ kind: struct.literal("a"), n: struct.number() }),
+        struct.object({ kind: struct.literal("b"), s: struct.string() })
+      ]),
+      { kind: undefined, n: 1 }
+    ]
+  ]
+
+  for (const [name, schema, input] of rows) {
+    try {
+      const expected = outcome(() => decodeJson(schema, input))
+      if (expected.startsWith("ok:")) expectFastPath(schema, input)
+      else expectSameInterpreter(schema, input)
+    } catch (error) {
+      throw new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`, {
+        cause: error
+      })
+    }
+  }
+})
+
 function randomLeaf(rand: () => number): AnyStruct {
   const roll = rand()
-  if (roll < 0.16) return struct.string()
-  if (roll < 0.32) return struct.number()
-  if (roll < 0.44) return struct.boolean()
-  if (roll < 0.52) return struct.null()
-  if (roll < 0.62) return struct.literal(rand() < 0.5 ? "ok" : 0)
-  if (roll < 0.7) return struct.literal(false)
-  if (roll < 0.76) return struct.literal(null)
-  if (roll < 0.86) return struct.enum(["a", "b", "c"])
-  if (roll < 0.93) return struct.enum({ off: 0, on: 1 })
-  if (roll < 0.97) return struct.any()
+  if (roll < 0.12) return struct.string()
+  if (roll < 0.2) {
+    return createPrimitiveStruct({
+      decode: (value: string) => ({ ok: true as const, value: value.toUpperCase() }),
+      expected: "string",
+      is: (value): value is string => typeof value === "string",
+      kind: "string"
+    })
+  }
+  if (roll < 0.28) return struct.number()
+  if (roll < 0.36) return struct.boolean()
+  if (roll < 0.42) return struct.null()
+  if (roll < 0.5) return struct.literal(rand() < 0.5 ? "ok" : 0)
+  if (roll < 0.56) return struct.literal(false)
+  if (roll < 0.62) return struct.literal(null)
+  if (roll < 0.7) return struct.enum(["a", "b", "c"])
+  if (roll < 0.78) return struct.enum({ off: 0, on: 1 })
+  if (roll < 0.84) return struct.date()
+  if (roll < 0.9) return struct.bigint()
+  if (roll < 0.95) return struct.any()
   return struct.unknown()
 }
 
-function randomSchema(rand: () => number, depth: number): AnyStruct {
-  if (depth <= 0 || rand() < 0.55) return modifySchema(randomLeaf(rand), rand)
-  if (rand() < 0.45) return modifySchema(struct.array(randomSchema(rand, depth - 1)), rand)
+function maybeAlias(schema: AnyStruct, rand: () => number, index: number): AnyStruct {
+  if (rand() < 0.75) return schema
+  return schema.alias(`w${index}`)
+}
+
+function randomObject(rand: () => number, depth: number): AnyStruct {
   const count = 1 + Math.floor(rand() * 3)
   const shared = rand() < 0.35 ? randomSchema(rand, depth - 1) : undefined
   const shape: { [key: string]: AnyStructLike } = {}
   for (let index = 0; index < count; index += 1) {
-    shape[`f${index}`] =
+    const child =
       shared !== undefined && (index === 0 || rand() < 0.4) ? shared : randomSchema(rand, depth - 1)
+    shape[`f${index}`] = maybeAlias(child, rand, index)
   }
-  return modifySchema(struct.object(shape), rand)
+  return struct.object(shape)
+}
+
+function randomDiscriminated(rand: () => number, depth: number): AnyStruct {
+  const aliasRight = rand() < 0.5
+  return struct.discriminatedUnion("kind", [
+    struct.object({
+      kind: struct.literal("a"),
+      body: randomSchema(rand, depth - 1)
+    }),
+    struct.object({
+      body: randomSchema(rand, depth - 1),
+      kind: aliasRight ? struct.literal("b").alias("type") : struct.literal("b")
+    })
+  ])
+}
+
+function randomIntersection(rand: () => number, depth: number): AnyStruct {
+  return struct.intersection(
+    struct.object({ left: randomSchema(rand, depth - 1) }),
+    struct.object({ right: randomSchema(rand, depth - 1) })
+  )
+}
+
+function randomSchema(rand: () => number, depth: number): AnyStruct {
+  if (depth <= 0 || rand() < 0.34) return modifySchema(randomLeaf(rand), rand)
+  const roll = rand()
+  if (roll < 0.12) return modifySchema(struct.array(randomSchema(rand, depth - 1)), rand)
+  if (roll < 0.24) {
+    return modifySchema(
+      struct.tuple([randomSchema(rand, depth - 1), randomSchema(rand, depth - 1)]),
+      rand
+    )
+  }
+  if (roll < 0.36) return modifySchema(struct.record(randomSchema(rand, depth - 1)), rand)
+  if (roll < 0.5) {
+    return modifySchema(
+      struct.or(randomSchema(rand, depth - 1), randomSchema(rand, depth - 1)),
+      rand
+    )
+  }
+  if (roll < 0.62) return modifySchema(randomDiscriminated(rand, depth), rand)
+  if (roll < 0.74) return modifySchema(randomIntersection(rand, depth), rand)
+  return modifySchema(randomObject(rand, depth), rand)
 }
 
 function validValue(schema: AnyStructLike, rand: () => number): unknown {
@@ -368,6 +549,41 @@ function validValue(schema: AnyStructLike, rand: () => number): unknown {
       }
       return output
     }
+    case "or":
+      return validValue(
+        definition.options[Math.floor(rand() * definition.options.length)] as AnyStructLike,
+        rand
+      )
+    case "discriminatedUnion":
+      return validValue(
+        definition.options[Math.floor(rand() * definition.options.length)] as AnyStructLike,
+        rand
+      )
+    case "intersection": {
+      const output: { [key: string]: unknown } = {}
+      for (const option of definition.options) {
+        const side = validValue(option as AnyStructLike, rand)
+        if (side !== null && typeof side === "object" && !Array.isArray(side)) {
+          Object.assign(output, side)
+        }
+      }
+      return output
+    }
+    case "tuple":
+      return definition.items.map((item) => validValue(item as AnyStructLike, rand))
+    case "record": {
+      const count = Math.floor(rand() * 3)
+      const output: { [key: string]: unknown } = {}
+      for (let index = 0; index < count; index += 1) {
+        const child = validValue(definition.value as AnyStructLike, rand)
+        if (child !== undefined) output[`k${index}`] = child
+      }
+      return output
+    }
+    case "date":
+      return rand() < 0.5 ? "2020-01-02T03:04:05.000Z" : 1_700_000_000_000
+    case "bigint":
+      return rand() < 0.5 ? "12" : "0"
     default:
       throw new Error(`fuzzer produced an unsupported kind ${definition.kind}`)
   }
@@ -430,6 +646,17 @@ function describeSchema(schema: AnyStructLike): string {
   }
   if (definition.kind === "literal") return `literal:${JSON.stringify(definition.value)}${flags}`
   if (definition.kind === "enum") return `enum:${definition.values.join("|")}${flags}`
+  if (definition.kind === "or" || definition.kind === "intersection") {
+    return `${definition.kind}(${definition.options.map((option) => describeSchema(option as AnyStructLike)).join(",")})${flags}`
+  }
+  if (definition.kind === "discriminatedUnion") {
+    return `discriminated(${definition.options.map((option) => describeSchema(option as AnyStructLike)).join(",")})${flags}`
+  }
+  if (definition.kind === "tuple") {
+    return `tuple(${definition.items.map((item) => describeSchema(item as AnyStructLike)).join(",")})${flags}`
+  }
+  if (definition.kind === "record")
+    return `record(${describeSchema(definition.value as AnyStructLike)})${flags}`
   return `${definition.kind}${flags}`
 }
 
@@ -482,7 +709,15 @@ test(`seeded differential fast path matches interpreter seed ${DIFFERENTIAL_SEED
   for (let iteration = 0; iteration < DIFFERENTIAL_ITERATIONS; iteration += 1) {
     const schema = randomSchema(rand, 3)
     expect(compileJsonDecoder(schema)).toEqual(expect.any(Function))
+    const definition = definitionOf(schema)
     const samples = mutants(validValue(schema, rand))
+    if (definition.kind === "or" || definition.kind === "discriminatedUnion") {
+      for (const option of definition.options)
+        samples.push(validValue(option as AnyStructLike, rand))
+      samples.push({ kind: "missing" }, { type: "nope" }, null)
+    }
+    if (definition.kind === "tuple") samples.push([], [null], ["only"])
+    if (definition.kind === "record") samples.push({ ["__proto__"]: "x" }, { k0: null })
     for (let index = 0; index < samples.length; index += 1) {
       const input = samples[index]
       const left = outcome(() => decodeJsonTree(schema, input))

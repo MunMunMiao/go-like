@@ -100,6 +100,15 @@ export function parseRootValue(
   return withParseGraph(input, () => drive(struct, input, [], mode, useAliases, true))
 }
 
+/** Island probe. `reportIssues` is false so a miss reuses QUIET_FAILURE instead of allocating an issue. */
+export function parseStructQuiet(
+  struct: RuntimeStruct,
+  input: unknown,
+  path: Path
+): InternalParseResult<unknown> {
+  return withParseGraph(input, () => drive(struct, input, [...path], "value", true, false))
+}
+
 type ParsePhase = "array" | "intersection" | "object" | "record" | "tuple" | "union"
 type ParseStart = "object" | "value"
 
