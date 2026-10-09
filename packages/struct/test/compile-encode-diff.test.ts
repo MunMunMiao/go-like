@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test"
 
 import { encodeParsedJson, encodeValidatedJson } from "../src/codec/json"
-import { compileJsonEncoder } from "../src/compile-encode"
+import { compileJsonEncoder, unionOptionsProvablyDisjoint } from "../src/compile-encode"
 import { StructError } from "../src/errors"
 import { getStructFields, parseStructValue } from "../src/introspection"
+import { selectUnionOptions } from "../src/match"
 import { struct } from "../src/index"
 import { createPrimitiveStruct } from "../src/runtime"
 import { DEFINITION } from "../src/symbols"
@@ -371,11 +372,7 @@ function randomSchema(rand: () => number, depth: number): AnyStruct {
       rand
     )
   if (roll < 0.36) return modifySchema(struct.record(randomSchema(rand, depth - 1)), rand)
-  if (roll < 0.5)
-    return modifySchema(
-      struct.or(randomSchema(rand, depth - 1), randomSchema(rand, depth - 1)),
-      rand
-    )
+  if (roll < 0.5) return modifySchema(randomOr(rand, depth), rand)
   if (roll < 0.62) {
     return modifySchema(
       struct.discriminatedUnion("kind", [
@@ -400,6 +397,27 @@ function randomSchema(rand: () => number, depth: number): AnyStruct {
   if (roll < 0.84) return modifySchema(hookedString(), rand)
   if (roll < 0.9) return lazyObject()
   return modifySchema(randomObject(rand, depth), rand)
+}
+
+function randomOr(rand: () => number, depth: number): AnyStruct {
+  const kind = rand()
+  if (kind < 0.16) return struct.or(struct.string(), struct.number())
+  if (kind < 0.28) return struct.or(struct.literal("a"), struct.literal("b"))
+  if (kind < 0.4) return struct.or(struct.string(), struct.null())
+  if (kind < 0.5) return struct.or(struct.literal("a"), struct.string())
+  if (kind < 0.62) return struct.or(struct.number(), struct.literal(1))
+  if (kind < 0.74)
+    return struct.or(
+      struct.object({ body: randomSchema(rand, depth - 1), tag: struct.literal("a") }),
+      struct.object({ body: randomSchema(rand, depth - 1), tag: struct.literal("b") })
+    )
+  if (kind < 0.84)
+    return struct.or(
+      struct.object({ a: struct.string() }),
+      struct.object({ a: struct.string(), b: struct.number().optional() })
+    )
+  if (kind < 0.92) return struct.or(hookedString(), struct.number())
+  return struct.or(randomSchema(rand, depth - 1), randomSchema(rand, depth - 1))
 }
 
 function validValue(schema: AnyStructLike, rand: () => number): unknown {
@@ -624,7 +642,30 @@ function boundarySamples(schema: AnyStructLike, rand: () => number): unknown[] {
   const definition = definitionOf(schema)
   if (definition.kind === "or" || definition.kind === "discriminatedUnion") {
     for (const option of definition.options) samples.push(validValue(option, rand))
-    samples.push({ kind: "missing" }, { type: "nope" }, null, undefined)
+    samples.push({ kind: "missing" }, { type: "nope" }, null, undefined, { kind: undefined })
+    const base = validValue(definition.options[0] as AnyStructLike, rand)
+    if (base !== null && typeof base === "object" && !Array.isArray(base)) {
+      const record = { ...(base as { [key: string]: unknown }) }
+      if (definition.kind === "discriminatedUnion") {
+        const key = definition.discriminator
+        const missing = { ...record }
+        delete missing[key]
+        const aliasOnly = { ...missing, type: record[key] }
+        const proto = Object.create(null) as { [key: string]: unknown }
+        for (const field of Object.keys(record)) proto[field] = record[field]
+        proto["__proto__"] = "p"
+        samples.push(
+          missing,
+          aliasOnly,
+          proto,
+          { ...record, [key]: undefined },
+          { ...record, [key]: "not-a-member" }
+        )
+      }
+      const cycle = {} as { self?: unknown }
+      cycle.self = cycle
+      samples.push({ ...record, extra: cycle }, { ...record, nested: containers(8) })
+    }
   }
   if (definition.kind === "tuple") samples.push([], [null], ["only"])
   if (definition.kind === "record") {
@@ -644,6 +685,97 @@ function boundarySamples(schema: AnyStructLike, rand: () => number): unknown[] {
   }
   return samples
 }
+
+function collectOrs(schema: AnyStructLike, found: RuntimeStruct[]): void {
+  const definition = definitionOf(schema)
+  if (definition.kind === "or") found.push(schema as unknown as RuntimeStruct)
+  if (definition.kind === "object") {
+    if (schemaHasLazy(schema)) return
+    for (const field of getStructFields(schema)) collectOrs(field.struct, found)
+    return
+  }
+  if (definition.kind === "array") {
+    collectOrs(definition.item as AnyStructLike, found)
+    return
+  }
+  if (definition.kind === "tuple") {
+    for (const item of definition.items) collectOrs(item, found)
+    return
+  }
+  if (definition.kind === "record") {
+    collectOrs(definition.value as AnyStructLike, found)
+    return
+  }
+  if (
+    definition.kind === "or" ||
+    definition.kind === "intersection" ||
+    definition.kind === "discriminatedUnion"
+  ) {
+    for (const option of definition.options) collectOrs(option, found)
+  }
+}
+
+test("classified disjoint unions match at most one interpreter option", () => {
+  const probes: unknown[] = [
+    undefined,
+    null,
+    0,
+    -0,
+    1,
+    NaN,
+    "",
+    "a",
+    "b",
+    true,
+    false,
+    [],
+    ["a"],
+    {},
+    { a: "x" },
+    { a: "x", b: 1 },
+    { tag: "a" },
+    { tag: "b" },
+    { body: "s", tag: "a" },
+    { body: 1, tag: "b" },
+    { kind: "a" },
+    { kind: undefined },
+    { type: "a" }
+  ]
+  const found: RuntimeStruct[] = [
+    struct.or(struct.string(), struct.number()) as unknown as RuntimeStruct,
+    struct.or(struct.literal("a"), struct.literal("b")) as unknown as RuntimeStruct,
+    struct.or(struct.string(), struct.null()) as unknown as RuntimeStruct,
+    struct.or(struct.literal(0), struct.literal(-0)) as unknown as RuntimeStruct,
+    struct.or(struct.array(struct.string()), struct.number()) as unknown as RuntimeStruct,
+    struct.or(
+      struct.object({ n: struct.number(), tag: struct.literal("a") }),
+      struct.object({ s: struct.string(), tag: struct.literal("b") })
+    ) as unknown as RuntimeStruct,
+    struct.or(struct.enum(["a", "b"]), struct.literal("c")) as unknown as RuntimeStruct,
+    struct.or(struct.string().nullable(), struct.boolean()) as unknown as RuntimeStruct
+  ]
+  const rand = mulberry32(DIFFERENTIAL_SEED)
+  for (let iteration = 0; iteration < DIFFERENTIAL_ITERATIONS; iteration += 1) {
+    collectOrs(randomSchema(rand, 3), found)
+  }
+  let checked = 0
+  for (const union of found) {
+    const definition = definitionOf(union)
+    if (definition.kind !== "or") continue
+    const unionOptions = definition.options as unknown as RuntimeStruct[]
+    if (!unionOptionsProvablyDisjoint(unionOptions)) continue
+    checked += 1
+    for (const value of probes) {
+      const matches = selectUnionOptions(definition.options, value)
+      if (matches.length > 1) {
+        throw new Error(
+          `seed ${DIFFERENTIAL_SEED} schema ${describeSchema(union)} value ${showInput(value)} matched ${matches.length}`
+        )
+      }
+    }
+  }
+  expect(checked).toBeGreaterThan(0)
+})
 
 test(`seeded encode fast path matches interpreter seed ${DIFFERENTIAL_SEED}`, () => {
   const rand = mulberry32(DIFFERENTIAL_SEED)

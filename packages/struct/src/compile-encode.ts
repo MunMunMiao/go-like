@@ -8,6 +8,7 @@ import { DEFINITION } from "./symbols"
 import type {
   AnyStructLike,
   ArrayDefinition,
+  DiscriminatedUnionDefinition,
   EnumDefinition,
   LiteralDefinition,
   LiteralValue,
@@ -16,7 +17,8 @@ import type {
   PrimitiveDefinition,
   PrimitiveKind,
   RuntimeStruct,
-  StructDefinition
+  StructDefinition,
+  UnionDefinition
 } from "./types"
 import { hasOwnKey, isPlainObject, matchesEnum } from "./utils"
 import { portableValueGraphError, PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "./value-graph"
@@ -283,14 +285,147 @@ function compileDefinition(struct: RuntimeStruct): JsonStep | null {
     case "string":
       return compilePrimitive(struct, definition)
     case "discriminatedUnion":
-      return compileIsland(struct, [...definition.map.values()] as RuntimeStruct[])
+      return compileDiscriminatedUnion(struct, definition)
     case "intersection":
-    case "or":
       return compileIsland(struct, definition.options as unknown as readonly RuntimeStruct[])
+    case "or":
+      return compileOr(struct, definition)
     case "record":
       return compileIsland(struct, [definition.value as RuntimeStruct])
     case "tuple":
       return compileIsland(struct, definition.items as unknown as readonly RuntimeStruct[])
+  }
+}
+
+function compileOr(struct: RuntimeStruct, definition: UnionDefinition): JsonStep | null {
+  const optionStructs = definition.options as unknown as readonly RuntimeStruct[]
+  const compiled: JsonStep[] = []
+  for (const option of optionStructs) {
+    const step = compileStep(option)
+    if (step === null) return null
+    compiled.push(step)
+  }
+  if (!unionOptionsProvablyDisjoint(optionStructs)) {
+    return remember(struct, islandStep(struct), leafCover)
+  }
+  return remember(struct, disjointOrStep(definition, compiled), disjointUnionCover(optionStructs))
+}
+
+function disjointOrStep(definition: UnionDefinition, steps: readonly JsonStep[]): JsonStep {
+  const optional = definition.flags.optional
+  const nullable = definition.flags.nullable
+  return (value, graph) => {
+    if (value === undefined) return optional ? undefined : INVALID
+    if (value === null && nullable) return null
+    for (const step of steps) {
+      const encoded = step(value, graph)
+      if (encoded !== INVALID) return encoded
+    }
+    return INVALID
+  }
+}
+
+function disjointUnionCover(options: readonly RuntimeStruct[]): CoverStep {
+  let arrayStep: CoverStep | undefined
+  const objects: RuntimeStruct[] = []
+  for (const option of options) {
+    const kind = option[DEFINITION].kind
+    if (kind === "array") arrayStep = covers.get(option) as CoverStep
+    else if (kind === "object") objects.push(option)
+  }
+  const objectStep = coverObjects(objects)
+  return (value, cursor) => {
+    if (Array.isArray(value)) {
+      if (arrayStep === undefined) return false
+      return arrayStep(value, cursor)
+    }
+    if (isPlainObject(value)) {
+      if (objectStep === undefined) return false
+      return objectStep(value, cursor)
+    }
+    return true
+  }
+}
+
+function coverObjects(objects: readonly RuntimeStruct[]): CoverStep | undefined {
+  const first = objects[0]
+  if (first === undefined) return undefined
+  if (objects.length === 1) return covers.get(first) as CoverStep
+  const key = (tagOf(first, first[DEFINITION] as ObjectDefinition) as ObjectTag).key
+  const arms: Array<{ cover: CoverStep; value: LiteralValue }> = []
+  for (const option of objects) {
+    const tag = tagOf(option, option[DEFINITION] as ObjectDefinition) as ObjectTag
+    arms.push({ cover: covers.get(option) as CoverStep, value: tag.value })
+  }
+  return (value, cursor) => {
+    if (!isPlainObject(value) || !Object.hasOwn(value, key)) return false
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (descriptor === undefined || !Object.hasOwn(descriptor, "value")) return false
+    for (const arm of arms) {
+      if (Object.is(arm.value, descriptor.value)) return arm.cover(value, cursor)
+    }
+    return false
+  }
+}
+
+function compileDiscriminatedUnion(
+  struct: RuntimeStruct,
+  definition: DiscriminatedUnionDefinition
+): JsonStep | null {
+  const steps = new Map<unknown, JsonStep>()
+  const optionCovers = new Map<unknown, CoverStep>()
+  let needsPath = false
+  for (const [value, option] of definition.map) {
+    const optionStruct = option as RuntimeStruct
+    const step = compileStep(optionStruct)
+    if (step === null) return null
+    if (step.needsPath === true) needsPath = true
+    steps.set(value, step)
+    optionCovers.set(value, covers.get(optionStruct) as CoverStep)
+  }
+  return remember(
+    struct,
+    discriminatedUnionStep(definition, steps, needsPath),
+    discriminatedUnionCover(definition.discriminator, optionCovers)
+  )
+}
+
+function discriminatedUnionStep(
+  definition: DiscriminatedUnionDefinition,
+  steps: ReadonlyMap<unknown, JsonStep>,
+  needsPath: boolean
+): JsonStep {
+  const key = definition.discriminator
+  const optional = definition.flags.optional
+  const nullOk = acceptsNull(definition)
+  const run: JsonStep = (value, graph, path) => {
+    if (value === undefined) return optional ? undefined : INVALID
+    if (value === null) return nullOk ? null : INVALID
+    if (!isPlainObject(value)) return INVALID
+    const raw = readOwn(value, key, graph.trusted)
+    if (raw === INVALID || raw === undefined) return INVALID
+    const step = steps.get(raw)
+    if (step === undefined) return INVALID
+    if (step.needsPath === true) return step(value, graph, path)
+    return step(value, graph)
+  }
+  if (needsPath) run.needsPath = true
+  return run
+}
+
+function discriminatedUnionCover(
+  key: string,
+  optionCovers: ReadonlyMap<unknown, CoverStep>
+): CoverStep {
+  return (value, cursor) => {
+    if (!isPlainObject(value)) return !Array.isArray(value)
+    if (!Object.hasOwn(value, key)) return false
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (descriptor === undefined || !Object.hasOwn(descriptor, "value")) return false
+    if (descriptor.value === undefined) return false
+    const cover = optionCovers.get(descriptor.value)
+    if (cover === undefined) return false
+    return cover(value, cursor)
   }
 }
 
@@ -529,4 +664,239 @@ function readIndex(value: unknown[], index: number, trusted: boolean): unknown {
 function acceptsNull(definition: StructDefinition): boolean {
   if (definition.flags.nullable || definition.kind === "null") return true
   return definition.kind === "literal" && definition.value === null
+}
+
+interface UnionAtom {
+  looseZero: boolean
+  value: boolean | number | string
+}
+
+interface ObjectTag {
+  key: string
+  value: LiteralValue
+}
+
+interface UnionDomain {
+  arrays: boolean
+  booleans: boolean
+  finite: readonly UnionAtom[]
+  nulls: boolean
+  numbers: boolean
+  object: ObjectTag | true | undefined
+  strings: boolean
+  undefs: boolean
+}
+
+/**
+ * True when each option's accepted set is pairwise disjoint under matchesRuntimeValue,
+ * and parse of a matching option cannot move the value into another option.
+ * Options that are not in a closed identity fragment return false.
+ */
+export function unionOptionsProvablyDisjoint(options: readonly RuntimeStruct[]): boolean {
+  const domains: UnionDomain[] = []
+  for (const option of options) {
+    const domain = domainOf(option)
+    if (domain === undefined) return false
+    domains.push(domain)
+  }
+  for (let left = 0; left < domains.length; left += 1) {
+    for (let right = left + 1; right < domains.length; right += 1) {
+      const leftDomain = domains[left] as UnionDomain
+      const rightDomain = domains[right] as UnionDomain
+      if (domainsOverlap(leftDomain, rightDomain)) return false
+    }
+  }
+  return true
+}
+
+function domainOf(struct: RuntimeStruct): UnionDomain | undefined {
+  const definition = struct[DEFINITION]
+  const domain = domainOfKind(struct, definition)
+  if (domain === undefined) return undefined
+  return applyFlags(domain, definition)
+}
+
+function domainOfKind(
+  struct: RuntimeStruct,
+  definition: StructDefinition
+): UnionDomain | undefined {
+  switch (definition.kind) {
+    case "any":
+    case "unknown":
+    case "or":
+    case "discriminatedUnion":
+    case "intersection":
+    case "record":
+    case "tuple":
+      return undefined
+    case "array":
+      return domainOf(definition.item as RuntimeStruct) === undefined
+        ? undefined
+        : blankDomain({ arrays: true })
+    case "enum":
+      return domainOfEnum(definition)
+    case "literal":
+      return domainOfLiteral(definition.value)
+    case "object":
+      return domainOfObject(struct, definition)
+    case "boolean":
+    case "null":
+    case "number":
+    case "string":
+    case "arrayBuffer":
+    case "bigint":
+    case "blob":
+    case "date":
+    case "file":
+      return domainOfPrimitive(definition)
+  }
+}
+
+function domainOfPrimitive(
+  definition: PrimitiveDefinition<PrimitiveKind, unknown, unknown>
+): UnionDomain | undefined {
+  if (definition.decode !== undefined || definition.encode !== undefined) return undefined
+  switch (definition.kind) {
+    case "boolean":
+      return blankDomain({ booleans: true })
+    case "null":
+      return blankDomain({ nulls: true })
+    case "number":
+      return blankDomain({ numbers: true })
+    case "string":
+      return blankDomain({ strings: true })
+    default:
+      return undefined
+  }
+}
+
+function domainOfEnum(definition: EnumDefinition<string | number>): UnionDomain | undefined {
+  const finite: UnionAtom[] = []
+  for (const value of definition.values) {
+    if (typeof value === "number" && Number.isNaN(value)) return undefined
+    finite.push({ looseZero: typeof value === "number", value })
+  }
+  return blankDomain({ finite })
+}
+
+function domainOfLiteral(value: LiteralValue): UnionDomain {
+  if (value === null) return blankDomain({ nulls: true })
+  return blankDomain({ finite: [{ looseZero: false, value }] })
+}
+
+function domainOfObject(
+  struct: RuntimeStruct,
+  definition: ObjectDefinition
+): UnionDomain | undefined {
+  const descriptors = definition.cache.declaredDescriptors
+  for (const key of Object.keys(descriptors)) {
+    const descriptor = descriptors[key]
+    if (descriptor !== undefined && typeof descriptor.get === "function") return undefined
+  }
+  for (const field of resolveStructFields(struct, definition)) {
+    if (domainOf(field.struct) === undefined) return undefined
+  }
+  return blankDomain({ object: tagOf(struct, definition) ?? true })
+}
+
+function tagOf(struct: RuntimeStruct, definition: ObjectDefinition): ObjectTag | undefined {
+  for (const field of resolveStructFields(struct, definition)) {
+    const fieldDefinition = field.struct[DEFINITION]
+    if (fieldDefinition.flags.optional || fieldDefinition.flags.nullable) continue
+    if (fieldDefinition.kind === "literal") return { key: field.key, value: fieldDefinition.value }
+  }
+  return undefined
+}
+
+function blankDomain(partial: {
+  arrays?: boolean
+  booleans?: boolean
+  finite?: readonly UnionAtom[]
+  nulls?: boolean
+  numbers?: boolean
+  object?: ObjectTag | true
+  strings?: boolean
+}): UnionDomain {
+  return {
+    arrays: partial.arrays === true,
+    booleans: partial.booleans === true,
+    finite: partial.finite ?? [],
+    nulls: partial.nulls === true,
+    numbers: partial.numbers === true,
+    object: partial.object,
+    strings: partial.strings === true,
+    undefs: false
+  }
+}
+
+function applyFlags(domain: UnionDomain, definition: StructDefinition): UnionDomain {
+  if (!definition.flags.nullable && !definition.flags.optional) return domain
+  return {
+    arrays: domain.arrays,
+    booleans: domain.booleans,
+    finite: domain.finite,
+    nulls: domain.nulls || definition.flags.nullable,
+    numbers: domain.numbers,
+    object: domain.object,
+    strings: domain.strings,
+    undefs: domain.undefs || definition.flags.optional
+  }
+}
+
+function domainsOverlap(left: UnionDomain, right: UnionDomain): boolean {
+  if (left.nulls && right.nulls) return true
+  if (left.undefs && right.undefs) return true
+  if (left.strings && right.strings) return true
+  if (left.numbers && right.numbers) return true
+  if (left.booleans && right.booleans) return true
+  if (left.arrays && right.arrays) return true
+  if (left.strings && atomsHave(right.finite, "string")) return true
+  if (right.strings && atomsHave(left.finite, "string")) return true
+  if (left.numbers && atomsHaveNonNaNNumber(right.finite)) return true
+  if (right.numbers && atomsHaveNonNaNNumber(left.finite)) return true
+  if (left.booleans && atomsHave(right.finite, "boolean")) return true
+  if (right.booleans && atomsHave(left.finite, "boolean")) return true
+  if (objectsOverlap(left.object, right.object)) return true
+  return atomsOverlap(left.finite, right.finite)
+}
+
+function atomsHave(atoms: readonly UnionAtom[], kind: "boolean" | "string"): boolean {
+  for (const atom of atoms) {
+    if (typeof atom.value === kind) return true
+  }
+  return false
+}
+
+function atomsHaveNonNaNNumber(atoms: readonly UnionAtom[]): boolean {
+  for (const atom of atoms) {
+    if (typeof atom.value === "number" && !Number.isNaN(atom.value)) return true
+  }
+  return false
+}
+
+function objectsOverlap(
+  left: ObjectTag | true | undefined,
+  right: ObjectTag | true | undefined
+): boolean {
+  if (left === undefined || right === undefined) return false
+  if (left === true || right === true) return true
+  if (left.key !== right.key) return true
+  return Object.is(left.value, right.value)
+}
+
+function atomsOverlap(left: readonly UnionAtom[], right: readonly UnionAtom[]): boolean {
+  for (const leftAtom of left) {
+    for (const rightAtom of right) {
+      if (atomPairOverlaps(leftAtom, rightAtom)) return true
+    }
+  }
+  return false
+}
+
+function atomPairOverlaps(left: UnionAtom, right: UnionAtom): boolean {
+  if (typeof left.value === "number" && typeof right.value === "number") {
+    if (left.looseZero || right.looseZero) return left.value === right.value
+    return Object.is(left.value, right.value)
+  }
+  return Object.is(left.value, right.value)
 }

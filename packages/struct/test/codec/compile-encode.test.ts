@@ -1036,3 +1036,241 @@ test("island rethrows a non-struct hook error", () => {
     outcome(() => oracle(schema, { a: "x" }))
   )
 })
+
+function markedContainers(value: unknown, marked: WeakSet<object>, seen: WeakSet<object>): void {
+  if (value === null || typeof value !== "object") return
+  if (seen.has(value)) return
+  seen.add(value)
+  marked.add(value)
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      if (Object.hasOwn(value, index)) markedContainers(value[index], marked, seen)
+    }
+    return
+  }
+  for (const key of Object.keys(value)) {
+    markedContainers((value as { [key: string]: unknown })[key], marked, seen)
+  }
+}
+
+function keyCalls(schema: Parameters<typeof encodeValidatedJson>[0], input: unknown): number {
+  try {
+    encodeValidatedJson(schema, input)
+  } catch {
+    // Warm the compiler. Invalid samples throw from the interpreter.
+  }
+  const marked = new WeakSet<object>()
+  markedContainers(input, marked, new WeakSet())
+  const original = Object.keys
+  let calls = 0
+  Object.keys = ((value: object) => {
+    if (marked.has(value)) calls += 1
+    return original(value)
+  }) as typeof Object.keys
+  try {
+    try {
+      encodeValidatedJson(schema, input)
+    } catch {
+      // The scan runs before the interpreter throws.
+    }
+    return calls
+  } finally {
+    Object.keys = original
+  }
+}
+
+test("discriminatedUnion field skips the root scan", () => {
+  const event = struct.discriminatedUnion("kind", [
+    struct.object({ kind: struct.literal("a"), n: struct.number() }),
+    struct.object({ kind: struct.literal("b").alias("type"), s: struct.string() })
+  ])
+  const schema = struct.object({ event, id: struct.string() })
+  const input = { event: { kind: "a", n: 1 }, id: "x" }
+  expect(compileJsonEncoder(schema)).toEqual(expect.any(Function))
+  expect(keyCalls(schema, input)).toBe(0)
+  expect(keyCalls(event, { kind: "a", n: 1 })).toBe(0)
+  expect(keyCalls(schema, { event: { kind: "b", s: "z" }, id: "x" })).toBe(0)
+  const encoded = encodeValidatedJson(schema, input)
+  expect(JSON.stringify(encoded)).toBe(JSON.stringify(oracle(schema, input)))
+  expect(Object.getPrototypeOf(encoded)).toBeNull()
+  const aliased = encodeValidatedJson(event, { kind: "b", s: "z" })
+  expect(JSON.stringify(aliased)).toBe(JSON.stringify(oracle(event, { kind: "b", s: "z" })))
+  expect(Object.hasOwn(aliased as object, "type")).toBe(true)
+  expect((aliased as { type?: unknown }).type).toBe("b")
+  const failures = [
+    { event: { n: 1 }, id: "x" },
+    { event: { kind: "missing", n: 1 }, id: "x" },
+    { event: { kind: undefined, n: 1 }, id: "x" },
+    { event: { type: "a", n: 1 }, id: "x" },
+    { id: "x" },
+    null,
+    "no"
+  ]
+  for (const sample of failures) {
+    expect(
+      outcome(() => encodeValidatedJson(schema, sample)),
+      JSON.stringify(sample)
+    ).toBe(outcome(() => oracle(schema, sample)))
+  }
+  for (const sample of failures.slice(0, 4)) {
+    expect(keyCalls(schema, sample), JSON.stringify(sample)).toBeGreaterThan(0)
+  }
+  expect(encodeValidatedJson(event.nullable(), null)).toBeNull()
+  expect(encodeValidatedJson(event.optional(), undefined)).toBeUndefined()
+  expect(outcome(() => encodeValidatedJson(event, null))).toBe(outcome(() => oracle(event, null)))
+  expect(outcome(() => encodeValidatedJson(event, "no"))).toBe(outcome(() => oracle(event, "no")))
+})
+
+test("disjoint or compiles and matches interpreter bytes", () => {
+  const listed = struct.object({
+    id: struct.string(),
+    payload: struct.or(struct.array(struct.string()), struct.number())
+  })
+  const listedInput = { id: "x", payload: ["a", "b"] }
+  expect(keyCalls(listed, listedInput)).toBe(0)
+  expect(JSON.stringify(encodeValidatedJson(listed, listedInput))).toBe(
+    JSON.stringify(oracle(listed, listedInput))
+  )
+  expect(keyCalls(listed, { id: "x", payload: 3 })).toBe(0)
+
+  const tagged = struct.object({
+    box: struct.or(
+      struct.object({ n: struct.number(), tag: struct.literal("a") }),
+      struct.object({ s: struct.string(), tag: struct.literal("b") })
+    )
+  })
+  const taggedInput = { box: { n: 1, tag: "a" } }
+  expect(keyCalls(tagged, taggedInput)).toBe(0)
+  expect(JSON.stringify(encodeValidatedJson(tagged, taggedInput))).toBe('{"box":{"n":1,"tag":"a"}}')
+  expect(outcome(() => encodeValidatedJson(tagged, taggedInput))).toBe(
+    outcome(() => oracle(tagged, taggedInput))
+  )
+  const unknownTag = { box: { n: 1, tag: "c" } }
+  expect(keyCalls(tagged, unknownTag)).toBeGreaterThan(0)
+  expect(outcome(() => encodeValidatedJson(tagged, unknownTag))).toBe(
+    outcome(() => oracle(tagged, unknownTag))
+  )
+
+  const literals = struct.object({
+    id: struct.string(),
+    kind: struct.or(struct.literal("a"), struct.literal("b")),
+    qty: struct.number()
+  })
+  const literalInput = { id: "x-1", kind: "a", qty: 3 }
+  expect(keyCalls(literals, literalInput)).toBe(0)
+  expect(JSON.stringify(encodeValidatedJson(literals, literalInput))).toBe(
+    JSON.stringify(oracle(literals, literalInput))
+  )
+  const primitive = struct.or(struct.string(), struct.number())
+  expect(encodeValidatedJson(primitive, "ok")).toBe("ok")
+  expect(encodeValidatedJson(primitive, 1.5)).toBe(1.5)
+  expect(
+    Object.is(encodeValidatedJson(struct.or(struct.literal(0), struct.literal(-0)), -0), -0)
+  ).toBe(true)
+  for (const sample of ["ok", 1, true, null, undefined]) {
+    expect(
+      outcome(() => encodeValidatedJson(primitive, sample)),
+      String(sample)
+    ).toBe(outcome(() => oracle(primitive, sample)))
+  }
+  expect(outcome(() => encodeValidatedJson(struct.or(struct.string(), struct.null()), null))).toBe(
+    outcome(() => oracle(struct.or(struct.string(), struct.null()), null))
+  )
+})
+
+test("union option cycles and depth match the interpreter", () => {
+  let hooks = 0
+  const marked = createPrimitiveStruct({
+    decode: (value: string) => {
+      hooks += 1
+      return { ok: true as const, value }
+    },
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+  const schema = struct.object({
+    event: struct.discriminatedUnion("kind", [
+      struct.object({ box: struct.any(), kind: struct.literal("a") }),
+      struct.object({ kind: struct.literal("b"), s: struct.string() })
+    ]),
+    name: marked
+  })
+  const clean = { event: { box: "ok", kind: "a" }, name: "ada" }
+  expect(keyCalls(schema, clean)).toBe(0)
+  hooks = 0
+  const encoded = encodeValidatedJson(schema, clean)
+  expect(hooks).toBe(1)
+  expect(JSON.stringify(encoded)).toBe(JSON.stringify(oracle(schema, clean)))
+
+  const cycle = {} as { self?: unknown }
+  cycle.self = cycle
+  const inside = { event: { box: cycle, kind: "a" }, name: "ada" }
+  hooks = 0
+  const insideOut = outcome(() => encodeValidatedJson(schema, inside))
+  expect(hooks).toBe(0)
+  hooks = 0
+  expect(insideOut).toBe(outcome(() => oracle(schema, inside)))
+  expect(hooks).toBe(0)
+
+  const beside = { event: { box: "ok", kind: "a" }, extra: cycle, name: "ada" }
+  hooks = 0
+  const besideOut = outcome(() => encodeValidatedJson(schema, beside))
+  expect(hooks).toBe(0)
+  hooks = 0
+  expect(besideOut).toBe(outcome(() => oracle(schema, beside)))
+  expect(hooks).toBe(0)
+
+  const undeclared = { event: { box: "ok", extra: cycle, kind: "a" }, name: "ada" }
+  hooks = 0
+  const undeclaredOut = outcome(() => encodeValidatedJson(schema, undeclared))
+  expect(hooks).toBe(0)
+  hooks = 0
+  expect(undeclaredOut).toBe(outcome(() => oracle(schema, undeclared)))
+  expect(hooks).toBe(0)
+
+  const within = {
+    event: { box: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 2), kind: "a" },
+    name: "ada"
+  }
+  const over = {
+    event: { box: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 1), kind: "a" },
+    name: "ada"
+  }
+  hooks = 0
+  const withinOut = outcome(() => encodeValidatedJson(schema, within))
+  expect(hooks).toBe(1)
+  hooks = 0
+  expect(withinOut).toBe(outcome(() => oracle(schema, within)))
+  expect(hooks).toBe(1)
+  hooks = 0
+  const overOut = outcome(() => encodeValidatedJson(schema, over))
+  expect(hooks).toBe(0)
+  hooks = 0
+  expect(overOut).toBe(outcome(() => oracle(schema, over)))
+  expect(hooks).toBe(0)
+
+  const choice = struct.or(
+    struct.object({ n: struct.number(), tag: struct.literal("a") }),
+    struct.array(struct.string())
+  )
+  const choiceSchema = struct.object({ choice, name: marked })
+  const choiceClean = { choice: { n: 1, tag: "a" }, name: "ada" }
+  expect(keyCalls(choiceSchema, choiceClean)).toBe(0)
+  const choiceCycle = { choice: { extra: cycle, n: 1, tag: "a" }, name: "ada" }
+  hooks = 0
+  const choiceOut = outcome(() => encodeValidatedJson(choiceSchema, choiceCycle))
+  expect(hooks).toBe(0)
+  hooks = 0
+  expect(choiceOut).toBe(outcome(() => oracle(choiceSchema, choiceCycle)))
+  expect(hooks).toBe(0)
+  const deepArray = struct.or(struct.array(struct.any()), struct.number())
+  const deepWithin = [containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 1)]
+  const deepOver = [containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT)]
+  expect(outcome(() => encodeValidatedJson(deepArray, deepWithin))).toBe(
+    outcome(() => oracle(deepArray, deepWithin))
+  )
+  expect(outcome(() => encodeValidatedJson(deepArray, deepOver))).toBe(
+    outcome(() => oracle(deepArray, deepOver))
+  )
+})
