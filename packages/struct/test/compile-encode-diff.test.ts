@@ -667,11 +667,50 @@ function boundarySamples(schema: AnyStructLike, rand: () => number): unknown[] {
       samples.push({ ...record, extra: cycle }, { ...record, nested: containers(8) })
     }
   }
-  if (definition.kind === "tuple") samples.push([], [null], ["only"])
+  if (definition.kind === "tuple") {
+    samples.push([], [null], ["only"], [undefined, undefined])
+    const hole = [] as unknown[]
+    hole.length = 2
+    samples.push(hole)
+    const extra = ["a", 1] as unknown[] & { extra?: unknown }
+    extra.extra = { n: true }
+    samples.push(extra)
+    const accessor: unknown[] = []
+    accessor.length = 2
+    Object.defineProperty(accessor, "0", {
+      enumerable: true,
+      get() {
+        return "got"
+      }
+    })
+    samples.push(accessor)
+  }
   if (definition.kind === "record") {
     const proto = Object.create(null) as { [key: string]: unknown }
     proto["__proto__"] = "x"
-    samples.push(proto, { k0: null })
+    const symbolInput = { k0: 1 } as { k0: number; [key: symbol]: string }
+    symbolInput[Symbol("s")] = "no"
+    const hidden = { k0: 1 }
+    Object.defineProperty(hidden, "hid", { enumerable: false, value: 1 })
+    const proxy = new Proxy(
+      { k0: "target" },
+      {
+        get(target, key, receiver) {
+          if (key === "k0") return "from-get"
+          return Reflect.get(target, key, receiver)
+        }
+      }
+    )
+    samples.push(
+      proto,
+      { k0: null },
+      { "": "e", "2": "a", "10": "b", constructor: "c", toString: "t" },
+      { ["k".repeat(80)]: 1 },
+      symbolInput,
+      hidden,
+      proxy,
+      JSON.parse('{"__proto__":"x","a":"z"}')
+    )
   }
   if (definition.kind === "object" && !schemaHasLazy(schema)) {
     const base = validValue(schema, rand)

@@ -611,7 +611,7 @@ test("island container fails the cover check", () => {
   try {
     hooks = 0
     const encoded = encodeValidatedJson(schema, input)
-    expect(calls).toBeGreaterThan(0)
+    expect(calls).toBe(0)
     expect(hooks).toBe(1)
     expect(JSON.stringify(encoded)).toBe(JSON.stringify(oracle(schema, input)))
   } finally {
@@ -791,6 +791,384 @@ test("encode island decode hook sees the interpreter path", () => {
   )
 })
 
+test("array of islands encodes in one interpreter pass", () => {
+  const log: string[] = []
+  const traced = (label: string) =>
+    createPrimitiveStruct({
+      decode: (value: string) => {
+        log.push(`${label}:decode`)
+        return { ok: true as const, value }
+      },
+      encode: (value: string) => {
+        log.push(`${label}:encode`)
+        return value
+      },
+      expected: "string",
+      is: (value): value is string => typeof value === "string",
+      kind: "string"
+    })
+  const listed = struct.array(traced("item"))
+  expect(compileJsonEncoder(listed)).toEqual(expect.any(Function))
+  log.length = 0
+  const encoded = encodeValidatedJson(listed, ["a", "b"])
+  expect(log).toEqual(["item:decode", "item:decode", "item:encode", "item:encode"])
+  expect(JSON.stringify(encoded)).toBe(JSON.stringify(oracle(listed, ["a", "b"])))
+
+  const nested = struct.array(struct.object({ n: struct.number(), name: traced("name") }))
+  const nestedInput = [
+    { n: 1, name: "a" },
+    { n: 2, name: "b" }
+  ]
+  log.length = 0
+  const nestedOut = encodeValidatedJson(nested, nestedInput)
+  expect(log).toEqual(["name:decode", "name:decode", "name:encode", "name:encode"])
+  expect(JSON.stringify(nestedOut)).toBe(JSON.stringify(oracle(nested, nestedInput)))
+
+  const allIslands = struct.array(struct.object({ a: traced("a"), b: traced("b") }))
+  const allInput = [
+    { a: "a", b: "b" },
+    { a: "c", b: "d" }
+  ]
+  log.length = 0
+  const allOut = encodeValidatedJson(allIslands, allInput)
+  expect(log).toEqual([
+    "a:decode",
+    "b:decode",
+    "a:decode",
+    "b:decode",
+    "a:encode",
+    "b:encode",
+    "a:encode",
+    "b:encode"
+  ])
+  expect(JSON.stringify(allOut)).toBe(JSON.stringify(oracle(allIslands, allInput)))
+})
+
+test("pure tuple encode covers elements without a root scan", () => {
+  const schema = struct.tuple([struct.number(), struct.string()])
+  expect(compileJsonEncoder(schema)).toEqual(expect.any(Function))
+  const input = [1, "a"]
+  expect(outcome(() => encodeValidatedJson(schema, input))).toBe(
+    outcome(() => oracle(schema, input))
+  )
+  expect(keyCalls(schema, input)).toBe(0)
+
+  const open = struct.tuple([struct.any(), struct.string()])
+  const cycle = {} as { self?: unknown }
+  cycle.self = cycle
+  const extra = [1, "a"] as unknown[] & { extra?: unknown }
+  extra.extra = cycle
+  const samples: Array<[string, unknown]> = [
+    ["cycle element", [cycle, "a"]],
+    ["cycle on a non-index key", extra],
+    ["cycle past the tuple length", [1, "a", cycle]],
+    ["short", [1]],
+    ["long", [1, "a", true]]
+  ]
+  for (const [label, sample] of samples) {
+    expect(
+      outcome(() => encodeValidatedJson(open, sample)),
+      label
+    ).toBe(outcome(() => oracle(open, sample)))
+  }
+  const within = [containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 1), "a"]
+  const over = [containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT), "a"]
+  expect(outcome(() => encodeValidatedJson(open, within))).toBe(outcome(() => oracle(open, within)))
+  expect(outcome(() => encodeValidatedJson(open, over))).toBe(outcome(() => oracle(open, over)))
+  expect(keyCalls(schema, input)).toBe(0)
+})
+
+test("pure record encode covers values without a root scan", () => {
+  const schema = struct.record(struct.string())
+  expect(compileJsonEncoder(schema)).toEqual(expect.any(Function))
+  const input = { b: "y", a: "z" }
+  expect(outcome(() => encodeValidatedJson(schema, input))).toBe(
+    outcome(() => oracle(schema, input))
+  )
+  expect(keyCalls(schema, input)).toBe(0)
+  const encoded = encodeValidatedJson(schema, input) as { [key: string]: unknown }
+  expect(Object.getPrototypeOf(encoded)).toBeNull()
+  expect(Object.keys(encoded)).toEqual(["b", "a"])
+})
+
+test("tuple and record edges match the interpreter", () => {
+  const pair = struct.tuple([struct.number().optional(), struct.string().nullable()])
+  const nested = struct.tuple([struct.tuple([struct.number(), struct.number()]), struct.string()])
+  const bag = struct.record(struct.string())
+  const optionalBag = struct.record(struct.string().optional())
+  const nullableBag = struct.record(struct.string().nullable())
+  const deepBag = struct.record(struct.any())
+  const shaped = struct.record(struct.object({ n: struct.number() }))
+  const points = struct.array(struct.tuple([struct.number(), struct.number()]))
+  const rows = struct.array(struct.record(struct.string()))
+  const hole = [] as unknown[]
+  hole.length = 2
+  hole[1] = "a"
+  const extra = [1, "a"] as unknown[] & { extra?: unknown }
+  extra.extra = { n: 1 }
+  const self = [] as unknown[]
+  self.push(self, "a")
+  const cycle = {} as { self?: unknown }
+  cycle.self = cycle
+  const parsedProto = JSON.parse(
+    '{"2":"a","10":"b","__proto__":"x","":"e","constructor":"c","toString":"t"}'
+  )
+  const hidden = { a: "z" }
+  Object.defineProperty(hidden, "hid", { enumerable: false, value: cycle })
+  const symbolInput = { a: "z" } as { a: string; [key: symbol]: string }
+  symbolInput[Symbol("s")] = "no"
+  const longKey = "k".repeat(300)
+  const samples: Array<[Parameters<typeof encodeValidatedJson>[0], unknown]> = [
+    [pair, [undefined, "a"]],
+    [pair, hole],
+    [pair, [null, null]],
+    [pair, [1]],
+    [pair, [1, "a", true]],
+    [pair, { 0: 1, 1: "a" }],
+    [pair, "no"],
+    [nested, [[1, 2], "z"]],
+    [bag, parsedProto],
+    [bag, Object.create(null)],
+    [bag, { a: "z" }],
+    [bag, []],
+    [bag, "no"],
+    [optionalBag, { a: undefined, b: "z" }],
+    [nullableBag, { a: null }],
+    [bag, { a: undefined }],
+    [bag, hidden],
+    [bag, symbolInput],
+    [bag, { [longKey]: "z", a: "b" }],
+    [deepBag, { box: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT - 1) }],
+    [deepBag, { box: containers(PORTABLE_VALUE_GRAPH_DEPTH_LIMIT) }],
+    [deepBag, { box: cycle }],
+    [shaped, { a: { n: 1 }, b: { n: 2 } }],
+    [
+      points,
+      [
+        [1, 2],
+        [3, 4]
+      ]
+    ],
+    [rows, [{ a: "z" }, { b: "y" }]],
+    [struct.tuple([struct.number(), struct.string()]), self],
+    [struct.tuple([struct.any(), struct.string()]), extra]
+  ]
+  for (const [schema, input] of samples) {
+    expect(compileJsonEncoder(schema)).toEqual(expect.any(Function))
+    expect(
+      outcome(() => encodeValidatedJson(schema, input)),
+      describeEdge(input)
+    ).toBe(outcome(() => oracle(schema, input)))
+  }
+
+  const optionalOut = encodeValidatedJson(pair, [undefined, "a"]) as unknown[]
+  expect(Object.hasOwn(optionalOut, 0)).toBe(true)
+  expect(optionalOut[0]).toBeUndefined()
+  const omitted = encodeValidatedJson(optionalBag, { a: undefined, b: "z" }) as {
+    [key: string]: unknown
+  }
+  expect(Object.getPrototypeOf(omitted)).toBeNull()
+  expect(Object.keys(omitted)).toEqual(["b"])
+  const ordered = encodeValidatedJson(bag, parsedProto) as { [key: string]: unknown }
+  expect(Object.getPrototypeOf(ordered)).toBeNull()
+  expect(Object.keys(ordered)).toEqual(Object.keys(oracle(bag, parsedProto) as object))
+  expect(Object.hasOwn(ordered, "__proto__")).toBe(true)
+  expect(
+    keyCalls(points, [
+      [1, 2],
+      [3, 4]
+    ])
+  ).toBe(0)
+  expect(keyCalls(rows, [{ a: "z" }, { b: "y" }])).toBe(0)
+  expect(keyCalls(shaped, { a: { n: 1 }, b: { n: 2 } })).toBe(0)
+  expect(keyCalls(struct.tuple([struct.any(), struct.string()]), extra)).toBeGreaterThan(0)
+
+  let reads = 0
+  const gotten = {}
+  Object.defineProperty(gotten, "a", {
+    enumerable: true,
+    get() {
+      reads += 1
+      return "z"
+    }
+  })
+  reads = 0
+  const got = outcome(() => encodeValidatedJson(bag, gotten))
+  const gotReads = reads
+  reads = 0
+  expect(got).toBe(outcome(() => oracle(bag, gotten)))
+  expect(gotReads).toBe(1)
+  expect(reads).toBe(1)
+
+  const indexed: unknown[] = []
+  indexed.length = 2
+  Object.defineProperty(indexed, "0", {
+    enumerable: true,
+    get() {
+      reads += 1
+      return 1
+    }
+  })
+  indexed[1] = "a"
+  const indexedSchema = struct.tuple([struct.number(), struct.string()])
+  reads = 0
+  const indexedOut = outcome(() => encodeValidatedJson(indexedSchema, indexed))
+  const indexedReads = reads
+  reads = 0
+  expect(indexedOut).toBe(outcome(() => oracle(indexedSchema, indexed)))
+  expect(indexedReads).toBe(1)
+  expect(reads).toBe(1)
+
+  let gets = 0
+  const proxy = new Proxy(
+    { a: "target" },
+    {
+      get(target, key, receiver) {
+        gets += 1
+        if (key === "a") return "from-get"
+        return Reflect.get(target, key, receiver)
+      }
+    }
+  )
+  gets = 0
+  const proxyOut = encodeValidatedJson(bag, proxy)
+  const proxyGets = gets
+  gets = 0
+  expect(proxyOut).toEqual(oracle(bag, proxy))
+  expect(proxyGets).toBe(gets)
+
+  Object.defineProperty(Object.prototype, "inheritedProbe", {
+    configurable: true,
+    enumerable: true,
+    value: "no"
+  })
+  try {
+    const inherited = encodeValidatedJson(bag, { a: "z" }) as { [key: string]: unknown }
+    expect(Object.keys(inherited)).toEqual(["a"])
+    expect(outcome(() => inherited)).toBe(outcome(() => oracle(bag, { a: "z" })))
+  } finally {
+    delete (Object.prototype as { inheritedProbe?: unknown }).inheritedProbe
+  }
+})
+
+function describeEdge(input: unknown): string {
+  try {
+    return JSON.stringify(input) ?? "undefined"
+  } catch {
+    return Object.prototype.toString.call(input)
+  }
+}
+
+test("forwarding proxy tuple and record encode match the interpreter", () => {
+  const pair = struct.tuple([struct.string(), struct.string()])
+  const bag = struct.record(struct.string())
+  const recordProxy = new Proxy(
+    { a: "target" },
+    {
+      get(target, key, receiver) {
+        if (key === "a") return "from-get"
+        return Reflect.get(target, key, receiver)
+      }
+    }
+  )
+  const tupleProxy = new Proxy(["x", "y"], {
+    get(target, key, receiver) {
+      if (key === "0") return "from-get"
+      return Reflect.get(target, key, receiver)
+    }
+  })
+  expect(outcome(() => encodeValidatedJson(bag, recordProxy))).toBe(
+    outcome(() => oracle(bag, recordProxy))
+  )
+  expect(outcome(() => encodeValidatedJson(pair, tupleProxy))).toBe(
+    outcome(() => oracle(pair, tupleProxy))
+  )
+})
+
+test("side-effecting tuple proxy encode is a known fast-path observation", () => {
+  // Known limitation. for-in calls getOwnPropertyDescriptor twice per index.
+  // The second read of "0" writes "changed" before the compiled tuple copies
+  // the element, so the fast path returns ["changed","y"]. A sole interpreter
+  // uses Object.keys, whose second descriptor read is "1", and returns
+  // ["x","y"]. Side-effecting descriptor traps are outside the contract.
+  const pair = struct.tuple([struct.string(), struct.string()])
+  const tupleProxy = () => {
+    const state = { reads: 0 }
+    const target = ["x", "y"]
+    return new Proxy(target, {
+      getOwnPropertyDescriptor(receiver, key) {
+        state.reads += 1
+        if (key === "0" && state.reads === 2) target[0] = "changed"
+        return Reflect.getOwnPropertyDescriptor(receiver, key)
+      }
+    })
+  }
+  expect(outcome(() => encodeValidatedJson(pair, tupleProxy()))).toBe('ok:["changed","y"]')
+  expect(outcome(() => oracle(pair, tupleProxy()))).toBe('ok:["x","y"]')
+})
+
+test("side-effecting record proxy encode is a known fast-path observation", () => {
+  // Known limitation. The fast path gets "a" while copying, which deletes
+  // "b", then fails that read and reruns the interpreter on the same object.
+  // The rerun sees only "a" and returns {a:"x"}. A sole interpreter on a
+  // fresh proxy snapshots ["a","b"] first and reports missing_key at "b".
+  // Side-effecting get traps are outside the contract.
+  const bag = struct.record(struct.string())
+  const recordProxy = () => {
+    const target: { a: string; b?: string } = { a: "x", b: "y" }
+    return new Proxy(target, {
+      get(receiver, key, owner) {
+        if (key === "a") delete target.b
+        return Reflect.get(receiver, key, owner)
+      }
+    })
+  }
+  expect(outcome(() => encodeValidatedJson(bag, recordProxy()))).toBe(
+    'ok:{"keys":["a"],"proto":"null","values":{"a":"x"}}'
+  )
+  let interpreted: unknown
+  try {
+    interpreted = oracle(bag, recordProxy())
+  } catch (error) {
+    interpreted = error
+  }
+  expect(interpreted).toBeInstanceOf(StructError)
+  expect((interpreted as StructError).issues[0]).toMatchObject({
+    code: "missing_key",
+    path: ["b"]
+  })
+})
+
+test("tuple or record that contains an island is one interpreter pass", () => {
+  const log: string[] = []
+  const traced = (label: string) =>
+    createPrimitiveStruct({
+      decode: (value: string) => {
+        log.push(`${label}:decode`)
+        return { ok: true as const, value }
+      },
+      encode: (value: string) => {
+        log.push(`${label}:encode`)
+        return value
+      },
+      expected: "string",
+      is: (value): value is string => typeof value === "string",
+      kind: "string"
+    })
+  const pair = struct.tuple([traced("left"), traced("right")])
+  log.length = 0
+  expect(encodeValidatedJson(pair, ["a", "b"])).toEqual(["a", "b"])
+  expect(log).toEqual(["left:decode", "right:decode", "left:encode", "right:encode"])
+  const bag = struct.record(traced("item"))
+  log.length = 0
+  expect(encodeValidatedJson(bag, { a: "a", b: "b" })).toEqual({ a: "a", b: "b" })
+  expect(log).toEqual(["item:decode", "item:decode", "item:encode", "item:encode"])
+  const listed = struct.array(struct.record(traced("row")))
+  log.length = 0
+  expect(encodeValidatedJson(listed, [{ a: "a" }, { b: "b" }])).toEqual([{ a: "a" }, { b: "b" }])
+  expect(log).toEqual(["row:decode", "row:decode", "row:encode", "row:encode"])
+})
+
 test("island hooks run in island order and again when a later field falls back", () => {
   const log: string[] = []
   const traced = (label: string) =>
@@ -823,6 +1201,25 @@ test("island hooks run in island order and again when a later field falls back",
   log.length = 0
   expect(failed).toBe(outcome(() => oracle(schema, { left: "L", right: 1 })))
   expect(log).toEqual(["left:decode"])
+})
+
+test("optional undefined beside an island is omitted and a missing required field falls back", () => {
+  const name = createPrimitiveStruct({
+    decode: (value: string) => ({ ok: true as const, value }),
+    encode: (value: string) => value,
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+  const schema = struct.object({ name, note: struct.string().optional() })
+  const present = { name: "ada" }
+  expect(outcome(() => encodeValidatedJson(schema, present))).toBe(
+    outcome(() => oracle(schema, present))
+  )
+  const missing = { note: "x" }
+  expect(outcome(() => encodeValidatedJson(schema, missing))).toBe(
+    outcome(() => oracle(schema, missing))
+  )
 })
 
 test("parsed undefined omits the field and an undefined encode stays an own key", () => {

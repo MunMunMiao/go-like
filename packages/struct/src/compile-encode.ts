@@ -1,3 +1,6 @@
+// Values with side-effecting proxy traps or accessors are outside the contract.
+// The fast path may observe them before the interpreter reruns.
+
 import { encodeObjectByAlias } from "./codec/common"
 import { StructError } from "./errors"
 import { resolveStructFields } from "./fields"
@@ -16,8 +19,10 @@ import type {
   Path,
   PrimitiveDefinition,
   PrimitiveKind,
+  RecordDefinition,
   RuntimeStruct,
   StructDefinition,
+  TupleDefinition,
   UnionDefinition
 } from "./types"
 import { hasOwnKey, isPlainObject, matchesEnum } from "./utils"
@@ -190,6 +195,52 @@ function arrayCover(item: CoverStep): CoverStep {
   }
 }
 
+function ownEnumerableKeys(value: object): string[] {
+  const keys: string[] = []
+  for (const key in value) {
+    if (Object.hasOwn(value, key)) keys.push(key)
+  }
+  return keys
+}
+
+function recordCover(item: CoverStep): CoverStep {
+  return (value, cursor) => {
+    if (!isPlainObject(value)) return !Array.isArray(value)
+    const keys = ownEnumerableKeys(value)
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)
+      if (
+        descriptor === undefined ||
+        !Object.hasOwn(descriptor, "value") ||
+        descriptor.enumerable !== true
+      )
+        return false
+      if (!enqueue(cursor, descriptor.value, item)) return false
+    }
+    return true
+  }
+}
+
+function tupleCover(items: readonly CoverStep[]): CoverStep {
+  const width = items.length
+  return (value, cursor) => {
+    if (!Array.isArray(value)) return !isPlainObject(value)
+    if (value.length > width) return false
+    for (const key in value) {
+      if (!Object.hasOwn(value, key)) continue
+      if (!isArrayIndex(key, value.length)) return false
+    }
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.hasOwn(value, index)) continue
+      const descriptor = Object.getOwnPropertyDescriptor(value, index)
+      if (descriptor === undefined || !Object.hasOwn(descriptor, "value")) return false
+      const item = items[index]
+      if (item === undefined || !enqueue(cursor, descriptor.value, item)) return false
+    }
+    return true
+  }
+}
+
 function isArrayIndex(key: string, length: number): boolean {
   const size = key.length
   if (size === 0 || size > 10) return false
@@ -291,9 +342,9 @@ function compileDefinition(struct: RuntimeStruct): JsonStep | null {
     case "or":
       return compileOr(struct, definition)
     case "record":
-      return compileIsland(struct, [definition.value as RuntimeStruct])
+      return compileRecord(struct, definition)
     case "tuple":
-      return compileIsland(struct, definition.items as unknown as readonly RuntimeStruct[])
+      return compileTuple(struct, definition)
   }
 }
 
@@ -473,38 +524,11 @@ function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): JsonS
   const itemStruct = definition.item as RuntimeStruct
   const item = compileStep(itemStruct)
   if (item === null) return null
+  // One island call for the whole array. Per-element island calls rebuild a parse
+  // graph and an encode graph, and a container element fails cover into a root scan.
+  if (item.needsPath === true) return remember(struct, islandStep(struct), leafCover)
   const element = nested(item)
   const cover = arrayCover(covers.get(itemStruct) as CoverStep)
-  if (element.needsPath === true) {
-    const accept: JsonStep = (value, graph, path = []) => {
-      if (!Array.isArray(value)) return INVALID
-      const output: unknown[] = []
-      for (let index = 0; index < value.length; index += 1) {
-        const raw = readIndex(value, index, graph.trusted)
-        if (raw === INVALID) return INVALID
-        path.push(index)
-        let encoded: unknown
-        try {
-          encoded = element(raw, graph, path)
-        } finally {
-          path.pop()
-        }
-        if (encoded === INVALID) return INVALID
-        if (encoded === SKIP_ENCODE) {
-          try {
-            encoded = encodeObjectByAlias(itemStruct, undefined, "json", true)
-          } catch (error) {
-            if (error instanceof StructError || error instanceof TypeError) return INVALID
-            throw error
-          }
-        }
-        output.push(encoded)
-      }
-      return output
-    }
-    accept.needsPath = true
-    return remember(struct, compileChecked(definition, accept), cover)
-  }
   return remember(
     struct,
     compileChecked(definition, (value, graph) => {
@@ -521,6 +545,67 @@ function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): JsonS
     }),
     cover
   )
+}
+
+function compileRecord(struct: RuntimeStruct, definition: RecordDefinition): JsonStep | null {
+  const valueStruct = definition.value as RuntimeStruct
+  const step = compileStep(valueStruct)
+  if (step === null) return null
+  if (step.needsPath === true) return remember(struct, islandStep(struct), leafCover)
+  return remember(
+    struct,
+    compileChecked(definition, recordAccept(nested(step))),
+    recordCover(covers.get(valueStruct) as CoverStep)
+  )
+}
+
+function recordAccept(valueStep: JsonStep): JsonStep {
+  return (value, graph) => {
+    if (!isPlainObject(value)) return INVALID
+    const keys = ownEnumerableKeys(value)
+    const output: { [key: string]: unknown } = Object.create(null)
+    for (const key of keys) {
+      const raw = readRecord(value, key, graph.trusted)
+      if (raw === INVALID) return INVALID
+      const encoded = valueStep(raw, graph)
+      if (encoded === INVALID) return INVALID
+      if (encoded === undefined) continue
+      output[key] = encoded
+    }
+    return output
+  }
+}
+
+function compileTuple(struct: RuntimeStruct, definition: TupleDefinition): JsonStep | null {
+  const itemStructs = definition.items as unknown as readonly RuntimeStruct[]
+  const compiled: JsonStep[] = []
+  const itemCovers: CoverStep[] = []
+  let island = false
+  for (const item of itemStructs) {
+    const step = compileStep(item)
+    if (step === null) return null
+    if (step.needsPath === true) island = true
+    compiled.push(nested(step))
+    itemCovers.push(covers.get(item) as CoverStep)
+  }
+  if (island) return remember(struct, islandStep(struct), leafCover)
+  return remember(struct, compileChecked(definition, tupleAccept(compiled)), tupleCover(itemCovers))
+}
+
+function tupleAccept(items: readonly JsonStep[]): JsonStep {
+  const width = items.length
+  return (value, graph) => {
+    if (!Array.isArray(value) || value.length !== width) return INVALID
+    const output: unknown[] = []
+    for (let index = 0; index < width; index += 1) {
+      const raw = readIndex(value, index, graph.trusted)
+      if (raw === INVALID) return INVALID
+      const encoded = (items[index] as JsonStep)(raw, graph)
+      if (encoded === INVALID) return INVALID
+      output.push(encoded)
+    }
+    return output
+  }
 }
 
 function compileEnum(definition: EnumDefinition<string | number>): JsonStep {
@@ -561,6 +646,8 @@ function compileObject(struct: RuntimeStruct, definition: ObjectDefinition): Jso
   }
 
   const cover = objectCover(covered)
+  // Field count is fixed. Hoisting an all-island object would change the per-field
+  // hook order locked for { left, right }. An array of such objects is one island.
   if (needsPath) {
     const accept: JsonStep = (value, graph, path = []) => {
       if (!isPlainObject(value)) return INVALID
@@ -641,6 +728,19 @@ function compileChecked(definition: StructDefinition, accept: JsonStep): JsonSte
     if (value === null) return nullOk ? null : INVALID
     return accept(value, graph)
   }
+}
+
+function readRecord(value: { [key: string]: unknown }, key: string, trusted: boolean): unknown {
+  if (!trusted) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (
+      descriptor === undefined ||
+      !Object.hasOwn(descriptor, "value") ||
+      descriptor.enumerable !== true
+    )
+      return INVALID
+  }
+  return value[key]
 }
 
 function readOwn(value: { [key: string]: unknown }, key: string, trusted: boolean): unknown {

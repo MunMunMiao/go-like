@@ -625,6 +625,223 @@ test("quiet island failure reuses one result", () => {
   expect(loudLeft).not.toBe(loudRight)
 })
 
+function capture(run: () => unknown): unknown {
+  try {
+    return run()
+  } catch (error) {
+    return error
+  }
+}
+
+test("tuple and record decode match the interpreter", () => {
+  const pair = struct.tuple([struct.string().optional(), struct.number().nullable()])
+  const nested = struct.tuple([struct.tuple([struct.number(), struct.number()]), struct.string()])
+  const bag = struct.record(struct.string())
+  const optionalBag = struct.record(struct.string().optional())
+  const hole = [] as unknown[]
+  hole.length = 2
+  hole[1] = 1
+  const extra = ["a", 1] as unknown[] & { extra?: unknown }
+  extra.extra = { n: 1 }
+  const parsed = JSON.parse(
+    '{"2":"a","10":"b","__proto__":"x","":"e","constructor":"c","toString":"t"}'
+  )
+  const longKey = "k".repeat(300)
+  const symbolRecord = () => {
+    const input = { a: "z" } as { a: string; [key: symbol]: string }
+    input[Symbol("s")] = "no"
+    return input
+  }
+  const hiddenRecord = () => {
+    const input = { a: "z" }
+    Object.defineProperty(input, "hid", { enumerable: false, value: "no" })
+    return input
+  }
+  const proxyRecord = () =>
+    new Proxy(
+      { a: "target" },
+      {
+        get(target, key, receiver) {
+          if (key === "a") return "from-get"
+          return Reflect.get(target, key, receiver)
+        }
+      }
+    )
+  const getterRecord = () => {
+    const input = {}
+    Object.defineProperty(input, "a", {
+      enumerable: true,
+      get() {
+        return "z"
+      }
+    })
+    return input
+  }
+  const marked = createPrimitiveStruct({
+    decode: (value: string, path: ReadonlyArray<number | string>) => ({
+      ok: true as const,
+      value: path.join(".")
+    }),
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string"
+  })
+  const samples: Array<[AnyStructLike, unknown]> = [
+    [pair, [undefined, 1]],
+    [pair, hole],
+    [pair, ["a", null]],
+    [pair, ["only"]],
+    [pair, ["a", 1, true]],
+    [pair, { 0: "a", 1: 1 }],
+    [nested, [[1, 2], "z"]],
+    [bag, parsed],
+    [bag, { a: "z", b: "y" }],
+    [bag, []],
+    [bag, "no"],
+    [optionalBag, { a: undefined, b: "z" }],
+    [bag, { [longKey]: "z" }],
+    [struct.record(struct.number().nullable()), { a: null }],
+    [struct.object({ bag: struct.record(marked) }), { bag: { a: "x" } }],
+    [struct.object({ pair: struct.tuple([marked, struct.number()]) }), { pair: ["a", 1] }],
+    [
+      struct.array(struct.tuple([struct.number(), struct.number()])),
+      [
+        [1, 2],
+        [3, 4]
+      ]
+    ],
+    [struct.array(struct.record(struct.string())), [{ a: "z" }]],
+    [bag, symbolRecord()],
+    [bag, hiddenRecord()],
+    [bag, proxyRecord()],
+    [bag, getterRecord()]
+  ]
+  for (const [schema, input] of samples) {
+    expect(compileJsonDecoder(schema)).toEqual(expect.any(Function))
+    const decoded = capture(() => decodeJsonTree(schema, input))
+    const expected = capture(() => decodeJson(schema, input))
+    const label = JSON.stringify(input)
+    if (decoded instanceof Error || expected instanceof Error) {
+      expect(decoded, label).toBeInstanceOf(Error)
+      expect(expected, label).toBeInstanceOf(Error)
+      expect((decoded as Error).message).toBe((expected as Error).message)
+      if (decoded instanceof StructError && expected instanceof StructError) {
+        expect(decoded.issues).toEqual(expected.issues)
+      }
+      continue
+    }
+    expect(decoded, label).toEqual(expected)
+  }
+  const ordered = decodeJsonTree(bag, parsed) as { [key: string]: unknown }
+  expect(Object.getPrototypeOf(ordered)).toBeNull()
+  expect(Object.keys(ordered)).toEqual(Object.keys(decodeJson(bag, parsed) as object))
+  expect(Object.hasOwn(ordered, "__proto__")).toBe(true)
+  const omitted = decodeJsonTree(optionalBag, { a: undefined, b: "z" }) as {
+    [key: string]: unknown
+  }
+  expect(Object.keys(omitted)).toEqual(["b"])
+  expect(Object.getPrototypeOf(omitted)).toBeNull()
+  const hooked = decodeJsonTree(struct.object({ bag: struct.record(marked) }), { bag: { a: "x" } })
+  expect(hooked).toEqual({ bag: { a: "bag.a" } })
+  const paired = decodeJsonTree(struct.object({ pair: struct.tuple([marked, struct.number()]) }), {
+    pair: ["a", 1]
+  })
+  expect(paired).toEqual({ pair: ["pair.0", 1] })
+})
+
+test("forwarding proxy tuple and record decode match the interpreter", () => {
+  const pair = struct.tuple([struct.string(), struct.string()])
+  const bag = struct.record(struct.string())
+  const recordProxy = new Proxy(
+    { a: "target" },
+    {
+      get(target, key, receiver) {
+        if (key === "a") return "from-get"
+        return Reflect.get(target, key, receiver)
+      }
+    }
+  )
+  const tupleProxy = new Proxy(["x", "y"], {
+    get(target, key, receiver) {
+      if (key === "0") return "from-get"
+      return Reflect.get(target, key, receiver)
+    }
+  })
+  expect(capture(() => decodeJsonTree(bag, recordProxy))).toEqual(
+    capture(() => decodeJson(bag, recordProxy))
+  )
+  expect(capture(() => decodeJsonTree(pair, tupleProxy))).toEqual(
+    capture(() => decodeJson(pair, tupleProxy))
+  )
+})
+
+test("side-effecting record proxy decode is a known fast-path observation", () => {
+  // Known limitation. decodeJsonTree's contract is a JSON.parse data tree.
+  // A get trap that deletes a later key is outside that contract. The depth
+  // walk gets "b", then "a"; getting "a" deletes "b", so the compiled record
+  // sees only "a" and returns {a:"x"}. A sole interpreter snapshots ["a","b"]
+  // before any get and then reports missing_key at "b". This pins the
+  // fast-path success, not agreement with the interpreter.
+  const bag = struct.record(struct.string())
+  const recordGets: string[] = []
+  const recordProxy = () => {
+    const target: { a: string; b?: string } = { a: "x", b: "y" }
+    return new Proxy(target, {
+      get(receiver, key, owner) {
+        recordGets.push(String(key))
+        if (key === "a") delete target.b
+        return Reflect.get(receiver, key, owner)
+      }
+    })
+  }
+  const decoded = capture(() => decodeJsonTree(bag, recordProxy()))
+  expect(decoded).not.toBeInstanceOf(Error)
+  const record = decoded as { [key: string]: unknown }
+  expect(recordGets).toEqual(["b", "a", "a"])
+  expect(Object.getPrototypeOf(record)).toBeNull()
+  expect(Object.keys(record)).toEqual(["a"])
+  expect(record.a).toBe("x")
+  recordGets.length = 0
+  const interpreted = capture(() => decodeJson(bag, recordProxy()))
+  expect(interpreted).toBeInstanceOf(StructError)
+  expect((interpreted as StructError).issues[0]).toMatchObject({
+    code: "missing_key",
+    path: ["b"]
+  })
+  expect(recordGets).toEqual(["a", "b"])
+})
+
+test("side-effecting tuple proxy decode is a known fast-path observation", () => {
+  // Known limitation. The depth walk reads index "1" before "0". The first
+  // get of "0" rewrites index 1 to "changed", and the compiled tuple then
+  // returns ["x","changed"]. A sole interpreter also returns ["x","changed"]
+  // on a fresh proxy, but its first index get is "0". This pins the fast
+  // path's earlier observation, not a promise that every side-effecting trap
+  // stays aligned with the interpreter.
+  const pair = struct.tuple([struct.string(), struct.string()])
+  const tupleProxy = (gets: string[]) => {
+    const state = { reads: 0 }
+    const target = ["x", "y"]
+    return new Proxy(target, {
+      get(receiver, key, owner) {
+        gets.push(String(key))
+        if (key === "0") {
+          state.reads += 1
+          if (state.reads === 1) target[1] = "changed"
+        }
+        return Reflect.get(receiver, key, owner)
+      }
+    })
+  }
+  const tupleGets: string[] = []
+  const tupleDecoded = capture(() => decodeJsonTree(pair, tupleProxy(tupleGets)))
+  expect(tupleGets).toEqual(["1", "0", "length", "0", "1"])
+  expect(tupleDecoded).toEqual(["x", "changed"])
+  const interpreterGets: string[] = []
+  expect(capture(() => decodeJson(pair, tupleProxy(interpreterGets)))).toEqual(["x", "changed"])
+  expect(interpreterGets).toEqual(["length", "0", "1"])
+})
+
 test("pure schema root decoder does not allocate a path array", () => {
   const schema = struct.object({
     flags: struct.array(struct.boolean()),
@@ -639,9 +856,24 @@ test("pure schema root decoder does not allocate a path array", () => {
 })
 
 test("island root decoder still receives a path array", () => {
-  const decoder = compileJsonDecoder(struct.tuple([struct.string()]))
-  expect(decoder).toEqual(expect.any(Function))
-  expect(Function.prototype.toString.call(decoder)).toContain("[]")
+  const island = compileJsonDecoder(
+    struct.intersection(
+      struct.object({ a: struct.string() }),
+      struct.object({ b: struct.number() })
+    )
+  )
+  expect(island).toEqual(expect.any(Function))
+  expect(Function.prototype.toString.call(island)).toContain("step.run")
+  const tuple = compileJsonDecoder(struct.tuple([struct.string(), struct.number()]))
+  expect(tuple).toEqual(expect.any(Function))
+  expect(Function.prototype.toString.call(tuple)).not.toContain("step.run")
+  expect(decodeJsonTree(struct.tuple([struct.string(), struct.number()]), ["a", 1])).toEqual([
+    "a",
+    1
+  ])
+  const record = compileJsonDecoder(struct.record(struct.string()))
+  expect(record).toEqual(expect.any(Function))
+  expect(Function.prototype.toString.call(record)).not.toContain("step.run")
 })
 
 test("island decode hook runs once on success and twice after a later field falls back", () => {

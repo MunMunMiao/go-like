@@ -716,8 +716,24 @@ test(`seeded differential fast path matches interpreter seed ${DIFFERENTIAL_SEED
         samples.push(validValue(option as AnyStructLike, rand))
       samples.push({ kind: "missing" }, { type: "nope" }, null)
     }
-    if (definition.kind === "tuple") samples.push([], [null], ["only"])
-    if (definition.kind === "record") samples.push({ ["__proto__"]: "x" }, { k0: null })
+    if (definition.kind === "tuple") {
+      samples.push([], [null], ["only"], [undefined, null])
+      const hole = [] as unknown[]
+      hole.length = 2
+      hole[1] = null
+      const extra = ["a"] as unknown[] & { extra?: unknown }
+      extra.extra = { n: 1 }
+      samples.push(hole, extra, ["a", 1, true])
+    }
+    if (definition.kind === "record") {
+      samples.push(
+        { ["__proto__"]: "x" },
+        { k0: null },
+        JSON.parse('{"2":"a","10":"b","__proto__":"x","":"e","constructor":"c"}'),
+        { ["k".repeat(80)]: null },
+        { k0: undefined }
+      )
+    }
     for (let index = 0; index < samples.length; index += 1) {
       const input = samples[index]
       const left = outcome(() => decodeJsonTree(schema, input))

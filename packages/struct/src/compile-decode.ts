@@ -1,3 +1,6 @@
+// Values with side-effecting proxy traps or accessors are outside the contract.
+// The fast path may observe them before the interpreter reruns.
+
 import { decodeObjectByAlias } from "./codec/common"
 import { StructError } from "./errors"
 import { resolveStructFields } from "./fields"
@@ -15,8 +18,10 @@ import type {
   Path,
   PrimitiveDefinition,
   PrimitiveKind,
+  RecordDefinition,
   RuntimeStruct,
   StructDefinition,
+  TupleDefinition,
   UnionDefinition
 } from "./types"
 import { hasOwnKey, isPlainObject, matchesEnum } from "./utils"
@@ -114,7 +119,7 @@ function compileDefinition(struct: RuntimeStruct): CompiledStep | null {
       // Root graph checks already cover JSON trees, so any/unknown is identity.
       return pure(compileChecked(definition, (value) => value))
     case "array":
-      return compileArray(definition)
+      return compileArray(struct, definition)
     case "enum":
       return compileEnum(definition)
     case "literal":
@@ -138,9 +143,9 @@ function compileDefinition(struct: RuntimeStruct): CompiledStep | null {
     case "intersection":
       return compileIsland(struct, definition.options as unknown as readonly RuntimeStruct[])
     case "record":
-      return compileIsland(struct, [definition.value as RuntimeStruct])
+      return compileRecord(struct, definition)
     case "tuple":
-      return compileIsland(struct, definition.items as unknown as readonly RuntimeStruct[])
+      return compileTuple(struct, definition)
   }
 }
 
@@ -148,43 +153,71 @@ function pure(run: PureStep): CompiledStep {
   return { cached: undefined, needsPath: false, run }
 }
 
-function compileArray(definition: ArrayDefinition): CompiledStep | null {
+function compileArray(struct: RuntimeStruct, definition: ArrayDefinition): CompiledStep | null {
   const item = compileStep(definition.item as RuntimeStruct)
   if (item === null) return null
-  if (!item.needsPath) {
-    const run = item.run
-    return pure(
-      compileChecked(definition, (value) => {
-        if (!Array.isArray(value)) return INVALID
-        const output: unknown[] = []
-        for (let index = 0; index < value.length; index += 1) {
-          const decoded = run(value[index])
-          if (decoded === INVALID) return INVALID
-          output.push(decoded)
-        }
-        return output
-      })
-    )
-  }
-  return {
-    needsPath: true,
-    run: compileCheckedPath(definition, (value, path) => {
+  // An element island would run once per index. Decode of array(date) allocated ~40% more than decodeJson.
+  if (item.needsPath) return islandStep(struct)
+  const run = item.run
+  return pure(
+    compileChecked(definition, (value) => {
       if (!Array.isArray(value)) return INVALID
       const output: unknown[] = []
       for (let index = 0; index < value.length; index += 1) {
-        path.push(index)
-        let decoded: unknown
-        try {
-          decoded = item.run(value[index], path)
-        } finally {
-          path.pop()
-        }
+        const decoded = run(value[index])
         if (decoded === INVALID) return INVALID
         output.push(decoded)
       }
       return output
     })
+  )
+}
+
+function compileRecord(struct: RuntimeStruct, definition: RecordDefinition): CompiledStep | null {
+  const valueStruct = definition.value as RuntimeStruct
+  const step = compileStep(valueStruct)
+  if (step === null) return null
+  if (step.needsPath) return islandStep(struct)
+  const run = step.run
+  return pure(
+    compileChecked(definition, (value) => {
+      if (!isPlainObject(value)) return INVALID
+      const keys = Object.keys(value)
+      const output: { [key: string]: unknown } = Object.create(null)
+      for (const key of keys) {
+        const decoded = run(value[key])
+        if (decoded === INVALID) return INVALID
+        if (decoded !== undefined) output[key] = decoded
+      }
+      return output
+    })
+  )
+}
+
+function compileTuple(struct: RuntimeStruct, definition: TupleDefinition): CompiledStep | null {
+  const itemStructs = definition.items as unknown as readonly RuntimeStruct[]
+  const runs: PureStep[] = []
+  let island = false
+  for (const item of itemStructs) {
+    const step = compileStep(item)
+    if (step === null) return null
+    if (step.needsPath) island = true
+    else runs.push(step.run)
   }
+  if (island) return islandStep(struct)
+  const width = runs.length
+  return pure(
+    compileChecked(definition, (value) => {
+      if (!Array.isArray(value) || value.length !== width) return INVALID
+      const output: unknown[] = []
+      for (let index = 0; index < width; index += 1) {
+        const decoded = (runs[index] as PureStep)(value[index])
+        if (decoded === INVALID) return INVALID
+        output.push(decoded)
+      }
+      return output
+    })
+  )
 }
 
 function compileEnum(definition: EnumDefinition<string | number>): CompiledStep {
