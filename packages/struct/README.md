@@ -28,6 +28,8 @@ const decoded = decodeJson(User, wire)
 
 - `@go-like/struct`：`struct`、`StructError`、`Infer`、`StructInput`、`ParseResult`、`ObjectStruct`、`StructLike`。
 - `@go-like/struct/codec`：`encodeJson`、`decodeJson`。
+- `decodeJsonTree(struct, tree)` 解码 `JSON.parse` 的纯数据树。可编译 schema 在容器深度不超过 1000 且校验成功时走闭包；失败、无法编译或超深时使用与 `decodeJson` 相同的解释器。
+- `encodeValidatedJson(struct, value)` 等价于 `encodeParsedJson(struct, parseStructValue(struct, value))`，错误也相同。可编译 schema 在校验成功时用闭包一次产出线上值；失败、无法编译，或输入图含环、超过 1000 层容器、或要读取的属性是 accessor 时，回退到原来的解释器。
 - `@go-like/struct/runtime`：`isStruct`、`isObjectStruct`、`getStructFields`、`parseStructTuple`、`parseStructValue`、`encodeStructValue`。
 
 ## 严格解析

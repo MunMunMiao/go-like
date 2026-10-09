@@ -4,7 +4,13 @@ import * as Struct from "@go-like/struct"
 import type { Struct as StructType } from "@go-like/struct"
 
 const expectedRootExports = ["StructError", "struct"].sort()
-const expectedCodecExports = ["decodeJson", "encodeJson"].sort()
+const expectedCodecExports = [
+  "decodeJson",
+  "decodeJsonTree",
+  "encodeJson",
+  "encodeParsedJson",
+  "encodeValidatedJson"
+].sort()
 const expectedRuntimeExports = [
   "PORTABLE_VALUE_GRAPH_DEPTH_LIMIT",
   "encodeStructValue",
