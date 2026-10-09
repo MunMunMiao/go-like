@@ -5,6 +5,8 @@ import { compileJsonDecoder } from "../../src/compile-decode"
 import { StructError } from "../../src/errors"
 import { struct } from "../../src/index"
 import { createPrimitiveStruct } from "../../src/runtime"
+import { DEFINITION } from "../../src/symbols"
+import type { RuntimeStruct } from "../../src/types"
 import { PORTABLE_VALUE_GRAPH_DEPTH_LIMIT } from "../../src/value-graph"
 
 describe("compileJsonDecoder", () => {
@@ -207,4 +209,79 @@ test("non-struct decodeJsonTree matches decodeJson TypeError", () => {
   expect(fromTree).toBeInstanceOf(TypeError)
   expect((fromTree as TypeError).name).toBe((fromJson as TypeError).name)
   expect((fromTree as TypeError).message).toBe((fromJson as TypeError).message)
+})
+
+test("json tree depth walk reads sibling getters before descending", () => {
+  const schema = struct.object({
+    a: struct.object({ n: struct.number() }),
+    b: struct.object({ m: struct.number() })
+  })
+  const seen: string[] = []
+  const tree = {
+    get a() {
+      seen.push("a")
+      return {
+        get n() {
+          seen.push("n")
+          return 1
+        }
+      }
+    },
+    get b() {
+      seen.push("b")
+      return {
+        get m() {
+          seen.push("m")
+          return 2
+        }
+      }
+    }
+  }
+
+  expect(decodeJsonTree(schema, tree)).toEqual({ a: { n: 1 }, b: { m: 2 } })
+  expect(seen).toEqual(["b", "a", "n", "m", "a", "n", "b", "m"])
+})
+
+test("compileJsonDecoder rejects non-objects", () => {
+  expect(compileJsonDecoder(null as never)).toBeNull()
+  expect(compileJsonDecoder(undefined as never)).toBeNull()
+  expect(compileJsonDecoder(1 as never)).toBeNull()
+  expect(compileJsonDecoder("no" as never)).toBeNull()
+})
+
+test("cached uncompilable schema does not re-read its definition", () => {
+  const schema = struct.object({
+    kind: struct.or(struct.literal("a"), struct.literal("b"))
+  })
+  expect(compileJsonDecoder(schema)).toBeNull()
+  const definition = (schema as RuntimeStruct)[DEFINITION]
+  let reads = 0
+  Object.defineProperty(schema, DEFINITION, {
+    configurable: true,
+    get() {
+      reads += 1
+      return definition
+    }
+  })
+
+  expect(compileJsonDecoder(schema)).toBeNull()
+  expect(reads).toBe(0)
+})
+
+test("cached decoder does not re-read its definition", () => {
+  const schema = struct.object({ id: struct.string() })
+  const decoder = compileJsonDecoder(schema)
+  expect(decoder).toBeTypeOf("function")
+  const definition = (schema as RuntimeStruct)[DEFINITION]
+  let reads = 0
+  Object.defineProperty(schema, DEFINITION, {
+    configurable: true,
+    get() {
+      reads += 1
+      return definition
+    }
+  })
+
+  expect(compileJsonDecoder(schema)).toBe(decoder)
+  expect(reads).toBe(0)
 })

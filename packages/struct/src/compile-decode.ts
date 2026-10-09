@@ -25,6 +25,10 @@ const compiled = new WeakMap<RuntimeStruct, JsonDecoder | null>()
 
 /** Compiles a JSON decode fast path, or returns null when the schema must stay on the interpreter. */
 export function compileJsonDecoder(struct: AnyStructLike): JsonDecoder | null {
+  if (typeof struct === "object" && struct !== null) {
+    const cached = compiled.get(struct as RuntimeStruct)
+    if (cached !== undefined) return cached
+  }
   if (!isStruct(struct)) return null
   return compileRuntime(struct as RuntimeStruct)
 }
@@ -43,16 +47,19 @@ export function decodeCompiledJsonTree(struct: AnyStructLike, tree: unknown): un
 // JSON.parse trees have no cycles and only enumerable data properties, so a
 // container-depth walk matches portableValueGraphError without descriptor or cycle checks.
 function jsonTreeExceedsPortableDepth(value: unknown): boolean {
-  const stack: Array<{ depth: number; value: unknown }> = [{ depth: 0, value }]
-  while (stack.length > 0) {
-    const frame = stack.pop() as { depth: number; value: unknown }
-    if (!Array.isArray(frame.value) && !isPlainObject(frame.value)) continue
-    const depth = frame.depth + 1
+  const values: unknown[] = [value]
+  const depths: number[] = [0]
+  while (values.length > 0) {
+    const frameValue = values.pop()
+    const frameDepth = depths.pop() as number
+    if (!Array.isArray(frameValue) && !isPlainObject(frameValue)) continue
+    const depth = frameDepth + 1
     if (depth > PORTABLE_VALUE_GRAPH_DEPTH_LIMIT) return true
-    const container = frame.value as { [key: string]: unknown }
+    const container = frameValue as { [key: string]: unknown }
     const keys = Object.keys(container)
     for (let index = keys.length - 1; index >= 0; index -= 1) {
-      stack.push({ depth, value: container[keys[index] as string] })
+      values.push(container[keys[index] as string])
+      depths.push(depth)
     }
   }
   return false
