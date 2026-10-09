@@ -82,8 +82,10 @@ function requestNativeHTTP1(
 
 const nativeHTTPClientRuntime: NodeHTTPClientRuntime = Object.freeze({
   /**
-   * Bun 1.4.2 measured higher CPU for the no-body metadata Request path on 256KiB
-   * chunked concurrent exchanges. The cause is unknown; revisit when Bun changes.
+   * Bun 1.4.2 measured higher CPU per call with byte reuse on 256KiB chunked concurrent
+   * exchanges. The extra cost followed how many large Uint8Array copies stayed referenced,
+   * not the wire format or the Request shape, which points at the allocator or GC working
+   * set rather than at HTTP framing. Revisit when Bun changes.
    */
   bufferedBody: !("Bun" in globalThis),
   newHTTPAgent: newNativeHTTPAgent,
