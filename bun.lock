@@ -8,7 +8,7 @@
         "@bufbuild/buf": "1.72.0",
         "@bufbuild/protobuf": "2.14.0",
         "@bufbuild/protoc-gen-es": "2.14.0",
-        "@connectrpc/connect": "2.1.2",
+        "@connectrpc/connect": "2.2.0",
         "@types/bun": "1.4.2",
         "@types/k6": "2.2.0",
         "oxfmt": "0.71.0",
@@ -942,7 +942,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@bufbuild/protobuf": "2.14.0",
-        "@connectrpc/connect": "2.1.2",
+        "@connectrpc/connect": "2.2.0",
         "@connectrpc/connect-node": "2.2.0",
         "@go-like/client": "0.0.1",
         "@go-like/context": "0.0.1",
@@ -1083,7 +1083,7 @@
 
     "@colors/colors": ["@colors/colors@1.6.0", "", {}, "sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA=="],
 
-    "@connectrpc/connect": ["@connectrpc/connect@2.1.2", "", { "peerDependencies": { "@bufbuild/protobuf": "^2.7.0" } }, "sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA=="],
+    "@connectrpc/connect": ["@connectrpc/connect@2.2.0", "", { "peerDependencies": { "@bufbuild/protobuf": "^2.7.0" } }, "sha512-M63OQ1ZFcPUm85CuewJ9G9CMV8LjzGR9935xOnXNQGSazAbwMb3x2W7vXBYM1zqrP7XFD8uxp/dUAhirclgwnQ=="],
 
     "@connectrpc/connect-node": ["@connectrpc/connect-node@2.2.0", "", { "peerDependencies": { "@bufbuild/protobuf": "^2.7.0", "@connectrpc/connect": "2.2.0" } }, "sha512-E6uUO6e11WdynAuBjuN+0WpHjqxEM9BNDdfDIJHcn49Esg/WxSIbn2y1KFt9XL96IJi01qdBbvubcdpBz1X3Zw=="],
 
