@@ -18,7 +18,6 @@
 - `@go-like/web/health`：把 `@go-like/health` 的 probe registry 暴露为健康检查 Web handler。
 - `@go-like/web/node`：基于内置 Node Fetch bridge 的 Node listener 生命周期。
 - `@go-like/web/bun`：直接使用 Bun 原生 HTTP listener 的生命周期。
-- `@go-like/web/deno`：直接使用 Deno 原生 HTTP listener 的生命周期。
 
 Web 是对外 HTTP 服务入口；内部微服务通信属于 `@go-like/transport` 与具体传输实现，二者不混用。
 
@@ -47,11 +46,10 @@ force 调用只是停止请求，不是终态证据。只有原生 listener clos
 运行期 Promise 会以主因作为 `cause`，
 并按清理观察顺序通过 `AggregateError.errors` 报告；同一个 `Error` 实例只记录一次。
 
-## Bun / Deno 宿主
+## Bun 宿主
 
-`@go-like/web/bun` 和 `@go-like/web/deno` 直接调用对应运行时的 `Bun.serve` 或 `Deno.serve`，不经过
-Node Fetch bridge。两者都接受精确单参数 `Handler`，并提供 `newBunServer` / `newDenoServer`、`hostname`、`port`
-以及运行时专属的 `bunShutdownTimeout` / `denoShutdownTimeout`。
+`@go-like/web/bun` 直接调用 `Bun.serve`，不经过 Node Fetch bridge。它接受精确单参数 `Handler`，
+并提供 `newBunServer`、`hostname`、`port` 以及 `bunShutdownTimeout`。
 
 ```ts
 import { newBunServer, port } from "@go-like/web/bun"
@@ -60,22 +58,9 @@ const server = newBunServer((request) => new Response(request.method), port(3000
 ```
 
 宿主只提供 HTTP 和一次性生命周期；TLS、`idleTimeout`、`maxRequestBodySize`、WebSocket 与路由仍由运行时或框架负责。
-Bun 排空会停止接受新连接，随后可在期限内升级为 `stop(true)`。Deno 排空期间监听器保持打开，新请求返回
-`503` 和 `Connection: close`；所有在途请求结束后才调用 `shutdown()`，只有期限到达且 `shutdown()` 尚未调用时才使用
-`AbortController.abort()`。
+Bun 排空会停止接受新连接，随后可在期限内升级为 `stop(true)`。
 
-运行时差异需要在应用验收中保留：Bun 收到缺失或非法 `Host` 时会直接返回 `400`，没有 hostname 回退；Deno 会把非法
-`Host` 交给 handler，若 handler 解析 `request.url` 失败则由其错误策略返回 `500`。Deno 在读取请求的
-`request.signal` 后可能触发一次 legacy-abort 警告，请在 `deno.json` 中显式启用官方开关以关闭该兼容行为：
-
-Deno 2.9.7 的客户端在服务端 force 一个非合作响应体后，`ReadableStreamDefaultReader.closed` 可能不结算；服务端
-生命周期终态仍以 `DenoServerForceCloseError` 和 `server.finished` 为准。
-
-```json
-{
-  "unstable": ["no-legacy-abort"]
-}
-```
+Bun 收到缺失或非法 `Host` 时会直接返回 `400`，没有 hostname 回退；应用验收应保留该边界。
 
 ## 健康检查与框架组合
 

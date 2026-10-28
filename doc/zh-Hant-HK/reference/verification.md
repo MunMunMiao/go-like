@@ -11,10 +11,10 @@ go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過�
 | Typecheck           | root、E2E、package 同 example 的 TypeScript 契約                       | 唔需要               | build output、runtime 語意或 provider 行為            |
 | Unit                | 確定性 root、package 同 example 測試                                   | 唔需要               | 真實網絡、Docker、published tarball 或跨 runtime 行為 |
 | Build               | package ESM 同 declaration output                                      | 唔需要               | consumer resolution 或 runtime 行為                   |
-| Runtime E2E         | 已宣告嘅 Bun、Node.js 同 Deno fixture                                  | 通常唔需要           | 所有 provider 或所有 package 都支援每個 runtime       |
+| Runtime E2E         | 已宣告嘅 Bun 同 Node.js fixture                                        | 通常唔需要           | 所有 provider 或所有 package 都支援每個 runtime       |
 | Provider E2E        | 真實 Consul、etcd、Kubernetes、ZooKeeper、Redis、RabbitMQ、NATS 等服務 | 需要                 | production 可用性或 hosted CI 結果                    |
 | Example E2E         | example process、request、readiness、停止同清理                        | 視乎 example         | 每個 example 喺獨立安裝中都正常                       |
-| Published           | 實際打包嘅 tarball 被 Node、Bun、Deno fixture 消費                     | 通常唔需要           | 已經發布到 npm 或有外部使用者採用                     |
+| Published           | 實際打包嘅 tarball 被 Node、Bun fixture 消費                           | 通常唔需要           | 已經發布到 npm 或有外部使用者採用                     |
 | Soak                | 長時間 HTTP 或 service 行為                                            | 通常唔需要           | 短測試或所有 provider 行為                            |
 | Documentation build | VitePress route 同 Markdown build                                      | 唔需要               | 瀏覽器 layout 或本地化語意 parity                     |
 | Audit               | dependency vulnerability report                                        | 唔需要               | application security design 或 authorization 完整性   |
@@ -65,7 +65,6 @@ candidate tree:  <commit SHA 或明確的 dirty-tree 描述>
 environment:     <OS、container/host、process mode>
 Bun:             <版本或未使用>
 Node.js:         <版本或未使用>
-Deno:            <版本或未使用>
 command:         <完整命令>
 started:         <開始時間>
 finished:        <完成時間>

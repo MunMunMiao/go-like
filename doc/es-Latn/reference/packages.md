@@ -12,4 +12,4 @@ Importa desde el paquete más pequeño que sea dueño del contrato. Los hosts de
 
 `@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
 
-La compatibilidad de gRPC administrado en Deno 2.9.8 pasó la [regresión de drain con un consumidor lento](/reference/claims#native-grpc-drain-status). No se ha verificado la resolución de los [límites históricos de cancelación y apagado](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 y Bun 1.4.2 Fetch.
+gRPC administrado en Node 26.12.1 y Bun 1.4.4 pasó la [regresión de drain con un consumidor lento](/reference/claims#native-grpc-drain-status). No se ha verificado la resolución de los [límites históricos de cancelación y apagado](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 y Bun 1.4.2 Fetch.

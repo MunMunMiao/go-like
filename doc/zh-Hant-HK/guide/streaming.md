@@ -12,4 +12,4 @@ Web body 只可以消費一次，中介層如果要讀，就要明確提供替�
 
 `@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於內部 Fetch/SSE 路徑。
 
-Deno 2.9.8 嘅託管 gRPC 兼容處理已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)。之前觀察到 Connect 2.1.2 喺外部取消暫停讀取嘅回應流後保留 deadline timer，同埋 Bun 1.4.2 嘅 Fetch 取消未傳到首個 chunk 後保持靜默嘅 server。詳見[證據同限制](/reference/claims#stream-cancellation-limits)；今次未驗證呢兩項歷史限制已修復。
+Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)。之前觀察到 Connect 2.1.2 喺外部取消暫停讀取嘅回應流後保留 deadline timer，同埋 Bun 1.4.2 嘅 Fetch 取消未傳到首個 chunk 後保持靜默嘅 server。詳見[證據同限制](/reference/claims#stream-cancellation-limits)；今次未驗證呢兩項歷史限制已修復。

@@ -22,10 +22,10 @@
     "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
     "@go-like/web": "workspace:*",
-    "h3": "2.0.1-rc.29"
+    "h3": "2.0.8"
   },
   "devDependencies": {
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

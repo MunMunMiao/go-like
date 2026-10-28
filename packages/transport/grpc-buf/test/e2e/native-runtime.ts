@@ -12,10 +12,8 @@ import {
 function identity(): NativeRuntimeIdentity {
   const runtimes = globalThis as typeof globalThis & {
     readonly Bun?: { readonly version: string }
-    readonly Deno?: { readonly version: { readonly deno: string } }
   }
   if (runtimes.Bun !== undefined) return { runtime: "bun", version: runtimes.Bun.version }
-  if (runtimes.Deno !== undefined) return { runtime: "deno", version: runtimes.Deno.version.deno }
   return { runtime: "node", version: process.versions.node }
 }
 

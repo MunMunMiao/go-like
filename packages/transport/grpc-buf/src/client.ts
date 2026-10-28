@@ -40,7 +40,6 @@ import { Buffer } from "node:buffer"
 import { constants, type Http2Session } from "node:http2"
 
 import { fromCallContextValues } from "./context"
-import { preserveCompletedResponse } from "./response-stream"
 import { canonicalAddress, clientOptions, type ClientOption, type ClientOptions } from "./options"
 
 type OfficialSessionManager = NonNullable<GrpcTransportOptions["sessionManager"]>
@@ -114,7 +113,7 @@ const defaultFactories: ClientFactories = Object.freeze({
         })
         sessions.set(session, closed)
       }
-      return preserveCompletedResponse(stream)
+      return stream
     }
     const abort = manager.abort.bind(manager)
     manager.abort = async (reason) => {

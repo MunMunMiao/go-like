@@ -2,17 +2,11 @@ import { Socket } from "node:net"
 import process from "node:process"
 
 import { background } from "@go-like/context"
-import type { Handler } from "@go-like/web"
-import type { BunServer, BunServerOption } from "@go-like/web/bun"
-
-interface Flavor {
-  readonly name: "bun" | "deno"
-  readonly forceCloseCode: string
-  readonly occupiedCode: string
-  newServer(handler: Handler, ...options: readonly BunServerOption[]): BunServer
-  shutdownTimeout(timeoutMs: number): BunServerOption
-  port(value: number): BunServerOption
-}
+import {
+  bunShutdownTimeout as shutdownTimeout,
+  newBunServer as newServer,
+  port as listenPort
+} from "@go-like/web/bun"
 
 interface SeenRequest {
   readonly method: string
@@ -21,33 +15,6 @@ interface SeenRequest {
 }
 
 const limitMs = 5_000
-
-/** Selects the native host entry that matches the runtime executing this script. */
-async function loadFlavor(): Promise<Flavor> {
-  if ("Bun" in globalThis) {
-    const api = await import("@go-like/web/bun")
-    return {
-      name: "bun",
-      forceCloseCode: "GO_LIKE_BUN_SERVER_FORCE_CLOSE",
-      occupiedCode: "EADDRINUSE",
-      newServer: api.newBunServer,
-      shutdownTimeout: api.bunShutdownTimeout,
-      port: api.port
-    }
-  }
-  if ("Deno" in globalThis) {
-    const api = await import("@go-like/web/deno")
-    return {
-      name: "deno",
-      forceCloseCode: "GO_LIKE_DENO_SERVER_FORCE_CLOSE",
-      occupiedCode: "AddrInUse",
-      newServer: api.newDenoServer,
-      shutdownTimeout: api.denoShutdownTimeout,
-      port: api.port
-    }
-  }
-  throw new Error("native host E2E requires the Bun or Deno runtime")
-}
 
 /** Fails the native E2E scenario when a required business observation is false. */
 function verify(condition: boolean, message: string): void {
@@ -145,16 +112,6 @@ function truncatedUpload(port: number, requestText: string): Promise<void> {
   })
 }
 
-/** Returns the error one construction attempt throws, or null when it unexpectedly succeeds. */
-function constructionError(construct: () => unknown): unknown {
-  try {
-    construct()
-    return null
-  } catch (error) {
-    return error
-  }
-}
-
 /** Returns the origin and TCP port of one reported endpoint. */
 function locate(endpoint: string): { readonly origin: string; readonly port: number } {
   const url = new URL(endpoint)
@@ -196,9 +153,6 @@ function openBody(onCancel: () => void): ReadableStream<Uint8Array> {
     }
   })
 }
-
-const flavor = await loadFlavor()
-const { newServer, shutdownTimeout, port: listenPort } = flavor
 
 const scenarios: string[] = []
 // A rejection nobody observed is a lifecycle leak; failing fast also keeps a failed scenario from
@@ -340,16 +294,14 @@ for (const [path, expected] of [
 }
 scenarios.push("handler-failure-status-mapping")
 
-if (flavor.name === "bun") {
-  const before = seen.length
-  const hostless = await rawExchange(
-    mainEndpoint.port,
-    "GET /p HTTP/1.1\r\nHost: bad host\r\nConnection: close\r\n\r\n"
-  )
-  verify(hostless.startsWith("HTTP/1.1 400"), "unusable Host answers 400")
-  verify(seen.length === before, "unusable Host reached the handler")
-  scenarios.push("bun-unusable-host-answers-400")
-}
+const before = seen.length
+const hostless = await rawExchange(
+  mainEndpoint.port,
+  "GET /p HTTP/1.1\r\nHost: bad host\r\nConnection: close\r\n\r\n"
+)
+verify(hostless.startsWith("HTTP/1.1 400"), "unusable Host answers 400")
+verify(seen.length === before, "unusable Host reached the handler")
+scenarios.push("bun-unusable-host-answers-400")
 
 const upload = truncatedUpload(
   mainEndpoint.port,
@@ -374,27 +326,19 @@ void gracefulStop
 await sleep(20)
 verify(!gracefulSettled, "graceful stop settled before the accepted request")
 const probeBefore = probeHits
-if (flavor.name === "bun") {
-  const refusedDuringDrain = await within(
-    fetch(`${base}/refusal-probe`, {
-      headers: { connection: "close" }
-    }),
-    "the draining 503"
-  )
+// Bun may close the listener before a draining connection can receive HTTP 503.
+const refusedDuringDrain = await within(
+  fetch(`${base}/refusal-probe`, {
+    headers: { connection: "close" }
+  }).catch((error: unknown) => {
+    if (error instanceof Error && hasErrorCode(error) && error.code === "ECONNREFUSED") return null
+    throw error
+  }),
+  "the draining refusal"
+)
+if (refusedDuringDrain !== null) {
   verify(refusedDuringDrain.status === 503, "Bun drain answers 503")
   verify((await refusedDuringDrain.text()) === "", "Bun drain has an empty body")
-} else {
-  const refusedDuringDrain = (
-    await within(
-      rawExchange(
-        mainEndpoint.port,
-        "GET /refusal-probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-      ),
-      "the draining 503"
-    )
-  ).toLowerCase()
-  verify(refusedDuringDrain.startsWith("http/1.1 503"), "Deno drain answers 503")
-  verify(refusedDuringDrain.includes("\r\nconnection: close\r\n"), "Deno drain connection header")
 }
 verify(probeHits === probeBefore, "a request entered the handler while draining")
 drainRelease.resolve()
@@ -464,21 +408,19 @@ try {
   forced = error
 }
 verify(
-  hasErrorCode(forced) && forced.code === flavor.forceCloseCode,
+  hasErrorCode(forced) && forced.code === "GO_LIKE_BUN_SERVER_FORCE_CLOSE",
   `force close error: ${String(forced)}`
 )
 const stableForced = await forceRunning.catch((error: unknown) => error)
 verify(stableForced === forced, "force close replaced stable done Error identity")
-if (flavor.name === "bun") {
-  const forceStreamTerminal = await within(
-    forceReader.closed.then(
-      () => true,
-      () => true
-    ),
-    "the force-closed response stream"
-  )
-  verify(forceStreamTerminal, "force-close response stream did not reach terminal")
-}
+const forceStreamTerminal = await within(
+  forceReader.closed.then(
+    () => true,
+    () => true
+  ),
+  "the force-closed response stream"
+)
+verify(forceStreamTerminal, "force-close response stream did not reach terminal")
 forceReader.releaseLock()
 terminalServers += 1
 scenarios.push("hard-force-noncooperative-body")
@@ -503,10 +445,7 @@ const bindFailure = await contenderStart.then(
   () => null,
   (error: unknown) => error
 )
-verify(
-  hasErrorMarker(bindFailure, flavor.occupiedCode),
-  `occupied port error: ${String(bindFailure)}`
-)
+verify(hasErrorMarker(bindFailure, "EADDRINUSE"), `occupied port error: ${String(bindFailure)}`)
 const endpointFailure = await contender.endpoint(background()).then(
   () => null,
   (error: unknown) => error
@@ -522,30 +461,13 @@ await within(occupierRunning, "the occupier lifecycle")
 terminalServers += 1
 scenarios.push("bind-failure-keeps-runtime-error")
 
-let foreignError: unknown = null
-let foreignMessage = ""
-if (flavor.name === "bun") {
-  const foreign = await import("@go-like/web/deno")
-  foreignError = constructionError(() => foreign.newDenoServer(() => new Response()))
-  foreignMessage = "@go-like/web/deno requires the Deno runtime"
-} else {
-  const foreign = await import("@go-like/web/bun")
-  foreignError = constructionError(() => foreign.newBunServer(() => new Response()))
-  foreignMessage = "@go-like/web/bun requires the Bun runtime"
-}
-verify(
-  foreignError instanceof Error && foreignError.message === foreignMessage,
-  `the other runtime's entry did not fail clearly at construction: ${String(foreignError)}`
-)
-scenarios.push("foreign-runtime-entry-imports-cleanly")
-
 await sleep(20)
 const stableScenarios = Array.from(new Set(scenarios))
 verify(stableScenarios.length === scenarios.length, "duplicate native host E2E scenario slug")
 verify(
-  stableScenarios.length === (flavor.name === "bun" ? 15 : 14),
+  stableScenarios.length === 14,
   `native host E2E scenario inventory: ${stableScenarios.length}`
 )
 verify(acceptedServers === terminalServers, "native host server cleanup mismatch")
 
-console.log(JSON.stringify({ runtime: flavor.name, scenarios: stableScenarios }))
+console.log(JSON.stringify({ runtime: "bun", scenarios: stableScenarios }))

@@ -28,7 +28,7 @@
 
 ## 历史可实施性实验
 
-2026-07-19 的原记录报告：Bun 1.3.14、Node 26.5.0、Deno 2.9.3 均完成 `CompressionStream("deflate")` 往返，跨运行时的压缩产物能够互相解压。
+2026-07-19 的原记录报告：Bun 1.3.14、Node 26.5.0 均完成 `CompressionStream("deflate")` 往返，跨运行时的压缩产物能够互相解压。
 
 同次研究在 Docker 29.6.1 的独立容器和自定义 bridge 中观察到 `224.0.0.251:5353` 的 IPv4 multicast。该结果仅证明 codec 和 UDP host 路径可实施，不能代替 DNS packet、TTL、watch、崩溃过期或完整 Registry 验证。
 

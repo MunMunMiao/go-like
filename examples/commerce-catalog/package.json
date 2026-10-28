@@ -26,12 +26,12 @@
     "@go-like/transport": "workspace:*",
     "@go-like/transport-http": "workspace:*",
     "@go-like/web": "workspace:*",
-    "hono": "4.13.11"
+    "hono": "4.13.14"
   },
   "devDependencies": {
     "@go-like/cache-memory": "workspace:*",
     "@go-like/transport-memory": "workspace:*",
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

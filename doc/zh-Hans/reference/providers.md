@@ -9,7 +9,7 @@
 - **Lifecycle adapter**：围绕应用创建的原生资源包一层 Server wrapper。
 - **Evidence**：说明仓库支持的证据类型：source/export、声明过的测试，或报告过的本地命令结果。它不会把 package version 变成 npm 发布或生产可用性声明。
 
-当前 source inventory 有 45 个非 private 的 `@go-like/*` package manifest 和 28 个 public source subpath；在这个 checkout 中它们的版本都是 `0.0.1`。`examples/*` 下的 44 个 workspace 是 private applications，不是 public packages。
+当前 source inventory 有 45 个非 private 的 `@go-like/*` package manifest 和 27 个 public source subpath；在这个 checkout 中它们的版本都是 `0.0.1`。`examples/*` 下的 44 个 workspace 是 private applications，不是 public packages。
 
 ## 按任务选择
 
@@ -49,7 +49,7 @@
 | `@go-like/transport`                 | Transport SPI 与 Fetch Request/Response                              | `Transport`、`Client`、`Listener`、`defineService`、`ServerStream`、`TransportInfo`、`Endpoint`、`endpoint`、`chain`、`serviceError`                                                                          | 除非选择 provider，否则不提供具体 wire；没有 internal full-duplex promise            |
 | `@go-like/transport-memory`          | 进程内 unary Transport                                               | `newMemoryTransport`                                                                                                                                                                                          | 跨进程行为、持久化、网络 fallback、TLS                                               |
 | `@go-like/transport-http`            | 基于 Fetch 的内部 HTTP Transport                                     | `newHTTPTransport`、`executor`、`maxMessageBytes`                                                                                                                                                             | 没有注入 `HTTPHost` 时，不是完整的 portable listener；也不提供原生 Node TLS controls |
-| `@go-like/transport-http/node`       | 原生 Node internal HTTP Transport                                    | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`                                                                                                                                                            | Deno listener 或自动安全策略                                                         |
+| `@go-like/transport-http/node`       | 原生 Node internal HTTP Transport                                    | `newNodeHTTPTransport`、`allowHTTP1`、`clientAuth`                                                                                                                                                            | 自动安全策略                                                                         |
 | `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                             | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                             | 基于 Protobuf-ES 的 Context-first 生成代码                                           |
 | `@go-like/transport-grpc-buf/native` | `/native` 提供标准 gRPC 四种调用形态                                 | `newClient`, `newServer`                                                                                                                                                                                      | Discovery, Selector, TLS/mTLS                                                        |
 | `@go-like/protoc-gen-like`           | 构建时 Node 生成器                                                   | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                            | Protobuf-ES                                                                          |
@@ -81,7 +81,7 @@ Config external providers 使用注入的标准 Fetch。凭据和 redirects 的�
 | `@go-like/registry-kubernetes` | EndpointSlice discovery 和可选 registration         | `newKubernetesRegistry`                                                                                                                            | Kubernetes EndpointSlice、owner references；不虚构 TTL               |
 | `@go-like/registry-mdns`       | 本地 multicast discovery                            | `newMDNSRegistry`                                                                                                                                  | Root provider 按设计可移植；UDP host 在 `/node`                      |
 | `@go-like/registry-mdns/node`  | Node UDP multicast capability                       | `newNodeMDNSHost`                                                                                                                                  | 明确的 Node runtime subpath                                          |
-| `@go-like/registry-zookeeper`  | ZooKeeper ephemeral registration 和 discovery       | `newZookeeperRegistry`                                                                                                                             | 文档支持 Node.js 和 Bun；明确不支持 Deno                             |
+| `@go-like/registry-zookeeper`  | ZooKeeper ephemeral registration 和 discovery       | `newZookeeperRegistry`                                                                                                                             | 文档支持 Node.js 和 Bun                                              |
 
 Registry 保存的是可达性状态，不是持久业务数据。Provider 在重建临时 watcher 时可以保留上一份 snapshot，但权威的空 snapshot 必须 fail closed。
 
@@ -128,7 +128,7 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 ## 完整的 public source subpath 清单
 
-以下是当前 package manifests 声明的 28 个显式 source subpath。生成的 packages 可能额外导出 metadata-only 的 `./package.json`；那不是 source API。
+以下是当前 package manifests 声明的 27 个显式 source subpath。生成的 packages 可能额外导出 metadata-only 的 `./package.json`；那不是 source API。
 
 |   # | Subpath                              | 主要 exports                                                                         | 面向对象                      |
 | --: | ------------------------------------ | ------------------------------------------------------------------------------------ | ----------------------------- |
@@ -159,21 +159,20 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 |  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                                             | 应用作者                      |
 |  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` | SSE server streams            |
 |  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             | Web applications              |
-|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           | Web applications              |
 
 `@go-like/otel/testing` 和 `@go-like/web/node/testing` 既不是 TypeScript path mappings，也不是当前 package manifest exports。不要把它们写成 public entrypoints。
 
 ## Runtime 选择矩阵
 
-| Entry 或 provider family                                       | Portable source                    | Bun/Node native                                        | Deno claim                                  | 证据措辞                                                                |
-| -------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------- |
-| Context、Core root、Health、Metadata、Resilience、Struct       | Yes                                | 不需要 native import                                   | 已声明选定的 runtime lanes                  | Source contract；发布措辞前检查当前已执行的 matrix                      |
-| Web root 和 Web health                                         | Yes                                | 需要单独的 host                                        | Standard Handler boundary                   | Handler 可移植；Handler 不是 listener                                   |
-| Memory Transport、Memory Store、Memory Cache、Memory Broker    | Process-local source               | 不需要 external service                                | 相同的进程内含义                            | 不是 distributed、durable 或 cross-process                              |
-| HTTP root 与 Fetch-backed Config/Registry/Store providers      | Injected Fetch                     | Runtime 选择 Fetch                                     | 在存在 package lane 时有 source-backed 证据 | 可以按 source 或已声明 runtime lane 说可移植，不要承诺 universal parity |
-| `/node` subpaths                                               | No                                 | Node-specific，部分可在 Bun 执行                       | 没有 Deno entrypoint                        | 显式 import 会改变 runtime graph                                        |
-| NATS、RabbitMQ、BullMQ、Redis、Pino、Winston、OTel native SDKs | Provider-dependent                 | Node/Bun fixtures 或 package-specific runtime evidence | 不要推断支持 Deno                           | 阅读 provider README 和 E2E scope                                       |
-| ZooKeeper                                                      | No Deno support in provider README | Node/Bun                                               | Explicitly unsupported                      | 不要从 Registry root 推广结论                                           |
+| Entry 或 provider family                                       | Portable source      | Bun/Node native                                        | 证据措辞                                                                |
+| -------------------------------------------------------------- | -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Context、Core root、Health、Metadata、Resilience、Struct       | Yes                  | 不需要 native import                                   | Source contract；发布措辞前检查当前已执行的 matrix                      |
+| Web root 和 Web health                                         | Yes                  | 需要单独的 host                                        | Handler 可移植；Handler 不是 listener                                   |
+| Memory Transport、Memory Store、Memory Cache、Memory Broker    | Process-local source | 不需要 external service                                | 不是 distributed、durable 或 cross-process                              |
+| HTTP root 与 Fetch-backed Config/Registry/Store providers      | Injected Fetch       | Runtime 选择 Fetch                                     | 可以按 source 或已声明 runtime lane 说可移植，不要承诺 universal parity |
+| `/node` subpaths                                               | No                   | Node-specific，部分可在 Bun 执行                       | 显式 import 会改变 runtime graph                                        |
+| NATS、RabbitMQ、BullMQ、Redis、Pino、Winston、OTel native SDKs | Provider-dependent   | Node/Bun fixtures 或 package-specific runtime evidence | 阅读 provider README 和 E2E scope                                       |
+| ZooKeeper                                                      | No                   | Node/Bun                                               | 不要从 Registry root 推广结论                                           |
 
 ## Function 选择规则
 
@@ -194,4 +193,4 @@ Registry 保存的是可达性状态，不是持久业务数据。Provider 在�
 
 这不包含浏览器标准 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用认证、Event Store/replay、ORM 或集群编排。
 
-Deno 2.9.8 的托管 gRPC 已通过[慢消费者 drain 回归](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 与 Bun 1.4.2 Fetch 的历史[取消与停机限制](/reference/claims#stream-cancellation-limits)仍未验证已修复。
+Node 26.12.1 与 Bun 1.4.4 的托管 gRPC 已通过[慢消费者 drain 回归](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 与 Bun 1.4.2 Fetch 的历史[取消与停机限制](/reference/claims#stream-cancellation-limits)仍未验证已修复。

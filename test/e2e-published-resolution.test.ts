@@ -490,8 +490,8 @@ test("published fixture stages local Buf and native inputs", async () => {
     const manifest = await Bun.file(join(directory.path, "package.json")).json()
     expect(manifest.scripts).toEqual({ "proto:generate": "buf generate" })
     expect(manifest.devDependencies).toEqual({
-      "@bufbuild/buf": "1.72.0",
-      "@bufbuild/protoc-gen-es": "2.14.0",
+      "@bufbuild/buf": "1.75.0",
+      "@bufbuild/protoc-gen-es": "2.16.0",
       "@go-like/protoc-gen-like": "0.0.1"
     })
   } finally {
@@ -540,14 +540,30 @@ test("published mTLS evidence preserves runtime errors and requires every trust 
   expect(parse).toThrow("mTLS upstream cases")
 })
 
-test("published mTLS fixture proves equivalent clients with isolated chain trust", async () => {
+test("published mTLS fixture preserves client equivalence across signing seconds and isolates chain trust", async () => {
   const directory = await createTempDirectory("go-like-published-mtls-")
   try {
-    const fixture = await createPublishedMtlsFixture(
-      process.cwd(),
-      directory,
-      publishedEnvironment(directory.path)
+    const openssl = Bun.which("openssl")
+    if (openssl === null) throw new Error("OpenSSL is required for the mTLS fixture")
+    await createTempSubdirectories(directory, [["bin"]])
+    const bin = join(directory.path, "bin")
+    await writeFile(
+      join(bin, "openssl"),
+      [
+        `#!${process.execPath}`,
+        "const args = process.argv.slice(2)",
+        'const output = args[args.indexOf("-out") + 1]',
+        'if (args.includes("-out") && output?.endsWith("untrusted-client.pem")) await Bun.sleep(1_100)',
+        `const child = Bun.spawn([${JSON.stringify(openssl)}, ...args], { stdin: "inherit", stdout: "inherit", stderr: "inherit" })`,
+        "process.exit(await child.exited)",
+        ""
+      ].join("\n"),
+      { flag: "wx", mode: 0o700 }
     )
+    const fixture = await createPublishedMtlsFixture(process.cwd(), directory, {
+      ...publishedEnvironment(directory.path),
+      PATH: `${bin}:${process.env.PATH ?? ""}`
+    })
     expect(fixture.opensslVersion).toStartWith("OpenSSL ")
     expect(fixture.evidence.serverIdentity).toEqual({
       dnsLocalhost: true,
@@ -901,7 +917,7 @@ test("published environment clears ambient module and tool configuration", () =>
     NPM_CONFIG_PREFIX: "/ambient/npm",
     npm_config_registry: "https://ambient.invalid",
     BUN_OPTIONS: "--preload=/ambient/preload.ts",
-    DENO_AUTH_TOKENS: "secret"
+    npm_config__authToken: "secret"
   })
   expect(environment.HOME).toBe("/stage/home")
   expect(environment.NODE_PATH).toBeUndefined()
@@ -910,9 +926,8 @@ test("published environment clears ambient module and tool configuration", () =>
   expect(environment.NPM_CONFIG_PREFIX).toBeUndefined()
   expect(environment.npm_config_registry).toBeUndefined()
   expect(environment.BUN_OPTIONS).toBeUndefined()
-  expect(environment.DENO_AUTH_TOKENS).toBeUndefined()
+  expect(environment.npm_config__authToken).toBeUndefined()
   expect(environment.npm_config_cache).toBe("/stage/cache/npm")
   expect(environment.BUN_INSTALL_CACHE_DIR).toBe("/stage/cache/bun")
-  expect(environment.DENO_DIR).toBe("/stage/cache/deno")
   expect(Object.hasOwn(environment, "PATH")).toBe(false)
 })

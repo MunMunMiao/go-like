@@ -175,7 +175,7 @@ Filters run in declaration order. A selector chooses one URL and returns a synch
 | `@go-like/registry-etcd`       | JSON gateway, leases, revisioned watch/relist | etcd is available through an HTTP gateway                    | Compaction, lease loss, and protocol conflicts are provider errors              |
 | `@go-like/registry-kubernetes` | `discovery.k8s.io/v1` EndpointSlice           | The application should select EndpointSlice-backed instances | It is not Kubernetes Service DNS, a fabricated TTL, or a Deployment controller  |
 | `@go-like/registry-mdns`       | Local multicast DNS and TTL cache             | Small local-network discovery                                | UDP capability is in `@go-like/registry-mdns/node`; there is no global revision |
-| `@go-like/registry-zookeeper`  | Ephemeral znodes and native sessions          | ZooKeeper is the established control plane                   | The package explicitly does not support Deno                                    |
+| `@go-like/registry-zookeeper`  | Ephemeral znodes and native sessions          | ZooKeeper is the established control plane                   | Requires a Node.js/Bun native session                                           |
 
 Providers fail closed on malformed managed records or identity conflicts. They should not silently choose an arbitrary endpoint when the backend has ambiguous ownership.
 

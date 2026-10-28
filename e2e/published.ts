@@ -43,7 +43,7 @@ interface PublishedStagePaths {
 }
 
 export interface PublishedNativeRuntimeEvidence {
-  readonly runtime: "bun" | "deno" | "node"
+  readonly runtime: "bun" | "node"
   readonly version: string
   readonly exitCode: 0
   readonly stdout: string
@@ -239,8 +239,6 @@ const FixtureFiles = Object.freeze([
   "portable.ts",
   "node.ts",
   "bun.ts",
-  "deno.ts",
-  "deno.json",
   "tsconfig.authoring.json",
   "tsconfig.types.json",
   "tsconfig.node.json",
@@ -319,7 +317,6 @@ async function createStagePaths(directory: TempDirectory): Promise<PublishedStag
     ["cache"],
     ["cache", "npm"],
     ["cache", "bun"],
-    ["cache", "deno"],
     ["config"],
     ["npm-prefix"],
     ["compiled"],
@@ -335,14 +332,14 @@ async function createStagePaths(directory: TempDirectory): Promise<PublishedStag
   ])
   return Object.freeze({
     tarballs: stagePath(paths, 1, "tarball directory"),
-    nodeOutput: stagePath(paths, 10, "Node output directory"),
+    nodeOutput: stagePath(paths, 9, "Node output directory"),
     nativeOutput: join(directory.path, "compiled/native-runtime.js"),
     nativeMetafile: join(directory.path, "compiled/native-runtime.meta.json"),
     upstreamOutput: join(directory.path, "compiled/native-upstream.js"),
     upstreamMetafile: join(directory.path, "compiled/native-upstream.meta.json"),
     browserOutput: join(directory.path, "compiled/browser.js"),
     browserMetafile: join(directory.path, "compiled/browser.meta.json"),
-    markers: stagePath(paths, 11, "marker directory")
+    markers: stagePath(paths, 10, "marker directory")
   })
 }
 
@@ -357,7 +354,6 @@ export function publishedEnvironment(
     if (
       /^npm_config_/iu.test(name) ||
       /^bun_/iu.test(name) ||
-      /^deno_/iu.test(name) ||
       upperName === "NODE_OPTIONS" ||
       upperName === "NODE_PATH" ||
       upperName === "INIT_CWD" ||
@@ -378,7 +374,6 @@ export function publishedEnvironment(
     npm_config_prefix: join(stage, "npm-prefix"),
     npm_config_ignore_scripts: "true",
     BUN_INSTALL_CACHE_DIR: join(stage, "cache/bun"),
-    DENO_DIR: join(stage, "cache/deno"),
     NODE_OPTIONS: undefined,
     NODE_PATH: undefined,
     INIT_CWD: undefined
@@ -594,19 +589,20 @@ export async function createPublishedMtlsFixture(
     [paths.trustedCaCertificate, paths.trustedCaKey, paths.trustedClientCertificate],
     [paths.untrustedCaCertificate, paths.untrustedCaKey, paths.untrustedClientCertificate]
   ] as const) {
+    // Preserve the first client's validity window so only its trust chain differs.
+    const input =
+      output === paths.trustedClientCertificate
+        ? ["-req", "-in", clientRequest, "-days", "1"]
+        : ["-in", paths.trustedClientCertificate, "-preserve_dates", "-clrext"]
     await openssl(
       "x509",
-      "-req",
-      "-in",
-      clientRequest,
+      ...input,
       "-CA",
       caCertificate,
       "-CAkey",
       caKey,
       "-set_serial",
       "0x2001",
-      "-days",
-      "1",
       "-sha256",
       "-extfile",
       clientExtensions,
@@ -1336,9 +1332,7 @@ function runtimeArgv(
   entry: string,
   ...args: readonly string[]
 ): readonly string[] {
-  if (runtime === "node") return ["node", entry, ...args]
-  if (runtime === "bun") return ["bun", entry, ...args]
-  return ["deno", "run", "--no-prompt", "--allow-net", "--allow-read", entry, ...args]
+  return [runtime, entry, ...args]
 }
 
 export async function runBufMatrix(
@@ -1978,11 +1972,7 @@ async function runNativeMatrix(
 
   const invocations = [
     { runtime: "node" as const, argv: ["node", paths.nativeOutput, "self-test"] },
-    { runtime: "bun" as const, argv: ["bun", paths.nativeOutput, "self-test"] },
-    {
-      runtime: "deno" as const,
-      argv: ["deno", "run", "--allow-net", "--allow-read", paths.nativeOutput, "self-test"]
-    }
+    { runtime: "bun" as const, argv: ["bun", paths.nativeOutput, "self-test"] }
   ]
   const runtimes: PublishedNativeRuntimeEvidence[] = []
   for (const invocation of invocations) {
@@ -2301,33 +2291,6 @@ export async function runPublishedE2e(
       signal
     )
     await writeMarker(paths, "bun")
-    await command(
-      root,
-      directory,
-      stage,
-      ["deno", "check", "--config", "deno.json", "--node-modules-dir=manual", "deno.ts"],
-      environment,
-      120_000,
-      signal
-    )
-    await command(
-      root,
-      directory,
-      stage,
-      [
-        "deno",
-        "run",
-        "--no-prompt",
-        "--config",
-        "deno.json",
-        "--node-modules-dir=manual",
-        "deno.ts"
-      ],
-      environment,
-      120_000,
-      signal
-    )
-    await writeMarker(paths, "deno")
     await runHidePackageNegatives(root, directory, stage, paths, environment, signal)
   } catch (error) {
     primary = errorValue(error, "published E2E failed")

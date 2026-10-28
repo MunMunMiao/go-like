@@ -2,7 +2,7 @@
 
 go-like 係一套畀 TypeScript 後端用、帶 Go 風格嘅微服務建構元件。生命週期、Context、服務呼叫、服務探索、訊息、設定、儲存、健康檢查同可觀測性都拆成細小而清楚嘅套件，唔會逼你成個框架或者 runtime 推倒重來。
 
-可攜部分只會用標準 Web API，包括 `Request`、`Response`、`Headers`、`AbortSignal`、Web Streams 同由應用傳入嘅 `fetch`。Node.js、Bun、Deno 專屬能力會另開入口。已經匯出 Fetch 嘅框架唔需要 go-like adapter 套件：Hono、Elysia 同 H3 2.x 嘅 `app.fetch` 可以直接交畀 `@go-like/web`；H3 1.x 使用 `toWebHandler(app)`。Croner、BullMQ、NATS、Pino、Winston 等資源先使用生命週期 adapter。
+可攜部分只會用標準 Web API，包括 `Request`、`Response`、`Headers`、`AbortSignal`、Web Streams 同由應用傳入嘅 `fetch`。Node.js、Bun 專屬能力會另開入口。已經匯出 Fetch 嘅框架唔需要 go-like adapter 套件：Hono、Elysia 同 H3 2.x 嘅 `app.fetch` 可以直接交畀 `@go-like/web`；H3 1.x 使用 `toWebHandler(app)`。Croner、BullMQ、NATS、Pino、Winston 等資源先使用生命週期 adapter。
 
 第一次閱讀可以先睇[開始使用](/zh-Hant-HK/guide/getting-started)，再按[診所預約：由 0 到 1](/zh-Hant-HK/guide/zero-to-one)跟住 milestone 行一次引導 project。已有現成服務要接入時，可以看[遷移同接入](/zh-Hant-HK/guide/migration)；想知道 go-like 同其他工具各自負責咩，請睇[go-like 同其他工具點樣分工](/zh-Hant-HK/guide/comparison)。
 
@@ -20,4 +20,4 @@ go-like 係一套畀 TypeScript 後端用、帶 Go 風格嘅微服務建構元�
 
 `@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於內部 Fetch/SSE 路徑。
 
-Deno 2.9.8 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。

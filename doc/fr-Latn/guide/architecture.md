@@ -4,7 +4,7 @@ go-like se présente comme des paquets plats et publiables séparément, pas com
 
 On peut lire l’ensemble par plans : l’application gère démarrage, admission, hooks et état terminal ; Core appelle en parallèle `stop(ctx)` sur chaque sibling Server, attend le terminal result de chacun, puis agrège les lifecycle failures ; l’ordre inverse de déclaration n’est pas garanti. Les composants qui exigent un nettoyage ordonné doivent composer eux-mêmes cet ordre dans un seul `Server`. Les appels réunissent découverte, sélection, client, projection serveur et transport ; les événements couvrent Broker et codec typé ; les opérations regroupent configuration, Store, santé, métriques, traces et logs ; la bordure Web reçoit les handlers Fetch publics, séparément du transport interne.
 
-Les dépendances pointent vers les contrats portables. Un fournisseur peut utiliser un SDK officiel ou un host propre au runtime, mais le SPI ne dépend jamais en retour de cette implémentation. La même composition fonctionne donc sur Bun, Node.js, Deno ou un autre backend compatible avec les API Web.
+Les dépendances pointent vers les contrats portables. Un fournisseur peut utiliser un SDK officiel ou un host propre au runtime, mais le SPI ne dépend jamais en retour de cette implémentation. La même composition fonctionne donc sur Bun, Node.js ou un autre backend compatible avec les API Web.
 
 Il n’existe pas de service locator global. L’application construit et injecte ses dépendances. Ces quelques lignes d’assemblage rendent la propriété des connexions, watchers, listeners et tâches d’arrêt beaucoup moins mystérieuse.
 

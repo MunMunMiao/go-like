@@ -94,7 +94,7 @@ Broker/Event 不拥有 retry、backoff、breaker 或幂等判断。需要这些�
 ## 验证边界
 
 公共包使用 fake 只验证不可变性、泛型传递、lazy decode、native identity 和生命周期边界。Memory Broker 使用
-真实进程内并发、Context 与发布态 Bun/Node/Deno 验证，不启动没有第三方服务的 Docker。NATS provider 必须在
+真实进程内并发、Context 与发布态 Bun/Node 验证，不启动没有第三方服务的 Docker。NATS provider 必须在
 固定 digest 的真实容器中验证 Core 与 JetStream round trip、queue group、unsubscribe/drain、PubAck、ackAck、
 非法 payload 后应用显式 nak/term、故障恢复，以及 stream、consumer、subscription、connection、container 和
 network 零残留。RabbitMQ provider 必须在固定 digest 的真实容器中验证 publish/consume、ack/nack/reject、

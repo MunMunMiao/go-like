@@ -2,17 +2,11 @@ import { background } from "@go-like/context"
 import { newProbeRegistry } from "@go-like/health"
 
 const lateRejections: unknown[] = []
-const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"
+const runtime = "Bun" in globalThis ? "bun" : "node"
 
-if (runtime === "node" || runtime === "bun") {
-  process.on("unhandledRejection", (reason) => {
-    lateRejections.push(reason)
-  })
-} else {
-  globalThis.addEventListener("unhandledrejection", (event) => {
-    lateRejections.push("reason" in event ? event.reason : event)
-  })
-}
+process.on("unhandledRejection", (reason) => {
+  lateRejections.push(reason)
+})
 
 const registry = newProbeRegistry()
 let rejectLate: (error: Error) => void = (error) => {

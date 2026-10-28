@@ -23,7 +23,7 @@ Pino、Winston、OpenTelemetry 等官方 API；go-like 只定义公共契约、�
   编排同一套生命周期。
 - TypeScript 的可见性只由 `export` 决定；函数、工厂、option、常量和普通运行时值使用 `camelCase`，不复制
   Go 的首字母大写导出规则。类型、接口、类和 Error 构造器按 TypeScript 惯例使用 `PascalCase`。
-- 可移植入口只依赖 ECMAScript 与标准 Web API，并在 Bun、Node.js、Deno 后端运行时验证。
+- 可移植入口只依赖 ECMAScript 与标准 Web API，并在 Bun、Node.js 后端运行时验证。
 - runtime 或供应商能力通过独立入口隔离；应用拥有第三方库的数据面，go-like 只接管明确移交的生命周期。
 - 外部 HTTP 应用属于 `@go-like/web`；内部微服务同步通信属于 `@go-like/transport` 及其实现。
 - Buf/Protobuf RPC 位于独立的生成与 runtime 边界；portable Fetch 只覆盖 unary 和 server-streaming，
@@ -208,7 +208,7 @@ const handler = newHandler((server) => {
 })
 ```
 
-该入口在 Node、Bun、Deno 的进程内 Fetch bridge 测试中覆盖 Connect/gRPC-Web unary 与 server-streaming
+该入口在 Node、Bun 的进程内 Fetch bridge 测试中覆盖 Connect/gRPC-Web unary 与 server-streaming
 协议往返；这不证明真实 HTTP 取消传播。Fetch request-streaming/bidi 会明确拒绝，浏览器不宣称标准 gRPC。
 托管的后端标准 gRPC 使用 capability subpath：
 
@@ -233,11 +233,10 @@ await client.close(ctx)
 真实生成代码从 `./gen/order_like.js` 导入 `newOrderServiceClient`。`withAddress` 与 `withService` 已删除。
 
 `/native` 的标准 gRPC unary、server-streaming、client-streaming、bidi 的当前物理发布包验证版本为 Node 26.12.1、
-Bun 1.4.4、Deno 2.9.8；Node 是 Connect-ES 上游支持的 runtime，Bun/Deno 由 LikeGo 兼容性 lane 记录实际
+Bun 1.4.4；Node 是 Connect-ES 上游支持的 runtime，Bun 由 LikeGo 兼容性 lane 记录实际
 执行结果，版本记录不构成固定版本门禁。生成器由 npm、pnpm 或 Yarn package script 调用项目本地 binary，
 不要求 consumer 安装 Bun。
-托管 Client 仅在已收到响应 `END_STREAM`、`rstCode` 为 0 且原生迭代器报出 `ERR_STREAM_PREMATURE_CLOSE`
-时读取剩余缓冲，保留正常 gRPC 状态校验。上述三个 runtime 已通过服务停止与慢消费并存的 drain 回归，
+Node 与 Bun 已通过服务停止与慢消费并存的 drain 回归，
 完整 published matrix 也已通过，包含四种调用、互操作、mTLS 和浏览器用例。
 此前另已用纯 HTTP 复现 Bun 1.4.2 Fetch 对静默响应流的取消未及时传播到远端；
 纯上游 Connect 2.1.2 在 Node/Bun 上也可因消费者取消后停止读取而保留 deadline timer 至原 deadline，延迟自然退出。
@@ -401,7 +400,7 @@ Client/Server 使用保留的 `Go-Like-Metadata` envelope 做 16 KiB 有界、�
 由标准 `crypto.randomUUID()` 生成，也可用 functional option 显式覆盖。
 
 Node.js/Bun 进程信号由显式 `@go-like/core/node` 子路径的 `signal()` option 承接。它把 SIGINT、SIGQUIT、
-SIGTERM 接入同一个 `app.run()` 生命周期；portable Core 不读取进程全局，也不伪装 Deno 支持。
+SIGTERM 接入同一个 `app.run()` 生命周期；portable Core 不读取进程全局。
 
 ## 构建与验证
 

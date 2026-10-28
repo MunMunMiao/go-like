@@ -185,4 +185,4 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 這不包含瀏覽器標準 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用驗證、Event Store/replay、ORM 或叢集編排。
 
-Deno 2.9.8 的託管 gRPC 已通過[慢速消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 與 Bun 1.4.2 Fetch 的歷史[取消與停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+Node 26.12.1 與 Bun 1.4.4 的託管 gRPC 已通過[慢速消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 與 Bun 1.4.2 Fetch 的歷史[取消與停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。

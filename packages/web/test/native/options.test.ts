@@ -11,7 +11,7 @@ import {
 } from "../../src/native-options"
 
 const maximumTimerDelayMs = 2_147_483_647
-const ids = ["bun", "deno"] as const
+const ids = ["bun"] as const
 const acceptedTimerDelays = [0, 0.5, 1.5, maximumTimerDelayMs - 0.5, maximumTimerDelayMs] as const
 const rejectedTimerDelays = [
   -1,

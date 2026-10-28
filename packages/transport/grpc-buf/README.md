@@ -26,7 +26,7 @@ const ctx = background()
 const order = await orders.getOrder(ctx, { id: "order-1" })
 ```
 
-`newHandler()` 返回 `(request: Request) => Promise<Response>`。Node、Bun 与 Deno 的现有 portable runtime test
+`newHandler()` 返回 `(request: Request) => Promise<Response>`。Node 与 Bun 的现有 portable runtime test
 通过进程内 Fetch bridge 覆盖 Connect/gRPC-Web unary 和 server-streaming 的协议往返，不证明真实 HTTP 连接的
 取消传播。Fetch request-streaming 与 bidi 会在业务 handler 进入前拒绝。浏览器和
 Edge 使用调用方创建的官方 Connect/gRPC-Web transport，不宣称浏览器标准 gRPC。
@@ -113,16 +113,13 @@ registerOrderServiceHandler(server, orderService)
 
 生成的 `newOrderServiceClient(client)` 借用传入的 Connect transport；只有 `/native` 创建的 managed Client
 拥有 session、Discovery resolver 与 `close(ctx)`。标准 gRPC 的 unary、server-streaming、client-streaming 和
-bidi 的当前物理发布包互操作验证版本为 Node 26.12.1、Bun 1.4.4、Deno 2.9.8。Node 是 Connect-ES
-上游支持的 runtime；Bun 与 Deno 由 LikeGo 的兼容性 lane 验证并记录实际执行版本，版本记录不构成固定版本门禁
+bidi 的当前物理发布包互操作验证版本为 Node 26.12.1、Bun 1.4.4。Node 是 Connect-ES
+上游支持的 runtime；Bun 由 LikeGo 的兼容性 lane 验证并记录实际执行版本，版本记录不构成固定版本门禁
 或全部生产场景的保证。
 
-此前 Deno 2.9.5 和 2.9.7 在服务停止与慢消费并存时出现 `Premature close`，该问题也能用不依赖 LikeGo 或
-Connect 的 `node:http2` 代码复现。托管 Client 现仅在已收到响应 `END_STREAM`、`rstCode` 为 0 且原生
-迭代器报出 `ERR_STREAM_PREMATURE_CLOSE` 时读取剩余缓冲，保留正常 gRPC 状态校验；其他错误继续失败。
-2026-10-28 的完整 `test:e2e:published` 已通过，包含 Node 26.12.1、Bun 1.4.4、Deno 2.9.8 的
-managed drain 强回归、四种调用、互操作与 mTLS，以及浏览器用例。该兼容处理不依赖固定延迟或流重放，
-也不宣称 Deno 上游缺陷或下述 Connect/Bun Fetch 历史限制已修复。
+2026-10-28 的完整 `test:e2e:published` 已通过，包含 Node 26.12.1、Bun 1.4.4 的
+managed drain 强回归、四种调用、互操作与 mTLS，以及浏览器用例。该结果不覆盖全部生产停机场景，
+也不宣称下述 Connect/Bun Fetch 历史限制已修复。
 
 流式调用提前停止时，先取消原始 Like Context，再退出循环；`cancel()` 可重复调用，所以 `finally` 负责兜底：
 
@@ -147,7 +144,7 @@ Like Context 才是生成 client 的提前停止契约。
 取消会异步传播到远端 handler；客户端已经收到取消错误，不代表服务端的 `finally` 已执行。需要确认业务收尾时，
 等待明确的完成信号并设置截止时间，不能依赖固定 sleep 或把客户端取消当作事务回滚。
 
-当前固定的 Connect 2.1.2 还有独立的依赖清理缺陷：响应流已交付一条消息、消费者暂停读取后，外部取消即使
+此前固定的 Connect 2.1.2 曾有独立的依赖清理缺陷：响应流已交付一条消息、消费者暂停读取后，外部取消即使
 已经使 handler 和 managed owner 关闭，Connect 的 deadline timer 仍可能保留到原 deadline。Node 26.9.0 和
 Bun 1.4.2 的纯上游 Connect HTTP/2 复现均观察到 1,200ms RPC 预算导致约 1.2 秒的自然进程退出延迟。
 这是有期限的 timer 滞留与退出延迟，尚无数据丢失、重复写或永久泄漏证据；本仓库尚未修补该依赖。
@@ -155,7 +152,7 @@ Bun 1.4.2 的纯上游 Connect HTTP/2 复现均观察到 1,200ms RPC 预算导�
 不是已验证的应用 workaround；不应强制 drain、`unref`、缩短业务预算或强制退出来伪造清理成功。
 
 `withTLSConfig(...)` 配置 managed Client；Server 使用 `tlsConfig(...)` 与 `clientAuth("require")`。物理发布
-测试在上述三个固定 runtime 上都证明可信客户端证书成功、缺少证书和不可信 CA 证书在 handler 前失败；Node
+测试在上述两个 runtime 上都证明可信客户端证书成功、缺少证书和不可信 CA 证书在 handler 前失败；Node
 还通过了带 CA、client certificate/key 与 server name 的独立 Buf TLS 调用。这不是对未来 runtime 版本或任意
 TLS 部署的泛化承诺。
 

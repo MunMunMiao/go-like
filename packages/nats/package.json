@@ -34,7 +34,7 @@
     "@go-like/core": "0.0.1",
     "@nats-io/jetstream": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

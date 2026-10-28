@@ -19,12 +19,12 @@
     "@go-like/croner": "workspace:*",
     "@go-like/store": "workspace:*",
     "@go-like/store-file": "workspace:*",
-    "bullmq": "6.3.11",
-    "croner": "10.0.1",
+    "bullmq": "6.5.0",
+    "croner": "11.0.0",
     "ioredis": "6.0.0"
   },
   "devDependencies": {
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

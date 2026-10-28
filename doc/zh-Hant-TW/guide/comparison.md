@@ -120,13 +120,12 @@ Web `ReadableStream` 不是內部 RPC channel。不要把 streamed HTTP body 和
 
 ## Runtime 比較
 
-| Runtime 問題                                             | go-like 證據                                                                                        | 比較時的結論                                          |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 共用程式碼能否使用 Fetch 與 `AbortSignal`？              | Root Web 與選定的 transport/config provider 使用標準 Web API 或注入的 Fetch                         | 可以有相近的可攜性目標，但型別不會替 runtime 實作行為 |
-| 同一個 package 能否綁定 Node listener 與 Deno listener？ | Runtime-specific 子路徑是明確的；`@go-like/web/node` 與 `@go-like/transport-http/node` 是 Node 路徑 | 不要寫「所有套件到處都能原樣執行」                    |
-| 自訂 PEM TLS、mTLS、ALPN 與 HTTP/2 能否透過 Fetch 可攜？ | Node transport 子路徑擁有原生能力；root Fetch path 不暴露所有控制項                                 | 應比較 host 能力與 import path，而不只是 package 名稱 |
-| 應用程式是否保留 framework router？                      | Hono、Elysia 與 H3 範例都傳入原生 Fetch handler                                                     | go-like 是 framework route ownership 的補充           |
-| package version 是否證明已經發布？                       | `workspace:*`, `0.0.1`                                                                              | 不能據此聲稱 npm 可用或生態成熟                       |
+| Runtime 問題                                             | go-like 證據                                                                | 比較時的結論                                          |
+| -------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 共用程式碼能否使用 Fetch 與 `AbortSignal`？              | Root Web 與選定的 transport/config provider 使用標準 Web API 或注入的 Fetch | 可以有相近的可攜性目標，但型別不會替 runtime 實作行為 |
+| 自訂 PEM TLS、mTLS、ALPN 與 HTTP/2 能否透過 Fetch 可攜？ | Node transport 子路徑擁有原生能力；root Fetch path 不暴露所有控制項         | 應比較 host 能力與 import path，而不只是 package 名稱 |
+| 應用程式是否保留 framework router？                      | Hono、Elysia 與 H3 範例都傳入原生 Fetch handler                             | go-like 是 framework route ownership 的補充           |
+| package version 是否證明已經發布？                       | `workspace:*`, `0.0.1`                                                      | 不能據此聲稱 npm 可用或生態成熟                       |
 
 目前 repository 有 Hono、Elysia、H3 與 vanilla Fetch 的直接 source 範例。沒有目前的 NestJS 或 Fastify bridge，也沒有對應的 compatibility suite。這些框架是遷移讀者的對象，不是已支援的直接整合。
 

@@ -60,7 +60,7 @@ Discovery resolver 由 `@go-like/client/discovery` 共享：一套 watcher cache
 
 2026-08-28 的第一阶段偏重 portable handler 和生成胶水；随后独立定义了原生 HTTP/2 owner，并将包归入 Transport 能力域。早期“同一个根入口承载所有 runtime”及 `connection` / `conn` 命名没有作为当前契约继续保留。
 
-2026-09-23 的原记录列出 Connect 2.1.2 deadline timer、Bun 1.4.2 Fetch cancellation、Deno 2.9.5/2.9.7 HTTP/2 drain 的限制。它们必须绑定当时版本与 workload，不能转述为当前所有版本的结论；本次整理没有重新执行实验。
+2026-09-23 的原记录列出 Connect 2.1.2 deadline timer、Bun 1.4.2 Fetch cancellation 的限制。它们必须绑定当时版本与 workload，不能转述为当前所有版本的结论；本次整理没有重新执行实验。
 
 ## 一手源码与协议依据
 

@@ -4,7 +4,7 @@ go-like 採用平鋪、可以獨立發布嘅套件，唔係一個乜都包辦嘅
 
 整體可以分幾條線：應用面負責啟動、接納、hook 同終態；Core 會並行呼叫各個 sibling Server 嘅 `stop(ctx)`，等待各自嘅 terminal result，再彙總 lifecycle failure，但唔保證按反向宣告次序停止。呼叫面包含服務探索、節點選擇、Client、Server 投影同 Transport；事件面處理 Broker 同 typed codec；營運面有設定快照、Store、健康檢查、指標、追蹤同日誌；對外 Web 接標準 Fetch Handler，同內部 transport 分得開。需要依次關閉嘅元件，應該喺同一個 `Server` 入面組合次序。
 
-依賴方向會集中去可攜接口。Provider 可以用官方 SDK 或 runtime host，但 SPI 唔會反過來依賴某個實作，所以 Bun、Node.js、Deno 或其他支援 Web API 嘅後端都可以共用組合方式。
+依賴方向會集中去可攜接口。Provider 可以用官方 SDK 或 runtime host，但 SPI 唔會反過來依賴某個實作，所以 Bun、Node.js 或其他支援 Web API 嘅後端都可以共用組合方式。
 
 go-like 冇 service locator。應用自己建立依賴再傳入，多幾行裝配其實有著數：connection、watcher、listener 同關閉責任全部睇得見，出事時唔使估。
 

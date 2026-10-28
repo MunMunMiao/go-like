@@ -20,15 +20,15 @@
 
 ## مصفوفة ترحيل الأطر
 
-| النظام الموجود | ما يبقى أصلياً                                                            | ما يُعتمد أولاً                                                           | الحدّ الحالي                                                                                              |
-| -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| NestJS         | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | `Server` بنيوي مخصص حول التطبيق الموجود، أو حدّ Client/Server داخلي منفصل | لا يوجد في هذا المستودع محوّل NestJS لـ go-like ولا تكامل DI تلقائي                                       |
-| Fastify        | Routes, plugins, hooks, request/reply, native listener                    | غلاف دورة حياة مخصص، أو جسر Fetch منفّذ صراحةً                            | لا يوجد تحويل مثبت حالياً من Fastify request/reply إلى go-like Handler                                    |
-| Hono           | Routes, middleware, sub-apps, `app.fetch`                                 | `newNodeServer(app.fetch, ...)` ثم `newApp(...)`                          | التكامل المباشر مع Fetch موضّح في `examples/hono`                                                         |
-| Elysia         | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | `app.fetch` الأصلي مع مضيف/دورة حياة Core عند الحاجة                      | أبقِ دلالات `.listen()` الخاصة بـ Bun؛ لا تعدّها API من go-like عابرة لكل بيئات التشغيل                   |
-| H3             | H3 router and native handler conversion                                   | مسار Fetch Handler الموجود في مثال H3 الحالي                              | `app.fetch` في H3 2.x هو الشكل الموضّح حالياً؛ وتحتاج إرشادات `toWebHandler` الأقدم إلى مثال مثبت الإصدار |
-| Koa            | Middleware and external router                                            | غلاف مخصص للمالك، أو استدعاء خدمة داخلي                                   | لا تقبل `@go-like/web` كائن Koa الخاص بـ Node request/reply من دون جسر على مستوى التطبيق                  |
-| tRPC           | Router, procedure middleware, input/output parsers, adapter               | دورة حياة Core حول المضيف، أو حدّ نقل داخلي منفصل                         | إن `Endpoint` في go-like ليس موجّه إجراءات tRPC                                                           |
+| النظام الموجود | ما يبقى أصلياً                                                             | ما يُعتمد أولاً                                                             | الحدّ الحالي                                                                                           |
+| -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| NestJS         | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | `Server` بنيوي مخصص حول التطبيق الموجود، أو حدّ Client/Server داخلي منفصل | لا يوجد في هذا المستودع محوّل NestJS لـ go-like ولا تكامل DI تلقائي                                      |
+| Fastify        | Routes, plugins, hooks, request/reply, native listener                    | غلاف دورة حياة مخصص، أو جسر Fetch منفّذ صراحةً                              | لا يوجد تحويل مثبت حالياً من Fastify request/reply إلى go-like Handler                                  |
+| Hono           | Routes, middleware, sub-apps, `app.fetch`                                 | `newNodeServer(app.fetch, ...)` ثم `newApp(...)`                         | التكامل المباشر مع Fetch موضّح في `examples/hono`                                                      |
+| Elysia         | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | `app.fetch` الأصلي مع مضيف/دورة حياة Core عند الحاجة                      | أبقِ دلالات `.listen()` الخاصة بـ Bun؛ لا تعدّها API من go-like عابرة لكل بيئات التشغيل                    |
+| H3             | H3 router and native handler conversion                                   | مسار Fetch Handler الموجود في مثال H3 الحالي                             | `app.fetch` في H3 2.x هو الشكل الموضّح حالياً؛ وتحتاج إرشادات `toWebHandler` الأقدم إلى مثال مثبت الإصدار |
+| Koa            | Middleware and external router                                            | غلاف مخصص للمالك، أو استدعاء خدمة داخلي                                   | لا تقبل `@go-like/web` كائن Koa الخاص بـ Node request/reply من دون جسر على مستوى التطبيق               |
+| tRPC           | Router, procedure middleware, input/output parsers, adapter               | دورة حياة Core حول المضيف، أو حدّ نقل داخلي منفصل                         | إن `Endpoint` في go-like ليس موجّه إجراءات tRPC                                                        |
 
 ### مثال Hono
 
@@ -66,17 +66,17 @@ framework route table
 
 إذا كنت قادماً من Go أو Kratos، فهاجر المفاهيم لا الأسماء:
 
-| مفهوم Go          | مفهوم go-like                                                                                                      | الاختلاف المهم                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `context.Context` | `Context` من `@go-like/context`                                                                                    | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                   |
+| مفهوم Go          | مفهوم go-like                                                                                                      | الاختلاف المهم                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `context.Context` | `Context` من `@go-like/context`                                                                                    | `done()` هو `AbortSignal` أو `null`، وليس قناة Go                  |
 | Server lifecycle  | `Server` البنيوي في Core                                                                                           | قد يستمر `start(ctx)` طوال عمر الخدمة، ولا يعني الجاهزية            |
 | App runner        | `newApp` و`App.run` و`App.stop`                                                                                    | لا يستقبل `App.stop()` سياق المستدعي ويعيد Promise مشتركة واحدة     |
 | RPC client        | `@go-like/client`                                                                                                  | الاستدعاءات الداخلية هي JSON Fetch أو SSE؛ وإعادة المحاولة اختيارية |
 | Transport         | `@go-like/transport`                                                                                               | المزوّدات وترويسات Fetch عقود TypeScript/Web                        |
-| Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                  |
+| Registry          | `@go-like/registry`                                                                                                | يعيد المراقبون لقطات استبدال كاملة                                 |
 | Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | الملاحظات الراجعة متزامنة وتعتمد على السياسة                        |
-| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | شيفرة Context-first فوق Protobuf-ES                                 |
-| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC قياسي بالأنماط الأربعة عبر `/native`                           |
+| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | شيفرة Context-first فوق Protobuf-ES                                |
+| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC قياسي بالأنماط الأربعة عبر `/native`                            |
 
 الخطوة التدريجية الأولى هي استدعاء typed إلى عنوان مباشر عبر Memory Transport:
 
@@ -128,14 +128,14 @@ void result
 
 أبقِ التسوية وسياسة المهام أصليتين:
 
-| مستوى البيانات الموجود | ما يبقى أصلياً                                                   | ما تضيفه go-like من أجله                                                              |
-| ---------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| NATS Core              | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer` و`newNatsCoreBroker` ودورة الحياة وحدّ البايتات                   |
-| NATS JetStream         | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer` و`newNatsJetStreamBroker` ودورة الحياة                       |
+| مستوى البيانات الموجود | ما يبقى أصلياً                                                    | ما تضيفه go-like من أجله                                                          |
+| ---------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| NATS Core              | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer` و`newNatsCoreBroker` ودورة الحياة وحدّ البايتات                |
+| NATS JetStream         | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer` و`newNatsJetStreamBroker` ودورة الحياة                   |
 | RabbitMQ               | Connection, topology, confirm policy, channel                    | دورة حياة subscriber المستعار أو المستعيد، والتسوية الأصلية الآمنة أمام تغيّر الأجيال |
-| BullMQ                 | Queue, Worker, processor, retry/backoff, Redis                   | `newBullMqWorkerServer` حول Worker رسمي متوقف مؤقتاً                                  |
-| Croner                 | Cron expression, time zone, callback, overlap policy             | `newCronerServer` حول وظائف Cron أصلية موقوفة مؤقتاً                                  |
-| Memory Broker          | خريطة topics داخل العملية ودلالات الاختبار                       | `newBrokerServer` وevent codec اختياري                                                |
+| BullMQ                 | Queue, Worker, processor, retry/backoff, Redis                   | `newBullMqWorkerServer` حول Worker رسمي متوقف مؤقتاً                               |
+| Croner                 | Cron expression, time zone, callback, overlap policy             | `newCronerServer` حول وظائف Cron أصلية موقوفة مؤقتاً                               |
+| Memory Broker          | خريطة topics داخل العملية ودلالات الاختبار                          | `newBrokerServer` وevent codec اختياري                                            |
 
 لا تنقل ack/nak/term في NATS، أو التسوية الدائمة في JetStream، أو تأكيدات RabbitMQ، أو عمليات retry في BullMQ إلى تجريد عام لـ go-like Broker. هذه الدلالات هي بالضبط سبب بقاء الكائن الأصلي للمزوّد ظاهراً.
 
@@ -185,4 +185,4 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 لا يشمل ذلك gRPC القياسي داخل المتصفح، أو تدفق طلبات Fetch ثنائي الاتجاه، أو health/reflection القياسيين، أو مصادقة عامة، أو Event Store/replay، أو ORM، أو تنسيق العناقيد.
 
-اجتاز مسار توافق gRPC المُدار في Deno 2.9.8 [اختبار تصريف التدفق مع مستهلك بطيء](/reference/claims#native-grpc-drain-status). لم يُتحقق من إصلاح [قيود الإلغاء والإيقاف المسجلة سابقاً](/reference/claims#stream-cancellation-limits) في Connect 2.1.2 وBun 1.4.2 Fetch.
+اجتاز gRPC المُدار في Node 26.12.1 وBun 1.4.4 [اختبار تصريف التدفق مع مستهلك بطيء](/reference/claims#native-grpc-drain-status). لم يُتحقق من إصلاح [قيود الإلغاء والإيقاف المسجلة سابقاً](/reference/claims#stream-cancellation-limits) في Connect 2.1.2 وBun 1.4.2 Fetch.

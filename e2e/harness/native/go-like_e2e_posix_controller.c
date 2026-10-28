@@ -2963,7 +2963,7 @@ static int process_one_wire_frame(struct controller *controller, const uint8_t *
 static int consume_control_input(struct controller *controller, bool *saw_eof) {
   *saw_eof = false;
   while (true) {
-    if (controller->input_length == sizeof(controller->input)) {
+    if (controller->input_length >= sizeof(controller->input)) {
       return terminal_protocol_error(controller, 0u, GO_LIKE_E2E_ERROR_PROTOCOL,
                                      EOVERFLOW, "control input exceeded the bounded frame buffer");
     }

@@ -12,7 +12,7 @@ test("gRPC soak rejects invalid and unbounded parameters before spawning", async
     ["--concurrency", "257"],
     ["--concurrency", "1.5"],
     ["--payload-bytes", "1048577"],
-    ["--runtime", "deno"],
+    ["--runtime", "unknown-runtime"],
     ["--output", ""],
     ["--unknown"]
   ])

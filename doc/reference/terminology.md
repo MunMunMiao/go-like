@@ -51,7 +51,7 @@ This glossary keeps the English source precise and gives translators a stable se
 | -------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | **portable**               | Shared code uses standard Web/ECMAScript APIs or injected capabilities              | Not proof that every runtime can bind sockets, watch files, use UDP, or configure TLS |
 | **Fetch Handler**          | Standard one-argument `Request` to `Response` function                              | A Handler still needs a host/listener                                                 |
-| **`/node` subpath**        | Explicit runtime-specific entrypoint with Node capabilities                         | Do not infer Deno support from the root package                                       |
+| **`/node` subpath**        | Explicit runtime-specific entrypoint with Node capabilities                         | Do not infer portability from the root package                                        |
 | **standard Web streaming** | Request/Response bodies and Web Streams, including framework SSE/WebSocket behavior | Not an internal SSE server stream or bidi RPC                                         |
 | **TLS**                    | Transport encryption and peer certificate verification at the host/provider layer   | Not application authentication or authorization                                       |
 | **mTLS**                   | TLS configuration requiring a verified client certificate                           | Not automatic mapping from certificate to user, tenant, or role                       |

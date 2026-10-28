@@ -11,10 +11,10 @@ go-like has several evidence lanes. A command can exist without having passed, a
 | Typecheck           | Root, E2E, package, and example TypeScript contracts                               | No                          | Build output, runtime semantics, provider behavior               |
 | Unit                | Deterministic root, package, and example tests                                     | No                          | Real network, Docker, published tarballs, cross-runtime behavior |
 | Build               | Package ESM and declaration output                                                 | No                          | Consumer resolution or runtime behavior                          |
-| Runtime E2E         | Bun, Node.js, and Deno fixtures where declared                                     | Usually no                  | Providers or all packages in every runtime                       |
+| Runtime E2E         | Bun and Node.js fixtures where declared                                            | Usually no                  | Providers or all packages in every runtime                       |
 | Provider E2E        | Real Consul, etcd, Kubernetes, ZooKeeper, Redis, RabbitMQ, NATS, or other services | Yes                         | Production availability or hosted CI                             |
 | Example E2E         | Executable example processes, requests, readiness, stop, and cleanup               | Sometimes                   | Every example in a separate installation                         |
-| Published           | Physical packed tarballs consumed by Node, Bun, and Deno fixtures                  | No, except provider imports | npm registry publication or external consumer adoption           |
+| Published           | Physical packed tarballs consumed by Node and Bun fixtures                         | No, except provider imports | npm registry publication or external consumer adoption           |
 | Soak                | Long-duration HTTP or service behavior                                             | Usually no                  | Short tests or all provider behavior                             |
 | Documentation build | VitePress route and Markdown build                                                 | No                          | Browser layout or localized semantic parity                      |
 | Audit               | Dependency vulnerability report                                                    | No                          | Application security design or authorization completeness        |
@@ -102,7 +102,7 @@ bun e2e/run.ts --scope published
 
 The public scope scripts build first. Direct `bun e2e/run.ts ...` and direct workspace E2E commands do not necessarily build; make the build prerequisite explicit in a run record.
 
-Provider E2E needs its declared Docker services and cleanup. Example E2E requires each `examples/*` workspace to provide a non-empty wrapper. Published checks pack physical tarballs, install them into staged consumers, perform NodeNext emit, run Node, run Bun with `--no-install`, and run Deno checks/runs with the documented permission and prompt settings.
+Provider E2E needs its declared Docker services and cleanup. Example E2E requires each `examples/*` workspace to provide a non-empty wrapper. Published checks pack physical tarballs, install them into staged consumers, perform NodeNext emit, run Node, and run Bun with `--no-install`.
 
 Soak is deliberately separate:
 
@@ -169,7 +169,6 @@ candidate tree:  <commit SHA or explicit dirty-tree description>
 environment:     <OS, container/host, process mode>
 Bun:            <version>
 Node.js:        <version or not used>
-Deno:           <version or not used>
 TypeScript:     <version if relevant>
 command:        <exact command>
 started:        <timestamp>
@@ -203,7 +202,6 @@ Do not turn a unit result into a production-adoption claim, or a source option i
 - No hosted CI result is established by a workflow file.
 - A package's runtime script may be a declared lane without a recent pass result.
 - Memory providers do not establish cross-process, durability, or vendor protocol behavior.
-- Node-specific subpaths do not establish Deno support.
 - A Web `ReadableStream` does not establish internal full-duplex RPC support.
 - TLS and mTLS source options do not establish application authentication or authorization.
 - A stop timeout does not establish that every native resource is terminal.

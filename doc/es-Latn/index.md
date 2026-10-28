@@ -2,7 +2,7 @@
 
 go-like es un conjunto de piezas con estilo Go para crear servicios backend en TypeScript. Separa el ciclo de vida, el contexto, las llamadas entre servicios, el descubrimiento, la mensajería, la configuración, el almacenamiento, la salud y la observabilidad en paquetes pequeños. No te obliga a cambiar de framework ni a casarte con un runtime concreto.
 
-El código portable se queda en las Web API estándar: `Request`, `Response`, `Headers`, `AbortSignal`, Web Streams y un `fetch` inyectado. Lo que depende de Node.js, Bun o Deno vive en una entrada aparte. Los frameworks que ya exponen Fetch no necesitan un adaptador de go-like: pasa `app.fetch` de Hono, Elysia o H3 2.x directamente a `@go-like/web`; H3 1.x usa `toWebHandler(app)`. Los adaptadores de ciclo de vida se reservan para recursos como Croner, BullMQ, NATS, Pino y Winston.
+El código portable se queda en las Web API estándar: `Request`, `Response`, `Headers`, `AbortSignal`, Web Streams y un `fetch` inyectado. Lo que depende de Node.js o Bun vive en una entrada aparte. Los frameworks que ya exponen Fetch no necesitan un adaptador de go-like: pasa `app.fetch` de Hono, Elysia o H3 2.x directamente a `@go-like/web`; H3 1.x usa `toWebHandler(app)`. Los adaptadores de ciclo de vida se reservan para recursos como Croner, BullMQ, NATS, Pino y Winston.
 
 Empieza por [Primeros pasos](/es-Latn/guide/getting-started) y continúa con [Clínica: de 0 a 1](/es-Latn/guide/zero-to-one) para recorrer una ruta guiada por milestones. Si ya tienes un servicio, consulta [Migración y adopción](/es-Latn/guide/migration); para comparar responsabilidades entre herramientas, lee [go-like frente a otras herramientas](/es-Latn/guide/comparison).
 
@@ -20,4 +20,4 @@ El `Context` va primero en las operaciones que pueden bloquear, la propiedad de 
 
 `@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
 
-La compatibilidad de gRPC administrado en Deno 2.9.8 pasó la [regresión de drain con un consumidor lento](/reference/claims#native-grpc-drain-status). No se ha verificado la resolución de los [límites históricos de cancelación y apagado](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 y Bun 1.4.2 Fetch.
+gRPC administrado en Node 26.12.1 y Bun 1.4.4 pasó la [regresión de drain con un consumidor lento](/reference/claims#native-grpc-drain-status). No se ha verificado la resolución de los [límites históricos de cancelación y apagado](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 y Bun 1.4.2 Fetch.

@@ -26,7 +26,6 @@ import {
 } from "../../src/native-server"
 
 const bun: NativeRuntimeTag<"bun"> = { id: "bun", name: "Bun", code: "BUN" }
-const deno: NativeRuntimeTag<"deno"> = { id: "deno", name: "Deno", code: "DENO" }
 
 class FakeBinding implements NativeBinding {
   port: number | undefined = 49_152
@@ -179,10 +178,10 @@ test("validates the handler before the options and never binds on a construction
     "bun server option must be callable"
   )
   expect(() =>
-    newNativeServer(deno, () => new Response(), host.bind, [
+    newNativeServer(bun, () => new Response(), host.bind, [
       () => ({ hostname: "", port: 0, shutdownTimeoutMs: 1 })
     ])
-  ).toThrow("deno hostname must be a non-empty string")
+  ).toThrow("bun hostname must be a non-empty string")
   expect(host.bindCalls).toBe(0)
 })
 
@@ -772,18 +771,18 @@ test("a single reported failure alone makes the clean drain fail with that ident
 
 test("the lifecycle core labels errors and messages with the owning runtime", async () => {
   const host = new FakeHost()
-  const subject = newNativeServer(deno, () => new Response("ok"), host.bind, [])
+  const subject = newNativeServer(bun, () => new Response("ok"), host.bind, [])
   const running = subject.start(background())
 
   await expect(subject.start(background())).rejects.toMatchObject({
-    name: "DenoServerAlreadyStartedError",
-    code: "GO_LIKE_DENO_SERVER_ALREADY_STARTED"
+    name: "BunServerAlreadyStartedError",
+    code: "GO_LIKE_BUN_SERVER_ALREADY_STARTED"
   })
   host.binding.finish()
 
   await expect(running).rejects.toMatchObject({
-    name: "DenoServerUnexpectedCloseError",
-    message: "deno web server closed unexpectedly"
+    name: "BunServerUnexpectedCloseError",
+    message: "bun web server closed unexpectedly"
   })
 })
 

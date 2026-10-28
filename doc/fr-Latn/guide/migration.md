@@ -185,4 +185,4 @@ Avant de fusionner une frontière, vérifiez :
 
 Cela n’inclut pas gRPC standard dans le navigateur, request-streaming/bidi via Fetch, health/reflection officiels, authentification générique, Event Store/replay, ORM ou orchestration de clusters.
 
-La compatibilité gRPC gérée sous Deno 2.9.8 a passé le [test de régression du drain avec consommateur lent](/reference/claims#native-grpc-drain-status). La correction des [limites historiques d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 et de Bun 1.4.2 Fetch reste non vérifiée.
+gRPC géré sous Node 26.12.1 et Bun 1.4.4 a passé le [test de régression du drain avec consommateur lent](/reference/claims#native-grpc-drain-status). La correction des [limites historiques d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 et de Bun 1.4.2 Fetch reste non vérifiée.

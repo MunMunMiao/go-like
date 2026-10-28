@@ -40,7 +40,7 @@ stop()
   重入创建 child，child 会在构造返回前同步继承父级 `err()` 与 cause，不会短暂暴露为 active 或误建 timer。
 - 一次取消在返回前同步终止所有已接纳后代；资源清理采用后序顺序，先清理后代、再清理祖先，同时保持同一
   Context 内 cleanup 的注册顺序。这使嵌套 deadline timer 与 Go 一样先停止子 timer，再停止父 timer。
-- 生产代码仅依赖标准 ECMAScript 和 Web API，不依赖 Bun、Node.js 或 Deno 全局对象。
+- 生产代码仅依赖标准 ECMAScript 和 Web API，不依赖 Bun 或 Node.js 全局对象。
 
 运行时测试由仓库当前选择的验证 lane 按需执行；实际工具版本只作为本次运行的 evidence 记录，不构成支持门禁。标准 Web API 无法要求一个已被冻结
 或挂起的 Document、Worker 或 isolate 在暂停期间执行 timer，因此这类宿主的 deadline 唤醒只能服从其调度；

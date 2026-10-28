@@ -120,13 +120,12 @@ A Web `ReadableStream` is not an internal RPC channel. Do not compare a streamed
 
 ## Runtime comparison
 
-| Runtime question                                                      | go-like evidence                                                                                              | Comparison consequence                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Can shared code use Fetch and `AbortSignal`?                          | Root Web and selected transport/config providers use standard Web APIs or injected Fetch                      | Similar portability goals are possible, but types do not polyfill runtime behavior |
-| Can the same package bind a Node listener and Deno listener?          | Runtime-specific subpaths are explicit; `@go-like/web/node` and `@go-like/transport-http/node` are Node paths | Do not write “all packages run unchanged everywhere”                               |
-| Can custom PEM TLS, mTLS, ALPN, and HTTP/2 be portable through Fetch? | HTTP `/node` and gRPC `/native` own explicit native behavior; root Fetch paths do not expose all controls     | Compare capability subpaths and executed runtime matrices, not only package names  |
-| Does the application keep the framework router?                       | Hono, Elysia, and H3 examples pass native Fetch handlers                                                      | go-like is complementary to framework route ownership                              |
-| Does package version prove publication?                               | The root workspace is private; package manifests use `0.0.1`, which does not establish npm publication        | No npm availability or ecosystem maturity claim                                    |
+| Runtime question                                                      | go-like evidence                                                                                          | Comparison consequence                                                             |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Can shared code use Fetch and `AbortSignal`?                          | Root Web and selected transport/config providers use standard Web APIs or injected Fetch                  | Similar portability goals are possible, but types do not polyfill runtime behavior |
+| Can custom PEM TLS, mTLS, ALPN, and HTTP/2 be portable through Fetch? | HTTP `/node` and gRPC `/native` own explicit native behavior; root Fetch paths do not expose all controls | Compare capability subpaths and executed runtime matrices, not only package names  |
+| Does the application keep the framework router?                       | Hono, Elysia, and H3 examples pass native Fetch handlers                                                  | go-like is complementary to framework route ownership                              |
+| Does package version prove publication?                               | The root workspace is private; package manifests use `0.0.1`, which does not establish npm publication    | No npm availability or ecosystem maturity claim                                    |
 
 The current repository contains direct source examples for Hono, Elysia, H3, and vanilla Fetch. It does not contain a current NestJS or Fastify bridge or compatibility suite. Those are migration audiences, not supported direct integrations.
 
@@ -206,4 +205,4 @@ The research record also stores these pinned external comparison inputs:
 
 The URLs are comparison references, not a claim that this documentation phase fetched or revalidated every upstream page. Recheck release tags or commits before changing a version-sensitive comparison statement.
 
-The Deno 2.9.8 managed gRPC slow-consumer drain compatibility path is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.
+Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.

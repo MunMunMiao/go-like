@@ -9,7 +9,7 @@ import type { Http2Session } from "node:http2"
 import { newOrderServiceClient } from "../../.artifacts/gen/order/v1/order_like.js"
 
 interface RuntimeIdentity {
-  readonly runtime: "bun" | "deno" | "node"
+  readonly runtime: "bun" | "node"
   readonly version: string
   readonly args: readonly string[]
 }
@@ -30,10 +30,6 @@ const ExpectedResult = Object.freeze({
 function identity(): RuntimeIdentity {
   const runtimes = globalThis as typeof globalThis & {
     readonly Bun?: { readonly argv: readonly string[]; readonly version: string }
-    readonly Deno?: {
-      readonly args: readonly string[]
-      readonly version: { readonly deno: string }
-    }
     readonly process?: {
       readonly argv: readonly string[]
       readonly versions: { readonly node: string }
@@ -41,9 +37,6 @@ function identity(): RuntimeIdentity {
   }
   if (runtimes.Bun !== undefined) {
     return { runtime: "bun", version: runtimes.Bun.version, args: runtimes.Bun.argv.slice(2) }
-  }
-  if (runtimes.Deno !== undefined) {
-    return { runtime: "deno", version: runtimes.Deno.version.deno, args: runtimes.Deno.args }
   }
   if (runtimes.process === undefined) throw new Error("upstream runtime identity is unavailable")
   return {

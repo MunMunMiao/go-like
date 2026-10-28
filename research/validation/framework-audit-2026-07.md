@@ -50,7 +50,7 @@ Kratos 官方 examples 已迁移到独立仓库；其当前 HEAD 为
 调查分别检查 Transport/Client、Context/Core/Croner 和 Registry/examples/Docker，以源码与独立复现区分有意的语言适配、实现缺陷和测试环境问题。
 
 1. 将上述精确提交 shallow checkout 到 `/tmp`，逐段核对实现和测试，而不是只阅读 README。
-2. 使用本机 Go `1.26.5`、Bun `1.3.14`、Node.js、Deno 和真实 Croner `10.0.1` 编写最小复现。
+2. 使用本机 Go `1.26.5`、Bun `1.3.14`、Node.js 和真实 Croner `10.0.1` 编写最小复现。
 3. HTTP redirect 使用两个真实本地监听端点；Registry 行为使用真实 etcd `3.7.1` Docker。
 4. 对上游运行定向 Go tests；遇到上游自身的环境或交互式测试限制时单独记录，不把失败伪装成通过。
 5. 对 go-like 先运行现有测试，再运行当前测试未覆盖的独立复现，用于证明门禁盲区。

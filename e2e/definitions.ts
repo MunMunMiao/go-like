@@ -1,7 +1,7 @@
 export type E2eScope = "suites" | "providers" | "runtimes" | "examples" | "published"
 export type E2eScopeSelection = E2eScope | "all"
 export type SuiteTag = "registered" | "provider" | "runtime" | "example" | "published"
-export type RequiredTool = "bun" | "node" | "deno" | "typescript" | "openssl" | "docker"
+export type RequiredTool = "bun" | "node" | "typescript" | "openssl" | "docker"
 export type DockerOwnership = "none" | "suite" | "children-with-invocation-backstop"
 
 export interface SuiteDefinition {
@@ -208,28 +208,28 @@ const Definitions: readonly SuiteDefinition[] = Object.freeze([
     300_000
   ),
   runtime("runtime-bullmq", "packages/bullmq", ["bun", "node"]),
-  runtime("runtime-config", "packages/config", ["bun", "node", "deno"]),
-  runtime("runtime-config-consul", "packages/config/consul", ["bun", "node", "deno"]),
-  runtime("runtime-context", "packages/context", ["bun", "node", "deno"]),
-  runtime("runtime-core", "packages/core", ["bun", "node", "deno"]),
-  runtime("runtime-croner", "packages/croner", ["bun", "node", "deno"]),
-  runtime("runtime-grpc-buf", "packages/transport/grpc-buf", ["bun", "node", "deno"]),
-  runtime("runtime-health", "packages/health", ["bun", "node", "deno"]),
-  runtime("runtime-metadata", "packages/metadata", ["bun", "node", "deno"]),
+  runtime("runtime-config", "packages/config", ["bun", "node"]),
+  runtime("runtime-config-consul", "packages/config/consul", ["bun", "node"]),
+  runtime("runtime-context", "packages/context", ["bun", "node"]),
+  runtime("runtime-core", "packages/core", ["bun", "node"]),
+  runtime("runtime-croner", "packages/croner", ["bun", "node"]),
+  runtime("runtime-grpc-buf", "packages/transport/grpc-buf", ["bun", "node"]),
+  runtime("runtime-health", "packages/health", ["bun", "node"]),
+  runtime("runtime-metadata", "packages/metadata", ["bun", "node"]),
   runtime("runtime-otel", "packages/otel", ["bun", "node"]),
   runtime("runtime-pino", "packages/pino", ["bun", "node"]),
   runtime("runtime-prometheus", "packages/prometheus", ["bun", "node"]),
-  runtime("runtime-registry-consul", "packages/registry/consul", ["bun", "node", "deno"]),
-  runtime("runtime-registry-etcd", "packages/registry/etcd", ["bun", "node", "deno"]),
-  runtime("runtime-registry-mdns", "packages/registry/mdns", ["bun", "node", "deno"]),
+  runtime("runtime-registry-consul", "packages/registry/consul", ["bun", "node"]),
+  runtime("runtime-registry-etcd", "packages/registry/etcd", ["bun", "node"]),
+  runtime("runtime-registry-mdns", "packages/registry/mdns", ["bun", "node"]),
   runtime("runtime-registry-zookeeper", "packages/registry/zookeeper", ["bun", "node"]),
-  runtime("runtime-resilience", "packages/resilience", ["bun", "node", "deno"]),
-  runtime("runtime-store-etcd", "packages/store/etcd", ["bun", "node", "deno"]),
-  runtime("runtime-struct", "packages/struct", ["bun", "node", "deno"]),
-  runtime("runtime-transport", "packages/transport", ["bun", "node", "deno"]),
-  runtime("runtime-transport-http", "packages/transport/http", ["bun", "node", "deno"]),
-  runtime("runtime-transport-memory", "packages/transport/memory", ["bun", "node", "deno"]),
-  runtime("runtime-web", "packages/web", ["bun", "node", "deno"]),
+  runtime("runtime-resilience", "packages/resilience", ["bun", "node"]),
+  runtime("runtime-store-etcd", "packages/store/etcd", ["bun", "node"]),
+  runtime("runtime-struct", "packages/struct", ["bun", "node"]),
+  runtime("runtime-transport", "packages/transport", ["bun", "node"]),
+  runtime("runtime-transport-http", "packages/transport/http", ["bun", "node"]),
+  runtime("runtime-transport-memory", "packages/transport/memory", ["bun", "node"]),
+  runtime("runtime-web", "packages/web", ["bun", "node"]),
   runtime("runtime-winston", "packages/winston", ["bun", "node"]),
   definition({
     id: "examples",
@@ -251,7 +251,7 @@ const Definitions: readonly SuiteDefinition[] = Object.freeze([
     cwd: ".",
     command: ["bun", "e2e/published.ts"],
     timeoutMs: PublishedTimeoutMs,
-    requiredTools: ["bun", "node", "deno", "typescript", "openssl"],
+    requiredTools: ["bun", "node", "typescript", "openssl"],
     requiresDocker: false,
     dockerOwnership: "none"
   })

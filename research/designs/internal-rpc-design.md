@@ -289,8 +289,8 @@ HTTP 与 gRPC 时，要用两个 App 名，例如 `payment` 与 `payment-grpc`�
 ### 7.1 传输单位
 
 内部 Transport 的传输单位从自定义 `Message { header, body }` 改为标准 Fetch `Request` / `Response`。
-Bun、Node.js、Deno 都支持构造任意 scheme 的 `Request`（已验证 `new Request("memory://payment/payment.v1/pay")`
-在三个运行时的 `url`、`method`、`body` 均正常），也都支持以 `ReadableStream` 为 body 的 `Response`。
+Bun、Node.js 都支持构造任意 scheme 的 `Request`（已验证 `new Request("memory://payment/payment.v1/pay")`
+在两个运行时的 `url`、`method`、`body` 均正常），也都支持以 `ReadableStream` 为 body 的 `Response`。
 因此路由、方法、状态码、内容类型与流式 body 全部由标准字段表达：
 
 | 信息                | 旧载体                                                                   | 新载体                                                    |
@@ -904,7 +904,6 @@ B. 固定前缀如 `/rpc/<service>/<endpoint>`；C. 前缀可配置，直连地�
 | `discovery:///` 与 `withDiscovery` 不配套、地址为空或重复 | —                                             | `withEndpoint` / `newClient` 立即报错                                                                        | 构造期                     |
 | 契约包 import 了实现代码                                  | —                                             | 示例模板的 `exports` 只导出 `./api`；另一个 App import 实现时类型检查失败                                    | 编译期、模板               |
 | 运行时依赖漏写进 `package.json`                           | Node 启动时找不到 `@go-like/transport-http`   | 示例的 e2e 用真实运行时启动，不只做类型检查；文档写明规则                                                    | 模板与 CI                  |
-| Deno 无法解析省略后缀的 import                            | 需要 `--sloppy-imports`                       | 文档给出三个运行时的实测启动命令                                                                             | 文档                       |
 | 原始 `call` 的 body 不读导致连接被占                      | —                                             | 文档与示例默认使用 typed 调用；原始 `call` 的注释写明调用方须读完或 cancel body                              | 文档                       |
 | 单条消息超过上限                                          | 两端上限不一致时只有笼统的协议错误            | `resource_exhausted` 错误写明实际大小、上限与超限的一方                                                      | 运行期错误信息             |
 | deadline 太短导致流中途结束                               | 下游看到 `Canceled` 而不是 `DeadlineExceeded` | 调用方收到 `DeadlineExceeded`；文档说明下游看到的取消原因可能不同                                            | 运行期、文档               |

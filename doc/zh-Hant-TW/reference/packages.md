@@ -12,4 +12,4 @@ Registry provider 的完整名稱是 `@go-like/registry-mdns`、`@go-like/regist
 
 `@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 的 Fetch 入口支援 Connect/gRPC-Web unary 與 server-streaming；`/native` 提供標準 gRPC 的四種呼叫形態，包含 client-streaming 與 bidi。這是獨立於內部 Fetch/SSE 路徑。
 
-Deno 2.9.8 的託管 gRPC 已通過[慢速消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 與 Bun 1.4.2 Fetch 的歷史[取消與停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+Node 26.12.1 與 Bun 1.4.4 的託管 gRPC 已通過[慢速消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 與 Bun 1.4.2 Fetch 的歷史[取消與停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。

@@ -8,7 +8,7 @@
 
 - 根 `package.json` 通过 `packageManager` 声明精确 Bun 版本；
 - Verify 与 Release workflow 固定 runner、Bun、Node 和 npm 版本；
-- E2E preflight 探测 Bun、Node、Deno、TypeScript 和 Docker 后，会在 Bun、Node 或 TypeScript 版本不匹配时阻止任何 consumer 启动；
+- E2E preflight 探测 Bun、Node、TypeScript 和 Docker 后，会在 Bun、Node 或 TypeScript 版本不匹配时阻止任何 consumer 启动；
 - soak preflight 会拒绝与固定值不同的 k6 版本；
 - canonical 文档、发布说明和部分 package README 把这些值写成 supported matrix、release lane 或 required check。
 
@@ -23,8 +23,8 @@
 ### 2.1 必须移除
 
 - `packageManager`、`engines`、`volta`、`devEngines` 或同类工具链版本资格声明；
-- CI 中固定 Bun、Node、Deno、npm 或 runner 版本的输入与名称；
-- 任何根据 Bun、Node、Deno、TypeScript、Docker 或 k6 版本号拒绝执行的分支；
+- CI 中固定 Bun、Node、npm 或 runner 版本的输入与名称；
+- 任何根据 Bun、Node、TypeScript、Docker 或 k6 版本号拒绝执行的分支；
 - public/canonical 文档中的 supported version matrix、required version、release version lane 和版本化 required-check 名称。
 
 ### 2.2 必须保留
@@ -38,7 +38,7 @@
 
 ### 2.3 版本观察不是限制
 
-一次 run record 可以写出实际 Bun、Node、Deno、TypeScript、Docker 或 k6 版本，因为证据必须描述真实环境。该值只能回答“这次在哪个环境运行”，不能回答“其他版本是否允许运行”。
+一次 run record 可以写出实际 Bun、Node、TypeScript、Docker 或 k6 版本，因为证据必须描述真实环境。该值只能回答“这次在哪个环境运行”，不能回答“其他版本是否允许运行”。
 
 ## 3. 方案选择
 

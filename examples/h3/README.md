@@ -1,7 +1,7 @@
 # H3 Fetch 示例
 
-本示例与 `h3-node` E2E 使用 example manifest 固定的 H3 `2.0.1-rc.29`。这是私有示例的兼容性测试依赖，
-不进入 `packages/**` 的生产依赖基线；该 pin 不代表 npm 当前 `latest`。
+本示例与 `h3-node` E2E 使用 example manifest 固定的 H3 `2.0.8`。这是私有示例的兼容性测试依赖，
+不进入 `packages/**` 的生产依赖基线。
 
 示例使用 H3 2.x 的 `new H3()` 注册路由，并把原生 `app.fetch` 直接交给 go-like 的受管 Node 生命周期宿主。
 H3 保持路由和请求处理所有权；go-like 不提供框架专用桥接包。

@@ -75,13 +75,13 @@ stream 之后漂移，会跳过错配 flush、清理原 destination 并以失败
 该包不导出 `PinoLogger`、`PinoDestination`，也不复制日志方法、stream 写入方法或 EventEmitter API；包内只保留
 运行时校验和确定性单元测试所需的最小生命周期 seam，它不是 package root API。
 `sonic-boom` 由 `pino` 自己声明和解析；本包不直接依赖、不声明 peer，也不 import 或校验其原型品牌。
-Pino `10.3.1` 当前声明 `sonic-boom ^4.0.1`，消费应用可以独立使用 SonicBoom `5.x`，npm 会为 Pino 保留其
+Pino `10.4.0` 当前声明 `sonic-boom ^4.0.1`，消费应用可以独立使用 SonicBoom `5.x`，npm 会为 Pino 保留其
 受支持的 `4.x` 实现，不需要 override。运行时边界是 Pino destination 的生命周期结构：
 `newPinoServer` 同步构造时捕获第一次观察到的 `logger.flush` 与 destination `end`/`destroy`，之后只接受相同
 函数引用。构造前已经存在的结构化包装会成为基线；本包不再承诺 implementation package provenance 或精确
 SonicBoom 版本。
 由于 Pino、其 destination 实现与 ThreadStream 的公开声明引用 Node 类型，该包把固定版本的 `@types/node` 声明为正式
-依赖，供仅安装真实发布 tarball 的 TypeScript 消费者解析 Node 声明。当前 manifest 固定 `26.4.0`。
+依赖，供仅安装真实发布 tarball 的 TypeScript 消费者解析 Node 声明。当前 manifest 固定 `26.6.5`。
 ThreadStream `4.2.0` 仍引用 Node 26 类型中已删除的旧别名 `TransferListItem`；它在 Node 25 声明中精确等价于仍存在的
 `Transferable`。本包随声明输出一个仅包含 `TransferListItem = Transferable` 的兼容 module augmentation，
 不改变运行时代码或 Pino API；对应的[上游问题](https://github.com/pinojs/thread-stream/issues/228)修复发布后
@@ -114,7 +114,7 @@ ThreadStream `4.2.0` 仍引用 Node 26 类型中已删除的旧别名 `TransferL
   `pinoDrainTimeout(ms)` 只配置这一真实 Pino drain 边界；App 的整体停止等待由 Core `stopTimeout(ms)` 配置。
 - adapter 不打开路径。路径错误由应用调用 Pino 官方 constructor 时原样产生，不会被 go-like 改写。
 
-Pino 版本固定为当前验证的 `10.3.1`。运行时 E2E 会创建官方异步 destination，写入结构化日志，并在
+Pino 版本固定为当前验证的 `10.4.0`。运行时 E2E 会创建官方异步 destination，写入结构化日志，并在
 Server stop 后读取最终文件，证明 flush/end/close 的实际顺序。
 
 ## 验证

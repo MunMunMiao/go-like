@@ -1,6 +1,6 @@
 # go-like
 
-go-like is a set of small, explicit TypeScript building blocks for backend services that run on Bun, Node.js, and Deno. It gives an application contracts for Context cancellation, application and resource lifecycle, standard Fetch handlers, internal unary service calls, generated Protobuf RPC over Connect/gRPC-Web and managed standard gRPC, discovery and selection, configuration, stores, caches, brokers, health, resilience, and optional logging and telemetry adapters.
+go-like is a set of small, explicit TypeScript building blocks for backend services that run on Bun and Node.js. It gives an application contracts for Context cancellation, application and resource lifecycle, standard Fetch handlers, internal unary service calls, generated Protobuf RPC over Connect/gRPC-Web and managed standard gRPC, discovery and selection, configuration, stores, caches, brokers, health, resilience, and optional logging and telemetry adapters.
 
 go-like is deliberately complementary to an application framework. Your framework still owns routes, middleware, request policy, Web Streams, WebSocket upgrades, dependency composition, and business behavior. Your provider still owns its native connection, acknowledgement model, lease, retry, or protocol. go-like supplies narrow contracts and lifecycle ownership where those boundaries are useful.
 
@@ -60,7 +60,7 @@ Internal unary call
     -> JSON body or SSE ServerStream
 ```
 
-Generated RPC is a separate optional path: project-local `@go-like/protoc-gen-like` uses upstream Protobuf-ES descriptors/codecs to generate ctx-first `registerXHandler(server, handler)` and `newXClient(client)` glue. `@go-like/transport-grpc-buf` adapts upstream Connect and gRPC-Web handlers to a standard `Request`/`Response` Fetch handler, while its `/native` subpath owns a managed standard-gRPC Client and Server. These packages are not Transport SPI providers. Portable Fetch evidence covers unary and server-streaming only; `/native` covers all four cardinalities in the tested Node 26.12.1, Bun 1.4.4, and Deno 2.9.8 physical-package matrix.
+Generated RPC is a separate optional path: project-local `@go-like/protoc-gen-like` uses upstream Protobuf-ES descriptors/codecs to generate ctx-first `registerXHandler(server, handler)` and `newXClient(client)` glue. `@go-like/transport-grpc-buf` adapts upstream Connect and gRPC-Web handlers to a standard `Request`/`Response` Fetch handler, while its `/native` subpath owns a managed standard-gRPC Client and Server. These packages are not Transport SPI providers. Portable Fetch evidence covers unary and server-streaming only; `/native` covers all four cardinalities in the tested Node 26.12.1 and Bun 1.4.4 physical-package matrix.
 
 ## What go-like intentionally does not own
 
@@ -80,7 +80,7 @@ Public Web streaming remains standard Fetch `Request`/`Response` and Web Streams
 
 ## Public inventory
 
-The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **28 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
+The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **27 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
 
 Use the [package reference](/reference/packages) to choose a contract or provider, and the [provider reference](/reference/providers) to compare backend and runtime semantics. The [claims ledger](/reference/claims) records the evidence level behind public wording.
 
@@ -102,4 +102,4 @@ That report did **not** establish `build`, `doc:build`, Docker provider E2E, cro
 - [Comparison](/guide/comparison) and [Migration](/guide/migration): compare ownership with third-party frameworks and adopt go-like incrementally.
 - [Packages](/reference/packages), [Providers](/reference/providers), [Terminology](/reference/terminology), and [Verification](/reference/verification): use the reference track when the API or evidence boundary matters.
 
-The Deno 2.9.8 managed gRPC slow-consumer drain compatibility path is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.
+Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.

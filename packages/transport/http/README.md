@@ -121,7 +121,7 @@ registerCatalogServiceHandler(rpc, catalogService)
 HTTP 与 `@go-like/transport-grpc-buf/native` 共享 `newClient(...) -> newXClient(client)`、
 `newServer(...) -> registerXHandler(server, handler)` 的装配顺序，但保持各自的 wire Client 与 registrar ABI。
 
-根入口 `newHTTPTransport(...)` 使用标准 Fetch 完成 dial，适用于 Bun、Node 与 Deno。Node 子路径同时提供
+根入口 `newHTTPTransport(...)` 使用标准 Fetch 完成 dial，适用于 Bun 与 Node。Node 子路径同时提供
 真实 listener 与原生 HTTPS client：按 ALPN 优先使用 HTTP/2、回退 HTTP/1.1，并支持 CA 校验和 mTLS
 客户端证书；证书验证不可关闭。`maxMessageBytes(...)` 是请求与响应的边界限制，`executor(...)` 仅用于
 注入 portable Fetch 实现，两者都是 construction option。portable client 的连接复用由 Fetch runtime

@@ -49,7 +49,7 @@ Count check: 6 + 6 + 5 + 6 + 9 + 5 + 2 + 4 + 2 = 45.
 | Health                      | `@go-like/health` and `@go-like/web/health` | `newProbeRegistry`, `createHealthHandler`                     |
 | Retry/circuit/rate limit    | `@go-like/resilience`                       | `retry`, `newCircuitBreaker`, `newTokenBucketLimiter`         |
 
-## All 28 public source subpaths
+## All 27 public source subpaths
 
 |   # | Public entrypoint                    | Main exports                                                                         |
 | --: | ------------------------------------ | ------------------------------------------------------------------------------------ |
@@ -80,31 +80,29 @@ Count check: 6 + 6 + 5 + 6 + 9 + 5 + 2 + 4 + 2 = 45.
 |  25 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                           |
 |  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` |
 |  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             |
-|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           |
 
 Generated `dist/package.json` files add a metadata-only `./package.json` export. That generated export is not a package and is not counted above.
 
 ## Runtime subpaths and stale aliases
 
-Runtime selection is explicit in package names. Current Node-oriented subpaths include:
+Runtime selection is explicit in package names. Current runtime-specific subpaths include:
 
 - `@go-like/config/node`;
 - `@go-like/core/node`;
 - `@go-like/registry-mdns/node`;
 - `@go-like/store-file/node`;
 - `@go-like/transport-http/node`;
-- `@go-like/web/node`.
-- `@go-like/web/bun`;
-- `@go-like/web/deno`.
+- `@go-like/web/node`;
+- `@go-like/web/bun`.
 
 `@go-like/transport-grpc-buf/native` is capability-specific rather than runtime-named: Node is supported by upstream
-Connect-ES, while Bun 1.4.4 and Deno 2.9.8 are tested LikeGo compatibility targets using the same public API.
-The full physical-package matrix also passes the slow-consumer drain regression with the managed compatibility path; see the [native gRPC drain status](/reference/claims#native-grpc-drain-status) for its scope.
+Connect-ES, while Bun 1.4.4 is a tested LikeGo compatibility target using the same public API.
+The full physical-package matrix also passes the slow-consumer drain regression on Node 26.12.1 and Bun 1.4.4; see the [native gRPC drain status](/reference/claims#native-grpc-drain-status) for its scope.
 
 The package manifests do not export `@go-like/otel/testing` or `@go-like/web/node/testing`; neither is a public entrypoint for application documentation.
 
 ## What is not in this catalog
 
-This catalog includes generated ctx-first Protobuf RPC glue, a portable Connect/gRPC-Web Fetch bridge, and managed standard-gRPC owners at `/native`. Portable Fetch is limited to unary/server-streaming; managed standard gRPC covers all four cardinalities in the tested Node 26.12.1, Bun 1.4.4, and Deno 2.9.8 physical-package matrix. It does not claim browser standard gRPC, official health/reflection, validation, canonical error-details mapping, a Google gRPC runtime, Buf online services, or future runtime-version compatibility. It also does not claim Event Store/history/replay, generic auth, ORM, global DI, or cluster orchestration. Standard Web streaming and third-party provider features may exist outside go-like's internal contract; see [Streaming](/guide/streaming) and [Comparison](/guide/comparison).
+This catalog includes generated ctx-first Protobuf RPC glue, a portable Connect/gRPC-Web Fetch bridge, and managed standard-gRPC owners at `/native`. Portable Fetch is limited to unary/server-streaming; managed standard gRPC covers all four cardinalities in the tested Node 26.12.1 and Bun 1.4.4 physical-package matrix. It does not claim browser standard gRPC, official health/reflection, validation, canonical error-details mapping, a Google gRPC runtime, Buf online services, or future runtime-version compatibility. It also does not claim Event Store/history/replay, generic auth, ORM, global DI, or cluster orchestration. Standard Web streaming and third-party provider features may exist outside go-like's internal contract; see [Streaming](/guide/streaming) and [Comparison](/guide/comparison).
 
-The Deno 2.9.8 managed gRPC slow-consumer drain compatibility path is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.
+Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.

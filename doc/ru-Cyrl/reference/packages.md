@@ -12,4 +12,4 @@
 
 `@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
 
-Управляемый gRPC с обработкой совместимости в Deno 2.9.8 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.
+Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.

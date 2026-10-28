@@ -95,17 +95,15 @@ unary/client-streaming 返回 `Promise`，server-streaming/bidi 返回 `AsyncIte
 
 `@go-like/transport-grpc-buf` 根入口的 portable Fetch evidence 只覆盖 Connect/gRPC-Web unary 与
 server-streaming，不据四种 generated cardinality 宣称 Fetch request-streaming 或 bidi。托管的标准 gRPC
-client/server 位于 `@go-like/transport-grpc-buf/native`，四种 cardinality 已在 Node 26.7.0、Bun 1.4.0、
-Deno 2.9.5 的物理发布包测试中通过。Deno-only 环境没有 Node 时应在 Node-enabled CI 生成并消费提交或交付的
-产物；当前不承诺第二套 launcher。
+client/server 位于 `@go-like/transport-grpc-buf/native`，四种 cardinality 已在 Node 26.7.0、Bun 1.4.0
+的物理发布包测试中通过。
 
-上述四种调用的基础互操作通过不代表全部生命周期场景通过。当前还存在 Deno native 慢消费与停止并存时的提前断流、
-Bun Fetch 静默响应流的取消传播，以及未修补的 Connect 2.1.2 取消后 deadline timer 滞留；具体版本、证据范围和
+上述四种调用的基础互操作通过不代表全部生命周期场景通过。Bun Fetch 静默响应流的取消传播，
+以及 Connect 2.1.2 取消后 deadline timer 滞留的历史限制仍未验证已修复；具体版本、证据范围和
 调用方取消契约见 [runtime 文档](../transport/grpc-buf/README.md)。生成器不为这些边界添加重试或强制 drain。
 
 仓库 source 使用 Bundler 模块解析，不能用 source-linked 执行结果代替发布包兼容性检查。外部消费者安装构建后的
 包，并在项目脚本中调用本地 `buf` / `protoc-gen-like`；生成的 `.js` 相对 import 由 TypeScript 编译后的文件满足。
-对 Deno 消费者也先生成、编译，再运行产物，不需要手改生成代码的 import。
 
 当前范围不包含 official health/reflection、validation、canonical error-details mapping、Google gRPC runtime
 或 Buf online services，也没有 placeholder API。

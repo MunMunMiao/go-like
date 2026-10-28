@@ -42,7 +42,7 @@ This page is the editorial claim ledger for the English source. It keeps impleme
 | C21 | Broker/Event preserves native delivery and does not publish universal settlement methods                               | `source`         | `BrokerEvent.native`, `eventBroker`, and portable Broker SPI                                                                                            |
 | C22 | BullMQ, Croner, NATS, Pino, Winston, OTel, and Prometheus packages are adapters or wrappers                            | `source`         | Package source and public export surfaces retain native objects/providers                                                                               |
 | C23 | Public Web streaming is not internal bidi; internal server streams are SSE                                             | `source`         | README, Streaming guide, and current unary Client/Transport dispatcher                                                                                  |
-| C24 | Generated RPC uses exact ctx-first glue; portable Fetch covers two cardinalities and managed standard gRPC covers four | `runtime-pass`   | 2026-10-28 physical packages: Node 26.12.1, Bun 1.4.4, Deno 2.9.8; no browser standard-gRPC or future-version claim                                     |
+| C24 | Generated RPC uses exact ctx-first glue; portable Fetch covers two cardinalities and managed standard gRPC covers four | `runtime-pass`   | 2026-10-28 physical packages: Node 26.12.1 and Bun 1.4.4; no browser standard-gRPC or future-version claim                                              |
 | C25 | Hono, Elysia, H3, and vanilla Fetch examples pass native Fetch handlers into a host                                    | `declared`       | Current examples and their tests; the exact result depends on a command run                                                                             |
 | C26 | Selected verification lanes require their tools to execute but do not reject an environment by runtime or tool version | `source`         | `e2e/runtime-versions.ts`, `e2e/executor.ts`, and `doc/reference/verification.md`                                                                       |
 | C27 | The baseline audit reported typecheck, unit test, format check, and 66-entry import audit success                      | `unit-pass`      | Reported by the repository contract audit for candidate commit `9385dbf...`; this page does not claim that this documentation phase reran every command |
@@ -64,19 +64,17 @@ The same evidence explicitly leaves these items unestablished: `build`, `doc:bui
 
 The later Task 8 RPC report separately establishes a physically staged published-consumer matrix for
 `@go-like/transport-grpc-buf`: portable Fetch unary/server-streaming and managed standard-gRPC four-cardinality calls at
-Node 26.7.0, Bun 1.4.0, and Deno 2.9.5. That scoped result does not close the unrelated baseline gaps above.
+Node 26.7.0 and Bun 1.4.0. That scoped result does not close the unrelated baseline gaps above.
 
 ## Native gRPC drain status
 
-The expanded native regression runs an admitted unary request alongside a slowly consumed server stream while stopping the server. Earlier runs passed on Node 26.9.0 and Bun 1.4.2 but failed on Deno 2.9.5 and 2.9.7 with `Premature close`. The failure also reproduced using only `node:http2`, without LikeGo or Connect.
+The expanded native regression runs an admitted unary request alongside a slowly consumed server stream while stopping the server. Earlier runs passed on Node 26.9.0 and Bun 1.4.2.
 
-The managed Client now drains existing buffered response bytes only when it has received response `END_STREAM`, the stream's `rstCode` is zero, and the native iterator throws `ERR_STREAM_PREMATURE_CLOSE`. Other errors still fail, and normal gRPC envelope and status validation remains in place. This compatibility path does not replay streams or use fixed sleeps, and does not claim to fix the upstream runtime.
-
-On 2026-10-28, the full physical published-consumer matrix passed with Node 26.12.1, Bun 1.4.4, and Deno 2.9.8. It keeps the slow-consumer drain regression mandatory and also covers native four-cardinality calls, interoperability, mTLS, and browser cases. This establishes the tested managed drain behavior, not every production shutdown or cancellation scenario.
+On 2026-10-28, the full physical published-consumer matrix passed with Node 26.12.1 and Bun 1.4.4. It keeps the slow-consumer drain regression mandatory and also covers native four-cardinality calls, interoperability, mTLS, and browser cases. This establishes the tested managed drain behavior, not every production shutdown or cancellation scenario.
 
 ## Stream cancellation limits
 
-The following upstream/runtime limitations are historical observations whose fixes were not established by the latest matrix. The verified [Deno managed drain compatibility path](#native-grpc-drain-status) is a separate result and does not close these cancellation gaps.
+The following upstream/runtime limitations are historical observations whose fixes were not established by the latest matrix. The verified [native gRPC drain behavior](#native-grpc-drain-status) is a separate result and does not close these cancellation gaps.
 
 - **Connect 2.1.2:** after a client reads one response message, pauses iteration, and externally cancels and returns the iterator, the original deadline timer can remain active until its deadline. This was reproduced using only official Connect and `node:http2` under Node and Bun, without go-like. Handler completion and closing the managed client/server do not establish timer cleanup. The current upstream `setupSignal()` releases the deadline in `abort()` and `done()`, but not when its linked controller is aborted externally. No upstream patch or dependency upgrade is claimed here.
 - **Bun 1.4.2 Fetch:** when a server sends the first chunk and then remains silent, canceling the reader and aborting the request did not produce server response/socket closure during the bounded observation. This also reproduced with plain `node:http` plus global Fetch, without go-like or Connect, against both Node and Bun servers; Node clients closed both. This limits long-lived Fetch stream cancellation claims, including portable Connect/gRPC-Web. It does not establish a managed native gRPC defect.
@@ -96,7 +94,7 @@ Before publishing a release-oriented statement, verify the claim at the level it
 - **API:** inspect the current manifest export and source entrypoint;
 - **type behavior:** run the focused package typecheck or public-type test;
 - **unit behavior:** run the relevant package or root unit command and record exit status;
-- **runtime behavior:** run the target Bun, Node, or Deno fixture and record the observed environment;
+- **runtime behavior:** run the target Bun or Node fixture and record the observed environment;
 - **provider behavior:** run the Docker or real-service E2E scope and record cleanup;
 - **published consumer behavior:** pack and install the physical tarball through the published scope;
 - **documentation behavior:** run `bun run doc:build` and check generated routes;
@@ -119,7 +117,7 @@ Prefer:
 Avoid:
 
 - “production-ready” without a defined release gate and evidence;
-- “runs unchanged in Bun, Node, and Deno” when only a portable source path exists;
+- “runs unchanged in Bun and Node” when only a portable source path exists;
 - “exactly once,” “safe to retry,” or “graceful shutdown complete” without the corresponding business or native terminal proof;
 - “supports streaming” when the only evidence is a Web `ReadableStream`;
 - “published” because a manifest has version `0.0.1`;

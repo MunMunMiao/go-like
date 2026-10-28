@@ -33,7 +33,7 @@
     "@go-like/struct": "0.0.1",
     "@go-like/transport": "0.0.1",
     "@go-like/web": "0.0.1",
-    "@types/node": "26.4.0",
+    "@types/node": "26.6.5",
     "winston": "3.19.0"
   },
   "license": "MIT"

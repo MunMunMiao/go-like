@@ -12,4 +12,4 @@
 
 يوفّر `@go-like/protoc-gen-like` شيفرة Protobuf RPC مولّدة تضع `Context` أولاً، باستخدام Protobuf-ES. يوفّر `@go-like/transport-grpc-buf` عبر Fetch استدعاءات Connect/gRPC-Web الأحادية وتدفق استجابات الخادم؛ ويضيف `/native` معيار gRPC بالأنماط الأربعة، بما فيها تدفق طلبات العميل والتدفق ثنائي الاتجاه. هذا مسار مستقل عن Transport SPI الأحادي.
 
-اجتاز مسار توافق gRPC المُدار في Deno 2.9.8 [اختبار تصريف التدفق مع مستهلك بطيء](/reference/claims#native-grpc-drain-status). لم يُتحقق من إصلاح [قيود الإلغاء والإيقاف المسجلة سابقاً](/reference/claims#stream-cancellation-limits) في Connect 2.1.2 وBun 1.4.2 Fetch.
+اجتاز gRPC المُدار في Node 26.12.1 وBun 1.4.4 [اختبار تصريف التدفق مع مستهلك بطيء](/reference/claims#native-grpc-drain-status). لم يُتحقق من إصلاح [قيود الإلغاء والإيقاف المسجلة سابقاً](/reference/claims#stream-cancellation-limits) في Connect 2.1.2 وBun 1.4.2 Fetch.

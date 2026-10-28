@@ -50,7 +50,7 @@ function isTimeoutResource(resource: string): boolean {
 const baselineTimeouts = process.getActiveResourcesInfo().filter(isTimeoutResource).length
 const require = createRequire(import.meta.url)
 const cronerPackage = require("croner/package.json") as { readonly version: string }
-assert.equal(cronerPackage.version, "10.0.1")
+assert.equal(cronerPackage.version, "11.0.0")
 const unhandled: unknown[] = []
 const scenarios: string[] = []
 let acceptedServers = 0

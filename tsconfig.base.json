@@ -67,7 +67,6 @@
       "@go-like/transport-memory": ["./packages/transport/memory/src/index.ts"],
       "@go-like/web": ["./packages/web/src/index.ts"],
       "@go-like/web/bun": ["./packages/web/src/bun.ts"],
-      "@go-like/web/deno": ["./packages/web/src/deno.ts"],
       "@go-like/web/health": ["./packages/web/src/health.ts"],
       "@go-like/web/node": ["./packages/web/src/node.ts"],
       "@go-like/winston": ["./packages/winston/src/index.ts"]

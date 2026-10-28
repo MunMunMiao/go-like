@@ -96,6 +96,6 @@ credential 仅进入私有客户端快照，不进入公共 Registry 契约、�
 ## 运行时边界
 
 - 支持 Node.js 与 Bun 后端。
-- 不支持浏览器和 Deno。
+- 不支持浏览器。
 - 当前真实 E2E 使用官方 `zookeeper:3.9.5` 镜像，覆盖注册、查询、更新、
   replacement watch、注销、SIGKILL 后 ephemeral 过期以及资源清理回读。

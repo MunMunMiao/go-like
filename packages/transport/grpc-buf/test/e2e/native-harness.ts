@@ -20,7 +20,7 @@ import {
 import { runManagedFaultTests } from "./native-faults.js"
 
 export interface NativeRuntimeIdentity {
-  readonly runtime: "bun" | "deno" | "node"
+  readonly runtime: "bun" | "node"
   readonly version: string
 }
 

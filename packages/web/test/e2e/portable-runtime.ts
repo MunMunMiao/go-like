@@ -3,7 +3,7 @@ import { newProbeRegistry } from "@go-like/health"
 import * as web from "@go-like/web"
 import { createHealthHandler } from "@go-like/web/health"
 
-const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"
+const runtime = "Bun" in globalThis ? "bun" : "node"
 const runtimeExports = Object.keys(web)
 if (JSON.stringify(runtimeExports) !== JSON.stringify(["contextHandler"])) {
   throw new Error(`unexpected @go-like/web exports: ${runtimeExports.join(",")}`)

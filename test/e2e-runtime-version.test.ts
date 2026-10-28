@@ -68,7 +68,6 @@ function probeVersions(overrides: Partial<Record<string, string>> = {}): {
     runner: async (_root: string, definition: CommandDefinition) => {
       const executable = definition.command[0] ?? ""
       if (executable === "node") return result(overrides.node ?? "node-observed")
-      if (executable === "deno") return result(overrides.deno ?? "deno-observed")
       if (executable === "openssl") return result(overrides.openssl ?? "openssl-observed")
       if (executable === "docker") return result(overrides.docker ?? "docker-observed")
       return result(overrides.typescript ?? "typescript-observed")
@@ -111,10 +110,9 @@ async function expectPathObservationAccepted(
   tool: Exclude<RequiredTool, "bun" | "openssl" | "docker">
 ): Promise<void> {
   const expectedPreflight = {
-    node: "[e2e] PREFLIGHT bun=n/a node=future node channel deno=n/a typescript=n/a openssl=n/a docker=n/a",
-    deno: "[e2e] PREFLIGHT bun=n/a node=n/a deno=custom deno build typescript=n/a openssl=n/a docker=n/a",
+    node: "[e2e] PREFLIGHT bun=n/a node=future node channel typescript=n/a openssl=n/a docker=n/a",
     typescript:
-      "[e2e] PREFLIGHT bun=n/a node=n/a deno=n/a typescript=typescript nightly openssl=n/a docker=n/a"
+      "[e2e] PREFLIGHT bun=n/a node=n/a typescript=typescript nightly openssl=n/a docker=n/a"
   } as const
   const directory = await createTempDirectory(`go-like-${tool}-version-`)
   const marker = join(directory.path, "consumer-started")
@@ -122,10 +120,6 @@ async function expectPathObservationAccepted(
     await writeVersionShim(
       join(directory.path, "node"),
       `if [ "$1" = "--version" ]; then printf '%s\\n' 'future node channel'; else printf '%s\\n' 'typescript nightly'; fi`
-    )
-    await writeVersionShim(
-      join(directory.path, "deno"),
-      `printf '%s\\n' 'custom deno build'; printf '%s\\n' 'extra detail'`
     )
     const child = Bun.spawn(
       [
@@ -195,24 +189,22 @@ test("only the published suite requires the observed OpenSSL prerequisite", () =
   expect(findSuiteDefinition("published")?.requiredTools).toEqual([
     "bun",
     "node",
-    "deno",
     "typescript",
     "openssl"
   ])
-  expect(findSuiteDefinition("runtime-grpc-buf")?.requiredTools).toEqual(["bun", "node", "deno"])
+  expect(findSuiteDefinition("runtime-grpc-buf")?.requiredTools).toEqual(["bun", "node"])
 })
 
 test("successful tool probes record arbitrary output without an eligibility gate", async () => {
   const observations = await probeRequiredRuntimeVersions(
     "/repo",
-    ["bun", "node", "deno", "typescript", "openssl", "docker"],
+    ["bun", "node", "typescript", "openssl", "docker"],
     async (_root, definition) => {
       const executable = definition.command[0] ?? ""
       if (executable === "node") return result("future-node channel")
-      if (executable === "deno") return result("custom deno build\nextra detail")
       if (executable === "openssl") return result("OpenSSL future-channel")
       if (executable === "docker") return result("")
-      return result("typescript nightly")
+      return result("typescript nightly\nextra detail")
     },
     { bunVersion: () => "bun-canary" }
   )
@@ -220,7 +212,6 @@ test("successful tool probes record arbitrary output without an eligibility gate
   expect(observations).toEqual([
     { tool: "bun", actual: "bun-canary" },
     { tool: "node", actual: "future-node channel" },
-    { tool: "deno", actual: "custom deno build" },
     { tool: "typescript", actual: "typescript nightly" },
     { tool: "openssl", actual: "OpenSSL future-channel" },
     { tool: "docker", actual: "unreported" }
@@ -230,7 +221,7 @@ test("successful tool probes record arbitrary output without an eligibility gate
 test("successful observations redact token-like output and bound the first line", async () => {
   const observations = await probeRequiredRuntimeVersions(
     "/repo",
-    ["node", "deno"],
+    ["node", "typescript"],
     async (_root, definition) =>
       result(definition.command[0] === "node" ? "token=probe-secret" : "x".repeat(1_001)),
     { bunVersion: () => "unused" }
@@ -238,7 +229,7 @@ test("successful observations redact token-like output and bound the first line"
 
   expect(observations).toEqual([
     { tool: "node", actual: "token=<redacted>" },
-    { tool: "deno", actual: "x".repeat(1_000) }
+    { tool: "typescript", actual: "x".repeat(1_000) }
   ])
 })
 
@@ -396,7 +387,7 @@ test("a nonzero required-tool probe prevents the selected consumer", async () =>
   expect(started).toBe(false)
 })
 
-test.each(["node", "deno", "typescript"] as const)(
+test.each(["node", "typescript"] as const)(
   "fake PATH %s observation allows the consumer to start",
   async (tool) => {
     await expectPathObservationAccepted(tool)

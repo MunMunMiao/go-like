@@ -303,14 +303,14 @@ async function validatedBook(ctx: Context, command: BookCommand): Promise<Appoin
 
 اختبر كل ما يأتي:
 
-| الاختبار               | النتيجة المتوقعة                        |
-| ---------------------- | --------------------------------------- |
-| valid typed request    | `allowed: true` وموعد محجوز             |
-| overlong request       | فشل السياسة قبل تغيير المستودع          |
-| invalid field type     | فشل فك الطلب typed                      |
+| الاختبار                | النتيجة المتوقعة                       |
+| ---------------------- | -------------------------------------- |
+| valid typed request    | `allowed: true` وموعد محجوز            |
+| overlong request       | فشل السياسة قبل تغيير المستودع         |
+| invalid field type     | فشل فك الطلب typed                     |
 | invalid response shape | فشل ترميز الاستجابة typed عند حد Server |
-| canceled Context       | تلاحظ السياسة والمستودع الإلغاء نفسه    |
-| client close           | تنظيف Client المقيم في Transport صريح   |
+| canceled Context       | تلاحظ السياسة والمستودع الإلغاء نفسه     |
+| client close           | تنظيف Client المقيم في Transport صريح  |
 
 يتحقق اختبار السياسة الحالي في المثال بالفعل من الرفض قبل تغيير المستودع، ومن النجاح عبر `Client -> Memory Transport -> Server`. أما الاختبار typed فهو امتداد مقترح.
 
@@ -444,16 +444,16 @@ await app.run()
 
 ## M5: خطة الاختبار والدليل
 
-| الطبقة     | الاختبار                                                    | هدف الدليل                                    |
+| الطبقة     | الاختبار                                                     | هدف الدليل                                    |
 | ---------- | ----------------------------------------------------------- | --------------------------------------------- |
 | Domain     | overlap وcancellation reuse وidempotency وconflicting ID    | سلوك `src/service.ts` ونتيجة اختبار الوحدة    |
-| Context    | لا يغيّر الحجز الملغى المستودع ولا يستدعي policy            | اختبار Context مركّز                          |
+| Context    | لا يغيّر الحجز الملغى المستودع ولا يستدعي policy               | اختبار Context مركّز                           |
 | Typed call | Struct decode/encode وpolicy rejection وresponse validation | حد `@go-like/client` و`@go-like/server`       |
 | Cache      | miss وhit وTTL وinvalidation وfailure fallback              | اختبارات `newMemoryCache()`                   |
 | Health     | empty liveness وempty readiness وfailing probe و405/404     | `newProbeRegistry()` و`createHealthHandler()` |
 | HTTP       | `POST` و`DELETE` وinvalid JSON وconflict status             | اختبار Fetch Handler القياسي                  |
-| Lifecycle  | قبول policy وWeb Server تحت App واحد؛ وإغلاق Client صراحةً  | سلوك Core App وServer النهائي                 |
-| Node E2E   | bind حقيقي وrequest وsignal وstop وتحرير المنفذ             | غلاف E2E للمثال والفحوص المتبقية              |
+| Lifecycle  | قبول policy وWeb Server تحت App واحد؛ وإغلاق Client صراحةً    | سلوك Core App وServer النهائي                 |
+| Node E2E   | bind حقيقي وrequest وsignal وstop وتحرير المنفذ             | غلاف E2E للمثال والفحوص المتبقية               |
 
 في مثال المستودع الحالي، الأوامر المركّزة هي:
 
@@ -473,13 +473,13 @@ bun run test:e2e:examples
 
 ## المراحل
 
-| المرحلة | الناتج القابل للتسليم                      | انتقل عندما...                                                        |
-| ------- | ------------------------------------------ | --------------------------------------------------------------------- |
-| M0      | مستودع المجال واختبارات القاعدة            | يكون سلوك التداخل والإلغاء حتمياً                                     |
+| المرحلة | الناتج القابل للتسليم                      | انتقل عندما...                                                     |
+| ------- | ------------------------------------------ | ------------------------------------------------------------------ |
+| M0      | مستودع المجال واختبارات القاعدة            | يكون سلوك التداخل والإلغاء حتمياً                                    |
 | M1      | Typed policy Endpoint فوق Memory Transport | يكون الاستدعاء Client/Server/Transport حقيقياً لا استدعاء دالة مباشرة |
-| M2      | إسقاط Cache مع إبطال                       | لا يستطيع فشل Cache استبدال المرجعية                                  |
-| M3      | `/livez` و`/readyz`                        | تفهم readiness الفارغة والفحوص الفاشلة                                |
-| M4      | App واحد وsignal وتنظيف Client صريح        | يملك كل مورد مقبول مالكاً واحداً                                      |
+| M2      | إسقاط Cache مع إبطال                       | لا يستطيع فشل Cache استبدال المرجعية                                |
+| M3      | `/livez` و`/readyz`                        | تفهم readiness الفارغة والفحوص الفاشلة                             |
+| M4      | App واحد وsignal وتنظيف Client صريح        | يملك كل مورد مقبول مالكاً واحداً                                     |
 | M5      | دليل Unit وNode E2E                        | تُسجّل النتائج مع الأمر وحالة الخروج                                  |
 
 لا تضف Registry أو Redis أو Vault أو broker حقيقياً أو authentication أو retries قبل وضوح هذه المراحل. فكل إضافة منها تدخل نموذج ملكية أو فشل جديداً ينبغي إدخاله عمداً.

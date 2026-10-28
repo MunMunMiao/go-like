@@ -1,5 +1,6 @@
 import { constants } from "node:fs"
 import { open, readdir, realpath } from "node:fs/promises"
+import { constants as osConstants } from "node:os"
 import { basename, dirname, join, resolve } from "node:path"
 import { setTimeout as sleepTimer } from "node:timers/promises"
 
@@ -467,6 +468,14 @@ function sameRootIdentity(observed: ProcessIdentity, capability: InvocationCapab
   )
 }
 
+function subprocessSignalName(signal: NodeJS.Signals | number | null): string | null {
+  if (signal === null || typeof signal === "string") return signal
+  for (const [name, number] of Object.entries(osConstants.signals)) {
+    if (number === signal) return name
+  }
+  return `SIG${signal}`
+}
+
 async function assertRootLive(
   capability: InvocationCapability,
   check: (value: InvocationCapability) => Promise<ProcessIdentity>
@@ -522,17 +531,18 @@ function defaultSpawn(argv: readonly string[], options: ExampleTaskSpawnOptions)
   return Object.freeze({
     stdout: child.stdout,
     stderr: child.stderr,
-    settled: child.exited.then((exitCode) =>
-      Object.freeze({
-        exitCode: child.signalCode === null ? exitCode : null,
-        signal: child.signalCode,
+    settled: child.exited.then((exitCode) => {
+      const signal = subprocessSignalName(child.signalCode)
+      return Object.freeze({
+        exitCode: signal === null ? exitCode : null,
+        signal,
         timedOut: false,
         aborted: false,
         abortReason: null,
         durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
         cleanupFailures: Object.freeze([])
       })
-    ),
+    }),
     kill(signal: "SIGTERM"): void {
       child.kill(signal)
     }

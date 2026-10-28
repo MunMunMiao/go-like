@@ -9,7 +9,7 @@ Cette page est organisée autour de la question que l'application cherche à ré
 - **Adaptateur de cycle de vie** désigne un wrapper `Server` autour d'une ressource native créée par l'application.
 - **Preuve** indique le type d'appui fourni par le dépôt : source/export, tests déclarés ou résultat d'une commande locale rapporté. Cela ne transforme pas une version de paquet en affirmation de publication npm ou de disponibilité en production.
 
-L'inventaire source actuel contient 45 manifests de paquets `@go-like/*` non privés et 28 sous-chemins source publics, tous en version `0.0.1` dans ce checkout. Les 44 workspaces `examples/*` sont des applications privées, pas des paquets publics.
+L'inventaire source actuel contient 45 manifests de paquets `@go-like/*` non privés et 27 sous-chemins source publics, tous en version `0.0.1` dans ce checkout. Les 44 workspaces `examples/*` sont des applications privées, pas des paquets publics.
 
 ## Choisir selon le besoin
 
@@ -49,7 +49,7 @@ L'inventaire source actuel contient 45 manifests de paquets `@go-like/*` non pri
 | `@go-like/transport`                 | SPI Transport et frontière Fetch Request/Response                            | `Transport`, `Client`, `Listener`, `defineService`, `ServerStream`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                          | Un wire concret si aucun fournisseur n'est choisi ; pas de promesse de full-duplex interne |
 | `@go-like/transport-memory`          | Transport unaire en processus                                                | `newMemoryTransport`                                                                                                                                                                                          | Comportement interprocessus, persistance, repli réseau, TLS                                |
 | `@go-like/transport-http`            | Transport HTTP interne adossé à Fetch                                        | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                             | Listener portable complet sans `HTTPHost` injecté ; contrôles TLS natifs Node              |
-| `@go-like/transport-http/node`       | Transport HTTP interne natif Node                                            | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                            | Listener Deno ou policy de sécurité automatique                                            |
+| `@go-like/transport-http/node`       | Transport HTTP interne natif Node                                            | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                            | Policy de sécurité automatique                                                             |
 | `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                                     | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                             | Code Context-first sur Protobuf-ES                                                         |
 | `@go-like/transport-grpc-buf/native` | gRPC standard avec quatre cardinalités via `/native`                         | `newClient`, `newServer`                                                                                                                                                                                      | Discovery, Selector, TLS/mTLS                                                              |
 | `@go-like/protoc-gen-like`           | Générateur Node au build                                                     | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                            | Protobuf-ES                                                                                |
@@ -81,7 +81,7 @@ Les fournisseurs Config externes utilisent un Fetch standard injecté. Les crede
 | `@go-like/registry-kubernetes` | Découverte EndpointSlice et enregistrement optionnel | `newKubernetesRegistry`                                                                                                                            | EndpointSlice Kubernetes, owner references, aucun TTL inventé                     |
 | `@go-like/registry-mdns`       | Découverte multicast locale                          | `newMDNSRegistry`                                                                                                                                  | Le fournisseur racine est portable par conception ; le host UDP est `/node`       |
 | `@go-like/registry-mdns/node`  | Capacité multicast UDP Node                          | `newNodeMDNSHost`                                                                                                                                  | Sous-chemin explicite du runtime Node                                             |
-| `@go-like/registry-zookeeper`  | Enregistrement et découverte éphémères ZooKeeper     | `newZookeeperRegistry`                                                                                                                             | Node.js et Bun documentés ; Deno explicitement non pris en charge                 |
+| `@go-like/registry-zookeeper`  | Enregistrement et découverte éphémères ZooKeeper     | `newZookeeperRegistry`                                                                                                                             | Node.js et Bun documentés                                                         |
 
 Registry représente la joignabilité, pas les données métier durables. Un fournisseur peut conserver le dernier snapshot pendant la reconstruction d'un watcher transitoire, mais un snapshot vide faisant autorité doit échouer par défaut.
 
@@ -128,7 +128,7 @@ Registry représente la joignabilité, pas les données métier durables. Un fou
 
 ## Inventaire complet des sous-chemins source publics
 
-Voici les 28 sous-chemins source explicites déclarés par les manifests de paquets actuels. Les paquets générés peuvent ajouter un export `./package.json` contenant uniquement des métadonnées ; ce n'est ni un paquet supplémentaire ni une API source.
+Voici les 27 sous-chemins source explicites déclarés par les manifests de paquets actuels. Les paquets générés peuvent ajouter un export `./package.json` contenant uniquement des métadonnées ; ce n'est ni un paquet supplémentaire ni une API source.
 
 |   # | Sous-chemin                          | Exports principaux                                                                   | Public visé                          |
 | --: | ------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------ |
@@ -159,21 +159,20 @@ Voici les 28 sous-chemins source explicites déclarés par les manifests de paqu
 |  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                                             | Auteurs d’applications               |
 |  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` | SSE server streams                   |
 |  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             | Web applications                     |
-|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           | Web applications                     |
 
 `@go-like/otel/testing` et `@go-like/web/node/testing` ne sont ni des mappings de chemins TypeScript ni des exports actuels des manifests de paquets. Ne les documentez pas comme entrypoints publics.
 
 ## Matrice de décision runtime
 
-| Entrée ou famille de fournisseurs                               | Source portable                                | Natif Bun/Node                                    | Affirmation Deno                               | Formulation de preuve                                                                       |
-| --------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Context, Core root, Health, Metadata, Resilience, Struct        | Oui                                            | Aucun import natif requis                         | Des lanes runtime sélectionnées sont déclarées | Contrat source ; vérifiez la matrice actuellement exécutée avant une formulation de release |
-| Web root et Web health                                          | Oui                                            | Host requis séparément                            | Frontière Handler standard                     | Le Handler est portable ; un Handler n'est pas un listener                                  |
-| Memory Transport, Memory Store, Memory Cache, Memory Broker     | Source locale au processus                     | Aucun service externe                             | Même sémantique locale au processus            | Ni distribué, ni durable, ni interprocessus                                                 |
-| HTTP root et fournisseurs Config/Registry/Store adossés à Fetch | Fetch injecté                                  | Le runtime choisit Fetch                          | Source étayée là où la lane du paquet existe   | Portable par source ou lane déclarée, pas de parité universelle                             |
-| Sous-chemins `/node`                                            | Non                                            | Spécifiques Node, avec exécution possible sur Bun | Aucun entrypoint Deno                          | Un import explicite modifie le graphe runtime                                               |
-| NATS, RabbitMQ, BullMQ, Redis, Pino, Winston, SDK natifs OTel   | Dépend du fournisseur                          | Fixtures Node/Bun ou preuve propre au paquet      | Ne pas déduire le support Deno                 | Lisez le README du fournisseur et le périmètre E2E                                          |
-| ZooKeeper                                                       | Pas de support Deno dans le README fournisseur | Node/Bun                                          | Explicitement non pris en charge               | Ne généralisez pas depuis la racine Registry                                                |
+| Entrée ou famille de fournisseurs                               | Source portable            | Natif Bun/Node                                    | Formulation de preuve                                                                       |
+| --------------------------------------------------------------- | -------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Context, Core root, Health, Metadata, Resilience, Struct        | Oui                        | Aucun import natif requis                         | Contrat source ; vérifiez la matrice actuellement exécutée avant une formulation de release |
+| Web root et Web health                                          | Oui                        | Host requis séparément                            | Le Handler est portable ; un Handler n'est pas un listener                                  |
+| Memory Transport, Memory Store, Memory Cache, Memory Broker     | Source locale au processus | Aucun service externe                             | Ni distribué, ni durable, ni interprocessus                                                 |
+| HTTP root et fournisseurs Config/Registry/Store adossés à Fetch | Fetch injecté              | Le runtime choisit Fetch                          | Portable par source ou lane déclarée, pas de parité universelle                             |
+| Sous-chemins `/node`                                            | Non                        | Spécifiques Node, avec exécution possible sur Bun | Un import explicite modifie le graphe runtime                                               |
+| NATS, RabbitMQ, BullMQ, Redis, Pino, Winston, SDK natifs OTel   | Dépend du fournisseur      | Fixtures Node/Bun ou preuve propre au paquet      | Lisez le README du fournisseur et le périmètre E2E                                          |
+| ZooKeeper                                                       | Non                        | Node/Bun                                          | Ne généralisez pas depuis la racine Registry                                                |
 
 ## Règles de sélection des fonctions
 
@@ -194,4 +193,4 @@ Voici les 28 sous-chemins source explicites déclarés par les manifests de paqu
 
 Cela n’inclut pas gRPC standard dans le navigateur, request-streaming/bidi via Fetch, health/reflection officiels, authentification générique, Event Store/replay, ORM ou orchestration de clusters.
 
-La compatibilité gRPC gérée sous Deno 2.9.8 a passé le [test de régression du drain avec consommateur lent](/reference/claims#native-grpc-drain-status). La correction des [limites historiques d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 et de Bun 1.4.2 Fetch reste non vérifiée.
+gRPC géré sous Node 26.12.1 et Bun 1.4.4 a passé le [test de régression du drain avec consommateur lent](/reference/claims#native-grpc-drain-status). La correction des [limites historiques d’annulation et d’arrêt](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 et de Bun 1.4.2 Fetch reste non vérifiée.

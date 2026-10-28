@@ -22,15 +22,15 @@
 
 ## 框架遷移矩陣
 
-| 現有系統 | 保留原生部分                                                          | 優先導入                                                                       | 目前的邊界                                                                                              |
-| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| NestJS   | Modules、controllers、decorators、DI、interceptors、pipes、adapter    | 在現有應用程式外加一層自訂的結構式 Server，或建立獨立的內部 Client/Server 邊界 | 目前 repository 沒有 go-like Nest bridge，也沒有自動 DI 整合                                            |
-| Fastify  | Routes、plugins、hooks、request/reply、原生 listener                  | 自訂生命週期 wrapper，或明確實作的 Fetch bridge                                | 目前沒有證據證明 Fastify request/reply 能自動轉換成 go-like Handler                                     |
-| Hono     | Routes、middleware、sub-apps、`app.fetch`                             | `newNodeServer(app.fetch, ...)`，再接到 `newApp(...)`                          | `examples/hono` 展示了直接使用原生 Fetch 的整合方式                                                     |
-| Elysia   | Route tree、schema、decorators、derives、hooks、Bun/Web Standard 行為 | 在適合的情況下使用原生 `app.fetch` 加上 Core host/lifecycle                    | 保留 Bun 專屬的 `.listen()` 語意；不要把它說成跨 runtime 的 go-like API                                 |
-| H3       | H3 router 與原生 handler 轉換                                         | 目前 H3 範例中的 Fetch handler 路徑                                            | 目前以 example 固定嘅 `h3@2.0.1-rc.26` `app.fetch` 為準；舊版 `toWebHandler` 指引需要獨立固定版本的範例 |
-| Koa      | Middleware 和外部 router                                              | 自訂擁有者 wrapper，或內部服務呼叫                                             | `@go-like/web` 不會直接接收 Koa 的 Node request/reply 物件，除非應用程式自行提供 bridge                 |
-| tRPC     | Router、procedure middleware、輸入／輸出解析器、adapter               | 在 host 外圍加上 Core lifecycle，或使用獨立的內部 transport 邊界               | go-like Endpoint 不是 tRPC procedure router                                                             |
+| 現有系統 | 保留原生部分                                                          | 優先導入                                                                       | 目前的邊界                                                                                        |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| NestJS   | Modules、controllers、decorators、DI、interceptors、pipes、adapter    | 在現有應用程式外加一層自訂的結構式 Server，或建立獨立的內部 Client/Server 邊界 | 目前 repository 沒有 go-like Nest bridge，也沒有自動 DI 整合                                      |
+| Fastify  | Routes、plugins、hooks、request/reply、原生 listener                  | 自訂生命週期 wrapper，或明確實作的 Fetch bridge                                | 目前沒有證據證明 Fastify request/reply 能自動轉換成 go-like Handler                               |
+| Hono     | Routes、middleware、sub-apps、`app.fetch`                             | `newNodeServer(app.fetch, ...)`，再接到 `newApp(...)`                          | `examples/hono` 展示了直接使用原生 Fetch 的整合方式                                               |
+| Elysia   | Route tree、schema、decorators、derives、hooks、Bun/Web Standard 行為 | 在適合的情況下使用原生 `app.fetch` 加上 Core host/lifecycle                    | 保留 Bun 專屬的 `.listen()` 語意；不要把它說成跨 runtime 的 go-like API                           |
+| H3       | H3 router 與原生 handler 轉換                                         | 目前 H3 範例中的 Fetch handler 路徑                                            | 目前以 example 固定嘅 `h3@2.0.8` `app.fetch` 為準；舊版 `toWebHandler` 指引需要獨立固定版本的範例 |
+| Koa      | Middleware 和外部 router                                              | 自訂擁有者 wrapper，或內部服務呼叫                                             | `@go-like/web` 不會直接接收 Koa 的 Node request/reply 物件，除非應用程式自行提供 bridge           |
+| tRPC     | Router、procedure middleware、輸入／輸出解析器、adapter               | 在 host 外圍加上 Core lifecycle，或使用獨立的內部 transport 邊界               | go-like Endpoint 不是 tRPC procedure router                                                       |
 
 ### Hono 範例
 
@@ -187,4 +187,4 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 呢啲能力唔包括瀏覽器標準 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用認證、Event Store/replay、ORM 或叢集編排。
 
-Deno 2.9.8 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。

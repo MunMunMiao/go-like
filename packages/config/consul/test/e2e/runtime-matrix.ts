@@ -47,10 +47,6 @@ async function main(): Promise<void> {
 
     validate("bun", await command(["bun", StagedFixture], stage))
     validate("node", await command(["node", StagedFixture], stage))
-    validate(
-      "deno",
-      await command(["deno", "run", "--node-modules-dir=manual", StagedFixture], stage)
-    )
   } finally {
     await rm(stage, { recursive: true })
   }

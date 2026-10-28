@@ -30,7 +30,7 @@
     "@go-like/store": "0.0.1"
   },
   "devDependencies": {
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

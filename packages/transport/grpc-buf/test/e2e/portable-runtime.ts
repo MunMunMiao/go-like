@@ -9,7 +9,7 @@ import {
   type OrderServiceHandler
 } from "../../.artifacts/gen/order/v1/order_like.js"
 
-const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"
+const runtime = "Bun" in globalThis ? "bun" : "node"
 const handlerEntries = { clientStreaming: 0, bidi: 0 }
 const service = {
   getOrder(_ctx, request) {

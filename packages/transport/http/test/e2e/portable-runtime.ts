@@ -1,7 +1,7 @@
 import { background } from "@go-like/context"
 import { executor, newHTTPTransport } from "@go-like/transport-http"
 
-const runtime = "Bun" in globalThis ? "bun" : "Deno" in globalThis ? "deno" : "node"
+const runtime = "Bun" in globalThis ? "bun" : "node"
 let redirect = ""
 const run = Object.assign(
   async function execute(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

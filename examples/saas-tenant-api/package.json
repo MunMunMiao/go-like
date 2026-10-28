@@ -22,12 +22,12 @@
     "@go-like/resilience": "workspace:*",
     "@go-like/store-consul": "workspace:*",
     "@go-like/web": "workspace:*",
-    "hono": "4.13.11",
-    "pino": "10.3.1"
+    "hono": "4.13.14",
+    "pino": "10.4.0"
   },
   "devDependencies": {
     "@go-like/cache-memory": "workspace:*",
-    "@types/node": "26.4.0"
+    "@types/node": "26.6.5"
   },
   "license": "MIT"
 }

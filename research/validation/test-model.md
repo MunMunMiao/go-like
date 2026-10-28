@@ -35,7 +35,7 @@
 
 10 秒 soak 只能证明短时 workload、结果标记和清理路径；持续至少 60 分钟的结论需要实际完成对应时长的运行。RPS、延迟、RSS、heap 和资源数量必须连同硬件、版本、负载与时间窗报告，不设置脱离环境的通用性能承诺。
 
-原 E2E 记录在提交 `3fb895bd41daebd48cf37765aeb51892fabdaca2`、tree `7185fe57e1854c9e34de516397dbfd9fa842e0db` 上报告：macOS 26.5.2 arm64、Bun 1.3.14、Node 26.5.0、Deno 2.9.4、TypeScript 7.0.2、Docker 29.6.2；有限 E2E 为 53/53，examples 为 44/44，残留为 zero-observed。该历史结果不包含 60 分钟 soak，也不替代当前完整矩阵。
+原 E2E 记录在提交 `3fb895bd41daebd48cf37765aeb51892fabdaca2`、tree `7185fe57e1854c9e34de516397dbfd9fa842e0db` 上报告：macOS 26.5.2 arm64、Bun 1.3.14、Node 26.5.0、TypeScript 7.0.2、Docker 29.6.2；有限 E2E 为 53/53，examples 为 44/44，残留为 zero-observed。该历史结果不包含 60 分钟 soak，也不替代当前完整矩阵。
 
 ## 后续演变
 

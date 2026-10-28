@@ -2,7 +2,7 @@ import type { RequiredTool, SuiteDefinition } from "../../definitions"
 import { runE2eRequest } from "../../executor"
 import { runCommand, type CommandResult, type ProcessSupervisor } from "../../harness/process"
 
-const ProbeTools = Object.freeze(["node", "deno", "typescript"] as const)
+const ProbeTools = Object.freeze(["node", "typescript"] as const)
 
 function requiredArgument(index: number, label: string): string {
   const value = process.argv[index]

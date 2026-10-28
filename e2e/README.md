@@ -57,9 +57,9 @@ runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启
 
 ## Published、k6 与 soak
 
-Published lane 动态发现实际 non-private publishable packages，生成并安装真实 npm tarball。Root authoring config 只检查 committed fixture 的语法与控制流，不是 package contract；staged checks 才从安装后的 `node_modules` 验证 DTS 与 package-name resolution。Node 使用 committed TypeScript 的 NodeNext 实际 emit 后在 clean environment 执行，Bun 使用 `--no-install` 防止隐藏依赖，Deno 先 `check` 再以 `--no-prompt` 和最小权限运行。
+Published lane 动态发现实际 non-private publishable packages，生成并安装真实 npm tarball。Root authoring config 只检查 committed fixture 的语法与控制流，不是 package contract；staged checks 才从安装后的 `node_modules` 验证 DTS 与 package-name resolution。Node 使用 committed TypeScript 的 NodeNext 实际 emit 后在 clean environment 执行，Bun 使用 `--no-install` 防止隐藏依赖。
 
-当前已知限制：Deno 2.9.5/2.9.7 的原生 HTTP/2 慢消费者 graceful drain 在独立重现中失败，因而不能宣称完整 `test:e2e:published` 已通过。Bun 1.4.2 的真实 HTTP Fetch 流取消另有底层复现：`reader.cancel()` 或 AbortController 取消后，服务端 quiet response/socket 未在 500ms 内关闭；这与原生 gRPC HTTP/2 流测试是不同边界。失败后尚未执行的后续协议分支不算通过。证据与支持边界见 [grpc-buf README](../packages/transport/grpc-buf/README.md) 和 [能力声明](../doc/reference/claims.md)。这些是既有故障记录，不能替代当前环境的重跑结果。
+当前已知限制：Bun 1.4.2 的真实 HTTP Fetch 流取消有底层复现：`reader.cancel()` 或 AbortController 取消后，服务端 quiet response/socket 未在 500ms 内关闭；这与原生 gRPC HTTP/2 流测试是不同边界。失败后尚未执行的后续协议分支不算通过。证据与支持边界见 [grpc-buf README](../packages/transport/grpc-buf/README.md) 和 [能力声明](../doc/reference/claims.md)。这些是既有故障记录，不能替代当前环境的重跑结果。
 
 gRPC 的可选本地检查由 `bun run test:e2e:grpc-soak` 执行，默认使用独立 Bun server/load 进程、30 秒、8 并发和 256 字节业务载荷，结果默认写入 `.artifacts/soak/grpc-bun.json`（Node 为 `grpc-node.json`）。使用 `bun run test:e2e:grpc-soak --runtime node` 可切换两个子进程的 runtime；`--duration 60s --concurrency 16 --payload-bytes 1024 --output .artifacts/soak/grpc.json` 可覆盖负载与结果路径。结果记录 runtime 版本、请求数、错误率、有界直方图的延迟分位数上界、RSS、HTTP/2 session 数和进程清理结果，并要求零错误、单连接复用及关闭后零活动 session。该检查使用 workspace 源码和生成代码，覆盖 loopback unary h2c，不替代 published lane、TLS、故障回归或目标部署环境的容量验证；默认不进入 CI。
 
@@ -79,7 +79,7 @@ Committed E2E TypeScript 的 owner 为：root tests 使用 `tsconfig.test.json`�
 
 新增或修改 E2E 时，同一 PR 必须：
 
-- 把文件纳入明确的 tsconfig owner，且不把 k6、Node、Bun、Deno 专用 globals 混入无关配置；
+- 把文件纳入明确的 tsconfig owner，且不把 k6、Node、Bun 专用 globals 混入无关配置；
 - 新增 runtime support 时同步更新 package `test:e2e:runtimes`、`e2e/definitions.ts`、fixture 与文档；registered plan 对已登记项 fail-closed，但不会推断未登记 support；
 - 新增 example 时提供非空 `test:e2e` wrapper；specialized Docker scenario 继续使用 shared ownership/ACK API；
 - 在具备 prerequisite 的真实环境运行对应 scoped 或 full E2E，并只记录实际平台与模式的 claim。

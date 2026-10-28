@@ -28,8 +28,8 @@
     "@go-like/broker": "0.0.1",
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
-    "@types/node": "26.4.0",
-    "amqplib": "2.0.1"
+    "@types/node": "26.6.5",
+    "amqplib": "2.2.0"
   },
   "license": "MIT"
 }

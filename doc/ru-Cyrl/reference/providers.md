@@ -9,7 +9,7 @@
 - **Адаптер жизненного цикла** — Server-wrapper вокруг нативного ресурса, созданного приложением.
 - **Доказательство** — вид опоры в репозитории: исходник/export, объявленные тесты или зафиксированный результат локальной команды. Это не превращает версию пакета в утверждение о публикации в npm или готовности к production.
 
-Текущий инвентарь исходников содержит 45 манифеста пакетов `@go-like/*`, не помеченных как `private`, и 28 публичных source subpath; все они имеют версию `0.0.1` в этой рабочей копии. 44 workspace `examples/*` — это приватные приложения, а не публичные пакеты.
+Текущий инвентарь исходников содержит 45 манифеста пакетов `@go-like/*`, не помеченных как `private`, и 27 публичных source subpath; все они имеют версию `0.0.1` в этой рабочей копии. 44 workspace `examples/*` — это приватные приложения, а не публичные пакеты.
 
 ## Выбор по задаче
 
@@ -49,7 +49,7 @@
 | `@go-like/transport`                 | Transport SPI и граница Fetch Request/Response                             | `Transport`, `Client`, `Listener`, `defineService`, `ServerStream`, `TransportInfo`, `Endpoint`, `endpoint`, `chain`, `serviceError`                                                                          | Конкретный wire без выбранного provider; internal full-duplex promise отсутствует          |
 | `@go-like/transport-memory`          | Внутрипроцессный unary Transport                                           | `newMemoryTransport`                                                                                                                                                                                          | Межпроцессное поведение, persistence, network fallback, TLS                                |
 | `@go-like/transport-http`            | Внутренний HTTP Transport на базе Fetch                                    | `newHTTPTransport`, `executor`, `maxMessageBytes`                                                                                                                                                             | Полный переносимый listener без внедрённого `HTTPHost`; native Node TLS controls           |
-| `@go-like/transport-http/node`       | Нативный Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                            | Deno listener или автоматическую security policy                                           |
+| `@go-like/transport-http/node`       | Нативный Node internal HTTP Transport                                      | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                                                                                                                                            | Автоматическую security policy                                                             |
 | `@go-like/transport-grpc-buf`        | Connect/gRPC-Web unary, server-streaming                                   | `newHandler`, `fromHandlerContext`, `callOptions`                                                                                                                                                             | Код Context-first на основе Protobuf-ES                                                    |
 | `@go-like/transport-grpc-buf/native` | Стандартный gRPC: четыре вида вызовов через `/native`                      | `newClient`, `newServer`                                                                                                                                                                                      | Discovery, Selector, TLS/mTLS                                                              |
 | `@go-like/protoc-gen-like`           | Генератор Node во время сборки                                             | `protoc-gen-like`, `protocGenLike`                                                                                                                                                                            | Protobuf-ES                                                                                |
@@ -81,7 +81,7 @@
 | `@go-like/registry-kubernetes` | EndpointSlice discovery и необязательная регистрация | `newKubernetesRegistry`                                                                                                                            | Kubernetes EndpointSlice, owner references, fabricated TTL отсутствует     |
 | `@go-like/registry-mdns`       | Локальное multicast discovery                        | `newMDNSRegistry`                                                                                                                                  | Root provider переносим по замыслу; UDP host находится в `/node`           |
 | `@go-like/registry-mdns/node`  | Node UDP multicast capability                        | `newNodeMDNSHost`                                                                                                                                  | Явный Node runtime subpath                                                 |
-| `@go-like/registry-zookeeper`  | Эфемерная регистрация и discovery ZooKeeper          | `newZookeeperRegistry`                                                                                                                             | Документированы Node.js и Bun; Deno явно не поддерживается                 |
+| `@go-like/registry-zookeeper`  | Эфемерная регистрация и discovery ZooKeeper          | `newZookeeperRegistry`                                                                                                                             | Документированы Node.js и Bun                                              |
 
 Registry описывает доступность, а не долговечные бизнес-данные. Провайдер может сохранять последний snapshot во время восстановления временного watcher, но авторитетный пустой snapshot должен закрываться по умолчанию.
 
@@ -128,7 +128,7 @@ Registry описывает доступность, а не долговечны
 
 ## Полный инвентарь публичных source subpath
 
-Ниже перечислены 28 явных source subpath, объявленных текущими package manifest. Сгенерированные пакеты могут добавить export `./package.json` только с metadata; это не дополнительный пакет и не source API.
+Ниже перечислены 27 явных source subpath, объявленных текущими package manifest. Сгенерированные пакеты могут добавить export `./package.json` только с metadata; это не дополнительный пакет и не source API.
 
 |   # | Subpath                              | Основные exports                                                                     | Для кого предназначен            |
 | --: | ------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------- |
@@ -159,21 +159,20 @@ Registry описывает доступность, а не долговечны
 |  25 | `@go-like/transport-grpc-buf/native` | `newClient`, `newServer`                                                             | Авторы приложений                |
 |  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` | SSE server streams               |
 |  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             | Web applications                 |
-|  28 | `@go-like/web/deno`                  | `newDenoServer`, `hostname`, `port`, `denoShutdownTimeout`                           | Web applications                 |
 
 `@go-like/otel/testing` и `@go-like/web/node/testing` не являются path mappings TypeScript или текущими exports package manifest. Не документируйте их как публичные entrypoint.
 
 ## Матрица выбора runtime
 
-| Entry или семейство провайдеров                               | Переносимый исходник                 | Нативный Bun/Node                               | Утверждение о Deno                                | Формулировка доказательства                                            |
-| ------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
-| Context, Core root, Health, Metadata, Resilience, Struct      | Да                                   | Нативный import не требуется                    | Заявлены отдельные runtime lanes                  | Исходный контракт; перед release проверяйте текущую выполненную matrix |
-| Web root и Web health                                         | Да                                   | Host нужен отдельно                             | Стандартная Handler boundary                      | Handler переносим; Handler сам по себе не listener                     |
-| Memory Transport, Memory Store, Memory Cache, Memory Broker   | Process-local source                 | Внешний сервис не нужен                         | Та же process-local semantics                     | Не distributed, не durable, не cross-process                           |
-| HTTP root и Fetch-based Config/Registry/Store providers       | Внедрённый Fetch                     | Fetch выбирает runtime                          | Подтверждено исходником там, где есть lane пакета | Переносимо по source или объявленной lane, но не universal parity      |
-| `/node` subpaths                                              | Нет                                  | Специфичны Node, иногда исполняются на Bun      | Deno entrypoint отсутствует                       | Явный import меняет runtime graph                                      |
-| Native SDK NATS, RabbitMQ, BullMQ, Redis, Pino, Winston, OTel | Зависит от provider                  | Fixtures Node/Bun или package-specific evidence | Не выводите поддержку Deno                        | Читайте README провайдера и область E2E                                |
-| ZooKeeper                                                     | README provider не поддерживает Deno | Node/Bun                                        | Явно не поддерживается                            | Не обобщайте свойства корневого Registry                               |
+| Entry или семейство провайдеров                               | Переносимый исходник | Нативный Bun/Node                               | Формулировка доказательства                                            |
+| ------------------------------------------------------------- | -------------------- | ----------------------------------------------- | ---------------------------------------------------------------------- |
+| Context, Core root, Health, Metadata, Resilience, Struct      | Да                   | Нативный import не требуется                    | Исходный контракт; перед release проверяйте текущую выполненную matrix |
+| Web root и Web health                                         | Да                   | Host нужен отдельно                             | Handler переносим; Handler сам по себе не listener                     |
+| Memory Transport, Memory Store, Memory Cache, Memory Broker   | Process-local source | Внешний сервис не нужен                         | Не distributed, не durable, не cross-process                           |
+| HTTP root и Fetch-based Config/Registry/Store providers       | Внедрённый Fetch     | Fetch выбирает runtime                          | Переносимо по source или объявленной lane, но не universal parity      |
+| `/node` subpaths                                              | Нет                  | Специфичны Node, иногда исполняются на Bun      | Явный import меняет runtime graph                                      |
+| Native SDK NATS, RabbitMQ, BullMQ, Redis, Pino, Winston, OTel | Зависит от provider  | Fixtures Node/Bun или package-specific evidence | Читайте README провайдера и область E2E                                |
+| ZooKeeper                                                     | Нет                  | Node/Bun                                        | Не обобщайте свойства корневого Registry                               |
 
 ## Правила выбора функций
 
@@ -194,4 +193,4 @@ Registry описывает доступность, а не долговечны
 
 Это не включает стандартный gRPC в браузере, request-streaming/bidi через Fetch, официальные health/reflection, универсальную аутентификацию, Event Store/replay, ORM или оркестрацию кластера.
 
-Управляемый gRPC с обработкой совместимости в Deno 2.9.8 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.
+Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.

@@ -1,8 +1,7 @@
 # @go-like/store-etcd
 
 `@go-like/store-etcd` 是基于标准 Web API `Fetch` 和 etcd v3 JSON gRPC gateway 的
-`@go-like/store` provider。它不依赖 Node API、gRPC client 或 Protobuf runtime，可由 Bun、Node.js、
-Deno 以及其他提供标准 Web API 的后端 runtime 承载。
+`@go-like/store` provider。它不依赖 Node API、gRPC client 或 Protobuf runtime，可由 Bun、Node.js 以及其他提供标准 Web API 的后端 runtime 承载。
 
 ```ts
 import { background } from "@go-like/context"

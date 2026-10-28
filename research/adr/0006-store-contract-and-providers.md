@@ -83,7 +83,7 @@ CAS 失败返回稳定 `StoreConflictError`，同时保留 expected revision 和
 外部服务测试必须使用固定 digest 的真实容器，覆盖 CRUD、排序、分页、支持的 CAS/TTL、后端重启、故障恢复、
 凭据边界和零残留。File provider 必须在 Node 上使用真实临时目录，并证明关闭后 watcher、timer 与文件句柄归零。
 不支持的 option 必须验证拒绝行为；只对具有生命周期的 provider 验证 `start/stop`。
-纯内存 provider 不启动无意义容器；它使用确定性 clock、完整 conformance 和发布态 Bun/Node/Deno 验证。
+纯内存 provider 不启动无意义容器；它使用确定性 clock、完整 conformance 和发布态 Bun/Node 验证。
 
 ## 后果
 

@@ -185,4 +185,4 @@ application creates logger / Registry / MeterProvider / TracerProvider
 
 Это не включает стандартный gRPC в браузере, request-streaming/bidi через Fetch, официальные health/reflection, универсальную аутентификацию, Event Store/replay, ORM или оркестрацию кластера.
 
-Управляемый gRPC с обработкой совместимости в Deno 2.9.8 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.
+Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.

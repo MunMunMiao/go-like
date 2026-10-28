@@ -214,9 +214,17 @@ test("graceful stop rejects new requests while an in-flight request completes", 
   try {
     await entered.promise
     const stopping = host.server.stop(background())
-    const refused = await fetch(`${host.origin}/probe`, { headers: { connection: "close" } })
-    expect(refused.status).toBe(503)
-    expect(await refused.text()).toBe("")
+    // Bun may close the listener before a draining connection can receive HTTP 503.
+    const refused = await fetch(`${host.origin}/probe`, {
+      headers: { connection: "close" }
+    }).catch((error: unknown) => {
+      if (error instanceof Error && "code" in error && error.code === "ECONNREFUSED") return null
+      throw error
+    })
+    if (refused !== null) {
+      expect(refused.status).toBe(503)
+      expect(await refused.text()).toBe("")
+    }
     expect(admitted).toBe(1)
 
     gate.resolve()

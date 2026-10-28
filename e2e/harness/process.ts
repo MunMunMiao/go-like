@@ -646,6 +646,11 @@ function signalName(signalNumber: number): string {
   return `SIG${signalNumber}`
 }
 
+function subprocessSignalName(signal: NodeJS.Signals | number | null): string | null {
+  if (signal === null || typeof signal === "string") return signal
+  return signalName(signal)
+}
+
 function testPosixProtocolRoundTrip(): void {
   const nonce = randomBytes(PosixNonceSize)
   const wire = encodePosixControllerFrame({
@@ -877,10 +882,10 @@ function baseCommandResult(
     readonly cleanupFailures: readonly FailureRecord[]
   }
 ): CommandResult {
+  const signal = subprocessSignalName(child.signalCode)
   return Object.freeze({
-    exitCode: child.signalCode === null ? values.exitCode : null,
-    signal:
-      values.termination === "timeout" || values.termination === "abort" ? null : child.signalCode,
+    exitCode: signal === null ? values.exitCode : null,
+    signal: values.termination === "timeout" || values.termination === "abort" ? null : signal,
     termination: values.termination,
     timedOut: values.timedOut,
     abortReason: values.abortReason,

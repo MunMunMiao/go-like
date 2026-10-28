@@ -1,10 +1,10 @@
 # go-like
 
-go-like — набор небольших явных строительных блоков в стиле Go для backend-сервисов на TypeScript, работающих в Bun, Node.js и Deno. Жизненный цикл, Context, внутренние вызовы сервисов, discovery и selection, сообщения, конфигурация, хранилища, кеши, брокеры, health, resilience и необязательные адаптеры логирования и телеметрии разделены на самостоятельные пакеты.
+go-like — набор небольших явных строительных блоков в стиле Go для backend-сервисов на TypeScript, работающих в Bun и Node.js. Жизненный цикл, Context, внутренние вызовы сервисов, discovery и selection, сообщения, конфигурация, хранилища, кеши, брокеры, health, resilience и необязательные адаптеры логирования и телеметрии разделены на самостоятельные пакеты.
 
 go-like дополняет фреймворк приложения, а не заменяет его. Фреймворк по-прежнему владеет маршрутами, middleware, политикой запросов, Web Streams, апгрейдами WebSocket, композицией зависимостей и бизнес-логикой. Провайдер сохраняет собственное соединение, модель подтверждений, lease, retry и семантику протокола. go-like даёт узкие контракты и явное владение жизненным циклом там, где такие границы полезны.
 
-Переносимый код использует стандартные Web API: `Request`, `Response`, `Headers`, `AbortSignal`, Web Streams и переданный приложением `fetch`. Зависимости от Node.js, Bun или Deno вынесены в отдельные точки входа. Фреймворкам с готовым Fetch не нужен адаптер go-like: передавайте `app.fetch` из Hono, Elysia или H3 2.x прямо в `@go-like/web`; H3 1.x использует `toWebHandler(app)`. Адаптеры жизненного цикла предназначены для ресурсов вроде Croner, BullMQ, NATS, Pino и Winston.
+Переносимый код использует стандартные Web API: `Request`, `Response`, `Headers`, `AbortSignal`, Web Streams и переданный приложением `fetch`. Зависимости от Node.js или Bun вынесены в отдельные точки входа. Фреймворкам с готовым Fetch не нужен адаптер go-like: передавайте `app.fetch` из Hono, Elysia или H3 2.x прямо в `@go-like/web`; H3 1.x использует `toWebHandler(app)`. Адаптеры жизненного цикла предназначены для ресурсов вроде Croner, BullMQ, NATS, Pino и Winston.
 
 Начните с раздела [Начало работы](/ru-Cyrl/guide/getting-started), а затем пройдите [Запись на приём в клинике: от 0 до 1](/ru-Cyrl/guide/zero-to-one). Если существующий сервис нужно подключить постепенно, читайте [Миграцию и внедрение](/ru-Cyrl/guide/migration); для сравнения зон ответственности инструментов откройте [Сравнение](/ru-Cyrl/guide/comparison).
 
@@ -22,4 +22,4 @@ go-like дополняет фреймворк приложения, а не за
 
 `@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
 
-Управляемый gRPC с обработкой совместимости в Deno 2.9.8 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.
+Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.

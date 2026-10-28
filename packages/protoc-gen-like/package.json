@@ -31,10 +31,10 @@
     "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
-    "@bufbuild/protoplugin": "2.14.0"
+    "@bufbuild/protoplugin": "2.16.0"
   },
   "devDependencies": {
-    "@bufbuild/protobuf": "2.14.0"
+    "@bufbuild/protobuf": "2.16.0"
   },
   "license": "MIT"
 }

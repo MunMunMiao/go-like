@@ -9,7 +9,7 @@ go-like has three distinct streaming boundaries:
 > [!IMPORTANT]
 > A public `ReadableStream`, framework SSE response, WebSocket upgrade, or long-lived Fetch response is Web streaming. It is not an internal RPC. An internal server stream is SSE on `POST /<service>/<endpoint>`, with `accept: text/event-stream`. Client-streaming and bidi stay on `@go-like/transport-grpc-buf/native`.
 
-The Deno 2.9.8 managed gRPC slow-consumer drain compatibility path is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed. Generated RPC does not add automatic retries or stream replay.
+Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed. Generated RPC does not add automatic retries or stream replay.
 
 ## Public Web streaming
 

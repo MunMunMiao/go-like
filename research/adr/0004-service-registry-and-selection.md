@@ -119,7 +119,7 @@ SDK。
 
 ### ZooKeeper provider
 
-`@go-like/registry-zookeeper` 使用 `node-zookeeper-client` 管理 Node.js/Bun 原生会话，因此不声明 Deno 或
+`@go-like/registry-zookeeper` 使用 `node-zookeeper-client` 管理 Node.js/Bun 原生会话，因此不声明
 portable Web API 支持。
 
 - 每次 registration 使用独立 ephemeral token child；最后一个 token 消失后逻辑实例才消失。
