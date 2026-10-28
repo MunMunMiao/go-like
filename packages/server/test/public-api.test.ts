@@ -1,0 +1,23 @@
+import { expect, test } from "bun:test"
+
+import * as Server from "../src/index"
+
+test("exports exactly the go-style internal server runtime surface", () => {
+  expect(Object.keys(Server)).toEqual([
+    "address",
+    "advertise",
+    "httpRoute",
+    "listenOption",
+    "maxSendMessageBytes",
+    "middleware",
+    "newServer",
+    "rateLimitMiddleware",
+    "streamKeepAlive",
+    "transport",
+    "use"
+  ])
+  expect(typeof Reflect.get(Server, "httpRoute")).toBe("function")
+  expect(Server).not.toHaveProperty("registeredUnaryService")
+  expect(Server).not.toHaveProperty("registeredFetchService")
+  expect(Server).not.toHaveProperty("composeUnary")
+})

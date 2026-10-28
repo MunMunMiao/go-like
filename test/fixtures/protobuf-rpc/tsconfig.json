@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"]
+  },
+  "include": [".artifacts/gen/**/*.ts", "handler.ts", "integration.test.ts", "type-errors.ts"]
+}

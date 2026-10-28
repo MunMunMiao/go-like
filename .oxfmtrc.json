@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "proseWrap": "preserve",
+  "semi": false,
+  "singleQuote": false,
+  "sortPackageJson": false,
+  "trailingComma": "none",
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/.artifacts/**",
+    ".git/**",
+    ".idea/**",
+    ".vscode/**",
+    "tmp/**",
+    "temp/**",
+    "vendor/**",
+    "external/**",
+    "**/*.tmp",
+    "**/*.tmp.*",
+    "**/*.temp",
+    "**/*.temp.*"
+  ]
+}

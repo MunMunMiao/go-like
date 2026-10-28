@@ -1,0 +1,13 @@
+version: v2
+clean: true
+plugins:
+  - local: protoc-gen-es
+    out: .artifacts/gen
+    opt:
+      - target=ts
+      - import_extension=js
+  - local: protoc-gen-like
+    out: .artifacts/gen
+    opt:
+      - target=ts
+      - import_extension=js

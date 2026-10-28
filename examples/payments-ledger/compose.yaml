@@ -1,0 +1,30 @@
+name: go-like-payments-ledger
+
+services:
+  postgres:
+    image: docker.io/library/postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+    environment:
+      POSTGRES_DB: ledger
+      POSTGRES_PASSWORD: local-e2e-only
+      POSTGRES_USER: go-like
+    ports:
+      - "127.0.0.1:35432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U go-like -d ledger"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  nats:
+    image: docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "127.0.0.1:34222:4222"
+    volumes:
+      - nats-data:/data
+
+volumes:
+  postgres-data:
+  nats-data:

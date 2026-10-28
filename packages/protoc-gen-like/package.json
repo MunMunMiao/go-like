@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/protoc-gen-like",
+  "version": "0.0.1",
+  "description": "Buf protoc plugin for go-like portable RPC generation.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "bin": {
+    "protoc-gen-like": "bin/protoc-gen-like.cjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "preferUnplugged": true,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native && bun build ./bin/protoc-gen-like.ts --target=node --format=cjs --packages=external --outfile=dist/bin/protoc-gen-like.cjs && chmod +x dist/bin/protoc-gen-like.cjs",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage"
+  },
+  "dependencies": {
+    "@bufbuild/protoplugin": "2.14.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.14.0"
+  },
+  "license": "MIT"
+}

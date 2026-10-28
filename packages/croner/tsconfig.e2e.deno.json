@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "noEmit": true,
+    "types": []
+  },
+  "files": ["test/e2e/deno-authoring.d.ts", "test/e2e/deno-runtime.ts"]
+}

@@ -1,0 +1,19 @@
+{
+  "overrides": [
+    {
+      "files": [
+        "packages/client/test/client.test.ts",
+        "packages/config/test/node-file.test.ts",
+        "packages/health/test/registry.test.ts",
+        "packages/registry/test/selector.test.ts",
+        "packages/transport/http/test/client.test.ts",
+        "packages/transport/http/test/options.test.ts",
+        "packages/transport/test/options.test.ts",
+        "packages/web/test/context-handler-cleanup.test.ts"
+      ],
+      "rules": {
+        "unicorn/no-thenable": "off"
+      }
+    }
+  ]
+}

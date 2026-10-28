@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun", "node"],
+    "paths": {
+      "@go-like/bullmq": ["./src/index.ts"],
+      "@go-like/context": ["../../packages/context/src/index.ts"],
+      "@go-like/core": ["../../packages/core/src/index.ts"],
+      "@go-like/core/lifecycle": ["../../packages/core/src/lifecycle.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

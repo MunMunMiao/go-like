@@ -1,0 +1,17 @@
+[install]
+exact = true
+
+[test]
+timeout = 10000
+coverageSkipTestFiles = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageThreshold = { lines = 1.0, functions = 1.0 }
+coveragePathIgnorePatterns = [
+  "**/dist/**",
+  "**/test/**",
+  "e2e/**",
+  "packages/**",
+  "examples/**",
+  "**/tsdown.config.ts"
+]
