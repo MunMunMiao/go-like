@@ -89,7 +89,7 @@ interface SiteConfig {
   readonly ignoreDeadLinks?: boolean
 }
 
-const base = "/go-like/"
+const base = "/"
 
 /** Creates one locale-aware absolute documentation route. */
 function route(prefix: string, path: string): string {
