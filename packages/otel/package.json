@@ -46,7 +46,7 @@
     "@opentelemetry/exporter-metrics-otlp-http": "0.300.0",
     "@opentelemetry/exporter-trace-otlp-http": "0.300.0",
     "@opentelemetry/resources": "3.0.0",
-    "@types/node": "26.6.5"
+    "@types/node": "26.6.6"
   },
   "license": "MIT"
 }

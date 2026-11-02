@@ -29,7 +29,7 @@
   "dependencies": {
     "@go-like/context": "0.0.1",
     "@go-like/registry": "0.0.1",
-    "@types/node": "26.6.5"
+    "@types/node": "26.6.6"
   },
   "license": "MIT"
 }
