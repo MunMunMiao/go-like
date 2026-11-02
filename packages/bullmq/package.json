@@ -28,7 +28,7 @@
   "dependencies": {
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "bullmq": "6.5.0",
     "ioredis": "6.0.0"
   },
