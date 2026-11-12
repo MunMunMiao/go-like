@@ -99,7 +99,7 @@ function nativeAcl(value: ZookeeperAcl): readonly zookeeper.ACL[] {
   return descriptor.value
 }
 
-/** Creates one promise-oriented adapter over node-zookeeper-client 1.1.3. */
+/** Creates one promise-oriented adapter over node-zookeeper-client 1.2.1. */
 export function newNativeZookeeperClient(options: ZookeeperClientFactoryOptions): ZookeeperClient {
   const client = zookeeper.createClient(options.connectionString, {
     sessionTimeout: options.sessionTimeoutMs,

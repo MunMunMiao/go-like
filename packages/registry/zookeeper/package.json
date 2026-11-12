@@ -29,7 +29,7 @@
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
     "@go-like/registry": "0.0.1",
-    "node-zookeeper-client": "1.1.3"
+    "node-zookeeper-client": "1.2.1"
   },
   "devDependencies": {
     "@types/node-zookeeper-client": "1.1.0"

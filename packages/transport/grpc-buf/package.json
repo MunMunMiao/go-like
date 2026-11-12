@@ -26,7 +26,7 @@
     "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "2.16.0",
+    "@bufbuild/protobuf": "2.17.0",
     "@connectrpc/connect": "2.3.0",
     "@connectrpc/connect-node": "2.3.0",
     "@go-like/client": "0.0.1",
@@ -35,7 +35,7 @@
     "@go-like/metadata": "0.0.1",
     "@go-like/registry": "0.0.1",
     "@go-like/transport": "0.0.1",
-    "@types/node": "26.6.5"
+    "@types/node": "26.6.6"
   },
   "devDependencies": {
     "@connectrpc/connect-web": "2.3.0",

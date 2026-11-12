@@ -491,7 +491,7 @@ test("published fixture stages local Buf and native inputs", async () => {
     expect(manifest.scripts).toEqual({ "proto:generate": "buf generate" })
     expect(manifest.devDependencies).toEqual({
       "@bufbuild/buf": "1.75.0",
-      "@bufbuild/protoc-gen-es": "2.16.0",
+      "@bufbuild/protoc-gen-es": "2.17.0",
       "@go-like/protoc-gen-like": "0.0.1"
     })
   } finally {

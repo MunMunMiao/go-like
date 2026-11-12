@@ -28,10 +28,10 @@
     "@go-like/cache": "0.0.1",
     "@go-like/context": "0.0.1",
     "@go-like/core": "0.0.1",
-    "@redis/client": "6.3.0"
+    "@redis/client": "6.3.1"
   },
   "devDependencies": {
-    "@types/node": "26.6.5"
+    "@types/node": "26.6.6"
   },
   "license": "MIT"
 }
