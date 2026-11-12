@@ -5,6 +5,6 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["test/**/*.ts", "scripts/test-unit-variants.ts"],
+  "include": ["test/**/*.ts", "scripts/**/*.ts", "tsdown.config.ts"],
   "exclude": ["test/fixtures/protobuf-rpc"]
 }

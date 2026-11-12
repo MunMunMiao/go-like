@@ -40,7 +40,7 @@
     "doc:preview": "vitepress preview doc",
     "audit": "bun audit",
     "build": "bun run --filter './packages/**' --sequential --if-present build",
-    "typecheck:root": "tsc -p tsconfig.test.json --pretty false && tsc -p tsconfig.tsdown.json --pretty false",
+    "typecheck:root": "tsc -p tsconfig.json --pretty false",
     "typecheck:e2e": "tsc -p e2e/tsconfig.json --pretty false && tsc -p e2e/load/tsconfig.json --pretty false && tsc -p e2e/fixtures/published-consumer/tsconfig.authoring.json --pretty false",
     "typecheck": "bun run typecheck:root && bun run typecheck:e2e && bun run --workspaces --sequential typecheck",
     "test:unit": "bun test --isolate --no-orphans test/*.test.ts && bun run --workspaces --sequential test:unit",
