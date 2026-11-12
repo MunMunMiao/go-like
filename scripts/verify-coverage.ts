@@ -93,7 +93,7 @@ async function verify(): Promise<void> {
     }
     if (!manifest.scripts?.["test:e2e"]) {
       throw new Error(
-        `${relative(root, roots[0])} requires one workspace manifest with a test:e2e script`
+        `${relative(root, roots[0]!)} requires one workspace manifest with a test:e2e script`
       )
     }
   }
@@ -122,34 +122,33 @@ async function verify(): Promise<void> {
         fields.set(key, values)
       }
 
-      const source = fields.get("SF")
-      const lf = fields.get("LF")
-      const lh = fields.get("LH")
-      const fnf = fields.get("FNF")
-      const fnh = fields.get("FNH")
-      if (
-        source?.length !== 1 ||
-        lf?.length !== 1 ||
-        lh?.length !== 1 ||
-        fnf?.length !== 1 ||
-        fnh?.length !== 1
-      ) {
-        throw new Error(`${relative(root, report)} contains an incomplete LCOV record`)
+      const single = (key: string): string => {
+        const values = fields.get(key)
+        if (values?.length !== 1 || values[0] === undefined) {
+          throw new Error(`${relative(root, report)} contains an incomplete LCOV record`)
+        }
+        return values[0]
       }
 
-      const sourcePath = resolve(directory, source[0])
+      const source = single("SF")
+      const lf = single("LF")
+      const lh = single("LH")
+      const fnf = single("FNF")
+      const fnh = single("FNH")
+
+      const sourcePath = resolve(directory, source)
       if (
         !inside(root, sourcePath) ||
         !inside(directory, sourcePath) ||
         !inventory.includes(sourcePath)
       ) {
         throw new Error(
-          `${relative(root, report)} references a source outside the production inventory: ${source[0]}`
+          `${relative(root, report)} references a source outside the production inventory: ${source}`
         )
       }
       if (records.has(sourcePath))
         throw new Error(`duplicate LCOV source record: ${relative(root, sourcePath)}`)
-      const summaries = [lf[0], lh[0], fnf[0], fnh[0]]
+      const summaries = [lf, lh, fnf, fnh]
       if (!summaries.every((value) => /^\d+$/.test(value))) {
         throw new Error(`${relative(root, report)} contains malformed LF/LH/FNF/FNH summaries`)
       }
@@ -166,7 +165,7 @@ async function verify(): Promise<void> {
   for (const path of executable) {
     const summary = records.get(path)
     if (!summary) continue
-    const [lf, lh, fnf, fnh] = summary.split("/").map(Number)
+    const [lf, lh, fnf, fnh] = summary.split("/").map(Number) as [number, number, number, number]
     if (![lf, lh, fnf, fnh].every(Number.isSafeInteger) || lf < 0 || lh < 0 || fnf < 0 || fnh < 0) {
       throw new Error(`${relative(root, path)} has malformed LF/LH/FNF/FNH summaries`)
     }
