@@ -36,3 +36,4 @@
 - [工具链版本与能力验证](validation/toolchain-policy.md)：版本观察、能力检查和可复现输入的区别。
 - [File Store 与外部重启对照实验（2026-08）](reports/framework-evidence-2026-08.md)：局部通过结果及未闭合的证据。
 - [Dogfood 对照实验（2026-08）](reports/dogfood-2026-08/README.md)：实验发现、后续归因、体验观察及公开样本摘要。
+- [架构探索（2026-11）](reports/architecture-exploration-2026-11/README.md)：core 合并方案的优化清单与六份从零发散设计的交叉审查。
