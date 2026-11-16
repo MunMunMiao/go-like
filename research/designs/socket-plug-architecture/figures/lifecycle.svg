@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 430" role="img" aria-label="App 生命周期三层：遥测层最先接纳、最后排空；资源层按声明顺序逐个启动并等待可用，倒序停止；服务层并发启动与停止。" class="fig"><style>text{font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;fill:#121a24}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:26px 0 10px}
+.fig-num{background:#ffffff;border:1px solid #d3dae3;border-radius:10px;padding:14px 16px}
+.fig-num b{display:block;font-family:"Chakra Petch","Noto Sans SC",system-ui,sans-serif;font-size:1.9rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.fig-num span{color:#445163;font-size:.86rem}
+.fig-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fig-wrap svg{display:block;width:100%;height:auto;min-width:980px}
+.fig-cap{color:#6b7889;font-size:.86rem;margin:10px 4px 2px;max-width:none}
+text{fill:#121a24;font-family:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.panel{fill:#e8ecf1;stroke:#b9c3cf;stroke-width:1.5}
+.screw{fill:#dde3ea;stroke:#b9c3cf}
+.screw-slot{stroke:#6b7889}
+.port-box{fill:#ffffff;stroke:#2a78d6;stroke-width:1.2}
+.port-sub,.tick,.wf-svc{fill:#6b7889}
+.port-sock{fill:#1c5cab}
+.port-note,.col-head,.panel-meta,.plug-lib,.fig-note,.annot,.wf-note,.slot-field,.k-desc,.u-item{fill:#445163}
+.jack{fill:#ffffff;stroke:#2a78d6;stroke-width:2}
+.jack-pin{fill:#2a78d6}
+.plug-box{fill:#fdeee6;stroke:#eb6834;stroke-width:1.2}
+.prong{fill:#eb6834}
+.plug-name{fill:#121a24}
+.cable{fill:none;stroke:#eb6834;stroke-width:2;opacity:.6;transition:opacity .15s,stroke-width .15s}
+.cable-thin{fill:none;stroke:#eb6834;stroke-width:1.5;opacity:.6}
+.lane-line{stroke:#d3dae3}
+.lane-label,.phase-label,.fig-title,.slot-title,.u-title,.k-name{fill:#121a24}
+.phase-start{fill:#2a78d6;opacity:.06}
+.phase-run{fill:#1baf7a;opacity:.07}
+.phase-stop{fill:#eb6834;opacity:.06}
+.bar-tel{fill:#6250d6}
+.bar-tel-run{fill:#6250d6;opacity:.3}
+.bar-res{fill:#1baf7a}
+.bar-res-run{fill:#1baf7a;opacity:.3}
+.bar-srv{fill:#2a78d6}
+.bar-srv-run{fill:#2a78d6;opacity:.3}
+.bar-reg{fill:#eda100}
+.bar-label{fill:#fff;font-weight:600}
+.mark{stroke:#121a24;stroke-width:1.5}
+.mark-label{fill:#445163}
+.ready-line{fill:none;stroke:#008300;stroke-width:2}
+.budget{stroke:#445163;stroke-width:1.5;stroke-dasharray:4 3}
+.flow{fill:none;stroke:#6b7889;stroke-width:1.4}
+.arrowhead{fill:#6b7889}
+.u-box,.slot-box,.machine-box,.prop-box,.k-box,.bridge-box{fill:#ffffff;stroke:#b9c3cf}
+.u-local{stroke:#6250d6;stroke-width:1.6}
+.u-msg{stroke:#1baf7a;stroke-width:1.4}
+.u-net{stroke:#2a78d6;stroke-width:1.4}
+.u-user{stroke:#eda100;stroke-width:1.4}
+.grid{stroke:#d3dae3}
+.wf-zebra{fill:#e8ecf1;opacity:.55}
+.wf-bar{fill:#2a78d6}
+.wf-net{fill:#2a78d6}
+.wf-msg{fill:#1baf7a}
+.wf-ext{fill:#898781}
+.wf-local{fill:#6250d6}
+.wf-evt{fill:#eda100}
+.wf-kind{fill:#fff;font-weight:600}
+.wf-name{fill:#121a24}
+.mig-line{fill:none;stroke-width:1.1;opacity:.45}
+.mig-sec{stroke-dasharray:3 3;opacity:.35}
+.mig-l-core{stroke:#2a78d6}
+.mig-l-plug{stroke:#eb6834}
+.mig-l-tool{stroke:#898781}
+.mig-core{fill:#2a78d6}
+.mig-plug{fill:#eb6834}
+.mig-tool{fill:#898781}
+.mig-old{fill:#445163}
+.mig-count{fill:#6b7889}
+.mig-t-core{fill:#1c5cab}
+.mig-t-plug{fill:#b0441a}</style><rect width="100%" height="100%" fill="#f2f4f7"/><text x="16.0" y="74.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">遥测层 telemetry</text><path d="M150 70 H1160" class="lane-line"/><text x="16.0" y="134.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">钩子 hooks</text><path d="M150 130 H1160" class="lane-line"/><text x="16.0" y="184.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">资源层 resources</text><path d="M150 180 H1160" class="lane-line"/><text x="16.0" y="254.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">服务层 server</text><path d="M150 250 H1160" class="lane-line"/><text x="16.0" y="322.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">注册 registrar</text><path d="M150 318 H1160" class="lane-line"/><text x="16.0" y="366.0" class="lane-label" text-anchor="start" font-size="12.5" font-weight="600">就绪 ready</text><path d="M150 362 H1160" class="lane-line"/><rect x="150" y="28" width="410" height="370" class="phase-start"/><text x="355.0" y="22.0" class="phase-label" text-anchor="middle" font-size="12" font-weight="600">启动 run()</text><rect x="560" y="28" width="140" height="370" class="phase-run"/><text x="630.0" y="22.0" class="phase-label" text-anchor="middle" font-size="12" font-weight="600">运行中</text><rect x="700" y="28" width="460" height="370" class="phase-stop"/><text x="930.0" y="22.0" class="phase-label" text-anchor="middle" font-size="12" font-weight="600">停止 stop()</text><rect x="154" y="59.0" width="82" height="22" rx="4" class="bar-tel"/><rect x="236" y="65.0" width="764" height="10" rx="4" class="bar-tel-run"/><rect x="1000" y="59.0" width="80" height="22" rx="4" class="bar-tel"/><rect x="1084" y="59.0" width="72" height="22" rx="4" class="bar-tel"/><text x="154.0" y="98.0" class="annot" text-anchor="start" font-size="11">接纳：日志处理器 → tracer → meters（失败则回滚）</text><text x="1156.0" y="98.0" class="annot" text-anchor="end" font-size="11">排空：① 链路+指标 → ② 日志</text><path d="M244 121 V139" class="mark"/><text x="244.0" y="117.0" class="mark-label mono" text-anchor="middle" font-size="10.5">beforeStart</text><path d="M520 121 V139" class="mark"/><text x="520.0" y="117.0" class="mark-label mono" text-anchor="middle" font-size="10.5">afterStart</text><path d="M728 121 V139" class="mark"/><text x="728.0" y="117.0" class="mark-label mono" text-anchor="middle" font-size="10.5">beforeStop</text><path d="M990 121 V139" class="mark"/><text x="990.0" y="117.0" class="mark-label mono" text-anchor="middle" font-size="10.5">afterStop</text><rect x="258" y="169.0" width="60" height="22" rx="4" class="bar-res"/><text x="266.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r1</text><rect x="318" y="169.0" width="52" height="22" rx="4" class="bar-res"/><text x="326.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r2</text><rect x="370" y="169.0" width="40" height="22" rx="4" class="bar-res"/><text x="378.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r3</text><rect x="410" y="175.0" width="490" height="10" rx="4" class="bar-res-run"/><rect x="900" y="169.0" width="30" height="22" rx="4" class="bar-res"/><text x="908.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r3</text><rect x="930" y="169.0" width="25" height="22" rx="4" class="bar-res"/><text x="938.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r2</text><rect x="955" y="169.0" width="30" height="22" rx="4" class="bar-res"/><text x="963.0" y="184.5" class="bar-label" text-anchor="start" font-size="11">r1</text><text x="258.0" y="206.0" class="annot" text-anchor="start" font-size="11">逐个启动，等到可用再启动下一个（awaited admission）</text><text x="900.0" y="206.0" class="annot" text-anchor="start" font-size="11">倒序停止</text><rect x="416" y="228.0" width="54" height="12" rx="4" class="bar-srv"/><rect x="470" y="231.0" width="290" height="6" rx="4" class="bar-srv-run"/><rect x="760" y="228.0" width="120" height="12" rx="4" class="bar-srv"/><rect x="416" y="244.0" width="54" height="12" rx="4" class="bar-srv"/><rect x="470" y="247.0" width="290" height="6" rx="4" class="bar-srv-run"/><rect x="760" y="244.0" width="120" height="12" rx="4" class="bar-srv"/><rect x="416" y="260.0" width="54" height="12" rx="4" class="bar-srv"/><rect x="470" y="263.0" width="290" height="6" rx="4" class="bar-srv-run"/><rect x="760" y="260.0" width="120" height="12" rx="4" class="bar-srv"/><text x="416.0" y="282.0" class="annot" text-anchor="start" font-size="11">s1 s2 s3 并发启动</text><text x="760.0" y="282.0" class="annot" text-anchor="start" font-size="11">并发停止，等待全部结束</text><rect x="476" y="309.0" width="40" height="18" rx="4" class="bar-reg"/><text x="484.0" y="322.5" class="bar-label" text-anchor="start" font-size="11">注册</text><rect x="732" y="309.0" width="40" height="18" rx="4" class="bar-reg"/><text x="740.0" y="322.5" class="bar-label" text-anchor="start" font-size="11">注销</text><path d="M150 372 H526 V352 H710 V372 H1160" class="ready-line"/><text x="530.0" y="346.0" class="mark-label mono" text-anchor="start" font-size="10.5">ready = 1</text><text x="714.0" y="388.0" class="mark-label mono" text-anchor="start" font-size="10.5">ready = 0（go_like.app.stopping）</text><path d="M258 404 H512" class="budget"/><text x="260.0" y="420.0" class="annot" text-anchor="start" font-size="11">startTimeout：覆盖资源接纳与服务启动</text><path d="M728 404 H990" class="budget"/><text x="730.0" y="420.0" class="annot" text-anchor="start" font-size="11">stopTimeout：服务与资源的停止</text><path d="M1000 404 H1156" class="budget"/><text x="1004.0" y="420.0" class="annot" text-anchor="start" font-size="11">遥测自有预算</text></svg>

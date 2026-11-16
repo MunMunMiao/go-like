@@ -16,6 +16,7 @@
 - [内部端到端 RPC](designs/internal-rpc-design.md)：值契约、Fetch/SSE、取消、背压及备选方案。
 - [HTTP 与 gRPC](designs/http-grpc-transport.md)：共享工作流、独立协议、连接与流的终态边界。
 - [生命周期、就绪与错误语义](designs/lifecycle-readiness.md)：地址发现、健康、工作接纳与结果的区别。
+- [插座与插头架构（2026-11）](designs/socket-plug-architecture/README.md)：零依赖 core 的插座、生态插头、观测基座、生命周期分层与迁移方案。
 
 ## 架构决策
 

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" role="img" aria-label="观测数据流：core 拥有的工作单元和业务代码通过单一 Context 槽找到已安装的提供者，再由 otel、pino、winston、prometheus 插头导出；没有安装时为空操作。" class="fig"><style>text{font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;fill:#121a24}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:26px 0 10px}
+.fig-num{background:#ffffff;border:1px solid #d3dae3;border-radius:10px;padding:14px 16px}
+.fig-num b{display:block;font-family:"Chakra Petch","Noto Sans SC",system-ui,sans-serif;font-size:1.9rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.fig-num span{color:#445163;font-size:.86rem}
+.fig-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fig-wrap svg{display:block;width:100%;height:auto;min-width:980px}
+.fig-cap{color:#6b7889;font-size:.86rem;margin:10px 4px 2px;max-width:none}
+text{fill:#121a24;font-family:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.panel{fill:#e8ecf1;stroke:#b9c3cf;stroke-width:1.5}
+.screw{fill:#dde3ea;stroke:#b9c3cf}
+.screw-slot{stroke:#6b7889}
+.port-box{fill:#ffffff;stroke:#2a78d6;stroke-width:1.2}
+.port-sub,.tick,.wf-svc{fill:#6b7889}
+.port-sock{fill:#1c5cab}
+.port-note,.col-head,.panel-meta,.plug-lib,.fig-note,.annot,.wf-note,.slot-field,.k-desc,.u-item{fill:#445163}
+.jack{fill:#ffffff;stroke:#2a78d6;stroke-width:2}
+.jack-pin{fill:#2a78d6}
+.plug-box{fill:#fdeee6;stroke:#eb6834;stroke-width:1.2}
+.prong{fill:#eb6834}
+.plug-name{fill:#121a24}
+.cable{fill:none;stroke:#eb6834;stroke-width:2;opacity:.6;transition:opacity .15s,stroke-width .15s}
+.cable-thin{fill:none;stroke:#eb6834;stroke-width:1.5;opacity:.6}
+.lane-line{stroke:#d3dae3}
+.lane-label,.phase-label,.fig-title,.slot-title,.u-title,.k-name{fill:#121a24}
+.phase-start{fill:#2a78d6;opacity:.06}
+.phase-run{fill:#1baf7a;opacity:.07}
+.phase-stop{fill:#eb6834;opacity:.06}
+.bar-tel{fill:#6250d6}
+.bar-tel-run{fill:#6250d6;opacity:.3}
+.bar-res{fill:#1baf7a}
+.bar-res-run{fill:#1baf7a;opacity:.3}
+.bar-srv{fill:#2a78d6}
+.bar-srv-run{fill:#2a78d6;opacity:.3}
+.bar-reg{fill:#eda100}
+.bar-label{fill:#fff;font-weight:600}
+.mark{stroke:#121a24;stroke-width:1.5}
+.mark-label{fill:#445163}
+.ready-line{fill:none;stroke:#008300;stroke-width:2}
+.budget{stroke:#445163;stroke-width:1.5;stroke-dasharray:4 3}
+.flow{fill:none;stroke:#6b7889;stroke-width:1.4}
+.arrowhead{fill:#6b7889}
+.u-box,.slot-box,.machine-box,.prop-box,.k-box,.bridge-box{fill:#ffffff;stroke:#b9c3cf}
+.u-local{stroke:#6250d6;stroke-width:1.6}
+.u-msg{stroke:#1baf7a;stroke-width:1.4}
+.u-net{stroke:#2a78d6;stroke-width:1.4}
+.u-user{stroke:#eda100;stroke-width:1.4}
+.grid{stroke:#d3dae3}
+.wf-zebra{fill:#e8ecf1;opacity:.55}
+.wf-bar{fill:#2a78d6}
+.wf-net{fill:#2a78d6}
+.wf-msg{fill:#1baf7a}
+.wf-ext{fill:#898781}
+.wf-local{fill:#6250d6}
+.wf-evt{fill:#eda100}
+.wf-kind{fill:#fff;font-weight:600}
+.wf-name{fill:#121a24}
+.mig-line{fill:none;stroke-width:1.1;opacity:.45}
+.mig-sec{stroke-dasharray:3 3;opacity:.35}
+.mig-l-core{stroke:#2a78d6}
+.mig-l-plug{stroke:#eb6834}
+.mig-l-tool{stroke:#898781}
+.mig-core{fill:#2a78d6}
+.mig-plug{fill:#eb6834}
+.mig-tool{fill:#898781}
+.mig-old{fill:#445163}
+.mig-count{fill:#6b7889}
+.mig-t-core{fill:#1c5cab}
+.mig-t-plug{fill:#b0441a}</style><rect width="100%" height="100%" fill="#f2f4f7"/><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrowhead"/></marker></defs><rect x="20" y="34" width="300" height="66" rx="8" class="u-box u-net"/><text x="34.0" y="55.0" class="u-title" text-anchor="start" font-size="12.5" font-weight="600">网络单元</text><text x="34.0" y="74.0" class="u-item mono" text-anchor="start" font-size="11">rpc.server  ·  rpc.client</text><text x="34.0" y="92.0" class="u-item mono" text-anchor="start" font-size="11">http.server（Web 请求）</text><rect x="20" y="114" width="300" height="66" rx="8" class="u-box u-msg"/><text x="34.0" y="135.0" class="u-title" text-anchor="start" font-size="12.5" font-weight="600">消息与任务</text><text x="34.0" y="154.0" class="u-item mono" text-anchor="start" font-size="11">messaging.publish  ·  process {订阅}</text><text x="34.0" y="172.0" class="u-item mono" text-anchor="start" font-size="11">job.enqueue  ·  run {任务名}</text><rect x="20" y="194" width="300" height="102" rx="8" class="u-box u-local"/><text x="34.0" y="215.0" class="u-title" text-anchor="start" font-size="12.5" font-weight="600">非网络单元</text><text x="34.0" y="234.0" class="u-item mono" text-anchor="start" font-size="11">app start / stop / ready</text><text x="34.0" y="252.0" class="u-item mono" text-anchor="start" font-size="11">config load · reload</text><text x="34.0" y="270.0" class="u-item mono" text-anchor="start" font-size="11">registry register · watch</text><text x="34.0" y="288.0" class="u-item mono" text-anchor="start" font-size="11">retry · breaker · rate-limit 事件</text><rect x="20" y="310" width="300" height="84" rx="8" class="u-box u-user"/><text x="34.0" y="331.0" class="u-title" text-anchor="start" font-size="12.5" font-weight="600">业务代码</text><text x="34.0" y="350.0" class="u-item mono" text-anchor="start" font-size="11">inSpan(ctx, name, fn)</text><text x="34.0" y="368.0" class="u-item mono" text-anchor="start" font-size="11">log.info(ctx, msg, attrs)</text><text x="34.0" y="386.0" class="u-item mono" text-anchor="start" font-size="11">counter.add(ctx, 1, attrs)</text><rect x="400" y="60" width="300" height="182" rx="10" class="slot-box"/><text x="416.0" y="84.0" class="slot-title" text-anchor="start" font-size="13" font-weight="600">Context 里唯一的观测槽</text><text x="416.0" y="108.0" class="slot-field mono" text-anchor="start" font-size="11">tracer · meters[] · handlers[]</text><text x="416.0" y="129.0" class="slot-field mono" text-anchor="start" font-size="11">propagator</text><text x="416.0" y="150.0" class="slot-field mono" text-anchor="start" font-size="11">span（当前活动 span）</text><text x="416.0" y="171.0" class="slot-field mono" text-anchor="start" font-size="11">resource（service.* 属性）</text><text x="416.0" y="192.0" class="slot-field mono" text-anchor="start" font-size="11">operation（所在单元名）</text><text x="416.0" y="213.0" class="slot-field mono" text-anchor="start" font-size="11">observing = 是否安装了任一信号</text><rect x="400" y="262" width="300" height="132" rx="10" class="machine-box"/><text x="416.0" y="286.0" class="slot-title" text-anchor="start" font-size="13" font-weight="600">core 埋点机（每个单元一次）</text><text x="416.0" y="310.0" class="slot-field" text-anchor="start" font-size="11.5">1 查一次槽；未安装 → 直接执行</text><text x="416.0" y="330.0" class="slot-field" text-anchor="start" font-size="11.5">2 从载体 extract 父上下文</text><text x="416.0" y="350.0" class="slot-field" text-anchor="start" font-size="11.5">3 startSpan + enter(ctx, fn)</text><text x="416.0" y="370.0" class="slot-field" text-anchor="start" font-size="11.5">4 结束：状态、指标、完成日志</text><rect x="400" y="420" width="300" height="96" rx="10" class="prop-box"/><text x="416.0" y="444.0" class="slot-title" text-anchor="start" font-size="13" font-weight="600">传播（默认 W3C traceparent）</text><text x="416.0" y="466.0" class="slot-field" text-anchor="start" font-size="11.5">HTTP 请求头 · 消息 headers</text><text x="416.0" y="486.0" class="slot-field mono" text-anchor="start" font-size="11">BullMQ telemetry.metadata</text><text x="416.0" y="506.0" class="slot-field" text-anchor="start" font-size="11.5">未装 tracer 也照常传播，日志可关联</text><path d="M320 67 C360 67 360 330 400 330" class="flow" marker-end="url(#arr)"/><path d="M320 147 C360 147 360 330 400 330" class="flow" marker-end="url(#arr)"/><path d="M320 245 C360 245 360 330 400 330" class="flow" marker-end="url(#arr)"/><path d="M320 352 C360 352 360 330 400 330" class="flow" marker-end="url(#arr)"/><path d="M550.0 242 V262" class="flow" marker-end="url(#arr)"/><rect x="770" y="70" width="206" height="64" rx="8" class="k-box k-trace"/><circle cx="770" cy="102" r="6" class="jack"/><text x="786.0" y="96.0" class="k-name mono" text-anchor="start" font-size="12" font-weight="600">TracerProvider</text><text x="786.0" y="116.0" class="k-desc mono" text-anchor="start" font-size="10.5">startSpan · enter?</text><path d="M700 330 C740 330 730 102 763 102" class="flow" marker-end="url(#arr)"/><rect x="770" y="190" width="206" height="64" rx="8" class="k-box k-metric"/><circle cx="770" cy="222" r="6" class="jack"/><text x="786.0" y="216.0" class="k-name mono" text-anchor="start" font-size="12" font-weight="600">MeterProvider[]</text><text x="786.0" y="236.0" class="k-desc mono" text-anchor="start" font-size="10.5">instrument → record</text><path d="M700 330 C740 330 730 222 763 222" class="flow" marker-end="url(#arr)"/><rect x="770" y="310" width="206" height="64" rx="8" class="k-box k-log"/><circle cx="770" cy="342" r="6" class="jack"/><text x="786.0" y="336.0" class="k-name mono" text-anchor="start" font-size="12" font-weight="600">LogHandler[]</text><text x="786.0" y="356.0" class="k-desc mono" text-anchor="start" font-size="10.5">enabled · handle · withAttrs?</text><path d="M700 330 C740 330 730 342 763 342" class="flow" marker-end="url(#arr)"/><rect x="770" y="430" width="206" height="64" rx="8" class="k-box k-prop"/><circle cx="770" cy="462" r="6" class="jack"/><text x="786.0" y="456.0" class="k-name mono" text-anchor="start" font-size="12" font-weight="600">Propagator</text><text x="786.0" y="476.0" class="k-desc mono" text-anchor="start" font-size="10.5">inject · extract · fields</text><path d="M700 330 C740 330 730 462 763 462" class="flow" marker-end="url(#arr)"/><text x="1012.0" y="52.0" class="col-head" text-anchor="start" font-size="11">插头 / 内置实现</text><rect x="1012" y="70" width="156" height="52" rx="8" class="plug-box"/><text x="1022.0" y="91.0" class="plug-name mono" text-anchor="start" font-size="11.5" font-weight="600">otel</text><text x="1022.0" y="109.0" class="plug-lib" text-anchor="start" font-size="10.5">OTLP 导出（三信号）</text><rect x="1012" y="190" width="156" height="52" rx="8" class="plug-box"/><text x="1022.0" y="211.0" class="plug-name mono" text-anchor="start" font-size="11.5" font-weight="600">prometheus/metric</text><text x="1022.0" y="229.0" class="plug-lib" text-anchor="start" font-size="10.5">/metrics 抓取</text><rect x="1012" y="290" width="156" height="52" rx="8" class="plug-box"/><text x="1022.0" y="311.0" class="plug-name mono" text-anchor="start" font-size="11.5" font-weight="600">pino/log</text><text x="1022.0" y="329.0" class="plug-lib" text-anchor="start" font-size="10.5">stdout · 文件</text><rect x="1012" y="350" width="156" height="52" rx="8" class="plug-box"/><text x="1022.0" y="371.0" class="plug-name mono" text-anchor="start" font-size="11.5" font-weight="600">winston/log</text><text x="1022.0" y="389.0" class="plug-lib" text-anchor="start" font-size="10.5">transports</text><rect x="1012" y="430" width="156" height="52" rx="8" class="plug-box"/><text x="1022.0" y="451.0" class="plug-name mono" text-anchor="start" font-size="11.5" font-weight="600">core 内置</text><text x="1022.0" y="469.0" class="plug-lib" text-anchor="start" font-size="10.5">W3C · 记录器 · 空操作</text><path d="M976 102 C1006 102 982 96 1012 96" class="cable-thin"/><path d="M976 222 C1006 222 982 216 1012 216" class="cable-thin"/><path d="M976 342 C1006 342 982 316 1012 316" class="cable-thin"/><path d="M976 342 C1006 342 982 376 1012 376" class="cable-thin"/><path d="M976 462 C1006 462 982 456 1012 456" class="cable-thin"/><path d="M976 222 C1006 222 982 96 1012 96" class="cable-thin"/><path d="M976 342 C1006 342 982 96 1012 96" class="cable-thin"/><text x="20.0" y="546.0" class="fig-note" text-anchor="start" font-size="12">插头只实现右侧四个插座，不包装任何调用点；埋点位置全部在 core 里，任务、消息、生命周期、配置与注册中心也在其中。</text></svg>

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 300" role="img" aria-label="显式 Context 与 OTel AsyncLocalStorage 的桥接：core 在用户代码外调用 enter，让第三方 span 嵌套在 go-like span 下；在 Server.start 和常驻循环外调用 enterRoot，避免捕获过期 span。" class="fig"><style>text{font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;fill:#121a24}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:26px 0 10px}
+.fig-num{background:#ffffff;border:1px solid #d3dae3;border-radius:10px;padding:14px 16px}
+.fig-num b{display:block;font-family:"Chakra Petch","Noto Sans SC",system-ui,sans-serif;font-size:1.9rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.fig-num span{color:#445163;font-size:.86rem}
+.fig-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.fig-wrap svg{display:block;width:100%;height:auto;min-width:980px}
+.fig-cap{color:#6b7889;font-size:.86rem;margin:10px 4px 2px;max-width:none}
+text{fill:#121a24;font-family:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.panel{fill:#e8ecf1;stroke:#b9c3cf;stroke-width:1.5}
+.screw{fill:#dde3ea;stroke:#b9c3cf}
+.screw-slot{stroke:#6b7889}
+.port-box{fill:#ffffff;stroke:#2a78d6;stroke-width:1.2}
+.port-sub,.tick,.wf-svc{fill:#6b7889}
+.port-sock{fill:#1c5cab}
+.port-note,.col-head,.panel-meta,.plug-lib,.fig-note,.annot,.wf-note,.slot-field,.k-desc,.u-item{fill:#445163}
+.jack{fill:#ffffff;stroke:#2a78d6;stroke-width:2}
+.jack-pin{fill:#2a78d6}
+.plug-box{fill:#fdeee6;stroke:#eb6834;stroke-width:1.2}
+.prong{fill:#eb6834}
+.plug-name{fill:#121a24}
+.cable{fill:none;stroke:#eb6834;stroke-width:2;opacity:.6;transition:opacity .15s,stroke-width .15s}
+.cable-thin{fill:none;stroke:#eb6834;stroke-width:1.5;opacity:.6}
+.lane-line{stroke:#d3dae3}
+.lane-label,.phase-label,.fig-title,.slot-title,.u-title,.k-name{fill:#121a24}
+.phase-start{fill:#2a78d6;opacity:.06}
+.phase-run{fill:#1baf7a;opacity:.07}
+.phase-stop{fill:#eb6834;opacity:.06}
+.bar-tel{fill:#6250d6}
+.bar-tel-run{fill:#6250d6;opacity:.3}
+.bar-res{fill:#1baf7a}
+.bar-res-run{fill:#1baf7a;opacity:.3}
+.bar-srv{fill:#2a78d6}
+.bar-srv-run{fill:#2a78d6;opacity:.3}
+.bar-reg{fill:#eda100}
+.bar-label{fill:#fff;font-weight:600}
+.mark{stroke:#121a24;stroke-width:1.5}
+.mark-label{fill:#445163}
+.ready-line{fill:none;stroke:#008300;stroke-width:2}
+.budget{stroke:#445163;stroke-width:1.5;stroke-dasharray:4 3}
+.flow{fill:none;stroke:#6b7889;stroke-width:1.4}
+.arrowhead{fill:#6b7889}
+.u-box,.slot-box,.machine-box,.prop-box,.k-box,.bridge-box{fill:#ffffff;stroke:#b9c3cf}
+.u-local{stroke:#6250d6;stroke-width:1.6}
+.u-msg{stroke:#1baf7a;stroke-width:1.4}
+.u-net{stroke:#2a78d6;stroke-width:1.4}
+.u-user{stroke:#eda100;stroke-width:1.4}
+.grid{stroke:#d3dae3}
+.wf-zebra{fill:#e8ecf1;opacity:.55}
+.wf-bar{fill:#2a78d6}
+.wf-net{fill:#2a78d6}
+.wf-msg{fill:#1baf7a}
+.wf-ext{fill:#898781}
+.wf-local{fill:#6250d6}
+.wf-evt{fill:#eda100}
+.wf-kind{fill:#fff;font-weight:600}
+.wf-name{fill:#121a24}
+.mig-line{fill:none;stroke-width:1.1;opacity:.45}
+.mig-sec{stroke-dasharray:3 3;opacity:.35}
+.mig-l-core{stroke:#2a78d6}
+.mig-l-plug{stroke:#eb6834}
+.mig-l-tool{stroke:#898781}
+.mig-core{fill:#2a78d6}
+.mig-plug{fill:#eb6834}
+.mig-tool{fill:#898781}
+.mig-old{fill:#445163}
+.mig-count{fill:#6b7889}
+.mig-t-core{fill:#1c5cab}
+.mig-t-plug{fill:#b0441a}</style><rect width="100%" height="100%" fill="#f2f4f7"/><defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrowhead"/></marker></defs><rect x="20" y="24" width="360" height="190" rx="10" class="bridge-box"/><text x="38.0" y="54.0" class="slot-title" text-anchor="start" font-size="14" font-weight="600">显式优先</text><text x="38.0" y="86.0" class="slot-field" text-anchor="start" font-size="12">ctx 里的 span 永远胜出</text><text x="38.0" y="110.0" class="slot-field" text-anchor="start" font-size="12">OTel context.active() 只在</text><text x="38.0" y="134.0" class="slot-field" text-anchor="start" font-size="12">ctx 无 span 且 implicitParent:true 时被读取</text><text x="38.0" y="158.0" class="slot-field" text-anchor="start" font-size="12">默认 implicitParent:false</text><rect x="410" y="24" width="360" height="190" rx="10" class="bridge-box"/><text x="428.0" y="54.0" class="slot-title" text-anchor="start" font-size="14" font-weight="600">enter：让第三方嵌套进来</text><text x="428.0" y="86.0" class="slot-field" text-anchor="start" font-size="12">core 用 TracerProvider.enter(unitCtx, fn)</text><text x="428.0" y="110.0" class="slot-field" text-anchor="start" font-size="12">包住处理器、中间件、每次流式拉取、</text><text x="428.0" y="134.0" class="slot-field" text-anchor="start" font-size="12">整个客户端调用（含每次 fetch）</text><text x="428.0" y="158.0" class="slot-field" text-anchor="start" font-size="12">→ undici / pg / ioredis 的 span 成为子 span</text><rect x="800" y="24" width="360" height="190" rx="10" class="bridge-box"/><text x="818.0" y="54.0" class="slot-title" text-anchor="start" font-size="14" font-weight="600">enterRoot：不捕获过期 span</text><text x="818.0" y="86.0" class="slot-field" text-anchor="start" font-size="12">Server.start、资源启动、Telemetry.start、</text><text x="818.0" y="110.0" class="slot-field" text-anchor="start" font-size="12">常驻循环外层用 enterRoot</text><text x="818.0" y="134.0" class="slot-field" text-anchor="start" font-size="12">→ OTel ALS 被设为 ROOT_CONTEXT</text><text x="818.0" y="158.0" class="slot-field" text-anchor="start" font-size="12">监听器和定时器捕获不到请求或启动 span</text><path d="M380 120 H408" class="flow" marker-end="url(#arr2)"/><path d="M770 120 H798" class="flow" marker-end="url(#arr2)"/><text x="20.0" y="250.0" class="fig-note" text-anchor="start" font-size="12.5">根单元规则 R7：cron tick、config reload、app start/stop，以及没有有效远端父 span 的入站单元，一律 root:true。</text><text x="20.0" y="274.0" class="fig-note" text-anchor="start" font-size="12.5">设计评审用实验复现过：读取隐式上下文作为默认父 span 的方案，会把新任务挂到已经结束的 span 下。</text></svg>
