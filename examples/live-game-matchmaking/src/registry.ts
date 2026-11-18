@@ -1,5 +1,6 @@
-import type { Registry } from "@go-like/registry"
-import { newKubernetesRegistry } from "@go-like/registry-kubernetes"
+import type { Registry } from "@go-like/core/registry"
+import { newKubernetesClient } from "@go-like/kubernetes"
+import { newKubernetesRegistry } from "@go-like/kubernetes/registry"
 
 export type GameRegistryEnvironment = Readonly<Record<string, string | undefined>>
 
@@ -10,7 +11,10 @@ export function gameRegistryFromEnvironment(environment: GameRegistryEnvironment
   if (address === "") throw new TypeError("KUBERNETES_API_ADDRESS must not be empty")
   const namespace = environment.KUBERNETES_NAMESPACE ?? "default"
   const token = environment.KUBERNETES_TOKEN
-  if (token === undefined) return newKubernetesRegistry({ fetch, address, namespace })
   if (token === "") throw new TypeError("KUBERNETES_TOKEN must not be empty")
-  return newKubernetesRegistry({ fetch, address, namespace, token })
+  const client =
+    token === undefined
+      ? newKubernetesClient({ fetch, address })
+      : newKubernetesClient({ fetch, address, token })
+  return newKubernetesRegistry(client, { namespace })
 }

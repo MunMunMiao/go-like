@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 
-import { background } from "@go-like/context"
+import { newConsulClient } from "@go-like/consul"
+import { background } from "@go-like/core/context"
 
 import { newTenantRuntimeState } from "../src/runtime-state"
 
@@ -54,7 +55,15 @@ for (const mismatch of ["revision", "service"] as const) {
       return consulRecord(payload, reads === 3 && mismatch === "revision" ? 2 : 1)
     })
     try {
-      const state = newTenantRuntimeState("http://consul.test", "tenant-test")
+      const state = newTenantRuntimeState(
+        newConsulClient({
+          fetch(request) {
+            return fetch(request)
+          },
+          address: "http://consul.test"
+        }),
+        "tenant-test"
+      )
 
       await expect(state.publish(background())).rejects.toThrow(
         "Consul runtime-state readback failed"
@@ -79,7 +88,15 @@ test("rejects a Consul cleanup whose record remains visible", async () => {
     return consulRecord(existingPayload(), 1)
   })
   try {
-    const state = newTenantRuntimeState("http://consul.test", "tenant-test")
+    const state = newTenantRuntimeState(
+      newConsulClient({
+        fetch(request) {
+          return fetch(request)
+        },
+        address: "http://consul.test"
+      }),
+      "tenant-test"
+    )
 
     await expect(state.remove(background())).rejects.toThrow("Consul runtime-state cleanup failed")
     expect(actions).toEqual([`GET:/v1/kv/${key}`, `DELETE:/v1/kv/${key}`, `GET:/v1/kv/${key}`])

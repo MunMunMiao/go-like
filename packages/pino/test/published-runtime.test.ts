@@ -1,10 +1,10 @@
 import { once } from "node:events"
 
 import { expect, test } from "bun:test"
-import { background, canceled, withCancelCause } from "@go-like/context"
+import { background, canceled, withCancelCause } from "@go-like/core/context"
 import pino, { symbols, type Logger } from "pino"
 
-import { pinoDrainTimeout, newPinoServer } from "../src/index"
+import { pinoDrainTimeout, newPinoHandler } from "@go-like/pino/log"
 
 type SonicDestination = ReturnType<typeof pino.destination>
 type ThreadDestination = ReturnType<typeof pino.transport>
@@ -76,10 +76,10 @@ test("published lifecycle rejects canceled and malformed startup contexts", asyn
   const canceledResource = await publishedSonicResource()
   const canceledContext = withCancelCause(background())
   canceledContext[1](null)
-  const canceledServer = newPinoServer(
+  const canceledServer = newPinoHandler(
     publishedLogger(canceledResource.destination),
     canceledResource.destination
-  )
+  ).lifecycle
   await expect(canceledServer.start(canceledContext[0])).rejects.toBe(canceled)
   await expect(canceledServer.start(background())).rejects.toMatchObject({
     name: "PinoAlreadyStartedError",
@@ -100,10 +100,10 @@ test("published lifecycle rejects canceled and malformed startup contexts", asyn
     value: () => undefined
   }
   await expect(
-    newPinoServer(
+    newPinoHandler(
       publishedLogger(externalResource.destination),
       externalResource.destination
-    ).start(externalContext)
+    ).lifecycle.start(externalContext)
   ).rejects.toBe(externalFailure)
   expect(errorReads).toBe(2)
   await closePublishedSonic(externalResource)
@@ -118,9 +118,10 @@ test("published lifecycle rejects canceled and malformed startup contexts", asyn
     value: () => undefined
   }
   await expect(
-    newPinoServer(publishedLogger(hostileResource.destination), hostileResource.destination).start(
-      hostileContext
-    )
+    newPinoHandler(
+      publishedLogger(hostileResource.destination),
+      hostileResource.destination
+    ).lifecycle.start(hostileContext)
   ).rejects.toMatchObject({
     cause: "context inspection failed"
   })
@@ -151,7 +152,9 @@ test("published lifecycle validates and drains an official ThreadStream", async 
         callback?.()
       }
     }
-    expect(() => newPinoServer(missingLogger as never, missing as never)).toThrow(TypeError)
+    expect(() => newPinoHandler(missingLogger as never, missing as never).lifecycle).toThrow(
+      TypeError
+    )
 
     const changed = new Proxy(destination, {
       get(target, property, receiver): unknown {
@@ -164,7 +167,9 @@ test("published lifecycle validates and drains an official ThreadStream", async 
         callback?.()
       }
     }
-    expect(() => newPinoServer(changedLogger as never, changed as never)).toThrow(TypeError)
+    expect(() => newPinoHandler(changedLogger as never, changed as never).lifecycle).toThrow(
+      TypeError
+    )
   }
 
   const missingErrorState = new Proxy(destination, {
@@ -172,16 +177,17 @@ test("published lifecycle validates and drains an official ThreadStream", async 
       return property === "writableErrored" ? false : Reflect.has(target, property)
     }
   })
-  expect(() =>
-    newPinoServer(
-      {
-        [symbols.streamSym]: missingErrorState,
-        flush(callback?: FlushCallback): void {
-          callback?.()
-        }
-      } as never,
-      missingErrorState as never
-    )
+  expect(
+    () =>
+      newPinoHandler(
+        {
+          [symbols.streamSym]: missingErrorState,
+          flush(callback?: FlushCallback): void {
+            callback?.()
+          }
+        } as never,
+        missingErrorState as never
+      ).lifecycle
   ).toThrow(TypeError)
 
   const terminalStates: readonly [string, unknown][] = [
@@ -194,7 +200,7 @@ test("published lifecycle validates and drains an official ThreadStream", async 
   for (const [key, value] of terminalStates) {
     Object.defineProperty(destination, key, { configurable: true, value })
     await expect(
-      newPinoServer(publishedLogger(destination), destination).start(background())
+      newPinoHandler(publishedLogger(destination), destination).lifecycle.start(background())
     ).rejects.toMatchObject({
       name: "PinoDestinationClosedError"
     })
@@ -207,11 +213,11 @@ test("published lifecycle validates and drains an official ThreadStream", async 
     value: startupFailure
   })
   await expect(
-    newPinoServer(publishedLogger(destination), destination).start(background())
+    newPinoHandler(publishedLogger(destination), destination).lifecycle.start(background())
   ).rejects.toBe(startupFailure)
   Reflect.deleteProperty(destination, "writableErrored")
 
-  const server = newPinoServer(publishedLogger(destination), destination)
+  const server = newPinoHandler(publishedLogger(destination), destination).lifecycle
   const running = server.start(background())
   await server.stop(background())
   await running
@@ -231,9 +237,10 @@ test("published lifecycle rejects synchronous native admission failures", async 
     }
   })
   await expect(
-    newPinoServer(publishedLogger(closeResource.destination), closeResource.destination).start(
-      background()
-    )
+    newPinoHandler(
+      publishedLogger(closeResource.destination),
+      closeResource.destination
+    ).lifecycle.start(background())
   ).rejects.toMatchObject({
     name: "PinoDestinationClosedError"
   })
@@ -252,9 +259,10 @@ test("published lifecycle rejects synchronous native admission failures", async 
     }
   })
   await expect(
-    newPinoServer(publishedLogger(errorResource.destination), errorResource.destination).start(
-      background()
-    )
+    newPinoHandler(
+      publishedLogger(errorResource.destination),
+      errorResource.destination
+    ).lifecycle.start(background())
   ).rejects.toBe(admissionFailure)
   Reflect.deleteProperty(errorResource.destination, "on")
   await closePublishedSonic(errorResource)
@@ -267,9 +275,10 @@ test("published lifecycle rejects synchronous native admission failures", async 
     }
   })
   await expect(
-    newPinoServer(publishedLogger(thrownResource.destination), thrownResource.destination).start(
-      background()
-    )
+    newPinoHandler(
+      publishedLogger(thrownResource.destination),
+      thrownResource.destination
+    ).lifecycle.start(background())
   ).rejects.toMatchObject({
     cause: "close listener registration failed"
   })
@@ -287,9 +296,10 @@ test("published lifecycle rejects synchronous native admission failures", async 
     }
   })
   await expect(
-    newPinoServer(publishedLogger(stateResource.destination), stateResource.destination).start(
-      background()
-    )
+    newPinoHandler(
+      publishedLogger(stateResource.destination),
+      stateResource.destination
+    ).lifecycle.start(background())
   ).rejects.toMatchObject({
     name: "PinoDestinationClosedError"
   })
@@ -302,12 +312,12 @@ test("published lifecycle rejects synchronous native admission failures", async 
 test("published lifecycle preserves flush and native failure identity", async () => {
   const flushResource = await publishedSonicResource()
   const flushFailure = new Error("published flush failed")
-  const flushServer = newPinoServer(
+  const flushServer = newPinoHandler(
     publishedLogger(flushResource.destination, function flush(callback?: FlushCallback): void {
       callback?.(flushFailure)
     }),
     flushResource.destination
-  )
+  ).lifecycle
   const flushRunning = flushServer.start(background())
   await expect(flushServer.stop(background())).rejects.toBe(flushFailure)
   await expect(flushRunning).rejects.toBe(flushFailure)
@@ -315,12 +325,12 @@ test("published lifecycle preserves flush and native failure identity", async ()
 
   const nativeResource = await publishedSonicResource()
   let releaseFlush: FlushCallback | undefined
-  const nativeServer = newPinoServer(
+  const nativeServer = newPinoHandler(
     publishedLogger(nativeResource.destination, function flush(callback?: FlushCallback): void {
       releaseFlush = callback
     }),
     nativeResource.destination
-  )
+  ).lifecycle
   const nativeRunning = nativeServer.start(background())
   const first = new Error("first native failure")
   const second = new Error("second native failure")
@@ -334,10 +344,10 @@ test("published lifecycle preserves flush and native failure identity", async ()
   await nativeResource.closed
 
   const closeResource = await publishedSonicResource()
-  const closeServer = newPinoServer(
+  const closeServer = newPinoHandler(
     publishedLogger(closeResource.destination),
     closeResource.destination
-  )
+  ).lifecycle
   const closeRunning = closeServer.start(background())
   closeResource.destination.destroy()
   await expect(closeRunning).rejects.toMatchObject({
@@ -349,11 +359,11 @@ test("published lifecycle preserves flush and native failure identity", async ()
 /** Exercises the Pino file-destination force boundary and native-operation failures. */
 test("published lifecycle enforces file-destination hard drain boundaries", async () => {
   const forcedResource = await publishedSonicResource()
-  const forcedServer = newPinoServer(
+  const forcedServer = newPinoHandler(
     publishedLogger(forcedResource.destination, function blockedFlush(): void {}),
     forcedResource.destination,
     pinoDrainTimeout(0)
-  )
+  ).lifecycle
   const forcedRunning = forcedServer.start(background())
   await expect(forcedServer.stop(background())).rejects.toMatchObject({
     name: "PinoDrainTimeoutError",
@@ -366,11 +376,11 @@ test("published lifecycle enforces file-destination hard drain boundaries", asyn
   await forcedResource.closed
 
   const destroyResource = await publishedSonicResource()
-  const destroyServer = newPinoServer(
+  const destroyServer = newPinoHandler(
     publishedLogger(destroyResource.destination, function blockedFlush(): void {}),
     destroyResource.destination,
     pinoDrainTimeout(0)
-  )
+  ).lifecycle
   const destroyRunning = destroyServer.start(background())
   const descriptor = Object.getOwnPropertyDescriptor(destroyResource.destination, "fd")
   const originalFD = Reflect.get(destroyResource.destination, "fd")
@@ -398,13 +408,13 @@ test("published lifecycle enforces file-destination hard drain boundaries", asyn
   await destroyResource.closed
 
   const endResource = await publishedSonicResource()
-  const endServer = newPinoServer(
+  const endServer = newPinoHandler(
     publishedLogger(endResource.destination, function failedFlush(): void {
       throw "flush threw"
     }),
     endResource.destination,
     pinoDrainTimeout(0)
-  )
+  ).lifecycle
   const endRunning = endServer.start(background())
   Reflect.set(endResource.destination, "destroyed", true)
   const endFailure = await endServer.stop(background()).catch((error: unknown) => error)
@@ -444,11 +454,11 @@ test("published lifecycle retains ThreadStream terminal observation after timeou
       return resource.destination
     }
   })
-  const server = newPinoServer(
+  const server = newPinoHandler(
     publishedLogger(resource.destination, function blockedFlush(): void {}),
     resource.destination,
     pinoDrainTimeout(0)
-  )
+  ).lifecycle
   const running = server.start(background())
   const timeoutFailure = await server.stop(background()).catch((error: unknown) => error)
   expect(timeoutFailure).toMatchObject({
@@ -472,7 +482,7 @@ test("published lifecycle retains ThreadStream terminal observation after timeou
 /** Exercises the elapsed-time recheck and stale owner-timer guard with official resources. */
 test("published lifecycle uses monotonic deadlines and ignores stale timeout callbacks", async () => {
   const elapsedResource = await publishedSonicResource()
-  const elapsedServer = newPinoServer(
+  const elapsedServer = newPinoHandler(
     publishedLogger(
       elapsedResource.destination,
       function delayedFlush(callback?: FlushCallback): void {
@@ -484,7 +494,7 @@ test("published lifecycle uses monotonic deadlines and ignores stale timeout cal
     ),
     elapsedResource.destination,
     pinoDrainTimeout(1)
-  )
+  ).lifecycle
   const elapsedRunning = elapsedServer.start(background())
   await expect(elapsedServer.stop(background())).rejects.toMatchObject({
     name: "PinoDrainTimeoutError",
@@ -503,11 +513,11 @@ test("published lifecycle uses monotonic deadlines and ignores stale timeout cal
   await elapsedNativeClose
 
   const staleResource = await publishedSonicResource()
-  const staleServer = newPinoServer(
+  const staleServer = newPinoHandler(
     publishedLogger(staleResource.destination),
     staleResource.destination,
     pinoDrainTimeout(100)
-  )
+  ).lifecycle
   const staleRunning = staleServer.start(background())
   const nativeSetTimeout = globalThis.setTimeout
   let staleCallback: (() => void) | undefined

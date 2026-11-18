@@ -19,7 +19,18 @@ import {
   publishedEnvironment,
   runBufMatrix,
   runRuntimeInterop,
+  assertDuplicateCoreVersions,
+  assertPublishedEntryResolution,
+  countPhysicalCoreDirectories,
+  duplicateCoreFailureCode,
+  peerInstallFailureCode,
+  publishedEntrySpecifiers,
+  DuplicateCoreCode,
+  PeerResolveCode,
+  PublishedHiddenPackageName,
+  PublishedPublicEntryCount,
   validateInstalledBuf,
+  validateInstalledPackages,
   validateInstalledProtocGenLike,
   validatePublishedBrowserBundle,
   validatePublishedNativeMetafile,
@@ -358,7 +369,7 @@ test("published native lifecycle evidence requires canonical cancellation and pe
 
 test("workspace native runtime proves cancellation feedback and forced stop", async () => {
   const result = await runCommand(process.cwd(), {
-    cwd: resolve("packages/transport/grpc-buf"),
+    cwd: resolve("packages/connectrpc"),
     command: ["bun", "test/e2e/native-runtime.ts", "self-test"],
     timeoutMs: 30_000
   })
@@ -382,7 +393,7 @@ test("workspace native runtime proves cancellation feedback and forced stop", as
 
 test("portable runtime calls request-streaming methods without entering the Fetch handler", async () => {
   const result = await runCommand(process.cwd(), {
-    cwd: resolve("packages/transport/grpc-buf"),
+    cwd: resolve("packages/connectrpc"),
     command: ["bun", "test/e2e/portable-runtime.ts"],
     timeoutMs: 30_000
   })
@@ -483,6 +494,7 @@ test("published fixture stages local Buf and native inputs", async () => {
     )
     expect(await Bun.file(join(directory.path, "proto/order/v1/order.proto")).exists()).toBe(true)
     expect(await Bun.file(join(directory.path, "browser.ts")).exists()).toBe(true)
+    expect(await Bun.file(join(directory.path, "smoke.ts")).exists()).toBe(true)
     expect(await Bun.file(join(directory.path, "test/e2e/native-harness.ts")).exists()).toBe(true)
     expect(await Bun.file(join(directory.path, "test/e2e/native-faults.ts")).exists()).toBe(true)
     expect(await Bun.file(join(directory.path, "test/e2e/native-runtime.ts")).exists()).toBe(true)
@@ -705,7 +717,7 @@ test("published native metafiles accept only their physical stage inputs", async
       JSON.stringify({
         inputs: {
           ...Object.fromEntries(upstreamRequired.map((path) => [path, {}])),
-          [resolve("packages/transport/grpc-buf/.artifacts/generated.ts")]: {}
+          [resolve("packages/connectrpc/.artifacts/generated.ts")]: {}
         }
       })
     )
@@ -724,7 +736,7 @@ test("published browser bundle requires portable generated inputs and rejects na
       "browser.ts",
       ".artifacts/gen/published/v1/probe_pb.ts",
       ".artifacts/gen/published/v1/probe_like.ts",
-      "node_modules/@go-like/transport-grpc-buf/index.js"
+      "node_modules/@go-like/connectrpc/index.js"
     ]
     for (const path of required) {
       const file = join(directory.path, path)
@@ -779,6 +791,23 @@ test("published browser bundle requires portable generated inputs and rejects na
         inputs: {
           ...Object.fromEntries(required.map((path) => [path, { imports: [] }])),
           [forbiddenInput]: { imports: [] }
+        },
+        outputs: { "./browser.js": { inputs: bundledInputs, imports: [] } }
+      })
+    )
+    await expect(validatePublishedBrowserBundle(directory.path, metafile, output)).rejects.toThrow(
+      "forbidden native module"
+    )
+
+    const connectrpcNode = "node_modules/@go-like/connectrpc/node/index.js"
+    await mkdir(resolve(directory.path, connectrpcNode, ".."), { recursive: true })
+    await writeFile(join(directory.path, connectrpcNode), "export {}\n")
+    await writeFile(
+      metafile,
+      JSON.stringify({
+        inputs: {
+          ...Object.fromEntries(required.map((path) => [path, { imports: [] }])),
+          [connectrpcNode]: { imports: [] }
         },
         outputs: { "./browser.js": { inputs: bundledInputs, imports: [] } }
       })
@@ -904,7 +933,164 @@ test("published trace accepts only staged resolutions and requires every public 
   ).toThrow("escaped staged node_modules")
   expect(() =>
     validatePublishedTrace(valid, stage, ["@go-like/context", "@go-like/server"])
-  ).toThrow("missed public packages")
+  ).toThrow("missed public entries")
+})
+
+test("published trace requires every public entry specifier", () => {
+  const stage = "/tmp/go-like-published-trace"
+  const trace = [
+    "======== Module name '@go-like/pino/log' was successfully resolved to '/tmp/go-like-published-trace/node_modules/@go-like/pino/log.d.ts'. ========",
+    "======== Module name '@go-like/core' was successfully resolved to '/tmp/go-like-published-trace/node_modules/@go-like/core/index.d.ts'. ========",
+    "======== Module name '@go-like/core/node' was successfully resolved to '/tmp/go-like-published-trace/node_modules/@go-like/core/node.d.ts'. ========"
+  ].join("\n")
+  const entries = ["@go-like/pino/log", "@go-like/core", "@go-like/core/node"]
+  expect(() => validatePublishedTrace(trace, stage, entries)).not.toThrow()
+  expect(() =>
+    validatePublishedTrace(trace, stage, [...entries, "@go-like/core/lifecycle"])
+  ).toThrow("missed public entries")
+})
+
+test("published entry specifiers come from packed export keys", () => {
+  expect(
+    publishedEntrySpecifiers({
+      name: "@go-like/pino",
+      exports: {
+        "./log": { types: "./log.d.ts", import: "./log.js", default: "./log.js" },
+        "./package.json": "./package.json"
+      }
+    })
+  ).toEqual(["@go-like/pino/log"])
+  expect(
+    publishedEntrySpecifiers({
+      name: "@go-like/core",
+      exports: { ".": { import: "./index.js" }, "./node": { import: "./node.js" } }
+    })
+  ).toEqual(["@go-like/core", "@go-like/core/node"])
+})
+
+test("installed package types are required only for a root export", async () => {
+  const directory = await createTempDirectory("go-like-published-contract-")
+  try {
+    await createTempSubdirectories(directory, [
+      ["node_modules"],
+      ["node_modules", "@go-like"],
+      ["node_modules", "@go-like", "pino"],
+      ["node_modules", "@go-like", "context"]
+    ])
+    const pino = join(directory.path, "node_modules/@go-like/pino")
+    const context = join(directory.path, "node_modules/@go-like/context")
+    await writeFile(
+      join(pino, "package.json"),
+      JSON.stringify({
+        name: "@go-like/pino",
+        exports: { "./log": { import: "./log.js" } }
+      })
+    )
+    await writeFile(
+      join(context, "package.json"),
+      JSON.stringify({
+        name: "@go-like/context",
+        types: "./index.d.ts",
+        exports: { ".": { types: "./index.d.ts", import: "./index.js" } }
+      })
+    )
+    await writeFile(join(context, "index.d.ts"), "export {}\n")
+    const packages = [
+      { name: "@go-like/pino", root: pino },
+      { name: "@go-like/context", root: context }
+    ]
+    expect(await validateInstalledPackages(directory.path, packages)).toEqual([
+      "@go-like/pino/log",
+      "@go-like/context"
+    ])
+
+    await writeFile(
+      join(context, "package.json"),
+      JSON.stringify({
+        name: "@go-like/context",
+        exports: { ".": { import: "./index.js" } }
+      })
+    )
+    await expect(validateInstalledPackages(directory.path, packages)).rejects.toThrow(
+      "installed package contract is incomplete: @go-like/context"
+    )
+  } finally {
+    await removeTempDirectory(directory)
+  }
+})
+
+test("published consumer fixtures import every public entry", async () => {
+  const entries = new Set<string>()
+  for await (const path of new Bun.Glob("packages/**/package.json").scan({
+    cwd: process.cwd(),
+    onlyFiles: true
+  })) {
+    if (
+      path.includes("/dist/") ||
+      path.includes("/node_modules/") ||
+      path.includes("/.artifacts/")
+    ) {
+      continue
+    }
+    const manifest = (await Bun.file(resolve(path)).json()) as {
+      readonly name?: unknown
+      readonly private?: unknown
+      readonly exports?: unknown
+    }
+    if (manifest.private === true) continue
+    if (typeof manifest.name !== "string" || !manifest.name.startsWith("@go-like/")) {
+      throw new Error(`public package at ${path} has an invalid name`)
+    }
+    if (
+      typeof manifest.exports !== "object" ||
+      manifest.exports === null ||
+      Array.isArray(manifest.exports)
+    ) {
+      throw new Error(`public package at ${path} has no exports object`)
+    }
+    for (const key of Object.keys(manifest.exports)) {
+      if (key === "./package.json") continue
+      entries.add(`${manifest.name}${key.slice(1)}`)
+    }
+  }
+  const imported = new Set<string>()
+  let browser = ""
+  for (const file of ["portable.ts", "node.ts", "bun.ts", "browser.ts"]) {
+    const text = await readFile(join(Fixture, file), "utf8")
+    if (file === "browser.ts") browser = text
+    for (const match of text.matchAll(/(?:from|import)\s+["'](@go-like\/[^"']+)["']/gu)) {
+      const specifier = match[1]
+      if (specifier !== undefined) imported.add(specifier)
+    }
+  }
+  expect([...entries].sort()).toEqual([...imported].sort())
+  expect(entries.size).toBe(PublishedPublicEntryCount)
+  const browserNative = [...browser.matchAll(/["'](@go-like\/[^"']+)["']/gu)]
+    .map((match) => match[1])
+    .filter(
+      (specifier): specifier is string =>
+        specifier !== undefined && /\/(?:node|bun|native)$/u.test(specifier)
+    )
+  expect(browserNative).toEqual([])
+})
+
+test("published lane fixtures run the single-core telemetry smoke", async () => {
+  const portable = await readFile(join(Fixture, "portable.ts"), "utf8")
+  const browser = await readFile(join(Fixture, "browser.ts"), "utf8")
+  const smoke = await readFile(join(Fixture, "smoke.ts"), "utf8")
+  for (const source of [portable, browser]) {
+    expect(source).toContain('from "./smoke.ts"')
+    expect(source).toContain("await runPublishedSmoke()")
+  }
+  for (const lane of ["node.ts", "bun.ts"]) {
+    expect(await readFile(join(Fixture, lane), "utf8")).toContain('from "./portable.ts"')
+  }
+  expect(smoke).toContain("newApp(")
+  expect(smoke).toContain("newTelemetry()")
+  expect(smoke).toContain("withTelemetry(background(), recorder.telemetry)")
+  expect(smoke).toContain("newTelemetryRecorder()")
+  expect(smoke).toContain("app.stop()")
+  expect(smoke).toContain("await running")
 })
 
 test("published environment clears ambient module and tool configuration", () => {
@@ -930,4 +1116,49 @@ test("published environment clears ambient module and tool configuration", () =>
   expect(environment.npm_config_cache).toBe("/stage/cache/npm")
   expect(environment.BUN_INSTALL_CACHE_DIR).toBe("/stage/cache/bun")
   expect(Object.hasOwn(environment, "PATH")).toBe(false)
+})
+
+test("published install evidence requires 75 entries, one physical core, and the failure codes", async () => {
+  expect(PublishedHiddenPackageName).toBe("@go-like/core")
+  expect(assertPublishedEntryResolution(PublishedPublicEntryCount)).toEqual({
+    resolved: 75,
+    typeChecked: 75
+  })
+  expect(() => assertPublishedEntryResolution(74)).toThrow("expected 75")
+
+  const duplicate = JSON.stringify({
+    name: "CoreInstanceError",
+    code: DuplicateCoreCode,
+    message:
+      "a second copy of @go-like/core was loaded: file:///nested/instance.js (9.9.9); first copy: file:///top/instance.js (0.0.1)."
+  })
+  expect(duplicateCoreFailureCode(duplicate)).toBe(DuplicateCoreCode)
+  expect(() => assertDuplicateCoreVersions(duplicate, "0.0.1", "9.9.9")).not.toThrow()
+  expect(() => assertDuplicateCoreVersions(duplicate, "0.0.1", "0.0.2")).toThrow("0.0.2")
+  expect(() =>
+    duplicateCoreFailureCode(
+      JSON.stringify({ name: "Error", code: "ERR_MODULE_NOT_FOUND", message: "missing" })
+    )
+  ).toThrow(DuplicateCoreCode)
+  expect(peerInstallFailureCode("npm error code ERESOLVE\nunable to resolve dependency tree")).toBe(
+    PeerResolveCode
+  )
+  expect(() => peerInstallFailureCode("npm error code E404\nnot found")).toThrow(PeerResolveCode)
+
+  const directory = await createTempDirectory("go-like-published-core-count-")
+  try {
+    const core = join(directory.path, "node_modules/@go-like/core")
+    const linked = join(directory.path, "node_modules/@go-like/mdns/node_modules/@go-like/core")
+    const second = join(directory.path, "node_modules/@go-like/yaml/node_modules/@go-like/core")
+    await mkdir(core, { recursive: true })
+    await mkdir(join(linked, ".."), { recursive: true })
+    await writeFile(join(core, "package.json"), `${JSON.stringify({ name: "@go-like/core" })}\n`)
+    await symlink(core, linked, "dir")
+    expect(await countPhysicalCoreDirectories(directory.path)).toBe(1)
+    await mkdir(second, { recursive: true })
+    await writeFile(join(second, "package.json"), `${JSON.stringify({ name: "@go-like/core" })}\n`)
+    expect(await countPhysicalCoreDirectories(directory.path)).toBe(2)
+  } finally {
+    await removeTempDirectory(directory)
+  }
 })

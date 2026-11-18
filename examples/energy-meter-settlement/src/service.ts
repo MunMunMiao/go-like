@@ -1,5 +1,5 @@
-import type { Config, ConfigObject } from "@go-like/config"
-import type { Context } from "@go-like/context"
+import type { Config, ConfigObject } from "@go-like/core/config"
+import type { Context } from "@go-like/core/context"
 
 import {
   calculateSettlement,

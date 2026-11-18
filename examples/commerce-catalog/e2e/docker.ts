@@ -1,4 +1,4 @@
-import { newRedisCache } from "@go-like/cache-redis"
+import { newRedisCache } from "@go-like/redis/cache"
 import {
   newClient,
   withDiscovery,
@@ -6,24 +6,27 @@ import {
   withEndpoint,
   withTransport,
   type Client
-} from "@go-like/client"
-import { background } from "@go-like/context"
+} from "@go-like/core/client"
+import { background } from "@go-like/core/context"
 import {
+  afterStart,
   endpoint,
   id,
   name,
   newApp,
   registrar,
+  resources,
   server,
   stopTimeout,
   version,
   type App
 } from "@go-like/core"
-import { newRoundRobinSelector } from "@go-like/registry"
-import { newConsulRegistry } from "@go-like/registry-consul"
-import { address, newServer, transport as serverTransport } from "@go-like/server"
-import { newHTTPTransport } from "@go-like/transport-http"
-import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+import { newRoundRobinSelector } from "@go-like/core/registry"
+import { newConsulClient } from "@go-like/consul"
+import { newConsulRegistry } from "@go-like/consul/registry"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { newHTTPTransport } from "@go-like/core/transport/http"
+import { newNodeHTTPTransport } from "@go-like/core/transport/http/node"
 
 import {
   closeOwnedDockerContext,
@@ -143,18 +146,19 @@ async function waitForPricingCount(consul: string, expected: number): Promise<vo
   throw new Error(`Consul exposed ${observed} passing Pricing registrations; expected ${expected}`)
 }
 
-/** Waits until one Cache is admitted by its owning Core App. */
-async function waitForCache(cache: ReturnType<typeof newRedisCache>): Promise<void> {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    try {
-      await cache.get(background(), "ready")
-      return
-    } catch {
-      await pause(10)
-    }
+/** Waits until resource admission has finished, without polling the cache. */
+async function waitForAdmission(ready: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Redis Cache was not admitted"))
+    }, 10_000)
+  })
+  try {
+    await Promise.race([ready, expired])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
-  throw new Error("Redis Cache did not enter its running state")
 }
 
 /** Stops and joins one Core App. */
@@ -251,15 +255,21 @@ async function main(): Promise<void> {
       throw new Error(`unexpected container versions: ${consulVersion}, redis ${redisVersion}`)
     }
 
-    const registry = newConsulRegistry({
-      fetch,
-      address: consulAddress,
-      waitMs: 1_000,
-      minimumQueryIntervalMs: 20,
-      retryInitialMs: 50,
-      retryMaximumMs: 200,
-      deregisterCriticalServiceAfterMs: 60_000
-    })
+    const registry = newConsulRegistry(
+      newConsulClient({
+        fetch(request) {
+          return fetch(request)
+        },
+        address: consulAddress
+      }),
+      {
+        waitMs: 1_000,
+        minimumQueryIntervalMs: 20,
+        retryInitialMs: 50,
+        retryMaximumMs: 200,
+        deregisterCriticalServiceAfterMs: 60_000
+      }
+    )
     const pricingServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
     pricing.registerHandler(pricingServer, {
       get: newPricingHandler(function countCall(): void {
@@ -293,10 +303,20 @@ async function main(): Promise<void> {
       withSelector(newRoundRobinSelector()),
       withTransport(newHTTPTransport())
     )
-    catalogApp = newApp(name("commerce-catalog"), stopTimeout(10_000), server(cache))
+    const admitted = Promise.withResolvers<void>()
+    catalogApp = newApp(
+      name("commerce-catalog"),
+      stopTimeout(10_000),
+      resources(cache),
+      afterStart(function cacheAdmitted(): void {
+        admitted.resolve()
+      })
+    )
     catalogRun = catalogApp.run()
-    void catalogRun.catch(() => {})
-    await waitForCache(cache)
+    void catalogRun.catch((error: unknown) => {
+      admitted.reject(error)
+    })
+    await waitForAdmission(admitted.promise)
     const handler = newCatalogHandler({ cache, client: newPricingClient(client) })
 
     const first = await handler(new Request("http://example.test/v1/products/sku-001?currency=USD"))

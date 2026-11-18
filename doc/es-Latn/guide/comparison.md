@@ -1,205 +1,127 @@
 # go-like frente a otras herramientas
 
-Una comparación justa empieza por la propiedad, no por una lista de casillas de funcionalidades. NestJS, Fastify, Hono, Elysia, Koa y tRPC resuelven partes distintas del stack de aplicaciones TypeScript. go-micro y go-kratos son referencias de frameworks Go con decisiones diferentes sobre transporte y generación de código. go-like es un conjunto de piezas para TypeScript que hace explícitos el ciclo de vida, las llamadas internas unary, los contratos de providers y la composición entre runtimes.
+Una comparación justa empieza por la propiedad. NestJS, Fastify, Hono, Elysia, Koa y tRPC resuelven partes distintas de una aplicación TypeScript. go-micro y go-kratos son referencias de Go con transportes y generación de código distintos. go-like es un panel de sockets: niveles de ciclo de vida explícitos, llamadas internas y plugs para los backends que se eligen.
 
-Esta página separa los niveles de evidencia:
+Etiquetas de evidencia en esta página:
 
-- **Source** significa que el checkout actual de go-like expone la API o frontera indicada.
-- **Pinned external** significa que la comparación usa la release, commit o documentación oficial registrada en el research ledger. No es un benchmark nuevo ni una afirmación de que una rama `main` no fijada siga igual.
-- **Declared** significa que existe un ejemplo o una lane de pruebas en el repositorio. No es un resultado aprobado.
-- **Gap** significa que el repositorio actual no demuestra un compromiso de compatibilidad.
+- **Source** significa que el checkout actual expone la API.
+- **Pinned external** significa una release, un commit o una página oficial registrados. No es un benchmark nuevo.
+- **Declared** significa que existe un ejemplo o una prueba. No es un resultado aprobado.
+- **Gap** significa que este repositorio no demuestra un compromiso de compatibilidad.
 
-El baseline de source actual de go-like para esta guía es el commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`. El registro de investigación local contiene una discrepancia de commit para go-micro: un registro de comparación menciona `9d306dcfc1a912a8a9493f31fee0bb983475258d`, mientras que el memo detallado de versión fija inspeccionó go-micro `v6.9.0` en `3c39d17fadaa9ec21b671be4afef3e63846406e6`. Trátalos como entradas de comparación que deben volver a comprobarse, no como una garantía actual de upstream.
+El baseline histórico de la documentación es el commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`. El registro de investigación contiene dos commits de go-micro: `9d306dcfc1a912a8a9493f31fee0bb983475258d` y, para el memo de v6.9.0, `3c39d17fadaa9ec21b671be4afef3e63846406e6`. Hay que tratarlos como entradas que deben volver a comprobarse.
 
 ## Lugar en el stack
 
-| Herramienta | Problema principal                                     | Qué suele controlar                                                                                                                                                                      | Qué complementaría go-like, sin reemplazarlo                                                                                                     |
-| ----------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| NestJS      | Framework de aplicaciones Node guiado por convenciones | Modules, providers, controllers, decorators, application context, ciclo de vida del framework, adaptador HTTP o de microservicios                                                        | Una frontera estructural de ciclo de vida o un contrato de llamada interna alrededor de una aplicación nativa, si se escribe un bridge explícito |
-| Fastify     | Servidor HTTP Node y pipeline de requests              | Tabla de rutas, hooks, plugins, encapsulation, listener de Node, objetos request/reply                                                                                                   | Un adaptador de ciclo de vida o de provider alrededor de un recurso que pertenece a Fastify                                                      |
-| Hono        | Routing y middleware basados en Web Standards          | Routes, middleware, sub-apps, `app.fetch`, elección del adaptador de runtime                                                                                                             | Core App, ciclo de vida explícito de recursos, Client/Transport internos, discovery                                                              |
-| Elysia      | Framework Web tipado, centrado en Bun                  | Route tree, schema composition, decorators, hooks, adaptador Bun o Web Standard                                                                                                          | Piezas de ciclo de vida de Core y servicios internos, conservando el comportamiento nativo de Elysia                                             |
-| Koa         | Kernel mínimo de middleware Node                       | Stack de middleware y listener Node; el router normalmente es externo                                                                                                                    | Ciclo de vida y contratos de servicios internos sin introducir otro router                                                                       |
-| tRPC        | Capa de procedimientos con tipos seguros               | Rutas de router/procedure, parsers de entrada/salida, context factory, adaptadores HTTP/Fetch/WS                                                                                         | Propiedad de providers, policy de discovery y ciclo de vida explícito de App                                                                     |
-| go-micro    | Ecosistema Go orientado a microservicios y agentes     | Go Context, abstracciones de service/client/transport/registry/broker, ecosistema de providers y alcance adicional de agent/flow/MCP/A2A                                                 | go-like toma parte del vocabulario, no el ABI de Go, las goroutines ni la compatibilidad de transportes                                          |
-| go-kratos   | Framework Go para servicios cloud-native               | Ciclo de vida de App, Go Context, transportes HTTP/gRPC, middleware, registry, config, generación de código Protobuf                                                                     | Código Context-first sobre Protobuf-ES; gRPC estándar con cuatro cardinalidades mediante `/native`                                               |
-| go-like     | Piezas explícitas para servicios TypeScript            | Context, ciclo de vida App/Server, borde Fetch estándar, transporte interno unary con Message, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adaptadores | La aplicación sigue siendo responsable de las rutas del framework, planos de datos nativos, policy de negocio, auth y despliegue                 |
+| Herramienta | Lo que suele poseer                                                        | Lo que go-like añade al lado                                                                   |
+| ----------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| NestJS      | Modules, controllers, decorators, el application context                   | Un `Server` estructural solo si se escribe ese adaptador                                       |
+| Fastify     | Rutas, hooks, plugins, el listener de Node                                 | Una frontera de ciclo de vida o de llamada alrededor de un recurso que Fastify sigue poseyendo |
+| Hono        | Rutas, middleware, `app.fetch`                                             | Niveles de App, llamadas internas, plugs                                                       |
+| Elysia      | Árbol de rutas, schema, hooks, su propio adaptador                         | Lo mismo, mientras `.listen()` sigue siendo de Elysia                                          |
+| Koa         | Middleware y un router externo                                             | Ciclo de vida y llamadas internas, no otro router                                              |
+| tRPC        | Procedimientos, parsers, adaptadores                                       | Descubrimiento, selección y ciclo de vida de la App                                            |
+| go-micro    | Go Context, service, registry, broker y una superficie de agent más amplia | Solo vocabulario. No hay ABI de Go                                                             |
+| go-kratos   | Ciclo de vida de App, HTTP/gRPC, registry, config, Protobuf                | Una composición de TypeScript. El camino gRPC es Connect-ES, no el runtime de Google           |
+| go-like     | Sockets, niveles, llamadas Fetch y SSE, plugs                              | La aplicación sigue poseyendo rutas, policy, auth y los detalles del protocolo nativo          |
 
-Por eso el proyecto no intenta ganar una comparación de “framework más grande”. La pregunta es si una aplicación necesita que estas fronteras sean explícitas y componibles.
+## Propiedad
 
-## Matriz de propiedad
-
-| Preocupación                   | NestJS                                                    | Fastify                                         | Hono / Elysia / Koa                                             | tRPC                                               | go-like                                                                                               |
-| ------------------------------ | --------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Tabla de rutas externas        | Controllers y decorators                                  | Instancia de Fastify                            | Instancia del framework o router externo                        | Router de procedures, no rutas REST ordinarias     | Framework externo o la aplicación                                                                     |
-| ABI del handler Web            | Abstracción request/reply propiedad del adaptador         | request/reply de Node                           | Fetch estándar como centro en Hono y adaptadores Web Standard   | Adaptadores Fetch/Node/Express/Fastify             | `(Request) => Response \| Promise<Response>` estándar                                                 |
-| Ciclo de vida de la aplicación | Application context y hooks                               | `ready`, `listen`, `close`, hooks               | El adaptador de runtime y el ciclo de vida del framework varían | Responsabilidad del host/adaptador                 | `newApp`, `App.run`, `App.stop`, hooks, Servers estructurales                                         |
-| Ciclo de vida de recursos      | Hooks del container/framework                             | Hooks de plugin y server                        | Responsabilidad de la aplicación/runtime                        | Responsabilidad de la aplicación/adaptador         | Contratos explícitos `Server.start(ctx)` / `stop(ctx)` y ownership del adaptador                      |
-| Composición de dependencias    | Container/providers de Nest                               | Decoration y encapsulation de plugins           | Context/env y composición; no hay un container DI general       | Context factory explícito y composición del router | Constructores explícitos y functional options; no hay container DI                                    |
-| Transporte interno             | Transportes de microservicios y adaptadores del framework | No es una abstracción de discovery de servicios | No es una abstracción de discovery de servicios                 | Adaptadores de procedures y WebSocket opcional     | `Transport`, `Client`, `Listener`, `defineService`, SSE `ServerStream`                                |
-| Discovery y selección          | Específicos del transporte o externos                     | Externos                                        | Externos                                                        | Externos                                           | `Registry`, `Discovery`, `Watcher`, Filters, cinco policies de Selector                               |
-| Retry                          | Específico del framework o provider                       | Específico de la aplicación/plugin              | Específico de la aplicación                                     | Específico de middleware/adaptador                 | Una sola tentativa por defecto; `withRetry` requiere autorización y total de intentos                 |
-| Streaming                      | Opciones de framework/provider                            | Opciones de streams Node/Web                    | Web Streams nativas y APIs del framework                        | Depende del adaptador HTTP/WS                      | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Instrumentación global         | Integración de framework/provider                         | Ecosistema de plugins                           | Ecosistema de middleware                                        | Middleware/adaptadores                             | Wrappers explícitos; no instala providers globales                                                    |
-
-Las etiquetas de las primeras cinco filas describen posiciones arquitectónicas, no una clasificación de calidad. Que un framework sea dueño de una tabla de rutas es útil cuando ese es el problema de composición. Simplemente es una decisión de propiedad distinta de la que toma go-like al dejar las rutas en la aplicación.
+| Preocupación              | go-like                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Rutas externas            | El framework o el `Handler` de la aplicación                                                             |
+| Handler Web               | `(Request) => Response \| Promise<Response>`                                                             |
+| Ciclo de vida del proceso | `newApp`, tres niveles, hooks                                                                            |
+| Dependencias              | Constructores y opciones. No hay contenedor                                                              |
+| Llamadas internas         | `Transport`, `Client`, `Server`, `defineService`, SSE `ServerStream`                                     |
+| Descubrimiento            | `Registry`, `Discovery`, filtros, cinco selectores                                                       |
+| Retry                     | Un intento, salvo que `withRetry` autorice más                                                           |
+| Streaming                 | Web Streams en el borde; JSON o SSE por dentro; cuatro cardinalidades gRPC en `@go-like/connectrpc/node` |
+| Instrumentación           | Core registra unidades de trabajo. Los plugs rellenan sockets de telemetría. No hay registro global      |
 
 ## Ciclo de vida y Context
 
-El source actual de go-like define:
-
 ```ts
-interface Server {
-  start(ctx: Context): Promise<void>
-  stop(ctx: Context): Promise<void>
-}
+import type { Server } from "@go-like/core/lifecycle"
 
 interface App {
   run(): Promise<void>
   stop(): Promise<void>
 }
+
+type Lifecycle = Server
+void null as unknown as Lifecycle
 ```
 
-El contrato `Server` es estructural. Un worker nativo, listener, scheduler, suscripción a un broker, destino de logs o proveedor de telemetría puede entrar en Core si un adaptador puede describir honestamente la admisión y el comportamiento terminal.
+`Server` es estructural: `start(ctx)` y `stop(ctx)`. En el nivel de recursos, `start` se resuelve cuando el recurso se puede usar. En el nivel de servidores, `start` puede seguir pendiente, y las paradas de los hermanos corren a la vez. Las paradas de recursos corren en orden inverso de declaración. Un context de Nest, un grafo de plugins de Fastify o un hook de Elysia tienen su propio orden. Hay que comparar propietarios, no la palabra "graceful".
 
-go-like Context también es estructural y usa `AbortSignal` internamente. Expone `deadline()`, `done()`, `err()` y `value(key)`, con constructores como `background`, `withCancel`, `withCancelCause`, `withTimeout`, `withDeadline`, `withoutCancel` y `withValue`.
+Context expone `deadline()`, `done()`, `err()` y `value(key)`, con `background`, `withCancel`, `withTimeout`, `withDeadline`, `withoutCancel` y `withValue`. Usa `AbortSignal` por dentro. No es un `context.Context` de Go y no es una API de gRPC.
 
-Esto se parece al estilo explícito de Context primero de Go, pero no es compatible a nivel de ABI con `context.Context`. Context no ofrece goroutines, channels ni una API gRPC. La pregunta correcta para migrar es “¿dónde cruza la cancelación y la propiedad esta frontera?”, no “¿qué nombre de tipo es idéntico?”.
+## Llamadas, retry y streams
 
-Core no promete un apagado en orden inverso para Servers hermanos. Invoca de forma concurrente las llamadas `stop(ctx)` de los hermanos, después espera las Promises terminales de `start` y agrega los fallos. Un application context de Nest, un grafo de plugins de Fastify, el ciclo de vida de Elysia o un adaptador de host pueden tener otro orden y otra semántica terminal. Compara el responsable real, no la etiqueta “graceful”.
+El camino interno es Client, Discovery opcional, filtros, selector, transporte, `POST /<service>/<endpoint>` y después el handler del servidor. Un endpoint tipado valida JSON con Struct. No es un IDL. `withEndpoint("discovery:///name")` selecciona un servicio. Una lista de direcciones directa no.
 
-## Transporte y llamadas de servicio
-
-La cadena de llamadas internas de go-like está separada de forma deliberada:
+Las llamadas hacen un intento salvo que `withRetry` ponga `authorization` en `"idempotent"` o `"caller-approved"`, un `maxAttempts` positivo y `shouldRetry`. Esa autorización es una declaración. Una respuesta ya recibida no se repite cuando falla un feedback posterior.
 
 ```text
-Client
-  -> Discovery snapshot, optional
-  -> ordered Filter callbacks, optional
-  -> Selector.select
-  -> opaque ServiceEndpoint URL
-  -> Transport.dial or resident logical owner
-  -> fetch(Request)
-  -> @go-like/server route and unary handler
-  -> read Response
-  -> feedback and owner release
+Web Handler
+  Web Streams, framework SSE, or WebSocket
+
+@go-like/core client and server
+  one JSON body, or SSE when stream: true
+
+@go-like/connectrpc
+  Connect and gRPC-Web unary and server-streaming on Fetch
+
+@go-like/connectrpc/node
+  standard gRPC unary, server-streaming, client-streaming, and bidi
 ```
 
-Un `Endpoint` tipado vincula la validación de request y response de `Struct` con un cuerpo JSON de Fetch. No es un IDL ni un protocolo generado. `withEndpoint(...)` selecciona una instantánea directa durante la construcción; las instantáneas directas y descubiertas usan el mismo Selector. La ruta en proceso con Memory Transport sigue siendo una buena primera prueba.
+El bucle de retry por defecto de go-micro y las formas de streaming HTTP de go-kratos dependen de la versión. Hay que volver a comprobar los commits fijados antes de publicar una comparación que dependa de ellos.
 
-Las opciones de transporte de microservicios de NestJS, los adaptadores de procedures de tRPC y los transportes de frameworks Go no son intercambiables con este DAG. Pueden tener otra identidad de ruta, modelo de serialización, pool de conexiones o capa de retry. Una comparación debe registrar esas diferencias en lugar de marcar como iguales todas las casillas de “RPC”.
+## Runtimes
 
-## Alcance de retry y streaming
+Las entradas compartidas usan Fetch y `AbortSignal`, o una capacidad inyectada. TLS a medida, HTTP/2 y mTLS viven en `@go-like/core/transport/http/node` y `@go-like/connectrpc/node`. Los ejemplos de Hono, Elysia, H3 y Fetch plano pasan un handler Fetch a un host de core. En este repositorio no hay un puente de NestJS ni de Fastify. La versión de manifiesto `0.0.1` no establece la publicación en npm.
 
-La comparación negativa más importante tiene que ver con las semánticas:
+## Por herramienta
 
-- Las llamadas de go-like hacen exactamente una tentativa por defecto.
-- `withRetry(...)` requiere `authorization: "idempotent" | "caller-approved"`, un `maxAttempts` positivo y `shouldRetry`.
-- La autorización es una declaración del caller, no una prueba de idempotencia.
-- Un retry puede seleccionar otro endpoint porque cada tentativa vuelve a entrar en discovery y selección.
-- Una response que ya se recibió pero después queda seguida por un fallo de feedback o cleanup no se repite.
+**NestJS.** Modules, providers y controllers siguen siendo de Nest. Una integración es un `Server` propiedad de la aplicación, alrededor de la aplicación de Nest, con una admisión y un cierre explícitos. Este repositorio no incluye ese adaptador.
 
-La investigación de comparación con Go registra defaults y capacidades diferentes: `DefaultRetries` de go-micro no es una afirmación simple de “cinco requests en total”, porque el límite de su loop puede producir seis iteraciones cuando la autorización del retry sigue siendo verdadera; su forma pública de stream y la implementación default de `CloseSend` también varían según el provider. go-kratos combina generación de Protobuf/gRPC con formas de streaming HTTP, donde SSE y WebSocket tienen direcciones y comportamientos de cierre distintos. Esas son decisiones del provider y de la arquitectura, no flags de go-like que falten.
+**Fastify.** Las rutas, la encapsulación y el listener siguen siendo de Fastify. go-like no convierte `request` / `reply` en un `Handler` de Fetch.
 
-Para go-like:
+**Hono.** `examples/hono` pasa `app.fetch` a `newNodeServer` y pone ese host en `server(...)`. Las rutas se quedan en Hono.
 
-```text
-Web framework or Fetch Handler
-  -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
+**Elysia.** Hay que conservar el árbol de rutas y el comportamiento específico de Bun. El ejemplo usa el handler Fetch con el host de Node. `.listen()` no es una API de go-like.
 
-go-like internal Client/Transport
-  -> one JSON body, or one SSE server stream when `stream: true`
-  -> not a bidirectional multi-frame protocol
+**Koa.** Hay que conservar el middleware y el router externo. Se añade una frontera de ciclo de vida o de llamada solo donde se puede nombrar al propietario.
 
-@go-like/transport-grpc-buf
-  -> Fetch: Connect/gRPC-Web unary and server-streaming
-  -> /native: standard gRPC unary, server-streaming, client-streaming, bidi
-```
+**tRPC.** Los procedimientos siguen siendo de tRPC. Un endpoint de go-like es un Struct sobre JSON Fetch, no un router de procedimientos.
 
-Un `ReadableStream` Web no es un canal RPC interno. No compares un body HTTP en streaming con un transporte de varios frames `send`/`recv` como si fueran la misma funcionalidad.
-
-## Comparación de runtimes
-
-| Pregunta de runtime                                                                    | Evidencia de go-like                                                                                                 | Consecuencia para la comparación                                                                                     |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| ¿El código compartido puede usar Fetch y `AbortSignal`?                                | Web root y los providers seleccionados de transport/config usan Web APIs estándar o Fetch inyectado                  | Se pueden tener objetivos de portabilidad parecidos, pero los tipos no hacen polyfill del comportamiento del runtime |
-| ¿Fetch puede transportar PEM TLS personalizado, mTLS, ALPN y HTTP/2 de forma portable? | El subpath de transporte de Node controla el comportamiento nativo; la ruta Fetch root no expone todos los controles | Compara capacidades del host y rutas de import, no solo nombres de paquetes                                          |
-| ¿La aplicación conserva el router del framework?                                       | Los ejemplos de Hono, Elysia y H3 pasan handlers Fetch nativos                                                       | go-like complementa la propiedad de rutas del framework                                                              |
-| ¿La versión del paquete demuestra que está publicado?                                  | `workspace:*`, `0.0.1`                                                                                               | No hagas afirmaciones de disponibilidad en npm o madurez del ecosistema                                              |
-
-El repositorio actual contiene ejemplos directos para Hono, Elysia, H3 y Fetch sin framework. No contiene un bridge actual de NestJS o Fastify ni una suite de compatibilidad. Son audiencias de migración, no integraciones directas soportadas.
-
-## Comparación detallada por herramienta
-
-### NestJS
-
-NestJS es un framework de aplicaciones guiado por convenciones. Sus modules, providers, controllers, decorators, interceptors, pipes y hooks de aplicación forman un container y un modelo de requests coherentes. go-like no proporciona un container de modules compatible con Nest ni un bridge de controllers.
-
-Una frontera de integración sensata es un adaptador propiedad de la aplicación que implemente el `Server` estructural de go-like alrededor de una aplicación o host Nest. El adaptador tendría que definir cuándo Nest admitió el listener, cómo se traduce `stop(ctx)` al cierre de Nest y qué ocurre después de un timeout. El repositorio actual no demuestra ese bridge, así que la documentación no debe mostrar una llamada directa como `newNodeServer(nestApp, ...)`.
-
-### Fastify
-
-Fastify controla una tabla de rutas, encapsulation de plugins, hooks y un listener Node. Su grafo de plugins sirve para comparar el scope de dependencias, pero `decorate` no es un container general de providers al estilo Nest. go-like no convierte automáticamente el ABI `request`/`reply` de Fastify en un Fetch Handler, y el repositorio actual no prueba ningún bridge de Fastify.
-
-Conserva nativos las rutas y plugins de Fastify. Si adoptas go-like, escribe un `Server` estructural explícito alrededor del responsable Fastify o expón una frontera Fetch implementada por separado. No llames al request injection ni al shutdown nativo de Fastify un contrato go-like de Transport o Client.
-
-### Hono
-
-Hono es el complemento demostrado con mayor claridad. El ejemplo actual crea las rutas en Hono, pasa `app.fetch` a `newNodeServer` y pone ese host dentro de una Core App. Hono conserva la propiedad de las rutas y del middleware; go-like controla la frontera de ciclo de vida del host cuando la aplicación lo elige.
-
-### Elysia
-
-Elysia ofrece un modelo de composición de rutas y schemas centrado en Bun, y también expone un handler Web Standard en la ruta de adaptador correspondiente. Conserva nativos el route tree, decorators, derives, hooks, streams y el comportamiento específico de Bun de Elysia. go-like puede controlar la App y una frontera explícita de recursos, pero no convierte `.listen()` en una API de go-like para todos los runtimes.
-
-### Koa
-
-Koa es un kernel pequeño de middleware para Node y no incluye un router. Es un buen ejemplo de framework que deja intencionalmente una mayor parte de la composición de la aplicación fuera del core. go-like no debería llenar ese espacio añadiendo un router. Conserva nativos el middleware de Koa y cualquier router externo, y añade una frontera de ciclo de vida o de llamada interna solo donde haga falta.
-
-### tRPC
-
-tRPC controla un router de procedures tipado y su middleware de procedures. Puede usar adaptadores Fetch, Node, Express, Fastify o WebSocket, pero no es un Registry, Selector, pool de conexiones ni gestor del ciclo de vida de la aplicación. El `Endpoint` tipado de go-like es un binding runtime más pequeño de `Struct` sobre un cuerpo JSON de Fetch, no un DSL de procedures ni un IDL generado que compita con tRPC.
-
-### go-micro y go-kratos
-
-Estos proyectos Go son referencias arquitectónicas útiles para llamadas Context-first, ciclo de vida de servicios, Registry, Discovery, Selector y vocabulario de transportes. No son objetivos de compatibilidad:
-
-- Go `context.Context` y go-like `Context` comparten la intención de cancelación explícita, pero tienen representaciones runtime distintas.
-- El modelo de watchers de Registry de go-micro y los snapshots de reemplazo completo de go-like no deben enseñarse como streams de eventos idénticos.
-- `@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
-- Los defaults de providers de go-micro y go-kratos, los loops de retry, el half-close de streams y los defaults de selectors dependen de la versión. Usa la tabla de commits upstream fijados en el registro de investigación y vuelve a comprobarla antes de publicar una nueva comparación.
+**go-micro y go-kratos.** Son referencias para llamadas con Context primero, ciclo de vida y vocabulario de descubrimiento. Los watchers de go-like producen instantáneas de reemplazo completo. La entrada de gRPC administrado es `@go-like/connectrpc/node`.
 
 ## Qué elegir
 
-| Si tu problema principal es...                    | Empieza con...       | Añade go-like cuando...                                                                                                            |
-| ------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Controllers, modules, decorators y DI             | NestJS               | Necesitas una frontera explícita alrededor de un recurso existente o una llamada interna y estás dispuesto a escribir el adaptador |
-| Rutas HTTP Node, hooks y encapsulation de plugins | Fastify              | Necesitas composición de ciclo de vida más allá del host o contratos internos de servicios unary                                   |
-| Rutas Web Standards entre runtimes                | Hono                 | Necesitas ciclo de vida de App/Server, llamadas internas o propiedad de providers                                                  |
-| Composición de schemas y rutas centrada en Bun    | Elysia               | Necesitas fronteras explícitas de ciclo de vida y transporte, conservando Elysia                                                   |
-| Middleware Node mínimo                            | Koa más un router    | Necesitas el contrato de ciclo de vida o de llamadas internas que falta, no otro router                                            |
-| Procedures con tipos seguros                      | tRPC                 | También necesitas discovery explícito de servicios, propiedad de providers o un ciclo de vida de Core                              |
-| Stack de microservicios Go                        | go-micro o go-kratos | Estás construyendo una composición TypeScript separada, no un port compatible a nivel de source                                    |
-| Piezas TypeScript para servicios entre runtimes   | go-like              | Usa solo los paquetes y providers que resuelven la frontera que necesitas                                                          |
-
-La respuesta correcta puede ser usar ambos sistemas. go-like es más útil cuando su modelo de propiedad explícita elimina una ambigüedad real; añadir todos los paquetes a una aplicación que ya funciona con otro framework contradice el objetivo de piezas pequeñas.
+Hay que usar el framework dueño del problema que de verdad se tiene. Se añade un socket de go-like cuando la pieza que falta es la admisión, la cancelación, el descubrimiento o un contrato de backend con un propietario nombrado. Instalar todos los plugs en una aplicación de framework ya terminada quita el beneficio de los contratos pequeños.
 
 ## Anclas de evidencia
 
-Las afirmaciones de go-like en esta página se pueden rastrear al árbol actual y a los entrypoints de los paquetes:
+Árbol actual:
 
-- `README.md` para el alcance del producto y sus exclusiones explícitas;
-- `packages/core/src/app.ts` para `App`, `Server`, el arranque, stop y el comportamiento de timeout;
-- `packages/web/src/context.ts` para el Handler estándar y el bridge de Context;
-- `packages/client/src/index.ts` para las opciones de Client, pooling, retry y el pipeline de intentos;
-- `packages/server/src/index.ts` para handlers internos unary y dispatch de rutas;
-- `packages/transport/src/types.ts` y `packages/transport/src/endpoint.ts` para las fronteras Fetch Request/Response y defineService;
-- `packages/registry/src/types.ts` y `packages/registry/src/selector.ts` para snapshots, filters, selectors y feedback.
+- `packages/core/src/app/app.ts` y `packages/core/src/app/tiers.ts` para niveles, presupuestos y orden de parada;
+- `packages/core/src/lifecycle/index.ts` para `Server` y `Endpointer`;
+- `packages/core/src/web/context.ts` para `Handler` y `contextHandler`;
+- `packages/core/src/client/index.ts` para opciones de llamada, descubrimiento y retry;
+- `packages/core/src/server/index.ts` para el despacho interno;
+- `packages/core/src/transport/service.ts` para `defineService`;
+- `packages/core/src/registry/selector.ts` para filtros, selectores y feedback;
+- `packages/connectrpc/src/node.ts` para gRPC administrado.
 
-El registro de investigación también guarda estas entradas de comparación externas fijadas:
+Entradas externas fijadas, no revalidadas por esta edición de la documentación:
 
-- [commit de comparación de go-micro registrado en el repositorio](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d);
-- [commit de comparación de go-kratos v3](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e);
-- [commit de comparación de go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336);
-- [documentación del ciclo de vida de NestJS](https://docs.nestjs.com/fundamentals/lifecycle-events), [referencia del servidor Fastify](https://fastify.dev/docs/latest/Reference/Server/), [API de Hono](https://hono.dev/docs/api/hono), [ciclo de vida de Elysia](https://elysiajs.com/essential/life-cycle), [Koa](https://koajs.com/) y [routers de tRPC](https://trpc.io/docs/server/routers).
+- [commit de comparación de go-micro](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d);
+- [commit de go-micro v6.9.0](https://github.com/micro/go-micro/commit/3c39d17fadaa9ec21b671be4afef3e63846406e6);
+- [commit de go-kratos v3](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e);
+- [commit de go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336);
+- [ciclo de vida de NestJS](https://docs.nestjs.com/fundamentals/lifecycle-events), [servidor de Fastify](https://fastify.dev/docs/latest/Reference/Server/), [Hono](https://hono.dev/docs/api/hono), [ciclo de vida de Elysia](https://elysiajs.com/essential/life-cycle), [Koa](https://koajs.com/), [routers de tRPC](https://trpc.io/docs/server/routers).
 
-Las URLs son referencias de comparación, no una afirmación de que esta fase de documentación haya descargado o revalidado cada página upstream. Vuelve a comprobar releases tags o commits antes de cambiar una afirmación sensible a la versión.
+Versiones de TypeScript de terceros registradas para la comparación, no como promesas de compatibilidad: NestJS `@nestjs/core@11.1.28`, Fastify `5.11.2`, Hono `4.12.34`, Elysia `1.4.29`, Koa `3.2.1`, tRPC `@trpc/server@11.18.0`. El manifiesto del ejemplo de Elysia es el pin de ese ejemplo; esta tabla es la instantánea de la investigación.

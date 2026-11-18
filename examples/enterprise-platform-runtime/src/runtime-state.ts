@@ -1,5 +1,6 @@
-import type { Context } from "@go-like/context"
-import { newVaultStore } from "@go-like/store-vault"
+import type { Context } from "@go-like/core/context"
+import type { VaultClient } from "@go-like/vault"
+import { newVaultStore } from "@go-like/vault/store"
 
 export interface PlatformRuntimeState {
   publish(ctx: Context): Promise<void>
@@ -10,18 +11,12 @@ const encoder = new TextEncoder()
 
 /** Creates one real Vault KV v2-backed deployment record with fresh readback. */
 export function newPlatformRuntimeState(
-  address: string,
-  token: string,
+  client: VaultClient,
   instanceId: string
 ): PlatformRuntimeState {
-  const store = newVaultStore({
-    fetch(request) {
-      return fetch(request)
-    },
-    address,
+  const store = newVaultStore(client, {
     mount: "secret",
-    root: "go-like/examples/enterprise-platform/runtime",
-    token
+    root: "go-like/examples/enterprise-platform/runtime"
   })
   const key = `instances/${instanceId}`
   const value = encoder.encode(JSON.stringify({ instanceId, status: "running" }))

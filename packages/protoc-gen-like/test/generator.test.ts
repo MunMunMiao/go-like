@@ -105,7 +105,7 @@ test("generated glue registers handlers and preserves RPC behavior", async () =>
 
     const runtimeScript = `
 import { createRouterTransport } from "@connectrpc/connect"
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 const generated = await import(${JSON.stringify(pathToFileURL(join(directory, "acme/order_like.ts")).href)})
 const context = background()
 const transport = createRouterTransport((server) => {

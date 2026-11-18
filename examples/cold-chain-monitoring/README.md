@@ -1,12 +1,12 @@
 # 冷链温度监控
 
-该示例演示冷链监控微服务：标准 Fetch API 接收运输传感器读数，应用从 `@go-like/config`
+该示例演示冷链监控微服务：标准 Fetch API 接收运输传感器读数，应用从 `@go-like/core/config`
 的当前不可变配置读取允许温区，判定越界状态，并把每票货物的最后序列写入内存台账。
 
 ## 主要演示
 
 - Core hook 在 HTTP Server 启动前加载 Config，并在停止后关闭 Config。
-- `@go-like/context` 从入口一路传入监控应用和读数台账。
+- `@go-like/core/context` 从入口一路传入监控应用和读数台账。
 - 标准 Fetch Handler 与监控服务、Config、运行入口分离。
 - 无外部 daemon 的可重复业务测试。
 

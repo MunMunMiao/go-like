@@ -25,7 +25,7 @@ main（进程与生命周期）
 
 ## go-like 能力
 
-使用 `@go-like/cache-memory` 缓存 `GET /v1/inventory/:sku` 的库存读模型；预占成功后写入最新可用量，避免返回旧库存。Memory Cache 构造后即可使用，`@go-like/core` 只负责 HTTP Server 的启动和停止，`@go-like/web` 暴露标准 Fetch Handler。
+使用 `@go-like/core/cache/memory` 缓存 `GET /v1/inventory/:sku` 的库存读模型；预占成功后写入最新可用量，避免返回旧库存。Memory Cache 构造后即可使用，`@go-like/core` 只负责 HTTP Server 的启动和停止，`@go-like/core/web` 暴露标准 Fetch Handler。
 
 ## 验证矩阵
 

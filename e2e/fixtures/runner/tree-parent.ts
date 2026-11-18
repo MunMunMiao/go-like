@@ -11,6 +11,11 @@ if (processIdPath === undefined || readyPath === undefined) {
   throw new Error("tree fixture paths are required")
 }
 
+// Lifetime cap: the driving tests finish within 15 s, so 60 s changes no assertion but bounds a leak
+// when the test process vanishes. No parent-loss exit here: the supervision tests must prove the
+// supervisor kills orphaned descendants itself.
+setTimeout(() => process.exit(124), 60_000)
+
 const descendant = Bun.spawn(
   [
     process.execPath,

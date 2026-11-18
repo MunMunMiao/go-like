@@ -28,9 +28,11 @@ interface PackageJson {
 }
 
 interface WinstonAdapterModule {
-  newWinstonServer(logger: Logger): {
-    start(ctx: unknown): Promise<void>
-    stop(ctx: unknown): Promise<void>
+  newWinstonHandler(logger: Logger): {
+    readonly lifecycle: {
+      start(ctx: unknown): Promise<void>
+      stop(ctx: unknown): Promise<void>
+    }
   }
 }
 
@@ -103,11 +105,9 @@ if (packageJson.version !== "3.19.0") {
   throw new Error(`unexpected Winston version ${packageJson.version}`)
 }
 const adapter = (await import(
-  pathToFileURL(resolve(process.cwd(), "dist/index.js")).href
+  pathToFileURL(resolve(process.cwd(), "dist/log/index.js")).href
 )) as WinstonAdapterModule
-const context = (await import(
-  pathToFileURL(resolve(process.cwd(), "../../packages/context/dist/index.js")).href
-)) as ContextModule
+const context = (await import("@go-like/core/context")) as ContextModule
 
 const directory = await mkdtemp(resolve(tmpdir(), "go-like-winston-e2e-"))
 const logPath = resolve(directory, "service.log")
@@ -123,7 +123,7 @@ try {
     transports: [new winston.transports.File({ filename: logPath })]
   })
   const baseline = listenerCounts(logger)
-  const server = adapter.newWinstonServer(logger)
+  const server = adapter.newWinstonHandler(logger).lifecycle
   if (listenerDelta(baseline, listenerCounts(logger)) !== 0) {
     throw new Error("Winston adapter installed listeners before lifecycle transfer")
   }

@@ -3,7 +3,7 @@
 > 状态：可执行基线。提供类型检查、业务单测、覆盖率和固定 digest Redis Docker E2E；下文区分当前实现与生产接入要求，测试结果以对应检出的实际运行日志为准。
 
 本示例定义一个可落地的单实例批量报表服务：Croner 按 cron 表达式触发调度，业务窗口按 UTC 计算，BullMQ 与 Redis 负责队列、
-重试和 stalled job 恢复，`@go-like/store-file` 保存本地 checkpoint，go-like 负责各常驻资源的显式生命周期。
+重试和 stalled job 恢复，`@go-like/file/store` 保存本地 checkpoint，go-like 负责各常驻资源的显式生命周期。
 
 该方案按“任务可能重复执行”设计，不承诺 exactly-once，也不引入工作流引擎。当前 publisher 只输出
 `GO_LIKE_REPORT_PUBLISHED` 到 stdout，随后推进 checkpoint，没有读取真实报表输入或持久化报表结果。
@@ -43,7 +43,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
 - 只有报表结果已经持久提交后才推进 checkpoint；失败窗口保持可见并阻断后续窗口。
 - 关停时先停止新调度，再排空 Worker，最后关闭 Queue 与 checkpoint Store。
 
-以上持久输出、恢复与有序停机是生产接入要求，当前 stdout publisher 和 `main.ts` 并未全部落实。
+以上持久输出与恢复是生产接入要求，当前 stdout publisher 并未落实。`main.ts` 已让 server 先于队列和 File Store 停止；scheduler 与 Worker 同时停止，还不是“先停调度、再排空 Worker”的更细顺序。
 基线刻意限制为一个应用实例、一个报表序列、同一时间最多一个逻辑窗口在途。该约束让单文件 checkpoint
 保持诚实；需要多副本或并行报表流时，应改用共享协调存储，而不是让多个进程争写同一文件。
 
@@ -66,7 +66,7 @@ docker compose -f examples/batch-reporting/compose.yaml down
             (main: stdout only)
                   |
                   v
-       @go-like/store-file checkpoint
+       @go-like/file/store checkpoint
        (directory owned by the app)
 ```
 
@@ -75,7 +75,7 @@ Queue 的生命周期错误地转交给 Worker adapter。
 
 ### 请求与数据流
 
-1. 应用把 File Store、Queue owner、Worker 与 scheduler 交给 Core。调度函数读取 checkpoint，计算下一个已经关闭的窗口；没有 checkpoint 时，`main.ts` 从当前最近关闭窗口开始，不自动补齐更早历史。
+1. `main.ts` 把 File Store 与队列放进 `resources(store, jobs)`，把 Worker 与 scheduler 放进 `server(worker, scheduler)`。调度函数读取 checkpoint，计算下一个已经关闭的窗口；没有 checkpoint 时，从当前最近关闭窗口开始，不自动补齐更早历史。
 2. 启动 reconciliation 与每次 Croner tick 都只调用同一个 `enqueueNextClosedWindow` 业务函数。
 3. 该函数用规范化 UTC 窗口生成确定性 BullMQ `jobId`，例如 `report-20260722T000000Z`，并只入队下一个窗口。
    当前 job payload 只携带规范化窗口，不携带凭据。
@@ -103,22 +103,23 @@ src/
 ├── checkpoint.ts      # Store 读写边界
 ├── scheduler.ts       # 下一窗口调度
 ├── processor.ts       # 发布与 checkpoint 提交
-└── main.ts            # 创建 Redis、Queue、Worker、Croner 并直接启动
+└── main.ts            # resources(store, jobs) 与 server(worker, scheduler)
 ```
 
 ## go-like 包映射
 
-| 包                                                  | 在本示例中的职责                                             | 不负责的内容                                                              |
-| --------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `@go-like/context`                                  | 为启动、停止和 Store 操作提供取消与 deadline。               | 不替代 BullMQ processor 的原生 `AbortSignal`。                            |
-| `@go-like/croner`                                   | 接管应用创建的 paused Croner job 的启动与停止。              | cron 表达式、timezone、overlap 和活动回调排空仍归应用/Croner。            |
-| `@go-like/bullmq`                                   | 接管官方 Worker 的 ready、run、pause、cancel、close 与终态。 | Queue、processor、attempts、backoff、jobId 和 stalled 参数归应用/BullMQ。 |
-| `@go-like/store`                                    | 提供 Context-first Store 契约。                              | 不提供事务 DSL 或分布式协调。                                             |
-| `@go-like/store-file` 与 `@go-like/store-file/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。    | 不支持跨进程 shared writers。                                             |
+| 包                                                  | 在本示例中的职责                                                           | 不负责的内容                                       |
+| --------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------- |
+| `@go-like/core/context`                             | 为启动、停止和 Store 操作提供取消与 deadline。                             | 不替代 BullMQ processor 的原生 `AbortSignal`。     |
+| `@go-like/core/job`                                 | `newScheduleServer` 负责计时、不重叠和回调排空。                           | cron 表达式与 timezone 归时刻表，不归这个 Server。 |
+| `@go-like/croner/job`                               | `newCronerSchedule` 只提供纯时刻表。                                       | 不持有定时器，也不排空正在运行的回调。             |
+| `@go-like/bullmq/job`                               | `newBullMqJobQueue` 把应用创建的 Queue 准入为资源；`worker()` 运行处理器。 | attempts、backoff、jobId 与 stalled 仍归 BullMQ。  |
+| `@go-like/core/store`                               | 提供 Context-first Store 契约。                                            | 不提供事务 DSL 或分布式协调。                      |
+| `@go-like/file/store` 与 `@go-like/file/store/node` | 用 checksum 快照、临时文件和原子 rename 保存 checkpoint。                  | 不支持跨进程 shared writers。                      |
 
-Queue 仍是 application-owned，`main.ts` 用本地 `queueServer` 包装其 `waitUntilReady / close`，不新增通用框架包。
-Core 并发停止 Store、Queue、Worker 与 scheduler；当前入口没有跟踪 Croner callback 的 admission barrier，
-也不保证 Worker 结束后才关闭 Queue/Store。Croner 原生 `stop()` 不等待已经运行的 callback，生产接入须补齐该依赖边界。
+应用仍创建 BullMQ `Queue`。`newBullMqJobQueue` 在 `waitUntilReady` 后准入，并在所有 server 停止后关闭队列，不再使用本地队列适配器。
+`resources(store, jobs)` 先于 `server(worker, scheduler)` 启动并被等待。停止时先并发停止 Worker 与 scheduler，再关闭队列，最后停止 File Store。
+`newScheduleServer` 跳过一次运行期间到来的到期触发，并在停止时排空当前回调。
 
 ## 生产接入要求（不等于当前入口全部实现）
 
@@ -151,13 +152,14 @@ Core 并发停止 Store、Queue、Worker 与 scheduler；当前入口没有跟�
 ### 关停
 
 E2E 单独创建 Queue、启动 File Store 与 scheduler，再按场景启动 Worker，并在测试主路径显式执行
-`scheduler → Worker → Queue → Store` 关闭。这个顺序属于 E2E 编排，不是 `main.ts` 的 Core 停机保证。生产接入需要：
+`scheduler → Worker → Queue → Store` 关闭。这个顺序是 E2E 为了分段观察终态而编排的，比 `main.ts` 更细：入口同时停止 scheduler 与 Worker。
+`main.ts` 本身保证 server 先结束，然后关闭队列资源，最后停止 File Store。各段现在是：
 
-1. scheduler 关闭 admission，停止 Croner 的未来 tick，并等待已接纳的 `queue.add()` barrier。
-2. `@go-like/bullmq` 调用 `pause(false)` 停止新 job admission，并等待 active processor。
-3. Worker 在 hard drain 边界内未结束时，adapter 调用原生 `cancelAllJobs(reason)`；processor 从原生 signal 观察取消。
-4. 等待唯一 `close(true)` 与 Worker `closed` 真实终态；pending `start(ctx)` Promise 不能被伪装成关闭完成。
-5. application-owned Queue 在 Worker 终止后执行 `queue.close()`。
+1. scheduler 停止未来 tick，并等待已经接纳的入队结束。
+2. `@go-like/bullmq/job` 的 worker 调用官方 `Worker.close()` 并等待 active processor；排空预算用尽时调用 `cancelAllJobs`。
+3. processor 从原生 signal 观察取消。
+4. 等待 Worker `closed` 真实终态；pending `start(ctx)` Promise 不能被伪装成关闭完成。
+5. 队列资源在 Worker 终止后执行 `queue.close()`。
 6. File Store 最后停止并清理正常运行产生的临时文件；Redis 是外部服务，不由应用停机流程关闭。
 
 ## 故障场景

@@ -1,4 +1,4 @@
-import type { ProbeRegistry } from "@go-like/health"
+import type { ProbeRegistry } from "@go-like/core/health"
 
 /** Registers the fixed public probe names used by the management plane. */
 export function registerRuntimeProbes(registry: ProbeRegistry, ready: () => boolean): void {

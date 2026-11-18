@@ -11,5 +11,9 @@
     "tsBuildInfoFile": ".artifacts/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../../packages/context" }, { "path": "../../packages/core" }]
+  "references": [
+    {
+      "path": "../core"
+    }
+  ]
 }

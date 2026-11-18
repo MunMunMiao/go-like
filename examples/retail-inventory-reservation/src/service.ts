@@ -1,6 +1,6 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import { newMemoryCache } from "@go-like/cache-memory"
-import type { Context } from "@go-like/context"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import { newMemoryCache } from "@go-like/core/cache/memory"
+import type { Context } from "@go-like/core/context"
 
 export interface ReserveStockCommand {
   readonly requestId: string

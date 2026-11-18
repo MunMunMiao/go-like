@@ -1,265 +1,119 @@
 # Configuration, registry, store, and cache
 
-Configuration, service reachability, records, and acceleration all involve data, but their contracts answer different questions:
+These four contracts answer different questions. A shared ecosystem client does not merge the contracts.
 
-| Domain   | Question                                                    | go-like contract                                                         | Typical lifetime               |
-| -------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
-| Config   | What configuration snapshot should this process use?        | Immutable merged source snapshots, validation, reload, last-good value   | Process or deployment          |
-| Registry | Which service instances can be reached now?                 | Registration, complete discovery snapshots, watchers, filters, selectors | Ephemeral control plane        |
-| Store    | Which record exists at this key and revision?               | Read/write/delete/list, revision, CAS, TTL, cursor                       | Business or operational state  |
-| Cache    | Can this disposable value accelerate an authoritative path? | Context-first get/put/delete, optional TTL                               | Disposable and reconstructible |
+| Domain   | Question                                      | Socket                              | Lifetime                      |
+| -------- | --------------------------------------------- | ----------------------------------- | ----------------------------- |
+| Config   | Which snapshot should this process use?       | `ConfigSource`, `ConfigDecoder`     | Process or deployment         |
+| Registry | Which instances are reachable now?            | `Registrar`, `Discovery`, `Watcher` | Ephemeral control plane       |
+| Store    | Which record exists at this key and revision? | `Store`                             | Business or operational state |
+| Cache    | Can this disposable value be recomputed?      | `Cache`                             | Disposable                    |
 
-Do not replace one with another just because all four have a `get`-like operation. Their failure, consistency, and ownership promises are intentionally different.
-
-See [Error handling](/reference/errors) before matching provider codes or replaying failed mutations.
+Match provider codes with [Error handling](/reference/errors) before replaying a failed mutation.
 
 ## Config
 
-The core Config API is built around explicit sources and immutable publications:
+`@go-like/core/config` merges sources into an immutable publication. `schema(...)` validates that publication. `config.scan(ctx, schema)` is a separate call: it both checks and types the result. Pass the schema to both.
 
 ```ts
-import { background } from "@go-like/context"
-import { newConfig, objectSource, source } from "@go-like/config"
+import { background } from "@go-like/core/context"
+import {
+  envSource,
+  fileSource,
+  jsonDecoder,
+  newConfig,
+  objectSource,
+  schema,
+  source
+} from "@go-like/core/config"
+import { struct } from "@go-like/core/struct"
+
+const settings = struct.object({
+  service: struct.object({
+    name: struct.string(),
+    port: struct.number()
+  })
+})
 
 const config = newConfig(
-  source(
-    objectSource("defaults", {
-      service: { name: "appointments", port: 3000 }
-    })
-  )
+  source(objectSource("defaults", { service: { name: "appointments", port: 3000 } })),
+  schema(settings)
 )
 
 await config.load(background())
-const serviceName = config.value("service.name").load()
+const loaded = await config.scan(background(), settings)
 await config.close(background())
+void fileSource
+void jsonDecoder
+void envSource
+void loaded
 ```
 
-Current public core functions include:
+`envSource` reads the record you pass. It does not read `process.env` by itself. `fileSource` plus `jsonDecoder` reads JSON through a `FileCapability`. `newNodeFileCapability` from `@go-like/core/config/node` is the Node binding. `decodeYaml` from `@go-like/yaml/config` is the YAML `ConfigDecoder`. It is a separate package because it depends on `js-yaml`.
 
-- `newConfig(...)` creates the lifecycle manager;
-- `source(...)` captures an ordered source list;
-- `objectSource(...)` creates an immutable in-memory source;
-- `schema(...)` validates each publication through Standard Schema;
-- `resolver(...)` transforms a complete merged source value before publication;
-- `placeholderResolver()` resolves supported placeholders explicitly;
-- `onReloadError(...)` observes recoverable background reload failures;
-- `onTerminalError(...)` observes the first unrecoverable post-load watcher failure.
+`resolver` and `placeholderResolver` transform the merged object before publication. `onReloadError` observes a background reload that kept the last accepted snapshot. `onTerminalError` observes the first unrecoverable watcher failure. `value(key)` and `watch` read the publication. Config is not a `Server`. Close it from `afterStop`, or load it in the bootstrap sequence described in [Health and observability](/guide/health-observability) before `newApp`.
 
-A Config object exposes `load(ctx)`, `scan(ctx, schema)`, `value(key)`, `watch(key, observer)`, and `close(ctx)`. It is not automatically a Core `Server`; compose `load` and `close` in application hooks or an explicit owner.
+A reload failure can keep the last accepted snapshot. A terminal watcher failure is a different event. Source names are logical identities.
 
-The environment and file subpaths are explicit:
+### Ecosystem sources
 
-```ts
-import { envSource } from "@go-like/config/env"
-import { fileSource, jsonFileDecoder } from "@go-like/config/file"
-import { newNodeFileCapability } from "@go-like/config/node"
-import { decodeYaml } from "@go-like/config/yaml"
-```
+Each of these plugs exports one client from the package root and a source from the socket entry. Pass the same client to every socket you use.
 
-`envSource(environment, options)` accepts an injected environment record. It does not read a runtime global. The `/node` subpath supplies Node file capabilities; importing it changes the runtime dependency graph.
+| Root client                                      | Config entry                 | Source                              |
+| ------------------------------------------------ | ---------------------------- | ----------------------------------- |
+| `newConsulClient` from `@go-like/consul`         | `@go-like/consul/config`     | `consulSource(client, options)`     |
+| `newEtcdClient` from `@go-like/etcd`             | `@go-like/etcd/config`       | `etcdSource(client, options)`       |
+| `newVaultClient` from `@go-like/vault`           | `@go-like/vault/config`      | `vaultSource(client, options)`      |
+| `newKubernetesClient` from `@go-like/kubernetes` | `@go-like/kubernetes/config` | `kubernetesSource(client, options)` |
 
-External Config providers use separate packages:
+The client takes an explicit `fetch`. That differs from `@go-like/core/transport/http`, which defaults to `globalThis.fetch`. HTTP, transport, and protocol failures share one error family on the package root. The `operation` field says which socket issued the call. See the plug README for watch recovery: Consul blocking queries, etcd compaction, Kubernetes relist, and Vault KV v2 are not the same mechanism.
 
-- `@go-like/config-consul` with `consulSource(...)`;
-- `@go-like/config-etcd` with `etcdSource(...)`;
-- `@go-like/config-kubernetes` with `kubernetesSource(...)` for one namespaced ConfigMap or Secret key;
-- `@go-like/config-vault` with `vaultSource(...)` for Vault KV v2.
-
-These HTTP-backed providers use an injected Fetch capability and retain backend-specific watch and recovery semantics. Kubernetes resource versions and relists, etcd compaction recovery, Consul blocking queries, and Vault protocol errors are not interchangeable.
-
-### Config rules
-
-- A source snapshot is copied and frozen before publication.
-- A reload failure can retain the last accepted value; use `onReloadError` to observe it.
-- A terminal watcher failure is separate from a recoverable reload failure; use `onTerminalError` to connect it to application policy.
-- A source name is a logical identity, not a backend URL.
-- A Config watcher must be closed by its owner; `App.stop()` does not discover arbitrary Config instances.
-- Do not claim that multiple ConfigMap or Secret keys form one cross-resource transaction.
+`@go-like/core/fetch` supplies `Fetch`, `newFetchClient`, and the status helper plug authors use. Application code that only loads config can stay on the source constructor.
 
 ## Registry and discovery
 
-The Registry contract has separate registration and read/observe roles:
+`@go-like/core/registry` is the socket and the in-process machinery: `filterVersion`, `filterLabel`, the five selectors, `snapshotServiceInstance`, `selectEndpoint`, and `newDiscoveryResolver`. `@go-like/core/registry/memory` is `newMemoryRegistry`. `@go-like/core/registry/provider` is the plug-author kit (`newSnapshotWatcher`, `newIdentityLocks`, `startHeartbeat`).
 
-```ts
-interface Registrar {
-  register(ctx: Context, service: ServiceInstance): Promise<void>
-  deregister(ctx: Context, service: ServiceInstance): Promise<void>
-}
+| Plug entry                         | Constructor                              | Notes                                                |
+| ---------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
+| `@go-like/consul/registry`         | `newConsulRegistry(client, options)`     | Same `ConsulClient` as config and store.             |
+| `@go-like/etcd/registry`           | `newEtcdRegistry(client, options)`       | Lease and transaction stay on etcd.                  |
+| `@go-like/kubernetes/registry`     | `newKubernetesRegistry(client, options)` | EndpointSlice identity and RBAC stay on the cluster. |
+| `@go-like/zookeeper/registry`      | `newZookeeperRegistry(options)`          | Portable over `ZookeeperClientFactory`.              |
+| `@go-like/zookeeper/registry/node` | `newNodeZookeeperClientFactory()`        | Imports `node-zookeeper-client`.                     |
+| `@go-like/mdns/registry`           | `newMDNSRegistry(options)`               | Portable over an injected `MDNSHost`.                |
+| `@go-like/mdns/registry/node`      | `newNodeMDNSHost`                        | Uses `node:dgram`.                                   |
 
-interface Discovery {
-  getService(ctx: Context, name: string): Promise<readonly ServiceInstance[]>
-  watch(ctx: Context, name: string): Promise<Watcher>
-}
-```
+A watcher yields complete replacement snapshots. `GO_LIKE_WATCHER_OVERFLOW` means events were dropped; rebuild from a full snapshot. `GO_LIKE_NO_AVAILABLE_ENDPOINT` means the current snapshot, after filters, has nowhere to send the call.
 
-A `ServiceInstance` contains:
-
-```ts
-interface ServiceInstance {
-  id: string
-  name: string
-  version: string
-  metadata: Readonly<Record<string, string>>
-  endpoints: readonly string[]
-}
-```
-
-The public watcher contract returns complete replacement snapshots. Backend events may be add/remove notifications internally, but consumers must not assume a patch stream. An empty snapshot is meaningful: it says that the service currently has no endpoints, so selection fails closed.
-
-A Core App can register the endpoints of its `Endpointer` Servers:
-
-```ts
-import { name, newApp, registrar, server } from "@go-like/core"
-
-const app = newApp(name("pricing"), registrar(registry), server(pricingServer))
-```
-
-The App registers after starting and preparing endpoints, then deregisters before canceling the long-lived Server Context during stop. Provider leases, sessions, heartbeats, and registration-loss callbacks remain provider concerns.
-
-Filters and selectors are separate from Registry storage:
-
-```ts
-import type { Context } from "@go-like/context"
-import {
-  newClient,
-  withDiscovery,
-  withEndpoint,
-  withFilter,
-  withSelector,
-  withTransport
-} from "@go-like/client"
-import { endpoint } from "@go-like/transport"
-import { struct } from "@go-like/struct"
-import {
-  filterLabel,
-  filterVersion,
-  newRoundRobinSelector,
-  type Discovery
-} from "@go-like/registry"
-import type { Transport } from "@go-like/transport"
-
-declare const ctx: Context
-declare const discovery: Discovery
-declare const transport: Transport
-
-const quote = endpoint(
-  "pricing",
-  "quote",
-  struct.object({ sku: struct.string() }),
-  struct.object({ amount: struct.number() })
-)
-
-const client = newClient(
-  withTransport(transport),
-  withEndpoint("discovery:///pricing"),
-  withDiscovery(discovery),
-  withSelector(newRoundRobinSelector())
-)
-
-const priced = await client.call(
-  ctx,
-  quote,
-  { sku: "a" },
-  withFilter(filterVersion("v2"), filterLabel("zone", "a"))
-)
-void priced
-```
-
-Filters run in declaration order. A selector chooses one URL and returns a synchronous `SelectionDone` callback. P2C and EWMA use that feedback for endpoint-local health and load state; they are not substitutes for an operation-level circuit breaker.
-
-## Registry providers
-
-| Provider                       | Backend mechanism                             | Use it when                                                  | Boundary                                                                        |
-| ------------------------------ | --------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `@go-like/registry-consul`     | Consul health and blocking-query model        | Consul is already the service control plane                  | TTL, health filtering, and blocking indexes remain Consul semantics             |
-| `@go-like/registry-etcd`       | JSON gateway, leases, revisioned watch/relist | etcd is available through an HTTP gateway                    | Compaction, lease loss, and protocol conflicts are provider errors              |
-| `@go-like/registry-kubernetes` | `discovery.k8s.io/v1` EndpointSlice           | The application should select EndpointSlice-backed instances | It is not Kubernetes Service DNS, a fabricated TTL, or a Deployment controller  |
-| `@go-like/registry-mdns`       | Local multicast DNS and TTL cache             | Small local-network discovery                                | UDP capability is in `@go-like/registry-mdns/node`; there is no global revision |
-| `@go-like/registry-zookeeper`  | Ephemeral znodes and native sessions          | ZooKeeper is the established control plane                   | Requires a Node.js/Bun native session                                           |
-
-Providers fail closed on malformed managed records or identity conflicts. They should not silently choose an arbitrary endpoint when the backend has ambiguous ownership.
+`registrar(registry)` on `newApp` registers the server-tier endpoints after they are prepared and deregisters them on stop. Resources are not registered. `registrarTimeout` defaults to 10 seconds.
 
 ## Store
 
-The Store contract is Context-first and revision-aware:
+`@go-like/core/store` is the byte-record socket: `get`, `put`, `delete`, and `list`, with `ifAbsent`, `ifRevision`, `prefix`, `limit`, `cursor`, and `expiresIn`. A missed condition is `GO_LIKE_STORE_CONFLICT`. Read the current record and decide again. Revisions are opaque. `@go-like/core/store/memory` is `newMemoryStore`, process-local only.
 
-```ts
-import { background } from "@go-like/context"
-import { ifAbsent, ifRevision, prefix } from "@go-like/store"
-import { newMemoryStore } from "@go-like/store-memory"
+| Plug                       | Entry                              | Role                                                                                                 |
+| -------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@go-like/consul/store`    | `newConsulStore(client, options?)` | KV under an isolated root. Uncertain readback and the TTL-plus-CAS combination have their own codes. |
+| `@go-like/etcd/store`      | `newEtcdStore(client)`             | Revisions, compaction, leases. `GO_LIKE_ETCD_STORE_CLEANUP` means the mutation committed.            |
+| `@go-like/vault/store`     | `newVaultStore(client, options)`   | KV v2. The list cursor is process-local.                                                             |
+| `@go-like/file/store`      | `newFileStore(host, directory)`    | Portable over `FileStoreHost`. Also a resource-tier `Server`.                                        |
+| `@go-like/file/store/node` | `newNodeFileStoreHost`             | Node directory host. The store is also a resource-tier `Server`.                                     |
 
-const store = newMemoryStore()
-const created = await store.write(
-  background(),
-  { key: "appointment/appointment-1", value: new TextEncoder().encode("booked") },
-  ifAbsent()
-)
+Consul, etcd, and Vault stores use the shared root errors for HTTP, transport, and protocol failures. Store-only outcomes (uncertain mutation, compaction, lease loss, cleanup, unsupported flag combination, snapshot cursor) stay on the store entry.
 
-const current = await store.read(background(), "appointment/appointment-1")
-await store.write(
-  background(),
-  {
-    key: current?.key ?? "appointment/appointment-1",
-    value: new TextEncoder().encode("cancelled")
-  },
-  ifRevision(created.revision)
-)
-
-const page = await store.list(background(), prefix("appointment/"))
-```
-
-The core options are:
-
-- `expiresIn(ms)` for a record TTL where the provider supports it;
-- `ifAbsent()` for create-only admission;
-- `ifRevision(revision)` for compare-and-set writes and deletes;
-- `prefix(value)`, `limit(count)`, and `cursor(value)` for ordered pages.
-
-A Store record contains `key`, bytes, metadata, `revision`, and `expiresAt`. `StoreConflictError` preserves the expected and actual revisions. Use Store for authoritative records or checkpoints when its provider's guarantees match the application.
-
-Providers include:
-
-- `@go-like/store-memory`: process-local, immediately usable test state;
-- `@go-like/store-file`: local file snapshots with single-owner lifecycle, using `@go-like/store-file/node` for the Node host;
-- `@go-like/store-consul`: Consul KV-backed records with provider-specific unsupported combinations;
-- `@go-like/store-etcd`: revision and lease-aware etcd gateway implementation;
-- `@go-like/store-vault`: Vault KV v2 records without a promise of uniform Store TTL/CAS semantics.
-
-The file Store is not a multi-process database. Vault Store is not a drop-in implementation of every Store option. Keep those limits in the provider documentation and deployment design.
+File-store corruption, lock, and state errors stay on `@go-like/file/store`. A stale lock is not authority to delete it. A checksum failure is not authority to overwrite the snapshot.
 
 ## Cache
 
-Cache is a disposable acceleration boundary:
+`@go-like/core/cache` is `get`, `put`, `delete` of bytes, plus `expiresIn`. A missing or expired key is `null`. `@go-like/core/cache/memory` is `newMemoryCache`. It is not a `Server` and it does not survive the process.
 
-```ts
-import { expiresIn } from "@go-like/cache"
-import { newMemoryCache } from "@go-like/cache-memory"
+`@go-like/redis/cache` exports `newRedisCache`. The returned object is a `Cache` and a resource-tier `Server`: `start` resolves when the client is usable, and `stop` closes it. Put it in `resources(...)`. `GO_LIKE_CACHE_REDIS_OPERATION` and `GO_LIKE_CACHE_REDIS_PROTOCOL` are the public codes. A cache failure is a reason to use the authoritative store, not a reason to retry a business write.
 
-const cache = newMemoryCache()
-const key = "availability/doctor-1"
-const cached = await cache.get(ctx, key)
-if (cached === null) {
-  const authoritative = await appointmentRepository.readAvailability(ctx, "doctor-1")
-  await cache.put(
-    ctx,
-    key,
-    new TextEncoder().encode(JSON.stringify(authoritative)),
-    expiresIn(30_000)
-  )
-}
-```
+## Choosing a plug
 
-The Cache contract exposes `get`, `put`, and `delete`. A miss, expiry, or cache error must fall back to the authoritative path when the business operation requires correctness. `@go-like/cache-memory` is process-local and does not persist on process exit. `@go-like/cache-redis` owns its native Redis integration boundary and has its own runtime and credential considerations.
-
-## Provider and runtime decisions
-
-Before adding a provider, write down:
-
-1. Which package or subpath is imported?
-2. Which backend and version are required?
-3. Does the provider use injected Fetch, a Node-only capability, or a vendor client?
-4. Who creates and closes the native connection, watcher, file handle, or session?
-5. What happens on a watcher compaction, lease loss, malformed record, or ambiguous mutation?
-6. Which test lane actually exercises it: source/unit, conformance, runtime, Docker provider, or published consumer?
-
-The [Provider reference](/reference/providers) contains the fuller matrix. The [Verification reference](/reference/verification) distinguishes source evidence from commands that have run.
+- One ecosystem, several sockets: one root client, one subpath per socket.
+- Tests and single-process examples: the `memory` entries in core.
+- Files on disk: `@go-like/file`, not a core subpath.
+- YAML: `@go-like/yaml/config`.
+- Anything that must be up before servers accept work, and that implements `Server`: `resources(...)`.

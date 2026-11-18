@@ -1,5 +1,5 @@
-import type { Context } from "@go-like/context"
-import { newRoundRobinSelector, type Selector, type ServiceInstance } from "@go-like/registry"
+import type { Context } from "@go-like/core/context"
+import { newRoundRobinSelector, type Selector, type ServiceInstance } from "@go-like/core/registry"
 
 import { canMatch, type JoinMatchCommand, type PlayerPair } from "./service"
 

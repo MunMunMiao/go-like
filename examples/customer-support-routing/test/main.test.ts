@@ -1,5 +1,5 @@
-import { background, withCancel } from "@go-like/context"
-import type { ServiceInstance } from "@go-like/registry"
+import { background, withCancel } from "@go-like/core/context"
+import type { ServiceInstance } from "@go-like/core/registry"
 import { describe, expect, test } from "bun:test"
 
 import { newSupportRoutingHandler } from "../src/http"

@@ -1,5 +1,5 @@
-import { newBrokerServer } from "@go-like/broker"
-import type { Server } from "@go-like/core"
+import { newBrokerServer } from "@go-like/core/broker"
+import type { Server } from "@go-like/core/lifecycle"
 
 import { rawTelemetrySubjects, type TelemetryBroker } from "./nats"
 import { processTelemetry } from "./processor"

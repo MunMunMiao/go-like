@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@go-like/otel",
   "version": "0.0.1",
-  "description": "Lifecycle adaptation and explicit go-like instrumentation for application-configured OpenTelemetry providers.",
+  "description": "OpenTelemetry plug: core trace, metric, log, and propagation adapters over application-owned SDK providers.",
   "type": "module",
   "module": "src/index.ts",
   "typings": "src/index.ts",
@@ -23,30 +23,24 @@
     "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
     "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage",
     "test:e2e": "bun test/e2e/docker-e2e.ts && bun test/e2e/instrumentation-docker.ts",
+    "test:e2e:otel": "bun test/e2e/docker-e2e.ts && bun test/e2e/instrumentation-docker.ts",
     "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts"
   },
-  "dependencies": {
-    "@go-like/broker": "0.0.1",
-    "@go-like/client": "0.0.1",
-    "@go-like/context": "0.0.1",
-    "@go-like/core": "0.0.1",
-    "@go-like/metadata": "0.0.1",
-    "@go-like/server": "0.0.1",
-    "@go-like/struct": "0.0.1",
-    "@go-like/transport": "0.0.1",
-    "@opentelemetry/api": "1.10.0",
-    "@opentelemetry/sdk-metrics": "3.1.1",
-    "@opentelemetry/sdk-trace": "3.1.1"
-  },
   "devDependencies": {
-    "@go-like/registry": "workspace:*",
-    "@go-like/transport-http": "workspace:*",
+    "@go-like/core": "workspace:*",
+    "@opentelemetry/api": "1.10.0",
     "@opentelemetry/context-async-hooks": "3.1.1",
     "@opentelemetry/core": "3.1.1",
     "@opentelemetry/exporter-metrics-otlp-http": "0.301.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.301.1",
     "@opentelemetry/resources": "3.1.1",
+    "@opentelemetry/sdk-metrics": "3.1.1",
+    "@opentelemetry/sdk-trace": "3.1.1",
     "@types/node": "26.6.6"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependencies": {
+    "@go-like/core": "0.0.1",
+    "@opentelemetry/api": "^1.10.0"
+  }
 }

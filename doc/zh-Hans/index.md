@@ -1,23 +1,101 @@
 # go-like
 
-go-like 是一套给 TypeScript 后端用的 Go 风格微服务工具包。它把生命周期、Context、服务调用、服务发现、消息、配置、存储、健康检查和可观测性拆成小而清楚的包，不要求你把现有框架或运行时整套换掉。
+go-like 是一组给 Bun 和 Node.js 后端服务用的显式 TypeScript 构建块。`@go-like/core` 是零运行时依赖的插座面板：Context、应用生命周期、内部调用、配置、发现、记录、缓存、消息、任务、健康检查，以及观测基座。其余十九个包是插头。插头用应用自己创建的生态客户端填入一个或多个插座。`@go-like/protoc-gen-like` 是构建期 Protobuf 生成器，不依赖 core。
 
-可移植代码只依赖标准 Web API，例如 `Request`、`Response`、`Headers`、`AbortSignal`、Web Streams 和注入的 `fetch`。Node.js、Bun 各自特有的能力会放到单独入口。已经导出 Fetch 的框架不需要 go-like 适配包：Hono、Elysia 与 H3 2.x 的 `app.fetch` 可直接交给 `@go-like/web`；H3 1.x 使用 `toWebHandler(app)`。Croner、BullMQ、NATS、Pino、Winston 等资源才使用生命周期适配器。
+应用仍然是组合根。它构造原生对象，传给插头构造函数，再把结果装到 `newApp` 上。没有服务器、日志器或观测 provider 的全局注册表。
 
-第一次看可以从[快速开始](/zh-Hans/guide/getting-started)读起，再按[诊所预约：从 0 到 1](/zh-Hans/guide/zero-to-one)按里程碑走一遍引导项目。已经有现成服务要接入时，看[迁移与接入](/zh-Hans/guide/migration)；想知道 go-like 和其他工具各自负责什么，翻[工具比较](/zh-Hans/guide/comparison)。
+> [!IMPORTANT]
+> 此 checkout 是私有的 `0.0.1` workspace。Manifest 版本不能证明 npm 可用。示例使用 workspace 包；除非已独立确认某个已发布版本，否则应在 checkout 中运行。
 
-想知道每个包和 provider 到底管什么，就看[包与 provider 参考](/zh-Hans/reference/providers)和[包参考](/zh-Hans/reference/packages)；想确认哪些能力真的跑过测试，而不是“理论上能用”，请看[验证](/zh-Hans/reference/verification)。
+> [!NOTE]
+> 英文 `doc/` 树是这条文档轨道的规范来源。包源码、manifest 和针对性测试才是 API 权威。仓库里存在的测试或 E2E 脚本只表示已声明的覆盖；在命令实际跑过并记录退出状态之前，它不是通过结果。
 
-## 选择阅读路径
+## 选择路径
 
-- **初学者：** 从[快速开始](/zh-Hans/guide/getting-started)到[诊所预约项目](/zh-Hans/guide/zero-to-one)，先跑通 Handler、ready 信号和停止。
-- **TypeScript 或 Go 专家：** 先看[架构](/zh-Hans/guide/architecture)，再看[服务调用](/zh-Hans/guide/service-call)和[包与 provider 参考](/zh-Hans/reference/providers)，重点确认 ownership 和终态。
-- **框架用户：** 先看[工具比较](/zh-Hans/guide/comparison)，再看[迁移与接入](/zh-Hans/guide/migration)，保留原有 router，只接入需要的边界。
+| 读者                       | 从这里开始                                 | 然后读                                                                         | 可以继续的时候                                                |
+| -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| 刚接触 go-like             | [快速开始](/zh-Hans/guide/getting-started) | [架构](/zh-Hans/guide/architecture)、[诊所项目](/zh-Hans/guide/zero-to-one)    | 能启动一个 Web 服务、传入 Context、暴露健康检查并停止它       |
+| 有经验的 TypeScript 工程师 | [架构](/zh-Hans/guide/architecture)        | [服务调用](/zh-Hans/guide/service-call)、[工具比较](/zh-Hans/guide/comparison) | 能说出每个资源的所有者、所在层级和终态边界                    |
+| Go 或 Kratos 读者          | [快速开始](/zh-Hans/guide/getting-started) | [术语](/reference/terminology)、[服务调用](/zh-Hans/guide/service-call)        | 能对应 Context 和 Server 概念，同时不假设 gRPC 或 Go ABI 兼容 |
+| 框架用户                   | [工具比较](/zh-Hans/guide/comparison)      | [迁移与接入](/zh-Hans/guide/migration)、[架构](/zh-Hans/guide/architecture)    | 能保留原生路由器，只加上需要的生命周期或调用边界              |
+| 插头作者                   | [插头](/zh-Hans/reference/providers)       | [验证](/zh-Hans/reference/verification)、[声明与证据](/reference/claims)       | 能说明一个插头的插座、runtime、所有权和证据界限               |
 
-## 这里说的 Go 风格
+## 规范学习路径
 
-阻塞操作把 Context 放在第一个参数，资源所有权写清楚，停止后有稳定的终态，小接口靠结构类型实现。它不是把 Go 的大小写、channel 或 goroutine 生搬硬套到 TypeScript；TS 该怎么导出就怎么导出，第三方库独有的语义也继续留在原生对象上。
+`doc/guide/` 下的四页规范路径是逐步推进的：
 
-`@go-like/protoc-gen-like` 基于 Protobuf-ES 生成 Context-first Protobuf RPC 代码。`@go-like/transport-grpc-buf` 的 Fetch 入口支持 Connect/gRPC-Web 的 unary 和 server-streaming；`/native` 提供标准 gRPC 的四种调用形态，包括 client-streaming 和 bidi。这是独立于内部 Fetch/SSE 路径的调用路径。
+1. [快速开始](/zh-Hans/guide/getting-started) 跑通一个标准 Fetch Handler、一个 Node 宿主、一个进程信号和一个 App。
+2. [诊所预约：从 0 到 1](/zh-Hans/guide/zero-to-one) 把生命周期落成具体领域、内部 unary 调用、缓存、健康检查、测试和停机练习。
+3. [工具比较](/zh-Hans/guide/comparison) 说明 go-like 与 NestJS、Fastify、Hono、Elysia、Koa、tRPC、go-micro、go-kratos 的有意差异。
+4. [迁移与接入](/zh-Hans/guide/migration) 把迁移前的包映射到 20 个包的布局。
 
-Node 26.12.1 与 Bun 1.4.4 的托管 gRPC 已通过[慢消费者 drain 回归](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 与 Bun 1.4.2 Fetch 的历史[取消与停机限制](/reference/claims#stream-cancellation-limits)仍未验证已修复。
+[包参考](/zh-Hans/reference/packages) 是 20 个包、75 个公共入口的清单。[插头](/zh-Hans/reference/providers) 指向每个生态插头的 README。
+
+## 心智模型
+
+三条规则贯穿整个库：
+
+1. **Context 在前。** 每次 I/O 都把 `ctx: Context` 作为第一个参数。Context 携带取消、截止时间、AppInfo、请求 metadata，以及当前观测状态。
+2. **显式组合。** 应用构造每一个实现并传进去。插头不会把自己注册成全局对象。
+3. **一件事一条路径。** 用 `newBrokerServer` 订阅，用 `newScheduleServer` 调度，用 `JobQueue.worker` 消费队列，用 `newResourceServer` 接入原生资源，用 `readyProbe` 加上 `createHealthHandler` 发布就绪。
+
+```text
+应用的 main.ts
+  用应用创建的原生对象构造插头
+  newTelemetry({...})  newConfig(...)  newServer(...)  newClient(...)
+        |
+        v
+@go-like/core  newApp(...)
+  telemetry(tel)     最先接纳，最后排空
+  resources(...)     按顺序启动，每个 start 都会等待，按相反顺序停止
+  server(...)        一起启动，一起停止
+  registrar(r)       在 server 层被接纳之后
+  readyProbe(...)    只在启动完成到停止之间就绪
+```
+
+读完本站其余页面，五个名词就够了：
+
+- **插座**是 core 声明的结构契约（`Server`、`LogHandler`、`Registry`、`Broker`、`Store`，以及其他）。插头实现插座。它不包裹 core 的调用点。
+- **Context** 是可取消工作的显式作用域。
+- **Server** 是 `start(ctx)` 和 `stop(ctx)`。在 `resources(...)` 里，`start` 在资源可用时 resolve。在 `server(...)` 里，`start` 可以一直 pending，直到原生对象结束。
+- **App** 接纳这些层级、hook、注册和停机。它不是依赖注入容器。
+- **Handler** 是标准 Web 函数 `(Request) => Response | Promise<Response>`。Handler 本身不是监听服务器。
+
+对外 Web 和内部服务调用保持分开。生成的 Protobuf RPC 是更后面的可选路径：`@go-like/protoc-gen-like` 生成 ctx 在前的粘合代码，`@go-like/connectrpc` 把 Connect 和 gRPC-Web 适配到 Fetch，`@go-like/connectrpc/node` 托管标准 gRPC。见[流式传输](/zh-Hans/guide/streaming)。
+
+## 应用仍然拥有的部分
+
+当前产品边界把这些留给应用或原生库：
+
+- 路由、框架 middleware、Web Streams 和 WebSocket 升级；
+- 业务策略、凭据和授权；
+- 原生确认、租约、重试和协议细节；
+- OpenTelemetry SDK 的构造、日志器配置和 exporter 选择；
+- 持久性、事务，以及内存参考实现跨进程时的任何含义；
+- 从 manifest 推断出的 npm 发布、托管 CI 状态或生产就绪声明。
+
+## 公共清单
+
+本 workspace 发布 **20** 个 `@go-like/*` 包，在此 checkout 中版本都是 `0.0.1`，以及 **75** 个公共入口。`@go-like/core` 贡献 41 个入口。其余 34 个入口属于插头和生成器。生成的 `dist/package.json` metadata 导出不是额外的源码 API。
+
+用[包参考](/zh-Hans/reference/packages)选择入口，用[插头](/zh-Hans/reference/providers)打开插头 README。[声明与证据](/reference/claims)记录公开措辞背后的证据级别。
+
+## 验证边界
+
+一次历史仓库契约审计在 commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675` 上报告了本地结果：`bun run typecheck`、`bun run test:unit` 和 `bun run fmt:check` 通过。该报告计为 2,736 个单元测试、1,514 个已格式化文件，以及 66 个源码导出入口的导入审计成功。这个计数描述的是迁移前的树。当前清单是 75 个入口。该审计没有确立 `build`、`doc:build`、Docker provider E2E、已发布 tarball 的消费者、npm 发布、托管 CI，或 60 分钟 soak。
+
+在把源码或脚本上的说法变成发布声明之前，先读[验证](/zh-Hans/reference/verification)。
+
+## 下一步
+
+- [快速开始](/zh-Hans/guide/getting-started)：跑通一个 Web handler 和第一个生命周期检查点。
+- [架构](/zh-Hans/guide/architecture)：层级、Context 作用域、启停顺序、就绪和预算。
+- [诊所预约：从 0 到 1](/zh-Hans/guide/zero-to-one)：一条业务不变量，从 HTTP 到内部策略调用、健康检查和停机。
+- [服务调用](/zh-Hans/guide/service-call)：带类型的 Memory Transport，然后是发现、选择和重试。
+- [配置、注册中心、存储与缓存](/zh-Hans/guide/config-registry-store)：四份契约，每个生态共用一个客户端。
+- [消息、事件与任务](/zh-Hans/guide/broker-events)：字节、codec、时间表和队列。
+- [健康与可观测性](/zh-Hans/guide/health-observability)：探针、`newTelemetry`，以及四个观测插头。
+- [工具比较](/zh-Hans/guide/comparison)和[迁移与接入](/zh-Hans/guide/migration)：相对其他工具的所有权，以及 import codemod。
+- [包参考](/zh-Hans/reference/packages)、[插头](/zh-Hans/reference/providers)、[错误](/reference/errors)、[术语](/reference/terminology)和[验证](/zh-Hans/reference/verification)。
+
+Node 26.12.1 与 Bun 1.4.4 上的托管 gRPC 慢消费者排空记录在[原生 gRPC 排空矩阵](/reference/claims#native-grpc-drain-status)。更早的 Connect 2.1.2 与 Bun 1.4.2 Fetch 取消观察仍留在[声明与证据](/reference/claims#stream-cancellation-limits)。

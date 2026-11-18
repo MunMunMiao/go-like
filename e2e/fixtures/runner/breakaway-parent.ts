@@ -7,6 +7,9 @@ if (processIdPath === undefined || readyPath === undefined) {
   throw new Error("breakaway fixture paths are required")
 }
 
+// Bound readiness too: the descendant may exit before it writes the ready file.
+setTimeout(() => process.exit(124), 60_000)
+
 const descendant = Bun.spawn(
   [process.execPath, join(import.meta.dir, "persistent.ts"), readyPath, "stdout"],
   {

@@ -1,178 +1,110 @@
-# Broker and events
+# Broker, events, and jobs
 
-`@go-like/broker` is a narrow Context-first bytes-and-topic contract. It deliberately preserves the provider's native delivery object because acknowledgement, redelivery, durability, negative acknowledgement, termination, and dead-letter behavior differ across brokers.
+Messaging and scheduled work are three sockets.
 
-`@go-like/event` adds one explicit codec layer. It does not add a schema registry, replay store, universal acknowledgement methods, or exactly-once delivery.
+- **Broker** publishes and subscribes bytes on a topic and keeps the provider's native delivery object.
+- **Event** is a codec over those bytes. It lives on `@go-like/core/broker` as `eventBroker`. It is not a separate package, a history log, or a replay engine.
+- **Job** is a timetable (`Schedule`) or a queue (`JobQueue`). Croner fills the timetable. BullMQ fills the queue.
 
-## The portable broker contract
+Core records `messaging.publish`, `messaging.process`, `job.run`, and `job.enqueue` when the plug calls the provider kit. Application handlers do not open those spans themselves.
 
-The core shapes are:
-
-```ts
-interface BrokerMessage {
-  readonly headers: Readonly<Record<string, string>>
-  readonly body: Uint8Array
-}
-
-interface BrokerEvent<Native> {
-  readonly topic: string
-  readonly message: BrokerMessage
-  readonly native: Native
-}
-
-interface Subscriber {
-  readonly topic: string
-  unsubscribe(ctx: Context): Promise<void>
-}
-```
-
-A Broker exposes Context-first `publish` and `subscribe`. The public SPI does not define `ack`, `nack`, `term`, retry, DLQ, or durable offset methods. Provider packages may expose those native operations through `event.native` or an official provider object.
-
-`newBrokerServer(...)` turns one accepted subscription into a Core `Server`:
+## Broker
 
 ```ts
-import { newBrokerServer } from "@go-like/broker"
+import { newBrokerServer, type BrokerMessage } from "@go-like/core/broker"
+import type { Context } from "@go-like/core/context"
 
-const consumerServer = newBrokerServer(broker, "appointments.created", async (ctx, event) => {
-  await handleAppointment(ctx, event)
+declare function handle(ctx: Context, event: { readonly message: BrokerMessage }): Promise<void>
+declare const broker: Parameters<typeof newBrokerServer>[0]
+
+const consumer = newBrokerServer(broker, "appointments.created", async (ctx, event) => {
+  await handle(ctx, event)
 })
+void consumer
 ```
 
-The adapter owns the accepted subscription's stop operation. It does not close a borrowed Broker connection, NATS connection, RabbitMQ connection, stream, or durable consumer unless that provider-specific contract explicitly transfers such ownership.
+`newBrokerServer` owns the accepted subscription's stop. It does not close a borrowed connection, stream, or durable consumer unless that plug's contract says so. The topic string is the subscription label used in telemetry. For JetStream, the message factory chooses which messages arrive. The label does not.
+
+`event.native` is the provider object (`Msg`, `JsMsg`, an AMQP delivery). Ack, nack, term, and dead-letter stay on that object. Core has no shared settlement method.
+
+`@go-like/core/broker/memory` exports `newMemoryBroker` for tests. `@go-like/core/broker/provider` exports `deliver`, `publish`, and `registerSubscriberTerminal` for plug authors.
+
+| Plug                       | Constructor                                                      | Native ownership                                                                                 |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `@go-like/nats/broker`     | `newNatsCoreBroker(connection, ...options)`                      | Subscription drain. `natsCoreDrainTimeout` bounds the wait, then unsubscribe.                    |
+| `@go-like/nats/jetstream`  | `newNatsJetStreamBroker(jetstream, messagesFactory, ...options)` | Consumer iterator. `natsJetStreamCloseTimeout` bounds close, then stop.                          |
+| `@go-like/rabbitmq/broker` | `newRabbitMqBroker(channel)`                                     | The channel's delivery object.                                                                   |
+| `@go-like/rabbitmq/broker` | `startRecoveringRabbitMqBroker(...)`                             | Admits the handle before the connector is ready. Publish stays closed until a generation exists. |
+
+A NATS connection the application opened belongs in the resource tier:
+
+```ts
+import { newApp, resources, server } from "@go-like/core"
+import { newResourceServer } from "@go-like/core/lifecycle"
+import { newBrokerServer } from "@go-like/core/broker"
+import { newNatsJetStreamBroker } from "@go-like/nats/jetstream"
+
+const nats = newResourceServer({
+  terminal: connection.closed(),
+  close: () => connection.drain()
+})
+const subscription = newBrokerServer(
+  newNatsJetStreamBroker(jetstream, messagesFactory),
+  "telemetry.raw.v1",
+  async (_ctx, event) => {
+    // Settlement stays on the JetStream message: event.native.ack(), nak(), or term().
+    void event.native
+  }
+)
+const app = newApp(resources(nats), server(subscription))
+void app
+```
+
+`connection`, `jetstream`, and `messagesFactory` are the objects the application got from the NATS client. The snippets above are the ownership shape; the plug README has the client construction.
 
 ## Typed events
 
-A codec has a media type and byte conversion:
+```ts
+import { eventBroker } from "@go-like/core/broker"
+import { newMemoryBroker } from "@go-like/core/broker/memory"
+import { jsonCodec, struct } from "@go-like/core/struct"
+
+const payload = struct.object({ id: struct.string() })
+const events = eventBroker(newMemoryBroker(), jsonCodec(payload))
+```
+
+`events.publish` encodes. `event.decode()` decodes one defensive copy. A codec failure is a Struct or protocol failure, not a successful delivery.
+
+## Jobs
+
+`newScheduleServer(schedule, name, handler)` from `@go-like/core/job` owns the timer, overlap, and drain. `newIntervalSchedule(ms)` is the core timetable. `newCronerSchedule(pattern, options)` from `@go-like/croner/job` is a pure Croner timetable: it does not start Croner's own timer. Pass it to `newScheduleServer`.
+
+`JobQueue.worker(handlers)` returns a `Server` for the server tier. The queue itself, when it needs a connection, belongs in `resources(...)` so the worker starts only after the queue is usable and stops before the queue closes.
 
 ```ts
-import { eventBroker } from "@go-like/event"
+import { newApp, resources, server } from "@go-like/core"
+import { newIntervalSchedule, newScheduleServer } from "@go-like/core/job"
+import { newBullMqJobQueue } from "@go-like/bullmq/job"
 
-const codec = {
-  mediaType: "application/vnd.example.appointment-created+json",
-  encode(value: AppointmentCreated): Uint8Array {
-    return new TextEncoder().encode(JSON.stringify(value))
-  },
-  decode(bytes: Uint8Array): AppointmentCreated {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as AppointmentCreated
+const jobs = newBullMqJobQueue(bullQueue)
+const worker = jobs.worker({
+  report: async (_ctx, job) => {
+    await writeReport(job.payload)
   }
-}
-
-const events = eventBroker(broker, codec)
-await events.publish(ctx, "appointments.created", {
-  appointmentId: "appointment-1"
 })
+const scheduler = newScheduleServer(newIntervalSchedule(60_000), "report", async (ctx) => {
+  await jobs.enqueue(ctx, "report", { window: "hourly" }, { id: "report-hourly" })
+})
+const app = newApp(resources(jobs), server(worker, scheduler))
+void app
 ```
 
-The actual codec type is application-owned. On receive, `event.decode()` is lazy and checks that the content type is exactly the codec media type. The native delivery identity is retained even if decoding fails, so application code can apply provider-specific settlement.
+`bullQueue` is the BullMQ `Queue` the application constructed, and `writeReport` is application code. `newBullMqJobQueue` adopts the queue: `start` waits until it is ready, and `stop` closes it once. `GO_LIKE_BULLMQ_UNEXPECTED_EXIT` means the Worker ended without `stop`. Queue state and drain use `GO_LIKE_JOB_STATE` and `GO_LIKE_JOB_DRAIN_TIMEOUT` from `@go-like/core/job`. `newPermanentJobError` marks a failure the queue should not retry. The `id` option is the idempotency key while an unfinished job holds it.
 
-```text
-publish typed value
-  -> Codec.encode
-  -> detached BrokerMessage bytes
-  -> provider publish
+`@go-like/core/job/provider` (`runJob`, `enqueue`, `dispatchJob`) is for plug authors. Application code uses `newScheduleServer` and `JobQueue`.
 
-receive BrokerMessage
-  -> EventMessage with native identity
-  -> event.decode() when application chooses
-  -> application settlement through native provider API
-```
+## Shutdown
 
-## Memory Broker
+Stop order follows the tiers in [Architecture](/guide/architecture). A broker server stops with the server tier. A connection or queue in `resources(...)` stops afterwards, in reverse declaration order. A drain timeout starts the native unsubscribe or close and does not prove the native object has finished. Observe the provider's terminal promise before replacing the owner.
 
-`newMemoryBroker()` is useful for deterministic unit tests and local composition:
-
-- the address space is private to the Broker instance;
-- subscriptions match exact topics and broadcast to matching subscribers;
-- each subscriber processes deliveries FIFO and serially;
-- different subscribers may process in parallel;
-- message headers and bodies are defensively copied;
-- there are no queue groups, wildcards, persistence, ack/nack, DLQ, replay, or cross-process behavior;
-- a handler failure terminates that subscription and retains the original error.
-
-Memory Broker is not a local simulation of NATS JetStream or RabbitMQ. Test provider-native settlement with the actual provider lane.
-
-## RabbitMQ
-
-`@go-like/broker-rabbitmq` exposes three deliberate construction choices:
-
-- `newRabbitMqBroker(channel)` borrows an ordinary `amqplib` Channel;
-- `newConfirmRabbitMqBroker(channel)` borrows a ConfirmChannel and waits for publisher confirms;
-- `newRecoveringRabbitMqBroker(...)` creates the canonical recovering generation model.
-
-A borrowed-channel entry does not close the application's connection or channel. The recovering entry replays exchange, queue, binding, QoS, and consumer declarations for a new channel generation. Native delivery settlement is fenced by generation, so an old delivery cannot accidentally acknowledge a new channel. A publisher confirm is not exactly-once delivery; application idempotency is still required.
-
-The package retains native `ack`, `nack`, and `reject` behavior through the provider event identity. Do not add those methods to the portable `Broker` type merely to make RabbitMQ look like Memory Broker.
-
-## NATS Core and JetStream
-
-`@go-like/nats` has separate entrypoints:
-
-| Entry               | Public factory or adapter                             | Native semantics retained                                                                          |
-| ------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| root                | `newNatsCoreServer`, `natsCoreDrainTimeout`           | NATS Core `Subscription`, queue groups, at-most-once delivery, `drain()`, and `closed`             |
-| `/broker`           | `newNatsCoreBroker`                                   | NATS Core `Msg`, publish options, subscription iterator, `unsubscribe`, and `drain`                |
-| `/jetstream`        | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout` | `ConsumerMessages`, `close`, `stop`, `closed`, and native close timeout behavior                   |
-| `/jetstream/broker` | `newNatsJetStreamBroker`                              | `JsMsg`, `PubAck`, durable consumer behavior, ack/nak/term, redelivery, MaxDeliver, and DLQ policy |
-
-The application owns the connection/client, stream, consumer configuration, and business settlement policy. The adapter joins an accepted native subscription or ConsumerMessages object to Core lifecycle and observes the provider's terminal barrier.
-
-A JetStream handler should make settlement visible in business code:
-
-```text
-valid event
-  -> publish or apply business result
-  -> native JsMsg ackAck()
-
-transient failure
-  -> native JsMsg nak(delay)
-
-permanent failure
-  -> publish to application DLQ
-  -> native JsMsg term()
-```
-
-This is a teaching shape, not a go-like portable API. The exact native methods and delivery policy belong to `@nats-io/jetstream` and the application.
-
-## Jobs and schedules are separate models
-
-A Broker is not a job queue. Use the native model that matches the problem:
-
-- `@go-like/croner` adapts application-created Croner `Cron` jobs. The factory must return paused, non-busy, non-stopped jobs. go-like resumes them in order and stops them in reverse order. Cron expressions, time zones, overlap policy, callbacks, and trigger behavior remain Croner/application concerns. Croner stop does not provide a reliable passive callback-drain barrier.
-- `@go-like/bullmq` adapts an official BullMQ `Worker` constructed with `autorun: false`. Startup waits for readiness, then calls `run()`. Stop requests `pause(false)`, `cancelAllJobs(reason)`, `close(true)`, and observes the native `closed` boundary. Queue, processor, retry/backoff, stalled-job policy, Redis, and job idempotency remain application/BullMQ concerns.
-
-Core stops sibling Servers concurrently. If a Croner schedule must stop before a BullMQ Worker or a Queue producer, compose that ordering explicitly rather than relying on `server(croner, worker)` declaration order.
-
-For workload admission, keep the model narrow:
-
-- resident workers are ready only when they can accept the next unit of work;
-- readiness becoming false does not replace App/Server stop: the adapter owner must stop and invoke its native pause, unsubscribe, drain, or close chain;
-- a one-shot Job or CronJob reports its result through its exit status.
-
-See the [workload admission matrix](/guide/health-observability#workload-admission-matrix) for the corresponding operational boundary.
-
-## Ownership matrix
-
-| Native resource                               | Application owns                                         | go-like adapter owns after admission                                                            |
-| --------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| NATS connection, stream, durable consumer     | Create, credentials, stream and consumer policy          | Accepted subscription or ConsumerMessages stop contract                                         |
-| RabbitMQ connection and borrowed channel      | Connection, topology policy, channel creation            | Borrowed subscription stop, or recovering channel generation for the canonical recovery adapter |
-| Memory Broker                                 | Broker instance and application subscription composition | In-process topic map and accepted delivery owner                                                |
-| BullMQ Queue, Worker configuration, processor | Queue, Redis, retry/backoff, processor behavior          | Worker `run`, pause, cancel, close boundary                                                     |
-| Croner factory and jobs                       | Cron options, callback, schedule policy                  | Accepted job resume/stop boundary                                                               |
-| Event codec                                   | Media type, validation, serialization                    | Detached byte conversion and lazy decode wrapper                                                |
-
-## Failure and shutdown rules
-
-Keep these distinctions visible in tests and runbooks:
-
-- subscriber cancellation is not connection shutdown;
-- a broker handler error may terminate one subscriber without proving the connection failed;
-- a provider close timeout may mean the owner is still converging;
-- a NATS `PubAck`, RabbitMQ confirm, or BullMQ completion is not a universal exactly-once proof;
-- a typed decode failure does not erase `event.native`;
-- a native broker's retry, redelivery, DLQ, and acknowledgement rules are not converted into a common go-like retry loop;
-- a Core App stop result aggregates adapter failures but does not invent a terminal result that the native provider did not expose.
-
-See [Error handling](/reference/errors) for lifecycle codes, aggregate traversal, and retry boundaries.
-
-See [Architecture](/guide/architecture) for the caller-wait versus owner-terminal distinction and [Health and observability](/guide/health-observability) for bounded operational signals.
+NATS unexpected-exit and drain-timeout codes are on `@go-like/nats/broker` and `@go-like/nats/jetstream`. They are listed in [Error handling](/reference/errors).

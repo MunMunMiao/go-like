@@ -3,8 +3,9 @@ import { once } from "node:events"
 import { tmpdir } from "node:os"
 import { resolve } from "node:path"
 
-import { background } from "@go-like/context"
-import { pinoDrainTimeout, newPinoServer } from "@go-like/pino"
+import { background } from "@go-like/core/context"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
+import { pinoDrainTimeout, newPinoHandler } from "@go-like/pino/log"
 import pino, { symbols } from "pino"
 
 interface FileDestinationState {
@@ -12,7 +13,7 @@ interface FileDestinationState {
   readonly writable: boolean
 }
 
-type NativeServer = ReturnType<typeof newPinoServer>
+type NativeServer = TelemetryLifecycle
 
 interface StartOutcome {
   readonly error: unknown
@@ -220,7 +221,7 @@ try {
     destinationCloseObserved = true
   })
   const destinationLogger = pino({ base: null, timestamp: false, redact: ["secret"] }, destination)
-  const destinationServer = newPinoServer(destinationLogger, destination)
+  const destinationServer = newPinoHandler(destinationLogger, destination).lifecycle
   const destinationRunning = destinationServer.start(background())
   destinationLogger.info({ component: "file", secret: "hidden" }, "native destination")
   await destinationServer.stop(background())
@@ -252,10 +253,10 @@ try {
     { base: null, timestamp: false },
     prototypeMutationDestination
   )
-  const prototypeMutationServer = newPinoServer(
+  const prototypeMutationServer = newPinoHandler(
     prototypeMutationLogger,
     prototypeMutationDestination
-  )
+  ).lifecycle
   const fileDestinationPrototype = Object.getPrototypeOf(prototypeMutationDestination) as {
     end: typeof prototypeMutationDestination.end
   }
@@ -289,7 +290,7 @@ try {
   })
   const ownMutationClosed = once(ownMutationDestination, "close")
   const ownMutationLogger = pino({ base: null, timestamp: false }, ownMutationDestination)
-  const ownMutationServer = newPinoServer(ownMutationLogger, ownMutationDestination)
+  const ownMutationServer = newPinoHandler(ownMutationLogger, ownMutationDestination).lifecycle
   try {
     await once(ownMutationDestination, "ready")
     const errorListeners = ownMutationDestination.listenerCount("error")
@@ -329,7 +330,10 @@ try {
   const loggerBindingClosed = once(loggerBindingDestination, "close")
   const loggerBindingReplacementClosed = once(loggerBindingReplacement, "close")
   const loggerBindingLogger = pino({ base: null, timestamp: false }, loggerBindingDestination)
-  const loggerBindingServer = newPinoServer(loggerBindingLogger, loggerBindingDestination)
+  const loggerBindingServer = newPinoHandler(
+    loggerBindingLogger,
+    loggerBindingDestination
+  ).lifecycle
   const loggerStreamDescriptor = Object.getOwnPropertyDescriptor(
     loggerBindingLogger,
     symbols.streamSym
@@ -379,7 +383,7 @@ try {
   })
   const reentryClosed = once(reentryDestination, "close")
   const reentryLogger = pino({ base: null, timestamp: false }, reentryDestination)
-  const reentryServer = newPinoServer(reentryLogger, reentryDestination)
+  const reentryServer = newPinoHandler(reentryLogger, reentryDestination).lifecycle
   const nativeOn = reentryDestination.on
   try {
     await once(reentryDestination, "ready")
@@ -445,7 +449,10 @@ try {
     value: admittedCaptureDestroyFlush,
     writable: true
   })
-  const captureDestroyServer = newPinoServer(captureDestroyLogger, captureDestroyDestination)
+  const captureDestroyServer = newPinoHandler(
+    captureDestroyLogger,
+    captureDestroyDestination
+  ).lifecycle
   const captureDestroyListeners = installListenerProbe(captureDestroyDestination)
   try {
     await once(captureDestroyDestination, "ready")
@@ -499,7 +506,7 @@ try {
     value: admittedCaptureErrorFlush,
     writable: true
   })
-  const captureErrorServer = newPinoServer(captureErrorLogger, captureErrorDestination)
+  const captureErrorServer = newPinoHandler(captureErrorLogger, captureErrorDestination).lifecycle
   const captureErrorListeners = installListenerProbe(captureErrorDestination)
   try {
     await once(captureErrorDestination, "ready")
@@ -558,7 +565,7 @@ try {
     value: admittedCaptureCloseFlush,
     writable: true
   })
-  const captureCloseServer = newPinoServer(captureCloseLogger, captureCloseDestination)
+  const captureCloseServer = newPinoHandler(captureCloseLogger, captureCloseDestination).lifecycle
   const captureCloseListeners = installListenerProbe(captureCloseDestination)
   try {
     await once(captureCloseDestination, "ready")
@@ -609,11 +616,11 @@ try {
   const ownerPrototypeLogger = pino({ base: null, timestamp: false }, ownerPrototypeDestination)
   try {
     await once(ownerPrototypeDestination, "ready")
-    const server = newPinoServer(
+    const server = newPinoHandler(
       ownerPrototypeLogger,
       ownerPrototypeDestination,
       pinoDrainTimeout(100)
-    )
+    ).lifecycle
     const running = server.start(background())
     fileDestinationPrototype.end = function changedAfterOwnership(): void {
       ownerPrototypeReplacementCalls += 1
@@ -642,7 +649,11 @@ try {
   const ownerOwnLogger = pino({ base: null, timestamp: false }, ownerOwnDestination)
   try {
     await once(ownerOwnDestination, "ready")
-    const server = newPinoServer(ownerOwnLogger, ownerOwnDestination, pinoDrainTimeout(100))
+    const server = newPinoHandler(
+      ownerOwnLogger,
+      ownerOwnDestination,
+      pinoDrainTimeout(100)
+    ).lifecycle
     const running = server.start(background())
     Object.defineProperties(ownerOwnDestination, {
       end: {
@@ -697,7 +708,7 @@ try {
       },
       writable: true
     })
-    const server = newPinoServer(ownerLogger, ownerLoggerDestination)
+    const server = newPinoHandler(ownerLogger, ownerLoggerDestination).lifecycle
     const running = server.start(background())
     Object.defineProperty(ownerLogger, "flush", {
       configurable: true,
@@ -741,7 +752,7 @@ try {
   )
   try {
     await Promise.all([once(ownerStreamOriginal, "ready"), once(ownerStreamReplacement, "ready")])
-    const server = newPinoServer(ownerStreamLogger, ownerStreamOriginal)
+    const server = newPinoHandler(ownerStreamLogger, ownerStreamOriginal).lifecycle
     const running = server.start(background())
     Object.defineProperty(ownerStreamLogger, symbols.streamSym, {
       configurable: true,
@@ -779,7 +790,7 @@ try {
 
   const destinationErrorListeners = destination.listenerCount("error")
   const destinationCloseListeners = destination.listenerCount("close")
-  const rejectedDestinationServer = newPinoServer(destinationLogger, destination)
+  const rejectedDestinationServer = newPinoHandler(destinationLogger, destination).lifecycle
   const destinationFlushDescriptor = Object.getOwnPropertyDescriptor(destinationLogger, "flush")
   Object.defineProperty(destinationLogger, "flush", {
     configurable: true,
@@ -821,7 +832,7 @@ try {
   const endingClosed = once(endingDestination, "close")
   const applicationEnd = endingDestination.end.bind(endingDestination)
   applicationEnd()
-  const endingServer = newPinoServer(endingLogger, endingDestination)
+  const endingServer = newPinoHandler(endingLogger, endingDestination).lifecycle
   const endingState = fileDestinationState(endingDestination)
   if (endingState.destroyed || !endingState.writable) {
     throw new Error("Pino file destination did not expose the reviewed end-in-progress state")
@@ -863,7 +874,7 @@ try {
     transportCloseObserved = true
   })
   const transportLogger = pino({ base: null, timestamp: false }, transport)
-  const transportServer = newPinoServer(transportLogger, transport)
+  const transportServer = newPinoHandler(transportLogger, transport).lifecycle
   const transportRunning = transportServer.start(background())
   transportLogger.info({ component: "thread" }, "native transport")
   await transportServer.stop(background())
@@ -886,7 +897,7 @@ try {
     nativeTransportEnd()
   }
   try {
-    await newPinoServer(transportLogger, transport).start(background())
+    await newPinoHandler(transportLogger, transport).lifecycle.start(background())
     throw new Error("Pino adapter accepted a terminal ThreadStream transport")
   } catch (error) {
     if (

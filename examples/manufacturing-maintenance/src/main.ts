@@ -2,9 +2,9 @@ import process from "node:process"
 
 import { afterStart, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import type { Handler } from "@go-like/web"
-import { createHealthHandler } from "@go-like/web/health"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import type { Handler } from "@go-like/core/web"
+import { createHealthHandler } from "@go-like/core/web"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import { newRuntime } from "./service"
 

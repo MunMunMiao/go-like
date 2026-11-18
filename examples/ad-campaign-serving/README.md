@@ -21,7 +21,7 @@
 
 ## go-like 能力
 
-本例实际运行 `@go-like/cache-memory`、`@go-like/resilience` 的 Token Bucket 与 Circuit Breaker；Memory Cache 不伪造 Server 生命周期。测试证明缓存命中、限流、熔断以及失败不扣预算，而不是只在依赖清单中声明能力。
+本例实际运行 `@go-like/core/cache/memory`、`@go-like/core/resilience` 的 Token Bucket 与 Circuit Breaker；Memory Cache 不伪造 Server 生命周期。测试证明缓存命中、限流、熔断以及失败不扣预算，而不是只在依赖清单中声明能力。
 
 ## 验证
 

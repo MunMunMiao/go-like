@@ -1,16 +1,15 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, canceled, withCancelCause } from "@go-like/context"
-import type { Server } from "@go-like/core"
-
-import { pinoDrainTimeout, type PinoDrainTimeoutError } from "../src/index"
+import { background, canceled, withCancelCause } from "@go-like/core/context"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
+import { pinoDrainTimeout, type PinoDrainTimeoutError } from "@go-like/pino/log"
 import { delay, fakePinoServer, FakeDestination, FakeLogger, withoutForce } from "./helpers"
 
 describe("native Pino destination lifecycle", () => {
   test("transfers ownership at start and returns one stable runtime Promise", async () => {
     const logger = new FakeLogger()
     const destination = new FakeDestination()
-    const server: Server = fakePinoServer(logger.official(destination), destination)
+    const server: TelemetryLifecycle = fakePinoServer(logger.official(destination), destination)
     expect(destination.listenerCount("error")).toBe(0)
     expect(destination.listenerCount("close")).toBe(0)
 

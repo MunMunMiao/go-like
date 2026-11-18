@@ -1,45 +1,26 @@
-import { background } from "@go-like/context"
-import type { Server } from "@go-like/core"
-import { Worker, type Processor } from "bullmq"
+import type { JobQueue } from "@go-like/core/job"
+import type { Server } from "@go-like/core/lifecycle"
+import type { Queue } from "bullmq"
 
 import {
-  bullMqWorkerShutdownTimeout,
-  newBullMqWorkerServer,
-  type BullMqWorkerFactory
-} from "../src/index"
+  newBullMqJobQueue,
+  type BullMqJobQueue,
+  type BullMqUnexpectedExitError,
+  type BullMqWorkerOptions
+} from "../src/job/index"
 
-interface MailJobData {
-  readonly recipient: string
-}
+const queue = null as unknown as Queue<unknown, unknown, string, unknown, unknown, string>
+const jobs: BullMqJobQueue<unknown> = newBullMqJobQueue(queue)
+const worker: Server = jobs.worker({ work() {} })
+const socket: JobQueue<unknown> = jobs
+const options: BullMqWorkerOptions = { lockDuration: 1_000 }
+const configured: BullMqJobQueue<unknown> = newBullMqJobQueue(queue, { worker: options })
+const failure = null as BullMqUnexpectedExitError | null
 
-interface MailResult {
-  readonly accepted: boolean
-}
+void [worker, socket.string(), configured.name, failure?.code, failure?.queueName, jobs.string()]
 
-const processor: Processor<MailJobData, MailResult, "send"> = async (job, token, signal) => {
-  signal?.throwIfAborted()
-  return { accepted: job.data.recipient.length > 0 && (token?.length ?? 0) > 0 }
-}
-const worker = new Worker<MailJobData, MailResult, "send">("typed-mail", processor, {
-  connection: { host: "127.0.0.1", port: 6379 },
-  prefix: "typed",
-  autorun: false,
-  concurrency: 2,
-  limiter: { max: 10, duration: 1_000 },
-  removeOnComplete: { count: 100 },
-  skipVersionCheck: true,
-  settings: { backoffStrategy: () => 10 }
-})
-worker.on("error", (error) => {
-  void error.message
-})
+// @ts-expect-error telemetry is owned by go-like
+newBullMqJobQueue(queue, { telemetry: {} })
 
-const direct: Server = newBullMqWorkerServer(worker, bullMqWorkerShutdownTimeout(25_000))
-const factory: BullMqWorkerFactory<MailJobData, MailResult, "send"> = () =>
-  new Worker("typed-mail-lazy", processor, {
-    connection: { host: "127.0.0.1", port: 6379 },
-    autorun: false
-  })
-const lazy: Server = newBullMqWorkerServer(factory)
-void direct.start(background())
-void lazy.start(background())
+// @ts-expect-error connection comes from the adopted Queue
+newBullMqJobQueue(queue, { worker: { connection: {} } })

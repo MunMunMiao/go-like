@@ -1,6 +1,6 @@
-import type { MemoryCache } from "@go-like/cache-memory"
-import type { Context } from "@go-like/context"
-import type { CircuitBreaker } from "@go-like/resilience"
+import type { MemoryCache } from "@go-like/core/cache/memory"
+import type { Context } from "@go-like/core/context"
+import type { CircuitBreaker } from "@go-like/core/resilience"
 
 import {
   adRequestFingerprint,

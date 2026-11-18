@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 

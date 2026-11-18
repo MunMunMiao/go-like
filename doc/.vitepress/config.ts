@@ -147,7 +147,7 @@ function theme(
       { text: "工具比较", link: route(prefix, "guide/comparison") },
       { text: "迁移与接入", link: route(prefix, "guide/migration") }
     )
-    referenceItems.push({ text: "包与 provider 参考", link: route(prefix, "reference/providers") })
+    referenceItems.push({ text: "插头", link: route(prefix, "reference/providers") })
   }
 
   if (includeTraditionalChineseTaiwanPages) {
@@ -159,7 +159,7 @@ function theme(
       { text: "遷移與導入", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "套件與 provider 參考",
+      text: "Provider",
       link: route(prefix, "reference/providers")
     })
   }
@@ -173,7 +173,7 @@ function theme(
       { text: "Migración y adopción", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "Referencia de paquetes y providers",
+      text: "Providers",
       link: route(prefix, "reference/providers")
     })
   }
@@ -187,7 +187,7 @@ function theme(
       { text: "Migration et adoption", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "Référence des paquets et fournisseurs",
+      text: "Fournisseurs",
       link: route(prefix, "reference/providers")
     })
   }
@@ -201,7 +201,7 @@ function theme(
       { text: "Миграция и внедрение", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "Справочник пакетов и провайдеров",
+      text: "Провайдеры",
       link: route(prefix, "reference/providers")
     })
   }
@@ -215,7 +215,7 @@ function theme(
       { text: "الترحيل والتبنّي", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "مرجع الحزم والمزوّدات",
+      text: "المزوّدات",
       link: route(prefix, "reference/providers")
     })
   }
@@ -225,11 +225,11 @@ function theme(
       1,
       0,
       { text: "診所預約：由 0 到 1", link: route(prefix, "guide/zero-to-one") },
-      { text: "go-like 同其他工具點樣分工", link: route(prefix, "guide/comparison") },
-      { text: "遷移同接入", link: route(prefix, "guide/migration") }
+      { text: "go-like 同其他工具嘅比較", link: route(prefix, "guide/comparison") },
+      { text: "遷移", link: route(prefix, "guide/migration") }
     )
     referenceItems.push({
-      text: "套件同 provider 參考",
+      text: "Provider",
       link: route(prefix, "reference/providers")
     })
   }

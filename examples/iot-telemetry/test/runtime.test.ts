@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancel } from "@go-like/context"
+import { afterStart, name, newApp, resources, server } from "@go-like/core"
+import { background } from "@go-like/core/context"
+import type { Server } from "@go-like/core/lifecycle"
 import type { JetStreamManager } from "@nats-io/jetstream"
 import type { NatsConnection } from "@nats-io/transport-node"
 
@@ -8,7 +10,7 @@ import {
   consumerName,
   deadLetterStream,
   ensureTelemetryTopology,
-  newNatsConnectionServer,
+  newNatsConnectionResource,
   rawStream,
   validatedStream
 } from "../src/runtime"
@@ -112,73 +114,128 @@ describe("telemetry topology", () => {
   })
 })
 
-describe("NATS connection server", () => {
-  test("waits for a clean close and drains an open connection", async () => {
+/** Resolves `start` when `stop` runs, matching a resident server-tier participant. */
+function resident(label: string, events: string[]): Server {
+  let resolveStart: (() => void) | null = null
+  const started = new Promise<void>((resolve) => {
+    resolveStart = resolve
+  })
+  return {
+    async start(): Promise<void> {
+      events.push(`${label}-start`)
+      await started
+    },
+    async stop(): Promise<void> {
+      events.push(`${label}-stop`)
+      resolveStart?.()
+    }
+  }
+}
+
+/** Polls until the predicate holds. */
+async function waitFor(label: string, predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`)
+    await Bun.sleep(1)
+  }
+}
+
+describe("NATS connection resource", () => {
+  test("admits while the connection is open and drains it once on stop", async () => {
     let closed = false
     let drains = 0
-    let finishClose: (failure?: Error) => void = () => {}
-    const terminal = new Promise<Error | undefined>((resolve) => {
-      finishClose = resolve
-    })
     const connection = {
-      closed: () => terminal,
+      closed: () => new Promise<Error | undefined>(() => {}),
       isClosed: () => closed,
       async drain() {
         drains += 1
         closed = true
       }
     } as unknown as NatsConnection
-    const server = newNatsConnectionServer(connection)
-    let settled = false
-    const started = server.start(background()).then(() => {
-      settled = true
-    })
+    const resource = newNatsConnectionResource(connection)
 
-    await Promise.resolve()
-    try {
-      expect(settled).toBe(false)
-    } finally {
-      finishClose()
-      await started
-    }
-    await server.stop(background())
+    await resource.start(background())
+    expect(drains).toBe(0)
+    await resource.stop(background())
+    await resource.stop(background())
+
     expect({ closed, drains }).toEqual({ closed: true, drains: 1 })
-  })
-
-  test("rejects an aborted start before waiting for connection close", async () => {
-    const [ctx, cancel] = withCancel(background())
-    cancel()
-    const server = newNatsConnectionServer({
-      closed: () => new Promise(() => {}),
-      isClosed: () => false,
-      async drain() {}
-    } as unknown as NatsConnection)
-
-    await expect(server.start(ctx)).rejects.toThrow("context canceled")
-  })
-
-  test("surfaces a failed connection close", async () => {
-    const failure = new Error("NATS connection failed")
-    const server = newNatsConnectionServer({
-      closed: async () => failure,
-      isClosed: () => true,
-      async drain() {}
-    } as unknown as NatsConnection)
-
-    await expect(server.start(background())).rejects.toBe(failure)
   })
 
   test("does not drain an already closed connection", async () => {
     let drains = 0
-    const server = newNatsConnectionServer({
-      closed: async () => undefined,
+    const resource = newNatsConnectionResource({
+      closed: () => new Promise<Error | undefined>(() => {}),
       isClosed: () => true,
       async drain() {
         drains += 1
       }
     } as unknown as NatsConnection)
 
-    await server.stop(background())
+    await resource.start(background())
+    await resource.stop(background())
+
     expect(drains).toBe(0)
+  })
+
+  test("stops the worker before draining the connection", async () => {
+    const events: string[] = []
+    const connection = {
+      closed: () => new Promise<Error | undefined>(() => {}),
+      isClosed: () => false,
+      async drain() {
+        events.push("nats-drain")
+      }
+    } as unknown as NatsConnection
+    const app = newApp(
+      name("iot-telemetry-order"),
+      resources(newNatsConnectionResource(connection)),
+      server(resident("worker", events))
+    )
+    const running = app.run()
+    void running.catch(() => {})
+
+    await waitFor("worker start", () => events.includes("worker-start"))
+    await app.stop()
+    await running
+
+    const workerStop = events.indexOf("worker-stop")
+    const drain = events.indexOf("nats-drain")
+    expect(workerStop).toBeGreaterThanOrEqual(0)
+    expect(drain).toBeGreaterThan(workerStop)
+    expect(events.filter((event) => event === "nats-drain")).toEqual(["nats-drain"])
+  })
+
+  test("a failed connection close fails the running app", async () => {
+    const failure = new Error("NATS connection failed")
+    let finish: (error: Error) => void = () => {}
+    const terminal = new Promise<Error>((resolve) => {
+      finish = resolve
+    })
+    let drains = 0
+    const connection = {
+      closed: () => terminal,
+      isClosed: () => false,
+      async drain() {
+        drains += 1
+      }
+    } as unknown as NatsConnection
+    let ready = false
+    const app = newApp(
+      name("iot-telemetry-terminal"),
+      resources(newNatsConnectionResource(connection)),
+      afterStart(() => {
+        ready = true
+      })
+    )
+    const running = app.run()
+    void running.catch(() => {})
+
+    await waitFor("admission", () => ready)
+    finish(failure)
+
+    await expect(running).rejects.toBe(failure)
+    expect(drains).toBe(1)
   })
 })

@@ -1,7 +1,12 @@
 import { resolve } from "node:path"
 
-import { background } from "@go-like/context"
-import { otelShutdownTimeout, newOtelServer } from "@go-like/otel"
+import { background } from "@go-like/core/context"
+import {
+  newOtelMeterProvider,
+  newOtelTracerProvider,
+  type OtelMeterProvider,
+  type OtelTracerProvider
+} from "@go-like/otel"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -122,8 +127,10 @@ const portReservation = Bun.serve({
 })
 const port = portReservation.port
 await portReservation.stop(true)
-let runtimeServer: ReturnType<typeof newOtelServer> | null = null
-let runtimeRunning: Promise<void> | null = null
+let traces: OtelTracerProvider | null = null
+let metrics: OtelMeterProvider | null = null
+let traceRunning: Promise<void> | null = null
+let metricRunning: Promise<void> | null = null
 let collectorExists = false
 let residualContainers = -1
 let shutdownSpanCount = -1
@@ -207,8 +214,10 @@ try {
       })
     ]
   })
-  runtimeServer = newOtelServer({ tracerProvider, meterProvider }, otelShutdownTimeout(5_000))
-  runtimeRunning = runtimeServer.start(background())
+  traces = newOtelTracerProvider(tracerProvider, { shutdownTimeoutMs: 5_000 })
+  metrics = newOtelMeterProvider(meterProvider, { shutdownTimeoutMs: 5_000 })
+  traceRunning = traces.lifecycle.start(background())
+  metricRunning = metrics.lifecycle.start(background())
   await Promise.resolve()
   const tracer = tracerProvider.getTracer("docker-e2e")
   const meter = meterProvider.getMeter("docker-e2e")
@@ -253,10 +262,14 @@ try {
 
   tracer.startSpan("shutdown-flush-span").end()
   meter.createCounter("shutdown.flush.counter").add(1)
-  await runtimeServer.stop(background())
-  await runtimeRunning
-  runtimeServer = null
-  runtimeRunning = null
+  await traces.lifecycle.stop(background())
+  await metrics.lifecycle.stop(background())
+  await traceRunning
+  await metricRunning
+  traces = null
+  metrics = null
+  traceRunning = null
+  metricRunning = null
   const finalLogs = await collectorLogs(container)
   if (!finalLogs.includes("shutdown-flush-span") || !finalLogs.includes("shutdown.flush.counter")) {
     throw new Error("provider shutdown did not naturally flush both signals")
@@ -273,14 +286,16 @@ try {
 } catch (error) {
   primaryFailure = error
 } finally {
-  if (runtimeServer !== null && runtimeRunning !== null) {
+  if (traces !== null && metrics !== null && traceRunning !== null && metricRunning !== null) {
     try {
-      await runtimeServer.stop(background())
+      await traces.lifecycle.stop(background())
+      await metrics.lifecycle.stop(background())
     } catch (error) {
       addFailure(cleanupFailures, error)
     }
     try {
-      await runtimeRunning
+      await traceRunning
+      await metricRunning
     } catch (error) {
       addFailure(cleanupFailures, error)
     }

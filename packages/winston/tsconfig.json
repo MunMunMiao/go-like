@@ -12,13 +12,8 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../../packages/broker" },
-    { "path": "../../packages/client" },
-    { "path": "../../packages/context" },
-    { "path": "../../packages/core" },
-    { "path": "../../packages/server" },
-    { "path": "../../packages/struct" },
-    { "path": "../../packages/transport" },
-    { "path": "../../packages/web" }
+    {
+      "path": "../core"
+    }
   ]
 }

@@ -82,3 +82,12 @@ systemd 的 `READY=1` 和 watchdog 是 supervisor 协议，不是 go-like 应复
 - application/native lifecycle boundary 抛出非 `Error` 值时，生成固定安全 message，并以标准非枚举 `Error.cause` 保留原始值；不得字符串化、深拷贝或写入 wire。
 - Config/Registry 等明确标记为 secret-bearing 或 untrusted 的边界继续保留当前“固定消息且不持有原值”策略；不能用全局规则覆盖它们。
 - go-like 的 Pino/Winston/OTel completion fields 不记录 raw message、stack 或 cause。`TransportLogger` 是应用提供的诊断边界，会收到本地 Error；应用若递归序列化其 cause，必须自行脱敏。
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文。总决定见
+[ADR 0009](../adr/0009-single-core-package.md)。出处是
+[插座与插头架构（2026-11）](socket-plug-architecture/README.md)第 11.1 节。
+
+- 诊断入口是 `@go-like/core/telemetry/provider` 的 `logEvent`。本地 `Error` 放在 `LogField.exception`（该字段从 `@go-like/core/telemetry` 导出）。理由是去掉重复且未接线的 `TransportLogger` 与 `ProviderLogger`。见第 11.1 节第 26 条、[D51](socket-plug-architecture/decisions.md)。上文的 `TransportLogger` 句子保留作当时的边界。
+- 应用可以通过 `readyProbe` 把生命周期事实投射到自己拥有的 `ProbeRegistry`。健康检查的通过条件保持原规则。新增这一入口，是因为当时的就绪探针在 App 排空期间、服务器启动之前仍然通过。见第 11.1 节第 31 条、[D7](socket-plug-architecture/decisions.md)。上文“`afterStart` 是唯一的就绪点”保留作当时的模型。

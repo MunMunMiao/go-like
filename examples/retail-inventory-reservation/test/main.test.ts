@@ -1,6 +1,6 @@
-import { background, withCancel } from "@go-like/context"
+import { background, withCancel } from "@go-like/core/context"
 import { describe, expect, test } from "bun:test"
-import { newMemoryCache } from "@go-like/cache-memory"
+import { newMemoryCache } from "@go-like/core/cache/memory"
 import { newReservationHandler } from "../src/http"
 import {
   newGetAvailableStock,

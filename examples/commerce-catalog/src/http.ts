@@ -1,8 +1,8 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import type { Context } from "@go-like/context"
-import { newProbeRegistry } from "@go-like/health"
-import { contextHandler, type Handler } from "@go-like/web"
-import { createHealthHandler } from "@go-like/web/health"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import type { Context } from "@go-like/core/context"
+import { newProbeRegistry } from "@go-like/core/health"
+import { contextHandler, type Handler } from "@go-like/core/web"
+import { createHealthHandler } from "@go-like/core/web"
 import { Hono, type Context as HonoContext } from "hono"
 
 import { decodePrice, encodePrice, type PricingClient } from "./pricing"

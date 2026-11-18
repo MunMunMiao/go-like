@@ -1,205 +1,127 @@
 # go-like 與其他工具的比較
 
-公平的比較應該從所有權開始，而不是從功能數量清單開始。這裡的所有權，是指誰建立資源、誰負責停止它，以及誰觀察它的終態。NestJS、Fastify、Hono、Elysia、Koa 與 tRPC 解決的是 TypeScript 應用程式堆疊的不同部分。go-micro 與 go-kratos 是 Go 生態的框架參考，它們在 transport 和程式碼產生上也有不同選擇。go-like 則是一組面向 TypeScript 的建構元件，強調明確的生命週期、內部 unary 呼叫、provider 契約與跨 runtime 組合。
+公平的比較從擁有權開始。NestJS、Fastify、Hono、Elysia、Koa 與 tRPC 各自解決 TypeScript 應用程式的不同部分。go-micro 與 go-kratos 是 Go 的參照，傳輸與程式碼產生都不相同。go-like 是一塊插座面板：明確的生命週期層級、內部呼叫，以及你所選後端的插頭。
 
-本頁把證據分成幾個層級：
+本頁的證據標籤：
 
-- **Source**：目前 go-like checkout 暴露了所述 API 或邊界。
-- **Pinned external**：比較使用研究記錄中固定的 release、commit 或官方文件。這不是新跑的 benchmark，也不表示未固定版本的 `main` 分支沒有變動。
-- **Declared**：repository 中有範例或測試 lane。這不等於該 lane 已通過。
-- **Gap**：目前 repository 沒有證明相容性承諾。
+- **Source** 表示目前的 checkout 暴露了這個 API。
+- **Pinned external** 表示一份已記錄的發布、commit 或官方頁面。它不是一輪新的評測。
+- **Declared** 表示存在一個範例或測試。它不是通過結果。
+- **Gap** 表示這個 repository 沒有證明一項相容承諾。
 
-本軌道使用的 go-like source baseline 是 commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`。本地研究記錄中存在一個 go-micro commit 不一致：一筆比較記錄寫的是 `9d306dcfc1a912a8a9493f31fee0bb983475258d`，而詳細的固定版本備忘錄檢查的是 `v6.9.0` 的 `3c39d17fadaa9ec21b671be4afef3e63846406e6`。請把它們視為需要重新核對的比較輸入，不要把它們當成目前 upstream 的保證。
+歷史文件基準是 commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`。研究記錄裡有兩個 go-micro commit：`9d306dcfc1a912a8a9493f31fee0bb983475258d`，以及 v6.9.0 備忘用的 `3c39d17fadaa9ec21b671be4afef3e63846406e6`。兩者都當作要重新核對的輸入。
 
-## 在技術堆疊中的位置
+## 在堆疊中的位置
 
-| 工具      | 主要解決的問題                       | 通常由它擁有的部分                                                                                                                                                 | go-like 可以補充、但不取代的部分                                                           |
-| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| NestJS    | 依慣例驅動的 Node 應用程式框架       | Modules、providers、controllers、decorators、application context、framework lifecycle、HTTP 或 microservice adapter                                                | 圍繞原生應用增加結構式 lifecycle boundary 或 internal call contract，前提是自行撰寫 bridge |
-| Fastify   | Node HTTP server 與請求處理 pipeline | Route table、hooks、plugins、encapsulation、Node listener、request/reply objects                                                                                   | 圍繞 Fastify 擁有的資源增加 lifecycle 或 provider adapter                                  |
-| Hono      | Web Standards 路由與 middleware      | Routes、middleware、sub-apps、`app.fetch`、runtime adapter 選擇                                                                                                    | Core App、明確的資源生命週期、內部 Client/Transport、服務探索                              |
-| Elysia    | Bun 優先的 typed Web framework       | Route tree、schema 組合、decorators、hooks、Bun 或 Web Standard adapter                                                                                            | 保留原生 Elysia 行為的同時增加 Core lifecycle 和內部 service building blocks               |
-| Koa       | 精簡的 Node middleware kernel        | Middleware stack 與 Node listener；router 通常由外部提供                                                                                                           | 不再引入另一套路由器的前提下補上 lifecycle 和內部 service contract                         |
-| tRPC      | 型別安全的 procedure layer           | Router/procedure paths、input/output parsers、context factory、HTTP/Fetch/WS adapters                                                                              | Provider ownership、service discovery、selector policy、明確的 App lifecycle               |
-| go-micro  | Go 微服務與 agent-oriented 生態      | Go Context、service/client/transport/registry/broker 抽象，以及額外的 agent/flow/MCP/A2A 範圍                                                                      | go-like 借用部分詞彙，不借用 Go ABI、goroutine 或 transport 相容性                         |
-| go-kratos | Go 雲原生服務框架                    | App lifecycle、Go Context、HTTP/gRPC transports、middleware、registry、config、Protobuf/code generation                                                            | 基於 Protobuf-ES 的 Context-first 程式碼; `/native` 提供標準 gRPC 四種呼叫形態             |
-| go-like   | 明確的 TypeScript 服務建構元件       | Context、App/Server lifecycle、standard Fetch edge、內部 Fetch JSON 與 SSE、Client/Server、Registry/Discovery/Selector、Config/Store/Cache/Broker/Health、adapters | 應用程式仍擁有框架路由、原生資料面、業務策略、auth（身分驗證與授權）與部署                 |
+| 工具      | 它通常擁有的部分                                             | go-like 放在旁邊的部分                                            |
+| --------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| NestJS    | Module、controller、decorator、應用程式 context              | 只有在你自己寫那個 adapter 時，才有一個結構式 `Server`            |
+| Fastify   | 路由、hook、plugin、Node listener                            | 繞著 Fastify 仍然擁有的資源，加一條生命週期或呼叫邊界             |
+| Hono      | 路由、middleware、`app.fetch`                                | App 層級、內部呼叫、插頭                                          |
+| Elysia    | 路由樹、schema、hook、它自己的 adapter                       | 同樣這些，同時 `.listen()` 仍屬於 Elysia                          |
+| Koa       | Middleware 與外部 router                                     | 生命週期與內部呼叫，不是另一個 router                             |
+| tRPC      | Procedure、解析器、adapter                                   | 服務探索、選擇，以及 App 生命週期                                 |
+| go-micro  | Go Context、service、registry、broker，以及更寬的 agent 表面 | 只有詞彙。沒有 Go ABI                                             |
+| go-kratos | App 生命週期、HTTP/gRPC、registry、config、Protobuf          | 一份 TypeScript 組裝。gRPC 路徑是 Connect-ES，不是 Google runtime |
+| go-like   | 插座、層級、Fetch 與 SSE 呼叫、插頭                          | 路由、政策、授權與原生協定細節仍由應用程式擁有                    |
 
-因此，go-like 並不是要贏一場「誰的框架最大」的比較。真正的問題是：應用程式是否需要這些邊界保持明確，而且可以組合。
+## 擁有權
 
-## 所有權矩陣
+| 關注點       | go-like                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| 對外路由     | 框架或應用程式的 `Handler`                                                                  |
+| Web handler  | `(Request) => Response \| Promise<Response>`                                                |
+| 程序生命週期 | `newApp`、三個層級、hook                                                                    |
+| 依賴         | 建構函式與選項。沒有容器                                                                    |
+| 內部呼叫     | `Transport`、`Client`、`Server`、`defineService`、SSE `ServerStream`                        |
+| 服務探索     | `Registry`、`Discovery`、篩選、五個 selector                                                |
+| 重試         | 一次嘗試，除非 `withRetry` 授權更多次                                                       |
+| 串流         | 邊緣使用 Web Streams；內部是 JSON 或 SSE；`@go-like/connectrpc/node` 上有四種 gRPC 呼叫形態 |
+| 觀測埋點     | Core 記錄工作單元。插頭填入 telemetry 插座。沒有全域註冊                                    |
 
-| 關注點                 | NestJS                                        | Fastify                            | Hono / Elysia / Koa                                         | tRPC                                         | go-like                                                                                               |
-| ---------------------- | --------------------------------------------- | ---------------------------------- | ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 外部 route table       | Controllers 與 decorators                     | Fastify instance                   | Framework instance 或外部 router                            | Procedure router，不是一般 REST routes       | 外部 framework 或 application                                                                         |
-| Web handler ABI        | Adapter 擁有的 request/reply abstraction      | Node request/reply                 | 對 Hono 與 Web Standard adapter 而言，Standard Fetch 是核心 | Fetch/Node/Express/Fastify adapters          | 標準的 `(Request) => Response \| Promise<Response>`                                                   |
-| Application lifecycle  | Application context 與 hooks                  | `ready`、`listen`、`close`、hooks  | Runtime adapter 與 framework lifecycle 各不相同             | 由 host/adapter 負責                         | `newApp`、`App.run`、`App.stop`、hooks、結構式 Servers                                                |
-| Resource lifecycle     | Container/framework hooks                     | Plugin 與 server hooks             | 由 application/runtime 負責                                 | 由 application/adapter 負責                  | 明確的 `Server.start(ctx)` / `stop(ctx)` 契約與 adapter 所有權                                        |
-| Dependency composition | Nest container/providers                      | Plugin decoration 與 encapsulation | Context/env 與組合；沒有通用 DI container                   | 明確的 context factory 與 router composition | 明確的 constructors 與 functional options；沒有 DI container                                          |
-| Internal transport     | Microservice transports 與 framework adapters | 不是 service discovery 抽象        | 不是 service discovery 抽象                                 | Procedure adapters 與可選 WebSocket          | `Transport`、`Client`、`Listener`、`defineService`、SSE `ServerStream`                                |
-| Discovery 與 selection | Transport-specific 或外部提供                 | 外部提供                           | 外部提供                                                    | 外部提供                                     | `Registry`、`Discovery`、`Watcher`、Filters、五種 Selector 策略                                       |
-| Retry                  | Framework 或 provider-specific                | Application/plugin-specific        | Application-specific                                        | Middleware/adapter-specific                  | 預設一次；`withRetry` 需要授權與總嘗試次數                                                            |
-| Streaming              | Framework/provider 選擇                       | Node/Web stream 選擇               | 原生 Web Streams 與 framework API                           | 取決於 adapter 的 HTTP/WS                    | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Global instrumentation | Framework/provider integration                | Plugin ecosystem                   | Middleware ecosystem                                        | Middleware/adapters                          | 明確的 wrapper；不安裝 global provider                                                                |
-
-前五列的標籤描述的是架構位置，不是品質排名。框架擁有 route table，在路由組合是主要問題時很有用；這只是和 go-like 把路由留給應用程式所做的不同所有權選擇。
-
-## Lifecycle 與 Context
-
-目前 go-like source 定義了：
+## 生命週期與 Context
 
 ```ts
-interface Server {
-  start(ctx: Context): Promise<void>
-  stop(ctx: Context): Promise<void>
-}
+import type { Server } from "@go-like/core/lifecycle"
 
 interface App {
   run(): Promise<void>
   stop(): Promise<void>
 }
+
+type Lifecycle = Server
+void null as unknown as Lifecycle
 ```
 
-`Server` 契約是結構式的。只要 adapter 能誠實說明資源如何被接納、終態如何產生，原生 worker、listener、scheduler、訊息代理 subscription、logger destination 或 telemetry provider 都可以加入 Core。
+`Server` 是結構式的：`start(ctx)` 與 `stop(ctx)`。在 resource 層級，`start` 在資源可用時 resolve。在 server 層級，`start` 可以一直 pending，兄弟的停止並行執行。資源的停止依宣告的反向順序執行。Nest context、Fastify plugin 圖或 Elysia hook 有自己的順序。比較的是擁有者，而不是 graceful 這個詞。
 
-go-like Context 同樣是結構式的，內部使用 `AbortSignal`。它暴露 `deadline()`、`done()`、`err()` 和 `value(key)`，並提供 `background`、`withCancel`、`withCancelCause`、`withTimeout`、`withDeadline`、`withoutCancel` 與 `withValue` 等建構函式。
+Context 暴露 `deadline()`、`done()`、`err()` 與 `value(key)`，以及 `background`、`withCancel`、`withTimeout`、`withDeadline`、`withoutCancel` 與 `withValue`。它內部使用 `AbortSignal`。它不是 Go 的 `context.Context`，也不是一套 gRPC API。
 
-這和 Go 的明確 Context-first 風格相似，但與 `context.Context` 並不 ABI-compatible。Context 本身不提供 goroutines、channels 或 gRPC API。正確的遷移問題應該是「取消和所有權在哪裡跨過這個邊界？」，而不是「哪個型別名稱完全一樣？」
+## 呼叫、重試與串流
 
-Core 不承諾 sibling Servers 按宣告的反向順序關閉。它會並行呼叫 sibling `stop(ctx)`，接著等待 terminal `start` Promises 並彙整失敗。Nest application context、Fastify plugin graph、Elysia lifecycle 或 host adapter 可能有不同的順序與終態語意。比較時要看真正的擁有者，不要只看「graceful」這個標籤。
+內部路徑是 Client、可選的 Discovery、篩選、selector、transport、`POST /<service>/<endpoint>`，然後是 server handler。帶型別的 Endpoint 用 Struct 驗證 JSON。它不是 IDL。`withEndpoint("discovery:///name")` 選擇一個服務。直接的位址清單不會。
 
-## Transport 與服務呼叫
-
-go-like 的內部呼叫鏈是刻意拆開的：
+呼叫只做一次嘗試，除非 `withRetry` 把 `authorization` 設成 `"idempotent"` 或 `"caller-approved"`，給出正的 `maxAttempts`，並給出 `shouldRetry`。那份授權是一項宣告。已經收到的回應，不會因為後來的 feedback 失敗而被重送。
 
 ```text
-Client
-  -> Discovery snapshot, optional
-  -> ordered Filter callbacks, optional
-  -> Selector.select
-  -> opaque ServiceEndpoint URL
-  -> Transport.dial or resident logical owner
-  -> fetch(Request)
-  -> @go-like/server route and unary handler
-  -> read Response
-  -> feedback and owner release
+Web Handler
+  Web Streams, framework SSE, or WebSocket
+
+@go-like/core client and server
+  one JSON body, or SSE when stream: true
+
+@go-like/connectrpc
+  Connect and gRPC-Web unary and server-streaming on Fetch
+
+@go-like/connectrpc/node
+  standard gRPC unary, server-streaming, client-streaming, and bidi
 ```
 
-typed `Endpoint` 把 `Struct` request/response validation 綁到JSON Fetch body。它不是 IDL，也不是產生式 protocol。`withEndpoint(...)` 選擇建構期直連快照；直連與發現快照使用同一個 Selector。程序內 Memory Transport 路徑仍很適合作為第一個測試。
+go-micro 的預設重試迴圈與 go-kratos 的 HTTP 串流形式都跟版本有關。發布一份依賴它們的比較之前，先重新核對那些釘選的 commit。
 
-NestJS 的 microservice transport 選項、tRPC procedure adapter 與 Go framework transport，都不能直接和這張 DAG 互換。它們可能擁有不同的 route identity、serialization model、connection pool 或 retry layer。比較時應記錄這些差異，不要把所有名字裡有「RPC」的方框都當成同一種能力。
+## Runtime
 
-## Retry 與 streaming 範圍
+共用入口使用 Fetch 與 `AbortSignal`，或一項注入的能力。自訂 TLS、HTTP/2 與 mTLS 住在 `@go-like/core/transport/http/node` 與 `@go-like/connectrpc/node`。Hono、Elysia、H3 與一般 Fetch 範例把 Fetch handler 傳給 core host。這個 repository 裡沒有 NestJS 或 Fastify bridge。Manifest 版本 `0.0.1` 不能證明 npm 已發布。
 
-最重要的反向比較是語意：
+## 依工具
 
-- go-like 預設每次呼叫只嘗試一次。
-- `withRetry(...)` 要求提供 `authorization: "idempotent" | "caller-approved"`、正數的 `maxAttempts` 與 `shouldRetry`。
-- 這個 authorization 是呼叫方的宣告，不是系統證明操作具有冪等性。
-- 每次重試都會重新進入 discovery 與 selection，因此可能選到新的 endpoint。
-- 如果已經收到 response，但後續 feedback 或 cleanup 失敗，不會重新 replay 這次 response。
+**NestJS。** Module、provider 與 controller 仍屬於 Nest。整合方式是在 Nest 應用程式外圍放一個由應用程式擁有的 `Server`，並有明確的接納與關閉。這個 repository 不包含那個 adapter。
 
-Go 比較研究記錄了不同的預設值與能力：go-micro 的 `DefaultRetries` 不能簡單說成「總共五次請求」，因為當 retry approval 仍為 true 時，它的 loop boundary 可能產生六次迭代；它的 public stream 形式與預設 `CloseSend` 實作也會隨 provider 改變。go-kratos 把 Protobuf/gRPC generation 與 HTTP streaming 形式結合，而 SSE 與 WebSocket 的方向和關閉行為並不相同。這些是 provider 與架構選擇，不是 go-like 少了幾個 flag。
+**Fastify。** 路由、封裝與 listener 仍屬於 Fastify。go-like 不會把 `request` / `reply` 轉成 Fetch `Handler`。
 
-對 go-like 來說：
+**Hono。** `examples/hono` 把 `app.fetch` 傳給 `newNodeServer`，再把那個 host 放進 `server(...)`。路由留在 Hono。
 
-```text
-Web framework or Fetch Handler
-  -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
+**Elysia。** 保留路由樹與 Bun 專屬行為。範例把 Fetch handler 配上 Node host。`.listen()` 不是 go-like API。
 
-go-like internal Client/Transport
-  -> one JSON body, or one SSE server stream when `stream: true`
-  -> not a bidirectional multi-frame protocol
+**Koa。** 保留 middleware 與外部 router。只在你能說出擁有者的地方，加上生命週期或呼叫邊界。
 
-@go-like/transport-grpc-buf
-  -> Fetch: Connect/gRPC-Web unary and server-streaming
-  -> /native: standard gRPC unary, server-streaming, client-streaming, bidi
-```
+**tRPC。** Procedure 仍屬於 tRPC。go-like 的 Endpoint 是 JSON Fetch 上的 Struct，不是 procedure router。
 
-Web `ReadableStream` 不是內部 RPC channel。不要把 streamed HTTP body 和多幀的 `send`／`recv` transport 當成同一個 feature。
-
-## Runtime 比較
-
-| Runtime 問題                                             | go-like 證據                                                                | 比較時的結論                                          |
-| -------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 共用程式碼能否使用 Fetch 與 `AbortSignal`？              | Root Web 與選定的 transport/config provider 使用標準 Web API 或注入的 Fetch | 可以有相近的可攜性目標，但型別不會替 runtime 實作行為 |
-| 自訂 PEM TLS、mTLS、ALPN 與 HTTP/2 能否透過 Fetch 可攜？ | Node transport 子路徑擁有原生能力；root Fetch path 不暴露所有控制項         | 應比較 host 能力與 import path，而不只是 package 名稱 |
-| 應用程式是否保留 framework router？                      | Hono、Elysia 與 H3 範例都傳入原生 Fetch handler                             | go-like 是 framework route ownership 的補充           |
-| package version 是否證明已經發布？                       | `workspace:*`, `0.0.1`                                                      | 不能據此聲稱 npm 可用或生態成熟                       |
-
-目前 repository 有 Hono、Elysia、H3 與 vanilla Fetch 的直接 source 範例。沒有目前的 NestJS 或 Fastify bridge，也沒有對應的 compatibility suite。這些框架是遷移讀者的對象，不是已支援的直接整合。
-
-## 按工具詳細比較
-
-### NestJS
-
-NestJS 是依慣例驅動的應用程式框架。它的 modules、providers、controllers、decorators、interceptors、pipes 與 application hooks 共同組成完整的 container 與 request model。go-like 沒有提供 Nest-compatible module container 或 controller bridge。
-
-合理的整合邊界，是由應用程式自行圍繞 Nest application 或 host 實作一個結構式 `Server` adapter。這個 adapter 需要定義 Nest 何時已接納 listener、`stop(ctx)` 如何對應 Nest close，以及 timeout 後會發生什麼。目前 repository 沒有證明這類 bridge，因此文件不應展示直接呼叫 `newNodeServer(nestApp, ...)`。
-
-### Fastify
-
-Fastify 擁有 route table、plugin encapsulation、hooks 與 Node listener。它的 plugin graph 很適合拿來比較 dependency scope，但 `decorate` 不是 Nest 風格的通用 provider container。go-like 不會自動把 Fastify 的 `request`／`reply` ABI 轉成 Fetch Handler，repository 目前也沒有測試 Fastify bridge。
-
-保留 Fastify 的 routes 與 plugins。如果導入 go-like，就圍繞 Fastify owner 撰寫明確的結構式 Server，或自行實作獨立的 Fetch boundary。不要把 Fastify 自己的 request injection 或原生 shutdown 稱為 go-like Transport 或 Client 契約。
-
-### Hono
-
-Hono 是目前已展示最清楚的互補關係。現有範例在 Hono 中建立 routes，把 `app.fetch` 傳給 `newNodeServer`，再把這個 host 放進 Core App。路由與 middleware 仍由 Hono 擁有；在應用程式選擇這樣做時，go-like 負責 host lifecycle boundary。
-
-### Elysia
-
-Elysia 提供 Bun-first 的 route 與 schema composition，也在相關 adapter path 暴露 Web Standard handler。保留 Elysia 的 route tree、decorators、derives、hooks、streams 與 Bun-specific behavior。go-like 可以擁有 App 與明確的資源邊界，但不會把 `.listen()` 變成跨 runtime 的 go-like API。
-
-### Koa
-
-Koa 是小型的 Node middleware kernel，不內建 router。這正好說明有些框架會刻意把更多 application composition 留在核心之外。go-like 不應該透過增加 router 來填補這個空缺。保留 Koa middleware 與外部 router，只在需要的地方增加 lifecycle 或內部呼叫邊界。
-
-### tRPC
-
-tRPC 擁有型別安全的 procedure router 與 procedure middleware。它可以使用 Fetch、Node、Express、Fastify 或 WebSocket adapter，但它不是 Registry、Selector、connection pool 或 application lifecycle manager。go-like 的 typed Endpoint 是對 JSON Fetch body 做的較小 runtime Struct binding，不是另一個 procedure DSL，也不是產生式 IDL。
-
-### go-micro 與 go-kratos
-
-這兩個 Go 專案可以作為 Context-first 呼叫、service lifecycle、Registry、Discovery、Selector 與 transport 詞彙的架構參考，但不是相容性目標：
-
-- Go `context.Context` 與 go-like `Context` 都強調明確取消，但 runtime 表示不同。
-- go-micro 的 Registry watcher model 與 go-like 的完整替換 snapshot，不應該被教成相同的 event stream。
-- `@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 的 Fetch 入口支援 Connect/gRPC-Web unary 與 server-streaming；`/native` 提供標準 gRPC 的四種呼叫形態，包含 client-streaming 與 bidi。這是獨立於內部 Fetch/SSE 路徑。
-- go-micro 與 go-kratos 的 provider 預設值、retry loop、stream half-close 行為與 selector 預設值都與版本有關。發布新的比較版本前，應使用研究記錄中的 fixed upstream commit table 重新核對。
+**go-micro 與 go-kratos。** 它們是 Context 優先呼叫、生命週期與服務探索詞彙的參照。go-like 裡的 watcher 產出完整替換快照。託管 gRPC 入口是 `@go-like/connectrpc/node`。
 
 ## 怎麼選
 
-| 如果你的主要問題是……                            | 先從……開始            | 在這些情況下再加 go-like                                               |
-| ----------------------------------------------- | --------------------- | ---------------------------------------------------------------------- |
-| Controllers、modules、decorators 和 DI          | NestJS                | 需要圍繞現有資源或內部服務呼叫增加明確邊界，而且願意自行撰寫 adapter   |
-| Node HTTP routes、hooks 和 plugin encapsulation | Fastify               | 需要超出 host 的生命週期組合，或需要內部 unary service contract        |
-| 跨 runtime 的 Web Standards routes              | Hono                  | 需要 App/Server lifecycle、內部呼叫或 provider ownership               |
-| Bun-first 的 schema 和 route composition        | Elysia                | 保留 Elysia 的同時，需要明確的 lifecycle 和 transport boundary         |
-| 精簡的 Node middleware                          | Koa 加上一個 router   | 需要補的是缺少的 lifecycle 或內部呼叫契約，而不是再加一個 router       |
-| 型別安全的 procedures                           | tRPC                  | 同時需要明確的 service discovery、provider ownership 或 Core lifecycle |
-| Go 微服務堆疊                                   | go-micro 或 go-kratos | 正在建立獨立的 TypeScript 組合，而不是做 source-compatible port        |
-| 跨 runtime 的 TypeScript 服務建構元件           | go-like               | 只使用能解決目前邊界問題的 packages 與 providers                       |
-
-正確答案可能是兩套系統一起使用。當明確的所有權模型確實消除了一個實際歧義時，go-like 最有價值；一個已經完整的 framework application 若把每個 package 都加進來，就會違背小型建構元件的目標。
+使用那個真正擁有你手上問題的框架。缺的是接納、取消、服務探索，或一份有具名擁有者的後端契約時，再加一個 go-like 插座。把每一個插頭都裝進一個已經完成的框架應用程式，就去掉了小契約的好處。
 
 ## 證據錨點
 
-本頁對 go-like 的判斷可以追溯到目前的 tree 與 package entrypoints：
+目前的樹：
 
-- `README.md`：產品範圍與明確排除項；
-- `packages/core/src/app.ts`：`App`、`Server`、startup、stop 與 timeout 行為；
-- `packages/web/src/context.ts`：標準 Handler 與 Context bridge；
-- `packages/client/src/index.ts`：Client options、pooling、retry 與 attempt pipeline；
-- `packages/server/src/index.ts`：內部 unary handlers 與 route dispatch；
-- `packages/transport/src/types.ts` 與 `packages/transport/src/endpoint.ts`：Fetch Request/Response 與 defineService 邊界；
-- `packages/registry/src/types.ts` 與 `packages/registry/src/selector.ts`：snapshots、filters、selectors 與 feedback。
+- `packages/core/src/app/app.ts` 與 `packages/core/src/app/tiers.ts`：層級、時間預算與停止順序；
+- `packages/core/src/lifecycle/index.ts`：`Server` 與 `Endpointer`；
+- `packages/core/src/web/context.ts`：`Handler` 與 `contextHandler`；
+- `packages/core/src/client/index.ts`：呼叫選項、服務探索與重試；
+- `packages/core/src/server/index.ts`：內部分派；
+- `packages/core/src/transport/service.ts`：`defineService`；
+- `packages/core/src/registry/selector.ts`：篩選、selector 與 feedback；
+- `packages/connectrpc/src/node.ts`：託管 gRPC。
 
-研究記錄也保存了以下固定版本的外部比較輸入：
+釘選的外部輸入，這次文件修訂沒有重新驗證：
 
-- [repository 記錄的 go-micro comparison commit](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d)；
-- [go-kratos v3 comparison commit](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e)；
-- [go-zlab/go-kratos comparison commit](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336)；
-- [NestJS lifecycle documentation](https://docs.nestjs.com/fundamentals/lifecycle-events)、[Fastify server reference](https://fastify.dev/docs/latest/Reference/Server/)、[Hono API](https://hono.dev/docs/api/hono)、[Elysia lifecycle](https://elysiajs.com/essential/life-cycle)、[Koa](https://koajs.com/) 與 [tRPC routers](https://trpc.io/docs/server/routers)。
+- [go-micro comparison commit](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d)；
+- [go-micro v6.9.0 commit](https://github.com/micro/go-micro/commit/3c39d17fadaa9ec21b671be4afef3e63846406e6)；
+- [go-kratos v3 commit](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e)；
+- [go-zlab/go-kratos commit](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336)；
+- [NestJS lifecycle](https://docs.nestjs.com/fundamentals/lifecycle-events)、[Fastify server](https://fastify.dev/docs/latest/Reference/Server/)、[Hono](https://hono.dev/docs/api/hono)、[Elysia lifecycle](https://elysiajs.com/essential/life-cycle)、[Koa](https://koajs.com/)、[tRPC routers](https://trpc.io/docs/server/routers)。
 
-這些 URL 是比較參考，不表示本次文件階段重新抓取或重新驗證了每個 upstream 頁面。修改與版本相關的比較陳述前，請重新核對 release tag 或 commit。
+用來比較而記錄下來的第三方 TypeScript 版本，不是相容承諾：NestJS `@nestjs/core@11.1.28`、Fastify `5.11.2`、Hono `4.12.34`、Elysia `1.4.29`、Koa `3.2.1`、tRPC `@trpc/server@11.18.0`。Elysia 範例的 manifest 是那個範例的釘選；這張表是研究快照。

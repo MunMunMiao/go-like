@@ -32,7 +32,7 @@ test("framework staging rejects source exports and removes its failed invocation
       runFrameworkDistConsumer({
         root: fixture.path,
         prefix,
-        consumer: resolve("packages/web/test/e2e/fixtures/bridge-dist-consumer.mjs"),
+        consumer: resolve("packages/core/test/e2e/fixtures/bridge-dist-consumer.mjs"),
         builtPackages: ["@go-like/web"],
         vendorPackages: []
       })

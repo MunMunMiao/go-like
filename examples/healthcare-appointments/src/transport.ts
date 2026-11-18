@@ -1,8 +1,8 @@
-import { newClient, withEndpoint, withTransport, type CallOption } from "@go-like/client"
-import type { Context } from "@go-like/context"
-import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
-import { serviceError } from "@go-like/transport"
-import { newMemoryTransport } from "@go-like/transport-memory"
+import { newClient, withEndpoint, withTransport, type CallOption } from "@go-like/core/client"
+import type { Context } from "@go-like/core/context"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/core/server"
+import { serviceError } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
 
 import { appointmentPolicy } from "./contract"
 import type { Appointment, BookAppointment, BookAppointmentCommand } from "./service"

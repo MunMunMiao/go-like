@@ -1,88 +1,101 @@
 # @go-like/core
 
-`@go-like/core` 提供与 go-kratos 对齐的应用生命周期。应用只需要理解 `App.run()`、`App.stop()` 与结构化
-`Server.start/stop`；不需要 handle、`done()`、diagnostics 或独立 runner。`name(...)` 是 Registry 应用名，
-Client 用 `withEndpoint("discovery:///<name>")` 选择它。它不是契约里的 service 名，也不是 endpoint 名。
+`@go-like/core` 是唯一的零运行时依赖包。它提供应用 API、插座、机制、参考实现、运行时绑定和插头作者 SDK。
+公开入口 41 个。没有全局默认实例，也没有全局注册；应用构造实现并传入。
 
-## 使用方式
+清单的 `devDependencies` 声明 `@types/node` `26.6.6`。发布的 dist 清单不携带它。源码不导入第三方运行时包。指南见
+[文档首页](../../doc/index.md)，可运行案例见 [examples](../../examples/README.md)。
 
-```ts
-import type { Context } from "@go-like/context"
-import { name, newApp, registrar, server, type Server } from "@go-like/core"
-import { signal } from "@go-like/core/node"
-import type { Registrar } from "@go-like/registry"
+角色：`app` 应用 API，`binding` 运行时绑定，`socket` 插座，`machinery` 机制，`reference` 参考实现，
+`sdk` 插头作者 SDK，`testing` 一致性测试。通道：`P` 可移植，`N` Node.js，`B` Bun。
 
-declare const registry: Registrar
-const httpServer: Server = {
-  async start(ctx: Context) {
-    const done = ctx.done()
-    if (done === null) throw new Error("this Server requires a cancelable runtime Context")
-    if (done.aborted) return
-    await new Promise<void>((resolve) => {
-      done.addEventListener("abort", () => resolve(), { once: true })
-    })
-  },
-  async stop(_ctx: Context) {}
-}
+## 应用与生命周期
 
-const app = newApp(name("orders"), server(httpServer), registrar(registry), signal())
+| #   | 入口                      | 角色             | 通道 | 关键导出                                                                                                                                                                                                                                                                  |
+| --- | ------------------------- | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `@go-like/core`           | app              | P    | `newApp`、`App`、`AppInfo`、`AppHook`、`AppOption`、`AppNotReadyError`；`context`、`id`、`name`、`version`、`metadata`、`endpoint`；`telemetry`、`resources`、`server`、`registrar`、`readyProbe`；预算与钩子；`newContext`、`fromContext`。不导出 `Server`、`Endpointer` |
+| 2   | `@go-like/core/node`      | binding          | N, B | `signal`、`ProcessSignal`                                                                                                                                                                                                                                                 |
+| 3   | `@go-like/core/lifecycle` | socket+machinery | P    | `Server`、`Endpointer`；`newResourceServer`、`ResourceServerOptions`、`ResourceServerError`（`GO_LIKE_RESOURCE_ALREADY_STARTED`、`GO_LIKE_RESOURCE_CLOSED`）                                                                                                              |
 
-await app.run()
-```
+`signal()` 必须显式传入。core 不安装隐式进程钩子。
 
-## 公共模型
+## 基础概念
 
-```ts
-export interface Server {
-  start(ctx: Context): Promise<void>
-  stop(ctx: Context): Promise<void>
-}
+| #   | 入口                       | 角色             | 通道 | 关键导出                                                                                              |
+| --- | -------------------------- | ---------------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| 4   | `@go-like/core/context`    | socket+machinery | P    | `Context`；`background`、`todo`、派生函数、`waitForContext`                                           |
+| 5   | `@go-like/core/metadata`   | machinery        | P    | 元数据模型与 client/server Context 辅助函数                                                           |
+| 6   | `@go-like/core/struct`     | machinery        | P    | `struct` 构建器、`StructError`、`isStructError`、`encodeJson`、`decodeJson`、`jsonCodec`              |
+| 7   | `@go-like/core/health`     | socket+machinery | P    | `ProbeRegistry`、`Probe`；`newProbeRegistry`                                                          |
+| 8   | `@go-like/core/resilience` | socket+machinery | P    | `RateLimiter`；`retry`、`Backoff`、`exponentialBackoff`、`newCircuitBreaker`、`newTokenBucketLimiter` |
 
-export interface Endpointer {
-  protocol(): string
-  endpoint(ctx: Context): string | Promise<string>
-}
+## 观测
 
-export interface App {
-  id(): string
-  name(): string
-  version(): string
-  metadata(): Readonly<Record<string, string>>
-  endpoint(): readonly string[]
-  run(): Promise<void>
-  stop(): Promise<void>
-}
-```
+| #   | 入口                               | 角色             | 通道 | 关键导出                                                                                                                                                                                         |
+| --- | ---------------------------------- | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 9   | `@go-like/core/telemetry`          | socket+machinery | P    | `TelemetryLifecycle`；`Telemetry`、`newTelemetry`、`withTelemetry`；语义约定常量                                                                                                                 |
+| 10  | `@go-like/core/telemetry/provider` | sdk              | P    | `beginUnit`、`observing`、`logEvent`、`logCorrelation`、`resourceFromContext`、`withRemoteSpanContext`、`isValidSpanContext`                                                                     |
+| 11  | `@go-like/core/log`                | socket+machinery | P    | `LogHandler`；`log`、`debug`、`info`、`warn`、`error`、`withLogAttrs`                                                                                                                            |
+| 12  | `@go-like/core/trace`              | socket+machinery | P    | `TracerProvider`、`Span`、`Propagator`；`inSpan`、`spanFromContext`、`newTraceContextPropagator`                                                                                                 |
+| 13  | `@go-like/core/metric`             | socket+machinery | P    | `MeterProvider`、`Instrument`；`newCounter`、`newUpDownCounter`、`newHistogram`、`newGauge`                                                                                                      |
+| 14  | `@go-like/core/testing`            | testing          | P    | `newTelemetryRecorder`、`ConformanceCase`；`cacheConformance`、`registryConformance`、`storeConformance`、`brokerConformance`、`jobQueueConformance`、`scheduleConformance` 以及四个观测插座用例 |
 
-- `server(...servers)` 注册结构化 Server，不要求继承；与 Kratos 一样，后声明的 `server` option
-  替换先前列表。
-- `registrar(registry)` 在 Server 启动后注册一个 Kratos `ServiceInstance`，并在停止 Server 前反注册；
-  `registrarTimeout(ms)` 限制 register/deregister caller 的等待，默认十秒。超时或停止后迟到成功的 register
-  会触发一次 best-effort 补偿反注册。
-- App 在发布一个 `ServiceInstance` 前会同步校验全部 Endpointer 的非空 `protocol()` 相同；该值仅用于
-  本地发布保护，不写入 URL、metadata 或 Registry。显式 `endpoint(...)` 仍会执行协议校验，但不会调用
-  `Endpointer.endpoint(ctx)`；未显式配置时，App 才会异步读取它。
-- Server 并发启动；`App.stop()` 使用同一个 stop Context 并发调用全部 Server。
-- `Server.start(ctx)` 既可在接纳完成后返回，也可像 Kratos HTTP/gRPC Server 一样持续到运行期结束；
-  Core 不把它当作 readiness Promise。
-- `startTimeout(ms)` 使用一份绝对 deadline 限制 `beforeStart`、endpoint 准备、register 与 `afterStart`；
-  默认 `0`，表示不设置 startup deadline。它不覆盖长期运行的 `Server.start(ctx)`。
-- `stopTimeout(ms)` 从第一次 `App.stop()` 起使用一份绝对 deadline，覆盖 startup join、`beforeStop`、
-  deregister、全部 `Server.stop`、全部 `Server.start` terminal join 与 `afterStop`；默认 `0`，表示不设置
-  shutdown deadline。各阶段只使用剩余预算。
-- timeout 只结束 App caller 的等待，不证明不合作的 Promise 或底层资源已经 terminal。Core 会继续观察迟到
-  resolve/reject 并调用尚未调用的必要 cleanup，但不会调用 `process.exit()`。生产预算应满足“原生 force
-  deadline < App stop deadline < supervisor/Kubernetes termination grace”。
-- `beforeStart`、`afterStart`、`beforeStop`、`afterStop` 按声明顺序执行；停止会先取消启动 Context，并等待已经
-  进入的启动 hook 或注册阶段收束。`Server.start(ctx)` 使用独立运行 Context，在 `beforeStop` 与反注册期间保持
-  有效，并在反注册完成后、`Server.stop(ctx)` 前取消；反注册失败也不会跳过该取消。
-- 启动 hook 需要中止启动时应抛出错误或取消父 Context；不要在启动 hook 内等待同一个 App 的 `stop()`，
-  否则“hook 完成后清理”与“清理完成后 hook 继续”会形成循环等待。
-- `context`、`id`、`name`、`version`、`metadata` 和 `endpoint` 对齐 Kratos App options。
-- `fromContext(ctx)` 与 `newContext(ctx, info)` 在 Context 中传递同一套 identity accessor。
-- `@go-like/core/node` 只导出 `signal(...signals)` App option。默认监听 `SIGTERM`、`SIGQUIT`、`SIGINT`，
-  第一次信号会设置 Unix exit code、同步移除该 App 自己的全部 listener，再请求 `App.stop()`；第二次信号恢复
-  Node 默认终止行为。停止失败将 exit code 改为 `1`。
-- `@go-like/core/lifecycle` 是 provider-facing 子路径，只提供 `waitForContext`：JavaScript Promise 本身不可取消，
-  该 helper 让一个 caller Context 放弃等待时不误取消资源 owner，也不会制造 unhandled rejection。它不属于
-  App 的 canonical happy path。
+## RPC 与 Web
+
+| #   | 入口                                | 角色             | 通道 | 关键导出                                                                                                                  |
+| --- | ----------------------------------- | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| 15  | `@go-like/core/transport`           | socket+machinery | P    | `Transport`、`Client`、`Listener`、`TransportHandler`、`TransportInfo`；`defineService`、`serviceError`、`isServiceError` |
+| 16  | `@go-like/core/transport/provider`  | sdk              | P    | 四个传输错误工厂、`newServerContext`、`observeResponseBody`                                                               |
+| 17  | `@go-like/core/transport/memory`    | reference        | P    | `newMemoryTransport`                                                                                                      |
+| 18  | `@go-like/core/transport/http`      | reference        | P    | `newHTTPTransport`。`listen` 拒绝，可移植入口只拨号                                                                       |
+| 19  | `@go-like/core/transport/http/node` | binding          | N    | `newNodeHTTPTransport`。Bun 上也可以作监听器                                                                              |
+| 20  | `@go-like/core/server`              | machinery        | P    | `newServer`、`address`、`advertise`、`transport`、`rateLimitMiddleware`                                                   |
+| 21  | `@go-like/core/client`              | machinery        | P    | `newClient`、`withEndpoint`、`withDiscovery`、`withRetry`、`circuitBreakerMiddleware`                                     |
+| 22  | `@go-like/core/web`                 | socket+machinery | P    | `Handler`；`contextHandler`、`requestContext`、`createHealthHandler`                                                      |
+| 23  | `@go-like/core/web/node`            | binding          | N    | `newNodeServer`、`port`、`hostname`、`nodeShutdownTimeout`                                                                |
+| 24  | `@go-like/core/web/bun`             | binding          | B    | `newBunServer`、`port`、`hostname`、`bunShutdownTimeout`                                                                  |
+
+`@go-like/core/web` 的 `Handler` 是单参数 `(request: Request) => Response | Promise<Response>`。core 没有路由器。
+
+## 发现、配置与 fetch
+
+| #   | 入口                              | 角色             | 通道 | 关键导出                                                                                                                                                                                                  |
+| --- | --------------------------------- | ---------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 25  | `@go-like/core/registry`          | socket+machinery | P    | `Registrar`、`Discovery`、`Watcher`、`Registry`、`Selector`、`Filter`；`newDiscoveryResolver`、`selectEndpoint`、`snapshotServiceInstance`                                                                |
+| 26  | `@go-like/core/registry/provider` | sdk              | P    | `newSnapshotWatcher`、`newIdentityLocks`、`startHeartbeat`、`sha256Base32`、错误工厂                                                                                                                      |
+| 27  | `@go-like/core/registry/memory`   | reference        | P    | `newMemoryRegistry`                                                                                                                                                                                       |
+| 28  | `@go-like/core/config`            | socket+machinery | P    | `ConfigSource`、`ConfigSourceWatcher`、`ConfigDecoder`、`ConfigResolver`、`FileCapability`、`FileWatcher`；`newConfig`、`objectSource`、`envSource`、`fileSource`、`jsonDecoder`；类型 `StandardSchemaV1` |
+| 29  | `@go-like/core/config/provider`   | sdk              | P    | `newSourceWatcher`、`newConfigSourceMissingError`、`admitConfigObject`                                                                                                                                    |
+| 30  | `@go-like/core/config/node`       | binding          | N    | `newNodeFileCapability`                                                                                                                                                                                   |
+| 31  | `@go-like/core/fetch`             | socket+machinery | P    | `Fetch`；`newFetchClient`、`parseOrigin`、`headerValue`、`isRetryableStatus`                                                                                                                              |
+
+## 数据、消息与任务
+
+| #   | 入口                            | 角色             | 通道 | 关键导出                                                                                                     |
+| --- | ------------------------------- | ---------------- | ---- | ------------------------------------------------------------------------------------------------------------ |
+| 32  | `@go-like/core/cache`           | socket           | P    | `Cache`；`expiresIn`、`putOptions`                                                                           |
+| 33  | `@go-like/core/cache/memory`    | reference        | P    | `newMemoryCache`                                                                                             |
+| 34  | `@go-like/core/store`           | socket           | P    | `Store`；选项函数、`StoreConflictError`（`GO_LIKE_STORE_CONFLICT`）                                          |
+| 35  | `@go-like/core/store/provider`  | sdk              | P    | 选项解析、冲突错误工厂、快照                                                                                 |
+| 36  | `@go-like/core/store/memory`    | reference        | P    | `newMemoryStore`                                                                                             |
+| 37  | `@go-like/core/broker`          | socket+machinery | P    | `Broker`、`Subscriber`、`Codec`；`newBrokerServer`、`eventBroker`                                            |
+| 38  | `@go-like/core/broker/provider` | sdk              | P    | `deliver`、`publish`；`registerSubscriberTerminal`、`brokerTopic`、`snapshotBrokerMessage`、`newBrokerEvent` |
+| 39  | `@go-like/core/broker/memory`   | reference        | P    | `newMemoryBroker`                                                                                            |
+| 40  | `@go-like/core/job`             | socket+machinery | P    | `Schedule`、`JobQueue`；`newScheduleServer`、`newIntervalSchedule`、`newPermanentJobError`                   |
+| 41  | `@go-like/core/job/provider`    | sdk              | P    | `runJob`、`enqueue`、`dispatchJob`；选项解析与错误工厂                                                       |
+
+计数：`app` 1，`binding` 5，`/provider` SDK 7，`testing` 1，参考实现 6，其余 21 个是概念入口。
+
+## 刻意不在 core 中
+
+这些能力有意留在 core 外面。
+
+| 概念                       | 理由                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| 鉴权                       | 没有使用者。对端身份只有 mTLS 的 `TransportInfo.peerIdentity()`                            |
+| 错误 `reason` 与 gRPC 映射 | 仍待确认（OQ11）。Connect 集成不使用 core 的 `ServiceError` 映射                           |
+| 熔断器工厂与分布式限流     | 没有这些使用者。进程内的 `newCircuitBreaker` 与 `newTokenBucketLimiter` 仍在 `/resilience` |
+| 自适应削峰                 | 没有使用者                                                                                 |
+| 默认信号处理               | 必须显式传入 `signal()`。没有隐式进程钩子                                                  |
+| RPC 编解码插座             | 内部 RPC 只用 JSON                                                                         |
+| 路由器                     | 不提供。同一个宿主上的路径分派由应用自己的函数完成                                         |

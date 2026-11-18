@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect"
-import { background, withTimeout } from "@go-like/context"
-import { newClientContext, newMetadata } from "@go-like/metadata"
+import { background, withTimeout } from "@go-like/core/context"
+import { newClientContext, newMetadata } from "@go-like/core/metadata"
 
 import {
   newOrderServiceClient,

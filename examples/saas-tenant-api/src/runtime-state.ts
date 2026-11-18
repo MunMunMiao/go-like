@@ -1,5 +1,6 @@
-import type { Context } from "@go-like/context"
-import { newConsulStore } from "@go-like/store-consul"
+import type { ConsulClient } from "@go-like/consul"
+import type { Context } from "@go-like/core/context"
+import { newConsulStore } from "@go-like/consul/store"
 
 export interface TenantRuntimeState {
   publish(ctx: Context): Promise<void>
@@ -9,12 +10,11 @@ export interface TenantRuntimeState {
 const encoder = new TextEncoder()
 
 /** Creates one real Consul Store-backed process-presence record with fresh readback. */
-export function newTenantRuntimeState(address: string, instanceId: string): TenantRuntimeState {
-  const store = newConsulStore({
-    fetch(request) {
-      return fetch(request)
-    },
-    address,
+export function newTenantRuntimeState(
+  client: ConsulClient,
+  instanceId: string
+): TenantRuntimeState {
+  const store = newConsulStore(client, {
     root: "go-like/examples/saas-tenant-api/runtime"
   })
   const key = `instances/${instanceId}`

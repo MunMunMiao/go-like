@@ -17,7 +17,7 @@
 
 ## go-like 能力
 
-主要演示 `@go-like/struct` 契约、`defineService`、`@go-like/server` 与 `@go-like/client` 的 `withEndpoint`。`bankTransfer.registerHandler` 和 `bankTransfer.newClient` 取代手写注册与客户端包装。请求由统一 Struct JSON 边界校验，并由 `@go-like/transport-memory` 完成真实的进程内 Client→Server 交换；外部入口仍使用 `@go-like/web` 标准 Fetch Handler。
+主要演示 `@go-like/core/struct` 契约、`defineService`、`@go-like/core/server` 与 `@go-like/core/client` 的 `withEndpoint`。`bankTransfer.registerHandler` 和 `bankTransfer.newClient` 取代手写注册与客户端包装。请求由统一 Struct JSON 边界校验，并由 `@go-like/core/transport/memory` 完成真实的进程内 Client→Server 交换；外部入口仍使用 `@go-like/core/web` 标准 Fetch Handler。
 
 ## 验证矩阵
 

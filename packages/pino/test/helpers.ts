@@ -1,10 +1,17 @@
 import { EventEmitter } from "node:events"
 
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
+import { newPinoHandler, type PinoHandlerOption } from "@go-like/pino/log"
 import { symbols, type Logger } from "pino"
 
-import { newPinoServer } from "../src/index"
-import type { DestinationLifecycle, LoggerFlushLifecycle } from "../src/types"
-import type { PinoServer, PinoServerOption } from "../src/types"
+/** Structural destination operations the lifecycle test double implements. */
+interface DestinationLifecycle {
+  end(): void
+  destroy?(): void
+  once(event: string, listener: (...values: unknown[]) => void): this
+  on(event: string, listener: (...values: unknown[]) => void): this
+  removeListener(event: string, listener: (...values: unknown[]) => void): this
+}
 
 interface ThreadStreamTestLifecycle extends DestinationLifecycle {
   readonly destroyed: boolean
@@ -41,7 +48,7 @@ export function delay(timeoutMs = 0): Promise<void> {
   })
 }
 
-export class FakeLogger implements LoggerFlushLifecycle {
+export class FakeLogger {
   flushCalls = 0
   flushError: Error | null = null
   flushThrown: unknown = null
@@ -62,6 +69,14 @@ export class FakeLogger implements LoggerFlushLifecycle {
         callback(this.flushError ?? undefined)
       })
     else this.callback = callback
+  }
+
+  isLevelEnabled(): boolean {
+    return true
+  }
+
+  child(): Logger {
+    return this as unknown as Logger
   }
 
   official(destination: DestinationLifecycle): Logger {
@@ -208,7 +223,7 @@ export function withoutForce(
 export function fakePinoServer(
   logger: Logger,
   destination: FakeDestination | ReturnType<typeof import("pino").transport>,
-  ...options: readonly PinoServerOption[]
-): PinoServer {
-  return newPinoServer(logger, destination, ...options)
+  ...options: readonly PinoHandlerOption[]
+): TelemetryLifecycle {
+  return newPinoHandler(logger, destination, ...options).lifecycle
 }

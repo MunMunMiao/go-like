@@ -18,7 +18,7 @@
 
 ## go-like 能力
 
-主要演示 `@go-like/health` 注册行情进程 liveness 和指定证券 snapshot readiness：服务启动后可存活，但只有摄取该证券首笔合法报价才会就绪；探针通过 `@go-like/web/health` 暴露标准 `/livez`、`/readyz` Handler。
+主要演示 `@go-like/core/health` 注册行情进程 liveness 和指定证券 snapshot readiness：服务启动后可存活，但只有摄取该证券首笔合法报价才会就绪；探针通过 `@go-like/core/web` 暴露标准 `/livez`、`/readyz` Handler。
 
 ## 验证矩阵
 

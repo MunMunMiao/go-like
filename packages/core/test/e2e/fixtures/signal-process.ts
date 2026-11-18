@@ -1,7 +1,7 @@
 import process from "node:process"
 
 import { newApp, server } from "../../../src/index"
-import { signal } from "../../../src/node"
+import { signal } from "../../../src/node/index"
 
 const selected = process.argv[2]
 if (selected !== "SIGINT" && selected !== "SIGQUIT" && selected !== "SIGTERM") {

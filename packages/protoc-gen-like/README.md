@@ -1,109 +1,22 @@
 # @go-like/protoc-gen-like
 
-`@go-like/protoc-gen-like` 是 project-local Node 22+ build-time Buf protoc plugin，用于生成 go-like portable
-RPC 代码。它不是 provider package，也不是 portable application runtime 的依赖；Bun 只用于本仓库内部
-build/package。生成的 `MessageShape` / `MessageInitShape` 是 Protobuf-ES 类型。Struct HTTP 契约使用
-`@go-like/transport` 的 `defineService`；托管标准 gRPC Client 用 `withEndpoint` 选择根 URL 或
-`discovery:///<name>`。`withAddress` 与 `withService` 已删除。
+Buf 的构建期插件。它不填充插座，也不依赖 `@go-like/core`。公开入口是包根，导出插件对象 `protocGenLike`。二进制名是 `protoc-gen-like`。`engines.node` 是 `>=22`。
 
-生成代码直接 import 的 runtime dependencies 必须由 Node/npm consumer 声明：
+生成的 `*_like.ts` 从 `@go-like/core/context` 导入 `Context`，从 `@go-like/connectrpc` 导入 `ServiceRegistrar`、`callOptions` 和 `fromHandlerContext`，并从 `@connectrpc/connect` 导入 `createClient`。
 
-```sh
-npm install @bufbuild/protobuf @connectrpc/connect @go-like/context @go-like/transport-grpc-buf
-```
+## 依赖
 
-codegen toolchain 只在 build time 使用，作为 dev dependencies 安装：
+没有 peer，也没有可选 peer。
 
-```sh
-npm install --save-dev @bufbuild/buf @bufbuild/protoc-gen-es @go-like/protoc-gen-like
-pnpm add --save-dev @bufbuild/buf @bufbuild/protoc-gen-es @go-like/protoc-gen-like
-yarn add --dev @bufbuild/buf @bufbuild/protoc-gen-es @go-like/protoc-gen-like
-```
+| 种类 | 包                      | 范围     |
+| ---- | ----------------------- | -------- |
+| 常规 | `@bufbuild/protoplugin` | `2.17.0` |
+| 常规 | `@bufbuild/protobuf`    | `2.17.0` |
 
-在 `package.json` 中通过 npm、pnpm 或 Yarn package script 运行项目本地 Buf：
+## 示例
 
-```json
-{
-  "scripts": {
-    "proto:generate": "buf generate"
-  }
-}
-```
+在 Buf 生成配置里把插件指到本包的 `protoc-gen-like` 二进制。运行时由应用把生成的 registrar 交给 `@go-like/connectrpc` 的 `newHandler`，或把生成的 client 接到 `@go-like/connectrpc/node` 的 `newClient`。
 
-`buf.gen.yaml` 使用 PATH 上的 project-local binary，不依赖远程 plugin/module 或 Bun：
+## 错误码
 
-```yaml
-version: v2
-plugins:
-  - local: protoc-gen-es
-    out: gen
-    opt:
-      - target=ts
-      - import_extension=js
-  - local: protoc-gen-like
-    out: gen
-    opt:
-      - target=ts
-      - import_extension=js
-```
-
-上游 `protoc-gen-es` 生成 Protobuf-ES message codec 与 descriptor；本 plugin 只生成 ctx-first
-Handler/Client glue。典型输出形态如下：
-
-```ts
-export interface OrderServiceHandler {
-  getOrder(
-    ctx: Context,
-    request: MessageShape<typeof GetOrderRequestSchema>
-  ): MessageInitShape<typeof OrderSchema> | Promise<MessageInitShape<typeof OrderSchema>>
-  watchOrders(
-    ctx: Context,
-    request: MessageShape<typeof WatchOrdersRequestSchema>
-  ): AsyncIterable<MessageInitShape<typeof OrderEventSchema>>
-}
-
-export interface OrderServiceClient {
-  getOrder(
-    ctx: Context,
-    request: MessageInitShape<typeof GetOrderRequestSchema>
-  ): Promise<MessageShape<typeof OrderSchema>>
-  watchOrders(
-    ctx: Context,
-    request: MessageInitShape<typeof WatchOrdersRequestSchema>
-  ): AsyncIterable<MessageShape<typeof OrderEventSchema>>
-}
-
-export function registerOrderServiceHandler(
-  server: ServiceRegistrar,
-  handler: OrderServiceHandler
-): void
-
-export function newOrderServiceClient(client: ConnectTransport): OrderServiceClient
-```
-
-Handler unary/server-streaming 请求是解码后的 `MessageShape`，client-streaming/bidi 请求是
-`AsyncIterable<MessageShape<...>>`；输出接受 `MessageInitShape`，其中 unary 允许直接值或 `Promise`，
-client-streaming 返回原生 `Promise<MessageInitShape<...>>`，server-streaming/bidi 返回
-`AsyncIterable<MessageInitShape<...>>`。Client unary/server-streaming 请求接受 `MessageInitShape`，
-client-streaming/bidi 请求接受 `AsyncIterable<MessageInitShape<...>>`；解码输出是 `MessageShape`，其中
-unary/client-streaming 返回 `Promise`，server-streaming/bidi 返回 `AsyncIterable`。生成代码只实现
-`registerXHandler(server, handler)` 与 `newXClient(client)` 胶水；它接收并借用 caller-owned Connect transport，
-不创建或关闭 owner。raw Connect descriptor/transport 是 advanced escape hatch。
-
-需要向 caller 返回明确的业务错误时，handler 使用上游 `ConnectError` 声明 status 和 Protobuf details。
-普通 `Error` 仍由 Connect 服务端按通用 `Internal` 处理；生成器不添加错误分类或重试策略。
-
-`@go-like/transport-grpc-buf` 根入口的 portable Fetch evidence 只覆盖 Connect/gRPC-Web unary 与
-server-streaming，不据四种 generated cardinality 宣称 Fetch request-streaming 或 bidi。托管的标准 gRPC
-client/server 位于 `@go-like/transport-grpc-buf/native`，四种 cardinality 已在 Node 26.7.0、Bun 1.4.0
-的物理发布包测试中通过。
-
-上述四种调用的基础互操作通过不代表全部生命周期场景通过。Bun Fetch 静默响应流的取消传播，
-以及 Connect 2.1.2 取消后 deadline timer 滞留的历史限制仍未验证已修复；具体版本、证据范围和
-调用方取消契约见 [runtime 文档](../transport/grpc-buf/README.md)。生成器不为这些边界添加重试或强制 drain。
-
-仓库 source 使用 Bundler 模块解析，不能用 source-linked 执行结果代替发布包兼容性检查。外部消费者安装构建后的
-包，并在项目脚本中调用本地 `buf` / `protoc-gen-like`；生成的 `.js` 相对 import 由 TypeScript 编译后的文件满足。
-
-当前范围不包含 official health/reflection、validation、canonical error-details mapping、Google gRPC runtime
-或 Buf online services，也没有 placeholder API。
+本包不定义运行时错误码。生成失败由 Buf 插件宿主报告。

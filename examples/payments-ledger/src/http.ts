@@ -1,7 +1,7 @@
 import { SQL } from "bun"
 
-import type { Context } from "@go-like/context"
-import { contextHandler, type Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import { contextHandler, type Handler } from "@go-like/core/web"
 
 import { postPayment } from "./post-payment"
 import { isPaymentFailure } from "./payment"

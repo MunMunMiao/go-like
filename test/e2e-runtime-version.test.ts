@@ -192,7 +192,7 @@ test("only the published suite requires the observed OpenSSL prerequisite", () =
     "typescript",
     "openssl"
   ])
-  expect(findSuiteDefinition("runtime-grpc-buf")?.requiredTools).toEqual(["bun", "node"])
+  expect(findSuiteDefinition("runtime-connectrpc")?.requiredTools).toEqual(["bun", "node"])
 })
 
 test("successful tool probes record arbitrary output without an eligibility gate", async () => {

@@ -1,5 +1,5 @@
-import type { Client } from "@go-like/client"
-import { background, withCancel } from "@go-like/context"
+import type { Client } from "@go-like/core/client"
+import { background, withCancel } from "@go-like/core/context"
 import { newApp, server } from "@go-like/core"
 import { describe, expect, spyOn, test } from "bun:test"
 

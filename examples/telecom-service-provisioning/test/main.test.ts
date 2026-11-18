@@ -1,5 +1,5 @@
-import type { CallOption, Client } from "@go-like/client"
-import { background } from "@go-like/context"
+import type { CallOption, CallOptions, Client } from "@go-like/core/client"
+import { background } from "@go-like/core/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 
@@ -171,7 +171,7 @@ describe("telecom service provisioning", () => {
       monthlyFeeMinor: 5_900,
       status: "active" as const
     })
-    const option: CallOption = (options) => options
+    const option = ((options: CallOptions) => options) as unknown as CallOption
     const failure = new Error("telecom service unavailable")
     let rejected = false
     let observed: readonly unknown[] = Object.freeze([])

@@ -1,15 +1,96 @@
-# 套件參考
+# 套件
 
-go-like 原始碼可以按能力分資料夾，但目前 checkout 的非 private package manifest 保持平鋪。呢個 checkout 使用版本 `0.0.1` 嘅 `workspace:*` 套件。Manifest 版本唔能夠證明 npm 可用；喺 workspace 外安裝之前，要獨立核實發布狀態。核心有 `@go-like/context`、`@go-like/core`、`@go-like/client`、`@go-like/server`、`@go-like/transport`、`@go-like/metadata`、`@go-like/struct`、`@go-like/web`、`@go-like/config`、`@go-like/registry`、`@go-like/cache`、`@go-like/store`、`@go-like/broker`、`@go-like/event`、`@go-like/health`、`@go-like/resilience`。
+Workspace 有 **20** 個公開 `@go-like/*` 套件，呢個 checkout 每個都係版本 `0.0.1`。根 workspace 係私人嘅。版本唔能夠證明 npm 可用。44 個 `examples/*` 目錄係私人應用。
 
-程序內呼叫同測試可以用 `@go-like/transport-memory`。內部 HTTP 用 `@go-like/transport-http`；`@go-like/transport-http/node` 提供 Node 嘅 `dial` 同 `listen` 實作，伺服器端支援 PEM TLS/mTLS 同以 ALPN 協商 HTTP/2。Web framework 直接將原生 Fetch Handler 交畀 `@go-like/web`；go-like 目前冇 framework 專用橋接套件。常用 library lifecycle adapter 包括 `@go-like/croner`、`@go-like/bullmq`、`@go-like/nats`、`@go-like/pino`、`@go-like/winston`，觀測套件就係 `@go-like/prometheus` 同 `@go-like/otel`。
+公開入口有 **75** 個：41 個喺 `@go-like/core`，34 個喺插頭同產生器。產生出嚟嘅 `dist/package.json` `./package.json` export 係 metadata，唔係另一個入口。
 
-Registry provider 有 mDNS、Consul、etcd、Kubernetes、ZooKeeper 嘅獨立 `@go-like/registry-*` 套件；Store provider 係 `@go-like/store-memory`、`@go-like/store-file`、`@go-like/store-consul`、`@go-like/store-etcd`、`@go-like/store-vault`；Config 嘅 Consul、etcd 同 Vault 亦分開發布，包括 `@go-like/config-vault`，環境、檔案同 YAML 來源就放喺 config 子路徑。Cache 用 `@go-like/cache` 契約，provider 係 `@go-like/cache-memory` 同 `@go-like/cache-redis`。
+`@go-like/core` 冇第三方 runtime 依賴。除 `@go-like/protoc-gen-like` 之外，其他每個套件都 peer 依賴同一個 core 版本。產生器唔依賴 core。插頭行為同限制喺每隻插頭 README。呢頁係清單。
 
-Registry provider 嘅完整名稱係 `@go-like/registry-mdns`、`@go-like/registry-consul`、`@go-like/registry-etcd`、`@go-like/registry-kubernetes`、`@go-like/registry-zookeeper`。Config provider 亦包括 `@go-like/config-consul`、`@go-like/config-etcd`、`@go-like/config-kubernetes`；Broker provider 係 `@go-like/broker-memory` 同 `@go-like/broker-rabbitmq`。
+## 20 個套件
 
-應用應該由真正擁有契約嘅最小套件 import。Node 等 runtime host 亦有獨立入口。公開命名冇含糊嘅 `adapters` 大桶，自訂 HTTP header 統一用 `Go-Like-` 前綴。
+| 套件                       | 入口                                     | 填咩                                           |
+| -------------------------- | ---------------------------------------- | ---------------------------------------------- |
+| `@go-like/core`            | 41                                       | 插座、機制、記憶體參考實作同 runtime 綁定      |
+| `@go-like/otel`            | `.`                                      | Tracer、meter、log handler、propagator         |
+| `@go-like/pino`            | `./log`                                  | `LogHandler`                                   |
+| `@go-like/winston`         | `./log`                                  | `LogHandler`                                   |
+| `@go-like/prometheus`      | `./metric`                               | `MeterProvider` 同 scrape `Handler`            |
+| `@go-like/consul`          | `.`、`./registry`、`./config`、`./store` | 共用 client、註冊中心、設定、儲存              |
+| `@go-like/etcd`            | `.`、`./registry`、`./config`、`./store` | 共用 client、註冊中心、設定、儲存              |
+| `@go-like/vault`           | `.`、`./config`、`./store`               | 共用 client、設定、儲存                        |
+| `@go-like/kubernetes`      | `.`、`./registry`、`./config`            | 共用 client、註冊中心、設定                    |
+| `@go-like/zookeeper`       | `./registry`、`./registry/node`          | 喺 client factory 之上嘅註冊中心；Node factory |
+| `@go-like/mdns`            | `./registry`、`./registry/node`          | 喺 `MDNSHost` 之上嘅註冊中心；Node host        |
+| `@go-like/yaml`            | `./config`                               | `ConfigDecoder`                                |
+| `@go-like/nats`            | `./broker`、`./jetstream`                | Core 同 JetStream broker                       |
+| `@go-like/rabbitmq`        | `./broker`                               | Broker                                         |
+| `@go-like/redis`           | `./cache`                                | 快取同資源層 `Server`                          |
+| `@go-like/bullmq`          | `./job`                                  | `JobQueue` 同資源層 `Server`                   |
+| `@go-like/croner`          | `./job`                                  | `Schedule`                                     |
+| `@go-like/file`            | `./store`、`./store/node`                | 儲存同資源層 `Server`；Node host               |
+| `@go-like/connectrpc`      | `.`、`./node`                            | Fetch Handler；Node gRPC server 同 client      |
+| `@go-like/protoc-gen-like` | `.`                                      | Buf plugin 同 `bin`。冇插座                    |
 
-`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於內部 Fetch/SSE 路徑。
+計數：41 + 4 + 8 + 6 + 10 + 6 = 75。插頭同產生器入口係 core 41 個之後嘅 34 個。
 
-Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+## Core 入口
+
+| 入口                                | 角色      | 首批匯出                                                                              |
+| ----------------------------------- | --------- | ------------------------------------------------------------------------------------- |
+| `@go-like/core`                     | App       | `newApp`、`telemetry`、`resources`、`server`、`registrar`、`readyProbe`、hook、時限   |
+| `@go-like/core/node`                | Node 綁定 | `signal`                                                                              |
+| `@go-like/core/lifecycle`           | 插座      | `Server`、`Endpointer`、`newResourceServer`                                           |
+| `@go-like/core/context`             | 插座      | `background`、`withCancel`、`withTimeout`、`waitForContext`                           |
+| `@go-like/core/metadata`            | 機制      | `newMetadata`、client 同 server Context helper                                        |
+| `@go-like/core/struct`              | 機制      | `struct`、`StructError`、`encodeJson`、`decodeJson`、`jsonCodec`                      |
+| `@go-like/core/health`              | 插座      | `newProbeRegistry`                                                                    |
+| `@go-like/core/resilience`          | 插座      | `retry`、`newCircuitBreaker`、`newTokenBucketLimiter`                                 |
+| `@go-like/core/telemetry`           | 插座      | `newTelemetry`、`withTelemetry`、語意慣例常數                                         |
+| `@go-like/core/telemetry/provider`  | 插頭 SDK  | `beginUnit`、`logCorrelation`、`resourceFromContext`                                  |
+| `@go-like/core/log`                 | 插座      | `log`、`info`、`error`、`LogHandler`                                                  |
+| `@go-like/core/trace`               | 插座      | `inSpan`、`newTraceContextPropagator`                                                 |
+| `@go-like/core/metric`              | 插座      | `newCounter`、`newHistogram`、`newGauge`、`newUpDownCounter`                          |
+| `@go-like/core/testing`             | 測試      | `newTelemetryRecorder`、`<concept>Conformance`                                        |
+| `@go-like/core/transport`           | 插座      | `defineService`、`serviceError`、`isServiceError`、`ServerStream`                     |
+| `@go-like/core/transport/provider`  | 插頭 SDK  | Transport 錯誤 factory、`newServerContext`                                            |
+| `@go-like/core/transport/memory`    | 參考實作  | `newMemoryTransport`                                                                  |
+| `@go-like/core/transport/http`      | 參考實作  | `newHTTPTransport`                                                                    |
+| `@go-like/core/transport/http/node` | Node 綁定 | `newNodeHTTPTransport`                                                                |
+| `@go-like/core/server`              | 機制      | `newServer`、`address`、`advertise`、`rateLimitMiddleware`                            |
+| `@go-like/core/client`              | 機制      | `newClient`、`withEndpoint`、`withDiscovery`、`withRetry`、`circuitBreakerMiddleware` |
+| `@go-like/core/web`                 | 插座      | `Handler`、`contextHandler`、`requestContext`、`createHealthHandler`                  |
+| `@go-like/core/web/node`            | Node 綁定 | `newNodeServer`、`hostname`、`port`、`nodeShutdownTimeout`                            |
+| `@go-like/core/web/bun`             | Bun 綁定  | `newBunServer`、`hostname`、`port`、`bunShutdownTimeout`                              |
+| `@go-like/core/registry`            | 插座      | selector、filter、`newDiscoveryResolver`、`selectEndpoint`                            |
+| `@go-like/core/registry/provider`   | 插頭 SDK  | `newSnapshotWatcher`、`startHeartbeat`                                                |
+| `@go-like/core/registry/memory`     | 參考實作  | `newMemoryRegistry`                                                                   |
+| `@go-like/core/config`              | 插座      | `newConfig`、`objectSource`、`envSource`、`fileSource`、`jsonDecoder`                 |
+| `@go-like/core/config/provider`     | 插頭 SDK  | `newSourceWatcher`、`admitConfigObject`                                               |
+| `@go-like/core/config/node`         | Node 綁定 | `newNodeFileCapability`                                                               |
+| `@go-like/core/fetch`               | 插座      | `Fetch`、`newFetchClient`                                                             |
+| `@go-like/core/cache`               | 插座      | `Cache`、`expiresIn`                                                                  |
+| `@go-like/core/cache/memory`        | 參考實作  | `newMemoryCache`                                                                      |
+| `@go-like/core/store`               | 插座      | `Store`、`ifAbsent`、`ifRevision`、`StoreConflictError`                               |
+| `@go-like/core/store/provider`      | 插頭 SDK  | Option parser、conflict factory                                                       |
+| `@go-like/core/store/memory`        | 參考實作  | `newMemoryStore`                                                                      |
+| `@go-like/core/broker`              | 插座      | `Broker`、`newBrokerServer`、`eventBroker`                                            |
+| `@go-like/core/broker/provider`     | 插頭 SDK  | `deliver`、`publish`                                                                  |
+| `@go-like/core/broker/memory`       | 參考實作  | `newMemoryBroker`                                                                     |
+| `@go-like/core/job`                 | 插座      | `newScheduleServer`、`newIntervalSchedule`、`JobQueue`                                |
+| `@go-like/core/job/provider`        | 插頭 SDK  | `runJob`、`enqueue`、`dispatchJob`                                                    |
+
+`@go-like/core/server` 同 `@go-like/core/client` 都匯出 `middleware` 同 `use`。一個檔案兩邊都要時，將其中一個當 namespace import。根入口嘅 `context`、`endpoint`、`server` 同 `metadata` option 係 App option。呢啲名稱同 OpenTelemetry 或 `defineService` 相撞時，將根入口當 namespace import。
+
+應用程式碼唔 import `/provider` 或 `/testing`，測試同插頭實作除外。
+
+## Runtime subpath
+
+Import 你想要嘅 subpath。Export 唔以 `bun` 或 `node` 做條件。
+
+- Node：`@go-like/core/node`、`@go-like/core/transport/http/node`、`@go-like/core/web/node`、`@go-like/core/config/node`、`@go-like/mdns/registry/node`、`@go-like/zookeeper/registry/node`、`@go-like/file/store/node`、`@go-like/connectrpc/node`。
+- Bun host：`@go-like/core/web/bun`。
+- NATS、RabbitMQ、Redis 同 BullMQ 喺 Node 同 Bun 上跟佢哋嘅原生 client。
+
+## 呢份目錄留低嘅
+
+記憶體參考實作係程序內嘅。Lease、acknowledgement、TTL 同交易嘅限制喺插頭 README。[Provider](/zh-Hant-HK/reference/providers)連去呢啲 README。[錯誤處理](/reference/errors)列出公開代碼。[遷移](/zh-Hant-HK/guide/migration)將歷史 specifier 對應到呢張表。

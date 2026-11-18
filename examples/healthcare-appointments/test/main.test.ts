@@ -3,9 +3,10 @@ import {
   withEndpoint,
   withTransport,
   type CallOption,
+  type CallOptions,
   type Client
-} from "@go-like/client"
-import { background } from "@go-like/context"
+} from "@go-like/core/client"
+import { background } from "@go-like/core/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, spyOn, test } from "bun:test"
 import { appointmentPolicy } from "../src/contract"
@@ -183,7 +184,7 @@ describe("healthcare appointments", () => {
       startsAt: 2_000,
       endsAt: 3_000
     })
-    const option: CallOption = (options) => options
+    const option = ((options: CallOptions) => options) as unknown as CallOption
     const failure = new Error("appointment policy unavailable")
     let rejected = false
     let observed: readonly unknown[] = Object.freeze([])

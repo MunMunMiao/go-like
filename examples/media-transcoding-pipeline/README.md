@@ -6,8 +6,8 @@
 ## 主要演示
 
 - `@go-like/core` 管理自定义 Worker Server 的启动和停止。
-- `@go-like/context` 作为任务提交和 Worker 生命周期操作的首个参数。
-- `@go-like/web` 输出可嵌入任意支持标准 Fetch API 的 runtime Handler。
+- `@go-like/core/context` 作为任务提交和 Worker 生命周期操作的首个参数。
+- `@go-like/core/web` 输出可嵌入任意支持标准 Fetch API 的 runtime Handler。
 - 任务规则、Worker、HTTP 路由和进程生命周期按真实职责拆分。
 
 ## 源码结构

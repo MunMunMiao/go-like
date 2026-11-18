@@ -19,7 +19,7 @@
 
 ## go-like 能力
 
-使用 `@go-like/context` 贯穿处置仓储调用，使用 `@go-like/web` 提供与运行时无关的标准 Fetch 入口，并使用 `@go-like/registry` 的 round-robin selector 为改签处置选择下游服务端点。
+使用 `@go-like/core/context` 贯穿处置仓储调用，使用 `@go-like/core/web` 提供与运行时无关的标准 Fetch 入口，并使用 `@go-like/core/registry` 的 round-robin selector 为改签处置选择下游服务端点。
 
 ## 验证矩阵
 
@@ -38,7 +38,7 @@ bun run --filter @go-like/example-airline-irregular-operations test:unit
 ## Docker 判定
 
 默认模式使用内存处置仓储，不声明已连接 GDS、航司 PSS、支付或票务系统，因此不需要 Docker。
-设置 `ZOOKEEPER_ADDRESS` 后，`@go-like/registry-zookeeper` 会把当前服务注册到真实 ensemble，并在停止时
+设置 `ZOOKEEPER_ADDRESS` 后，`@go-like/zookeeper/registry` 会把当前服务注册到真实 ensemble，并在停止时
 注销；可用 `ZOOKEEPER_ROOT` 隔离路径。连接或认证失败会使生命周期失败，不会静默改用内存注册中心。
 
 ## 非目标

@@ -1,5 +1,11 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
-import type { Context } from "@go-like/context"
+import {
+  newConfig,
+  source,
+  objectSource,
+  type Config,
+  type ConfigObject
+} from "@go-like/core/config"
+import type { Context } from "@go-like/core/context"
 
 import {
   validateTemperatureLimits,

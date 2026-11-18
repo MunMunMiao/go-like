@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import type { BrokerEvent, BrokerMessage, Subscriber } from "@go-like/broker"
-import { background, type Context } from "@go-like/context"
-import type { NatsJetStreamBrokerPublishOptions } from "@go-like/nats/jetstream/broker"
+import type { BrokerEvent, BrokerMessage, Subscriber } from "@go-like/core/broker"
+import { background, type Context } from "@go-like/core/context"
+import type { NatsJetStreamBrokerPublishOptions } from "@go-like/nats/jetstream"
 import type { JsMsg, PubAck } from "@nats-io/jetstream"
 
 import { deadLetterTelemetrySubject, rawTelemetrySubjects, type TelemetryBroker } from "../src/nats"

@@ -87,7 +87,7 @@ application logs --------> Pino destination
 | Config        | Vault Source 作为 Config 的输入，通过 Core `beforeStart / afterStop` hook 加载和关闭                                              |
 | Web           | Node Web Server 承载标准 Fetch Handler                                                                                            |
 | Observability | OTel 与 Pino 只接管应用创建资源的生命周期                                                                                         |
-| Store         | `@go-like/store-vault` 写入隔离的 runtime state，并执行 write/read/delete fresh readback                                          |
+| Store         | `@go-like/vault/store` 写入隔离的 runtime state，并执行 write/read/delete fresh readback                                          |
 
 Server、Client、Registry 和 App 的用法与 go-like 当前公开 API 保持一致。
 

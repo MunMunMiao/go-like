@@ -1,9 +1,9 @@
 # 通知投递
 
 该示例演示通知投递微服务：标准 Fetch API 接收 email 或 SMS 消息，使用
-`@go-like/resilience` 的显式幂等 retry 重试瞬时 provider 故障，并用 circuit breaker
-阻止持续故障继续冲击下游。成功 receipt 随后通过 `@go-like/event` 编码并发布到
-`@go-like/broker-memory`，消费者把结果投影到 `@go-like/store-memory`；`@go-like/winston`
+`@go-like/core/resilience` 的显式幂等 retry 重试瞬时 provider 故障，并用 circuit breaker
+阻止持续故障继续冲击下游。成功 receipt 随后通过 `jsonCodec(struct)` 编码并发布到
+`@go-like/core/broker/memory`，消费者把结果投影到 `@go-like/core/store/memory`；`@go-like/winston`
 记录标准 Web 请求完成日志并进入同一个 App 生命周期。
 
 ## 主要演示
@@ -13,7 +13,7 @@
 - typed Event 不隐藏 codec，Memory Broker 的订阅由标准 Broker Server 生命周期持有。
 - Memory Store 保存可查询的进程内 receipt 投影；它不是持久 Event Store 或 replay。
 - 应用创建原生 Winston Logger，go-like 只包装请求日志和终态排空。
-- `@go-like/context` 作为投递应用和 provider 操作的首个参数。
+- `@go-like/core/context` 作为投递应用和 provider 操作的首个参数。
 - 标准 Fetch Handler 与投递服务、Provider、运行入口分离。
 
 ## 业务不变量

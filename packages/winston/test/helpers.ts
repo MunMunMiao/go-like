@@ -46,6 +46,21 @@ export class FakeLogger extends EventEmitter {
     return this.finished
   }
 
+  /** Reports every level as enabled. The lifecycle only requires the method to exist. */
+  isLevelEnabled(): boolean {
+    return true
+  }
+
+  /** Returns this double. Resource binding is covered with a real logger. */
+  child(): Logger {
+    return this.official()
+  }
+
+  /** Accepts one log call. Lifecycle tests do not read the record. */
+  log(): this {
+    return this
+  }
+
   /** Exposes this test double through Winston's unmodified public Logger type. */
   official(): Logger {
     return this as unknown as Logger

@@ -7,7 +7,7 @@
 - Redis 按租户和配置 generation 缓存公开响应；
 - Token Bucket 对每个租户执行进程内限流；
 - Pino 输出结构化请求日志，并由 Core App 管理输出终态。
-- `@go-like/store-consul` 在隔离 KV root 发布当前进程状态，启动和清理都执行 fresh readback。
+- `@go-like/consul/store` 在隔离 KV root 发布当前进程状态，启动和清理都执行 fresh readback。
 
 ## 运行
 
@@ -73,15 +73,15 @@ feature flags。缓存 key 同时包含 generation 与 tenant ID，配置更新�
 
 ## go-like 能力
 
-| 能力         | 使用方式                                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------------------------ |
-| 应用生命周期 | Config 通过 `beforeStart / afterStop` hook 加载和关闭；Cache、Pino 与 Web Server 作为 `Server` 交给 Core App |
-| 配置         | `@go-like/config-consul` 提供 Config Source，完整文档通过 Schema 后发布                                      |
-| 缓存         | Redis Cache 持有连接生命周期                                                                                 |
-| Web          | Hono Handler 由标准 Web Server 承载                                                                          |
-| 限流         | `@go-like/resilience` 的无后台 timer Token Bucket                                                            |
-| 日志         | 应用配置 Pino；`@go-like/pino` 负责 flush/close 生命周期                                                     |
-| Store        | `@go-like/store-consul` 写入隔离的 runtime state，并在 App 停止时删除                                        |
+| 能力         | 使用方式                                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------- |
+| 应用生命周期 | Config 通过 `beforeStart / afterStop` 加载和关闭；Cache 进入 `resources(...)`；Telemetry 与 Web Server 交给 App |
+| 配置         | `@go-like/consul/config` 提供 Config Source，完整文档通过 Schema 后发布                                         |
+| 缓存         | Redis Cache 持有连接生命周期                                                                                    |
+| Web          | Hono Handler 由标准 Web Server 承载                                                                             |
+| 限流         | `@go-like/core/resilience` 的无后台 timer Token Bucket                                                          |
+| 日志         | 应用配置 Pino；`@go-like/pino` 负责 flush/close 生命周期                                                        |
+| Store        | `@go-like/consul/store` 写入隔离的 runtime state，并在 App 停止时删除                                           |
 
 ## 验证
 

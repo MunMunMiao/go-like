@@ -1,11 +1,12 @@
-import type { Broker, Subscriber } from "@go-like/broker"
-import { background } from "@go-like/context"
+import type { Broker, Subscriber } from "@go-like/core/broker"
+import { background } from "@go-like/core/context"
 import type { ConsumerMessages, JetStreamClient, JsMsg, PubAck } from "@nats-io/jetstream"
 import {
   newNatsJetStreamBroker,
+  type NatsJetStreamBroker,
   type NatsJetStreamBrokerMessagesFactory,
   type NatsJetStreamBrokerPublishOptions
-} from "../src/jetstream-broker"
+} from "../src/jetstream"
 
 interface SubscribeOptions {
   readonly durable: string
@@ -19,8 +20,9 @@ const factory: NatsJetStreamBrokerMessagesFactory<SubscribeOptions> = async (
   _topic,
   _options
 ) => messages
-const broker: Broker<NatsJetStreamBrokerPublishOptions, PubAck, SubscribeOptions, JsMsg> =
-  newNatsJetStreamBroker(client, factory)
+const broker: NatsJetStreamBroker<SubscribeOptions> = newNatsJetStreamBroker(client, factory)
+const brokerSocket: Broker<NatsJetStreamBrokerPublishOptions, PubAck, SubscribeOptions, JsMsg> =
+  broker
 const published: Promise<PubAck> = broker.publish(
   background(),
   "events",
@@ -38,7 +40,7 @@ const subscribed: Promise<Subscriber> = broker.subscribe(
   { durable: "worker" }
 )
 
-void [published, subscribed]
+void [brokerSocket, published, subscribed]
 
 // @ts-expect-error BrokerMessage is the only public header source.
 const invalidOptions: NatsJetStreamBrokerPublishOptions = { headers: undefined }

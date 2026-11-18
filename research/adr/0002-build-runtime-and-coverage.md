@@ -6,6 +6,13 @@
 
 状态：已接受
 
+> 修订（2026-11-17）：第 3 条继续由 `tsdown` 从包的 `exports` 派生入口。设计第 11.1 节第 47 条把“每个包都有
+> 根入口”记在该条与当时的构建配置上。当前 `packageEntries` 把根导出 `.` 当作可选项。只填充插座子路径的
+> 插头可以只列出这些子路径（[D26](../designs/socket-plug-architecture/decisions.md)）。可移植入口和每个
+> workspace 的行与函数覆盖率要求见
+> [插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.2 节。见
+> [ADR 0009](0009-single-core-package.md)。
+
 ## 背景
 
 go-like 使用 Bun 管理 monorepo，但发布包需要在支持其公共 API 的 Node.js 与 Bun 后端中使用。开发时的

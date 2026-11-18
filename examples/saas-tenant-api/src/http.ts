@@ -1,8 +1,8 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import type { Config } from "@go-like/config"
-import type { Context } from "@go-like/context"
-import { newTokenBucketLimiter, type RateLimiter } from "@go-like/resilience"
-import { contextHandler, type Handler } from "@go-like/web"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import type { Config } from "@go-like/core/config"
+import type { Context } from "@go-like/core/context"
+import { newTokenBucketLimiter, type RateLimiter } from "@go-like/core/resilience"
+import { contextHandler, type Handler } from "@go-like/core/web"
 import { Hono, type Context as HonoContext } from "hono"
 import type { Logger } from "pino"
 
@@ -135,7 +135,7 @@ export function newTenantHandler(options: TenantHandlerOptions): Handler {
         limiter = newTokenBucketLimiter(policy.rateLimit)
         limiters.set(limiterKey, limiter)
       }
-      const decision = limiter.allow(ctx)
+      const decision = await limiter.allow(ctx)
       if (!decision.allowed) {
         rateLimited = true
         status = 429

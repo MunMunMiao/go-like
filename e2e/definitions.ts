@@ -142,95 +142,101 @@ const Definitions: readonly SuiteDefinition[] = Object.freeze([
     "bun",
     "node"
   ]),
-  suite("web-node-native", "packages/web", ["bun", "run", "test:e2e"], 60_000, ["bun", "node"]),
-  suite("web-bridge-dist", "packages/web", ["bun", "run", "test:e2e:bridge-dist"], 60_000, [
+  suite("web-node-native", "packages/core", ["bun", "run", "test:e2e:web-native"], 60_000, [
     "bun",
     "node"
   ]),
-  suite("transport-http-node", "packages/transport/http", ["bun", "run", "test:e2e"], 60_000, [
+  suite("web-bridge-dist", "packages/core", ["bun", "test/e2e/web-bridge-dist-e2e.ts"], 60_000, [
     "bun",
     "node"
   ]),
+  suite(
+    "transport-http-node",
+    "packages/core",
+    ["bun", "test/e2e/transport-http-run-node-e2e.ts"],
+    60_000,
+    ["bun", "node"]
+  ),
   suite("cron-native", "packages/croner", ["bun", "run", "test:e2e"], 60_000, ["bun", "node"]),
-  provider("bullmq-docker", "packages/bullmq", ["bun", "run", "test:e2e"], 180_000),
+  provider("bullmq-docker", "packages/bullmq", ["bun", "run", "test:e2e:job"], 180_000),
   provider("nats-core-docker", "packages/nats", ["bun", "run", "test:e2e:core"], 180_000),
   provider("nats-jetstream-docker", "packages/nats", ["bun", "run", "test:e2e:jetstream"], 180_000),
-  provider("config-consul-docker", "packages/config/consul", ["bun", "run", "test:e2e"], 180_000),
-  provider("config-etcd-docker", "packages/config/etcd", ["bun", "run", "test:e2e"], 180_000),
-  provider("store-consul-docker", "packages/store/consul", ["bun", "run", "test:e2e"], 300_000),
-  provider("store-etcd-docker", "packages/store/etcd", ["bun", "run", "test:e2e"], 240_000),
+  provider("config-consul-docker", "packages/consul", ["bun", "run", "test:e2e:config"], 180_000),
+  provider("config-etcd-docker", "packages/etcd", ["bun", "run", "test:e2e:config"], 180_000),
+  provider("store-consul-docker", "packages/consul", ["bun", "run", "test:e2e:store"], 300_000),
+  provider("store-etcd-docker", "packages/etcd", ["bun", "run", "test:e2e:store"], 240_000),
   provider(
     "registry-consul-docker",
-    "packages/registry/consul",
-    ["bun", "run", "test:e2e"],
+    "packages/consul",
+    ["bun", "run", "test:e2e:registry"],
     300_000
   ),
-  provider("registry-etcd-docker", "packages/registry/etcd", ["bun", "run", "test:e2e"], 300_000),
+  provider("registry-etcd-docker", "packages/etcd", ["bun", "run", "test:e2e:registry"], 300_000),
   provider(
     "registry-kubernetes-docker",
-    "packages/registry/kubernetes",
-    ["bun", "run", "test:e2e"],
+    "packages/kubernetes",
+    ["bun", "run", "test:e2e:registry"],
     420_000
   ),
   provider(
     "registry-zookeeper-docker",
-    "packages/registry/zookeeper",
-    ["bun", "run", "test:e2e"],
+    "packages/zookeeper",
+    ["bun", "run", "test:e2e:registry"],
     420_000
   ),
   provider(
     "registry-transport-consul-docker",
-    ".",
-    ["bun", "e2e/scripts/registry-transport-consul-docker.ts"],
+    "packages/consul",
+    ["bun", "run", "test:e2e:registry-transport"],
     180_000
   ),
-  provider("registry-mdns-docker", "packages/registry/mdns", ["bun", "run", "test:e2e"], 240_000),
-  provider("otel-docker", "packages/otel", ["bun", "run", "test:e2e"], 300_000),
+  provider("registry-mdns-docker", "packages/mdns", ["bun", "run", "test:e2e:registry"], 240_000),
+  provider("otel-docker", "packages/otel", ["bun", "run", "test:e2e:otel"], 300_000),
   provider(
     "broker-rabbitmq-docker",
-    "packages/broker/rabbitmq",
-    ["bun", "run", "test:e2e"],
+    "packages/rabbitmq",
+    ["bun", "run", "test:e2e:broker"],
     420_000
   ),
-  provider("cache-redis-docker", "packages/cache/redis", ["bun", "run", "test:e2e"], 420_000),
+  provider("cache-redis-docker", "packages/redis", ["bun", "run", "test:e2e:cache"], 420_000),
   provider(
     "config-kubernetes-docker",
-    "packages/config/kubernetes",
-    ["bun", "run", "test:e2e"],
+    "packages/kubernetes",
+    ["bun", "run", "test:e2e:config"],
     420_000
   ),
-  provider("config-vault-docker", "packages/config/vault", ["bun", "run", "test:e2e"], 300_000),
-  provider("store-vault-docker", "packages/store/vault", ["bun", "run", "test:e2e"], 300_000),
+  provider("config-vault-docker", "packages/vault", ["bun", "run", "test:e2e:config"], 300_000),
+  provider("store-vault-docker", "packages/vault", ["bun", "run", "test:e2e:store"], 300_000),
   provider(
     "transport-http-node-security",
-    "packages/transport/http",
-    ["bun", "run", "test:e2e:node-security"],
+    "packages/core",
+    ["bun", "run", "test:e2e:transport"],
     300_000
   ),
-  runtime("runtime-bullmq", "packages/bullmq", ["bun", "node"]),
-  runtime("runtime-config", "packages/config", ["bun", "node"]),
-  runtime("runtime-config-consul", "packages/config/consul", ["bun", "node"]),
-  runtime("runtime-context", "packages/context", ["bun", "node"]),
+  suite("release-traceparent", ".", ["bun", "e2e/release/traceparent.ts"], 300_000, [
+    "bun",
+    "node"
+  ]),
+  provider("release-etcd-auth-docker", ".", ["bun", "e2e/release/etcd-auth-docker.ts"], 300_000),
+  suite("release-dist-brands", ".", ["bun", "e2e/release/dist-brands.ts"], 120_000, ["bun"]),
+  suite("release-binding-types", ".", ["bun", "e2e/release/binding-types.ts"], 180_000, ["bun"]),
+  suite("release-disabled-cost", ".", ["bun", "e2e/release/disabled-cost.ts"], 300_000, [
+    "bun",
+    "node"
+  ]),
+  suite("release-dist-graph", ".", ["bun", "e2e/release/dist-graph.ts"], 120_000, ["bun"]),
   runtime("runtime-core", "packages/core", ["bun", "node"]),
+  runtime("runtime-bullmq", "packages/bullmq", ["bun", "node"]),
+  runtime("runtime-connectrpc", "packages/connectrpc", ["bun", "node"]),
+  runtime("runtime-consul", "packages/consul", ["bun", "node"]),
   runtime("runtime-croner", "packages/croner", ["bun", "node"]),
-  runtime("runtime-grpc-buf", "packages/transport/grpc-buf", ["bun", "node"]),
-  runtime("runtime-health", "packages/health", ["bun", "node"]),
-  runtime("runtime-metadata", "packages/metadata", ["bun", "node"]),
+  runtime("runtime-etcd", "packages/etcd", ["bun", "node"]),
+  runtime("runtime-mdns", "packages/mdns", ["bun", "node"]),
   runtime("runtime-otel", "packages/otel", ["bun", "node"]),
   runtime("runtime-pino", "packages/pino", ["bun", "node"]),
   runtime("runtime-prometheus", "packages/prometheus", ["bun", "node"]),
-  runtime("runtime-registry-consul", "packages/registry/consul", ["bun", "node"]),
-  runtime("runtime-registry-etcd", "packages/registry/etcd", ["bun", "node"]),
-  runtime("runtime-registry-mdns", "packages/registry/mdns", ["bun", "node"]),
-  runtime("runtime-registry-zookeeper", "packages/registry/zookeeper", ["bun", "node"]),
-  runtime("runtime-resilience", "packages/resilience", ["bun", "node"]),
-  runtime("runtime-store-etcd", "packages/store/etcd", ["bun", "node"]),
-  runtime("runtime-struct", "packages/struct", ["bun", "node"]),
-  runtime("runtime-transport", "packages/transport", ["bun", "node"]),
-  runtime("runtime-transport-http", "packages/transport/http", ["bun", "node"]),
-  runtime("runtime-transport-memory", "packages/transport/memory", ["bun", "node"]),
-  runtime("runtime-web", "packages/web", ["bun", "node"]),
   runtime("runtime-winston", "packages/winston", ["bun", "node"]),
+  runtime("runtime-zookeeper", "packages/zookeeper", ["bun", "node"]),
   definition({
     id: "examples",
     tags: ["registered", "example"],

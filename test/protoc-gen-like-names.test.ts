@@ -2,14 +2,14 @@ import { expect, test } from "bun:test"
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf"
 import { CodeGeneratorRequestSchema, CodeGeneratorResponseSchema } from "@bufbuild/protobuf/wkt"
 import { createRouterTransport, type Transport } from "@connectrpc/connect"
-import type { ServiceRegistrar } from "@go-like/transport-grpc-buf"
+import type { ServiceRegistrar } from "@go-like/connectrpc"
 import { spawnSync } from "node:child_process"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
 import { protocGenLike } from "../packages/protoc-gen-like/src/index"
-import { background, type Context } from "../packages/context/src/index"
+import { background, type Context } from "../packages/core/src/context/index"
 
 test("generated service names cannot shadow imports, public factories or local parameters", async () => {
   const root = resolve(import.meta.dir, "..")

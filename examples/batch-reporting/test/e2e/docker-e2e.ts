@@ -2,14 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { newBullMqWorkerServer } from "@go-like/bullmq"
-import { background, type Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
-import { newCronerServer } from "@go-like/croner"
-import { newFileStore } from "@go-like/store-file"
-import { newNodeFileStoreHost } from "@go-like/store-file/node"
-import { Queue, Worker, type Job, type Processor, type WorkerOptions } from "bullmq"
-import { Cron } from "croner"
+import { newBullMqJobQueue } from "@go-like/bullmq/job"
+import { background } from "@go-like/core/context"
+import { newScheduleServer } from "@go-like/core/job"
+import type { Server } from "@go-like/core/lifecycle"
+import { newCronerSchedule } from "@go-like/croner/job"
+import { newFileStore } from "@go-like/file/store"
+import { newNodeFileStoreHost } from "@go-like/file/store/node"
+import { Queue, type Job } from "bullmq"
 
 import { errorSummary, sanitizeArgv } from "../../../../e2e/harness/diagnostics"
 import {
@@ -22,7 +22,7 @@ import {
 import { readCheckpoint } from "../../src/checkpoint"
 import { processReport, type ReportOutcome } from "../../src/processor"
 import { reportWindow, type ReportJob } from "../../src/report-window"
-import { enqueueNextClosedWindow } from "../../src/scheduler"
+import { enqueueNextClosedWindow, submitReportJob } from "../../src/scheduler"
 
 const RedisImage =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
@@ -119,7 +119,7 @@ async function waitUntil(
 async function waitForJobState(
   queue: Queue<ReportJob, ReportOutcome, string>,
   jobId: string,
-  expected: "active" | "completed"
+  expected: "active" | "completed" | "failed"
 ): Promise<Job<ReportJob, ReportOutcome, string>> {
   let observed: Job<ReportJob, ReportOutcome, string> | null = null
   await waitUntil(
@@ -206,9 +206,12 @@ async function waitForServer(
 ): Promise<void> {
   await Promise.race([
     waitUntil(label, ready),
-    managed.running.then(() => {
-      throw new Error(`${label} stopped before becoming ready`)
-    })
+    managed.running.then(
+      () => new Promise<void>(() => {}),
+      () => {
+        throw new Error(`${label} failed before becoming ready`)
+      }
+    )
   ])
 }
 
@@ -234,7 +237,6 @@ async function run(): Promise<void> {
   let storeServer: RunningServer | null = null
   let cronServer: RunningServer | null = null
   let workerServer: RunningServer | null = null
-  const cron: { value: Cron<Context> | null } = { value: null }
   let redisVersion = ""
   let redisImageId = ""
   let deterministicJobId = ""
@@ -290,72 +292,73 @@ async function run(): Promise<void> {
       await store!.read(background(), "__go-like_e2e_readiness__")
       return true
     })
+    const jobs = newBullMqJobQueue(queue, {
+      worker: { lockDuration: 500, stalledInterval: 250, maxStalledCount: 2 }
+    })
+    await jobs.start(background())
     let nowMs = Date.UTC(2026, 6, 22, 1)
     const enqueue = async (job: ReportJob, jobId: string): Promise<void> => {
-      await queue!.add("daily-report", job, {
+      const existing = await queue!.getJob(jobId)
+      const nativeState =
+        existing === undefined
+          ? "absent"
+          : (await existing.getState()) === "failed"
+            ? "failed"
+            : "open"
+      await submitReportJob(
+        async (body, id) => {
+          await jobs.enqueue(background(), "daily-report", body, {
+            id,
+            attempts: 3,
+            backoff: { type: "fixed", delayMs: 100 }
+          })
+        },
+        job,
         jobId,
-        attempts: 3,
-        backoff: { type: "fixed", delay: 100 },
-        removeOnComplete: false,
-        removeOnFail: false
-      })
-    }
-    const scheduler = newCronerServer<Context>((ctx) => {
-      cron.value = new Cron<Context>(
-        "0 0 0 1 1 * 2099",
-        { paused: true, context: ctx, catch: true },
-        async (_job, callbackCtx) => {
-          await enqueueNextClosedWindow(callbackCtx, store!, enqueue, FirstStart, nowMs)
-        }
+        nativeState
       )
-      return cron.value
-    })
+    }
+    const scheduler = newScheduleServer(
+      newCronerSchedule("0 0 0 1 1 * 2099"),
+      "daily-report",
+      async (ctx) => {
+        await enqueueNextClosedWindow(ctx, store!, enqueue, FirstStart, nowMs)
+      }
+    )
     cronServer = startServer(scheduler)
-    await waitForServer(cronServer, "Croner readiness", () => cron.value !== null)
-    const scheduledCron = cron.value
-    assert(scheduledCron !== null, "Croner factory did not publish its native job")
-    await scheduledCron.trigger()
-    await scheduledCron.trigger()
+    await waitForServer(cronServer, "schedule readiness", () => true)
+    await scheduler.trigger(background())
+    await scheduler.trigger(background())
     deterministicJobId = `report-${reportWindow(FirstStart).id}`
     duplicateTickWaitingJobs = (await queue.getJobs(["waiting"])).filter(
       (job) => job.id === deterministicJobId
     ).length
-    assert(duplicateTickWaitingJobs === 1, "duplicate Cron ticks created parallel jobs")
+    assert(duplicateTickWaitingJobs === 1, "duplicate schedule runs created parallel jobs")
 
-    function createWorker(
-      processor: Processor<ReportJob, ReportOutcome, string>,
-      options: Omit<WorkerOptions, "connection" | "prefix" | "autorun"> = {}
-    ): Worker<ReportJob, ReportOutcome, string> {
-      const worker = new Worker<ReportJob, ReportOutcome, string>(queueName, processor, {
-        ...options,
-        connection,
-        prefix,
-        autorun: false
-      })
-      worker.on("error", () => {})
-      return worker
-    }
-
-    const retryWorker = createWorker(
-      async (job, _token, signal) => {
-        retryAttempts.push(job.attemptsMade)
-        retryTimes.push(Date.now())
-        return await processReport(
-          background(),
-          store!,
-          job.data,
-          job.attemptsMade,
-          async (_report, attempt, nativeSignal) => {
-            assert(nativeSignal === signal, "processor did not retain BullMQ's native signal")
-            if (attempt < 2) throw new Error(`transient report failure ${attempt}`)
-          },
-          signal
-        )
-      },
-      { concurrency: 1, name: "batch-retry", stalledInterval: 250 }
+    workerServer = startServer(
+      jobs.worker(
+        {
+          "daily-report": async (ctx, job) => {
+            const attemptsMade = job.attempt - 1
+            retryAttempts.push(attemptsMade)
+            retryTimes.push(Date.now())
+            return await processReport(
+              ctx,
+              store!,
+              job.payload,
+              attemptsMade,
+              async (_report, attempt) => {
+                if (attempt < 2) throw new Error(`transient report failure ${attempt}`)
+              }
+            )
+          }
+        },
+        { concurrency: 1 }
+      )
     )
-    workerServer = startServer(newBullMqWorkerServer(retryWorker))
-    await waitForServer(workerServer, "retry Worker readiness", () => retryWorker.isRunning())
+    await waitForServer(workerServer, "retry Worker readiness", async () => {
+      return (await queue!.getWorkersCount()) >= 1
+    })
     const completedRetry = await waitForJobState(queue, deterministicJobId, "completed")
     assert(completedRetry.attemptsMade === 3, "BullMQ did not preserve all retry attempts")
     assert(retryAttempts.join(",") === "0,1,2", `unexpected attempts: ${retryAttempts}`)
@@ -367,44 +370,35 @@ async function run(): Promise<void> {
     workerServer = null
 
     nowMs = Date.UTC(2026, 6, 23, 1)
-    await scheduledCron.trigger()
+    await scheduler.trigger(background())
     const stalledJobId = `report-${reportWindow(SecondStart).id}`
     await crashRawWorker(ownedDocker, port, queueName, prefix, stalledJobId)
     await waitForJobState(queue, stalledJobId, "active")
     await Bun.sleep(750)
 
     const recovered: string[] = []
-    const recoveryErrors: string[] = []
-    const recoveryWorker = createWorker(
-      async (job, _token, signal) => {
-        return await processReport(
-          background(),
-          store!,
-          job.data,
-          job.attemptsMade,
-          async (report, _attempt, nativeSignal) => {
-            assert(nativeSignal === signal, "recovery lost BullMQ's native signal")
-            recovered.push(report.window.id)
-          },
-          signal
-        )
-      },
-      {
-        concurrency: 1,
-        name: "batch-stalled-recovery",
-        lockDuration: 500,
-        stalledInterval: 250,
-        maxStalledCount: 2
-      }
+    workerServer = startServer(
+      jobs.worker(
+        {
+          "daily-report": async (ctx, job) => {
+            return await processReport(
+              ctx,
+              store!,
+              job.payload,
+              job.attempt - 1,
+              async (report) => {
+                recovered.push(report.window.id)
+              }
+            )
+          }
+        },
+        { concurrency: 1 }
+      )
     )
-    recoveryWorker.on("error", (error) => recoveryErrors.push(error.message))
-    workerServer = startServer(newBullMqWorkerServer(recoveryWorker))
-    await waitForServer(workerServer, "recovery Worker readiness", () => recoveryWorker.isRunning())
-    const recoveredJob = await waitForJobState(queue, stalledJobId, "completed").catch(
-      (error: unknown) => {
-        throw new Error(`stalled recovery errors: ${recoveryErrors.join(" | ")}`, { cause: error })
-      }
-    )
+    await waitForServer(workerServer, "recovery Worker readiness", async () => {
+      return (await queue!.getWorkersCount()) >= 1
+    })
+    const recoveredJob = await waitForJobState(queue, stalledJobId, "completed")
     stalledAttemptsStarted = recoveredJob.attemptsStarted
     stalledCounter = recoveredJob.stalledCounter
     assert(recovered.includes(reportWindow(SecondStart).id), "recovery Worker did not publish")
@@ -412,6 +406,38 @@ async function run(): Promise<void> {
     assert(stalledCounter >= 1, "stalled counter did not advance")
     finalCheckpoint = (await readCheckpoint(background(), store)) ?? -1
     assert(finalCheckpoint === SecondStart, "stalled recovery did not commit checkpoint")
+
+    await stopServer(workerServer)
+    workerServer = null
+    let exhaustedAttempts = 0
+    workerServer = startServer(
+      jobs.worker({
+        "daily-report"() {
+          exhaustedAttempts += 1
+          throw new Error("report output unavailable")
+        }
+      })
+    )
+    await waitForServer(workerServer, "finite retry Worker readiness", async () => {
+      return (await queue!.getWorkersCount()) >= 1
+    })
+    nowMs = Date.UTC(2026, 6, 24, 1)
+    await scheduler.trigger(background())
+    const failedId = `report-${reportWindow(Date.UTC(2026, 6, 23)).id}`
+    const exhausted = await waitForJobState(queue, failedId, "failed")
+    assert(exhausted.attemptsMade === 3, "report did not exhaust its finite attempt budget")
+    await scheduler.trigger(background())
+    await scheduler.trigger(background())
+    const retained = await queue.getJob(failedId)
+    assert(retained !== undefined, "reconciliation deleted the failed report")
+    assert((await retained.getState()) === "failed", "reconciliation restarted the failed report")
+    assert(retained.timestamp === exhausted.timestamp, "reconciliation replaced failure history")
+    assert(retained.attemptsMade === 3, "reconciliation reset the attempt budget")
+    assert(exhaustedAttempts === 3, "reconciliation ran another attempt")
+    assert(
+      (await readCheckpoint(background(), store)) === SecondStart,
+      "a failed report advanced the checkpoint"
+    )
 
     await stopServer(cronServer)
     cronServer = null

@@ -1,6 +1,6 @@
-import type { Context } from "@go-like/context"
-import { decodeJson } from "@go-like/struct/codec"
-import { contextHandler, type Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import { decodeJson } from "@go-like/core/struct"
+import { contextHandler, type Handler } from "@go-like/core/web"
 import { transferQuoteEndpoint, type TransferQuote, type TransferQuoteCommand } from "./contract"
 
 type QuoteTransferOperation = (

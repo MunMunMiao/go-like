@@ -1,5 +1,5 @@
-import type { Context } from "@go-like/context"
-import { contextHandler, type Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import { contextHandler, type Handler } from "@go-like/core/web"
 import type { HoldRoom, HoldRoomCommand, ReleaseRoomHold } from "./service"
 
 function commandFrom(value: unknown): HoldRoomCommand {

@@ -1,4 +1,4 @@
-import { fromServerContext } from "@go-like/metadata"
+import { fromServerContext } from "@go-like/core/metadata"
 
 import type { OrderServiceHandler } from "./.artifacts/gen/order/v1/order_like.js"
 

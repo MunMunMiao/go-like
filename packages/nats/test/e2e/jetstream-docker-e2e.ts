@@ -1,7 +1,9 @@
-import { background, canceled, withCancelCause, type Context } from "@go-like/context"
-import { eventBroker, type Codec } from "@go-like/event"
+import { background } from "@go-like/core/context"
+import { eventBroker, type Codec } from "@go-like/core/broker"
+import { brokerConformance, brokerTelemetryConformance } from "@go-like/core/testing"
 import {
   AckPolicy,
+  DeliverPolicy,
   RetentionPolicy,
   StorageType,
   jetstream,
@@ -12,8 +14,8 @@ import {
   type JsMsg
 } from "@nats-io/jetstream"
 import { connect, nanos, type NatsConnection, type Status } from "@nats-io/transport-node"
-import { natsJetStreamCloseTimeout, newNatsJetStreamServer } from "../../src/jetstream"
-import { newNatsJetStreamBroker } from "../../src/jetstream-broker"
+import { newNatsJetStreamBroker } from "../../src/jetstream"
+import { brokerCaseSubject, runIsolatedBrokerCases } from "../conformance-subject"
 
 const NatsImage =
   "docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
@@ -23,11 +25,6 @@ if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwne
   throw new Error("invalid GO_LIKE_E2E_OWNER")
 const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
-interface Deferred<T> {
-  readonly promise: Promise<T>
-  resolve(value: T): void
-}
-
 interface CommandResult {
   readonly stdout: string
   readonly stderr: string
@@ -35,10 +32,7 @@ interface CommandResult {
 }
 
 interface ManagedMessages {
-  readonly messages: ConsumerMessages
-  readonly server: ReturnType<typeof newNatsJetStreamServer>
-  readonly running: Promise<void>
-  readonly consuming: Promise<void>
+  readonly unsubscribe: () => Promise<void>
 }
 
 interface TypedEvent {
@@ -63,29 +57,6 @@ const typedEventCodec: Codec<TypedEvent> = Object.freeze({
     return Object.freeze({ id, name })
   }
 })
-
-/** Creates a manually controlled Promise for one E2E synchronization point. */
-function deferred<T>(): Deferred<T> {
-  let resolvePromise: (value: T) => void = () => {}
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve
-  })
-  return { promise, resolve: resolvePromise }
-}
-
-/** Cancels at the final startup acceptance check without owning a native resource. */
-function cancelAtAcceptance(): Context {
-  let reads = 0
-  return {
-    deadline: () => [new Date(0), false],
-    done: () => null,
-    err: () => {
-      reads += 1
-      return reads >= 3 ? canceled : null
-    },
-    value: () => undefined
-  }
-}
 
 /** Throws when one real-service invariant is false. */
 function assert(condition: unknown, message: string): asserts condition {
@@ -133,25 +104,6 @@ async function waitUntil(
   throw new Error(`timed out waiting for ${label}`)
 }
 
-/** Reports whether one Promise settled inside a deliberately short window. */
-async function settlesWithin(operation: Promise<unknown>, timeoutMs: number): Promise<boolean> {
-  return await new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      resolve(false)
-    }, timeoutMs)
-    operation.then(
-      () => {
-        clearTimeout(timeout)
-        resolve(true)
-      },
-      () => {
-        clearTimeout(timeout)
-        resolve(true)
-      }
-    )
-  })
-}
-
 /** Opens the official connection after the real container becomes ready. */
 async function connectWhenReady(server: string): Promise<NatsConnection> {
   let lastError: unknown = null
@@ -195,26 +147,27 @@ async function addDurableConsumer(
   })
 }
 
-/** Starts lifecycle ownership while the application consumes and acknowledges messages. */
+/** Subscribes through the broker over one already-opened official consumer iterator. */
 async function startManaged(
+  client: JetStreamClient,
+  subject: string,
   messages: ConsumerMessages,
   onMessage: (message: JsMsg) => void | Promise<void>
 ): Promise<ManagedMessages> {
-  const server = newNatsJetStreamServer(messages)
-  const running = server.start(background())
-  void running.catch(() => {})
-  const consuming = (async () => {
-    for await (const message of messages) await onMessage(message)
-  })()
-  void consuming.catch(() => {})
-  return { messages, server, running, consuming }
+  const broker = newNatsJetStreamBroker(client, () => messages)
+  const subscriber = await broker.subscribe(background(), subject, async (_ctx, event) => {
+    await onMessage(event.native)
+  })
+  return {
+    async unsubscribe() {
+      await subscriber.unsubscribe(background())
+    }
+  }
 }
 
-/** Stops lifecycle ownership and waits for the application iterator to end. */
+/** Stops the broker subscription. */
 async function stopManaged(managed: ManagedMessages): Promise<void> {
-  await managed.server.stop(background())
-  await managed.running
-  await managed.consuming
+  await managed.unsubscribe()
 }
 
 /** Opens one continuous official pull iterator for a named durable consumer. */
@@ -249,7 +202,6 @@ async function main(): Promise<void> {
   const deadPrefix = `go-like.${prefix}.dlq`
   const lateRejections: unknown[] = []
   const statuses: Status["type"][] = []
-  const consumingTasks: Promise<void>[] = []
   let connection: NatsConnection | null = null
   let statusTask: Promise<void> | null = null
   let serverVersion = ""
@@ -307,75 +259,6 @@ async function main(): Promise<void> {
       storage: StorageType.File
     })
 
-    const startupSubject = `${sourcePrefix}.startup`
-    const startupConsumer = `startup_${prefix}`
-    await addDurableConsumer(manager, sourceStream, startupConsumer, startupSubject, 4)
-    const startupNativeConsumer = await client.consumers.get(sourceStream, startupConsumer)
-    const acquisition = deferred<ConsumerMessages>()
-    const [startupContext, cancelStartup] = withCancelCause(background())
-    const startupCause = new Error("startup canceled before iterator ownership transfer")
-    const startup = newNatsJetStreamServer(() => acquisition.promise).start(startupContext)
-    await Bun.sleep(0)
-    cancelStartup(startupCause)
-    const startupFailure = await startup.catch((error: unknown) => error)
-    assert(startupFailure === startupCause, "startup cancellation replaced its exact cause")
-    const lateMessages = await startupNativeConsumer.consume({ max_messages: 1 })
-    acquisition.resolve(lateMessages)
-    await Bun.sleep(0)
-    const closedPendingBeforeConsumption = !(await settlesWithin(lateMessages.closed(), 50))
-    const consumeLateTerminal = (async () => {
-      for await (const _message of lateMessages) {
-        // Rollback has no data-plane work; iteration only admits the native stop callback.
-      }
-    })()
-    await consumeLateTerminal
-    const closedAfterIteratorConsumption = await settlesWithin(lateMessages.closed(), 500)
-    await manager.consumers.info(sourceStream, startupConsumer)
-    assert(closedPendingBeforeConsumption, "unconsumed iterator closed before rollback iteration")
-    assert(closedAfterIteratorConsumption, "rollback iterator did not reach native terminal")
-    assert(!connection.isClosed() && !connection.isDraining(), "startup rollback closed connection")
-
-    const directStartupSubject = `${sourcePrefix}.startup.direct`
-    const directStartupConsumer = `startup_direct_${prefix}`
-    await addDurableConsumer(manager, sourceStream, directStartupConsumer, directStartupSubject, 4)
-    const directNativeConsumer = await client.consumers.get(sourceStream, directStartupConsumer)
-    const directMessages = await directNativeConsumer.consume({ max_messages: 1 })
-    const directFailure = await newNatsJetStreamServer(directMessages)
-      .start(cancelAtAcceptance())
-      .catch((error: unknown) => error)
-    assert(
-      directFailure === canceled,
-      "direct JetStream startup cancellation replaced its sentinel"
-    )
-    const closedPendingAfterRejectedStart = !(await settlesWithin(directMessages.closed(), 50))
-    let directDeliveries = 0
-    let directAckConfirmed = false
-    const directConsumption = (async () => {
-      for await (const message of directMessages) {
-        directDeliveries += 1
-        directAckConfirmed = await message.ackAck()
-      }
-    })()
-    await client.publish(directStartupSubject, "application-still-owns")
-    await waitUntil(
-      "direct ConsumerMessages after rejected startup",
-      async () =>
-        directDeliveries === 1 &&
-        directAckConfirmed &&
-        (await manager.consumers.info(sourceStream, directStartupConsumer)).num_ack_pending === 0
-    )
-    directMessages.stop()
-    await directConsumption
-    const closedAfterApplicationCleanup = await settlesWithin(directMessages.closed(), 500)
-    await manager.consumers.info(sourceStream, directStartupConsumer)
-    assert(closedPendingAfterRejectedStart, "rejected startup closed application messages")
-    assert(
-      directDeliveries === 1 && directAckConfirmed,
-      "application messages lost delivery or ack"
-    )
-    assert(closedAfterApplicationCleanup, "application messages did not close")
-    assert(!connection.isClosed() && !connection.isDraining(), "direct startup closed connection")
-
     const rawSubject = `${sourcePrefix}.raw`
     const rawConsumer = `raw_${prefix}`
     await addDurableConsumer(manager, sourceStream, rawConsumer, rawSubject, 4)
@@ -383,6 +266,8 @@ async function main(): Promise<void> {
     const rawSubjects: string[] = []
     const rawAcks: boolean[] = []
     const raw = await startManaged(
+      client,
+      rawSubject,
       await consumeDurable(client, sourceStream, rawConsumer),
       async (message) => {
         rawBodies.push(message.string())
@@ -390,7 +275,6 @@ async function main(): Promise<void> {
         rawAcks.push(await message.ackAck())
       }
     )
-    consumingTasks.push(raw.consuming)
     await client.publish(rawSubject, "one")
     await waitUntil("application raw JetStream consumption", () => rawBodies.length === 1)
     await waitUntil(
@@ -489,12 +373,13 @@ async function main(): Promise<void> {
     await addDurableConsumer(manager, sourceStream, maxConsumer, maxSubject, 2, 100)
     const deliveryCounts: number[] = []
     const maximum = await startManaged(
+      client,
+      maxSubject,
       await consumeDurable(client, sourceStream, maxConsumer),
       (message) => {
         deliveryCounts.push(message.info.deliveryCount)
       }
     )
-    consumingTasks.push(maximum.consuming)
     await client.publish(maxSubject, "retry")
     await waitUntil("MaxDeliver redelivery", () => deliveryCounts.length === 2)
     await Bun.sleep(350)
@@ -508,6 +393,8 @@ async function main(): Promise<void> {
     let publishFailureAtThreshold = false
     let deadLetterPublished = false
     const dead = await startManaged(
+      client,
+      dlqSourceSubject,
       await consumeDurable(client, sourceStream, dlqConsumer),
       async (message) => {
         if (message.info.deliveryCount === 2) {
@@ -527,7 +414,6 @@ async function main(): Promise<void> {
         }
       }
     )
-    consumingTasks.push(dead.consuming)
     await client.publish(dlqSourceSubject, "dead-body")
     await waitUntil(
       "application DLQ recovery",
@@ -552,40 +438,20 @@ async function main(): Promise<void> {
     assert(deadStreamInfo.state.messages === 1, "DLQ published more than one message")
     assert(deadLetterBodyMatch && deadLetterAckConfirmed, "DLQ body or ack changed")
 
-    const forceSubject = `${sourcePrefix}.force`
-    const forceConsumer = `force_${prefix}`
-    await addDurableConsumer(manager, sourceStream, forceConsumer, forceSubject, 2)
-    const forceMessages = await consumeDurable(client, sourceStream, forceConsumer)
-    const forceServer = newNatsJetStreamServer(forceMessages, natsJetStreamCloseTimeout(0))
-    const forceRunning = forceServer.start(background())
-    void forceRunning.catch(() => {})
-    const forceConsuming = (async () => {
-      for await (const _message of forceMessages) {
-        // The application owns iteration in the force-lifecycle scenario.
-      }
-    })()
-    void forceConsuming.catch(() => {})
-    consumingTasks.push(forceConsuming)
-    const forceFailure = await forceServer.stop(background()).catch((error: unknown) => error)
-    assert(forceFailure instanceof Error, "zero boundary did not reject the owner waiter")
-    await forceRunning.catch(() => {})
-    await forceConsuming
-    const borrowedConnectionOpenAfterForce = !connection.isClosed() && !connection.isDraining()
-    assert(borrowedConnectionOpenAfterForce, "forced server stop closed borrowed connection")
-
     const reconnectSubject = `${sourcePrefix}.reconnect`
     const reconnectConsumer = `reconnect_${prefix}`
     await addDurableConsumer(manager, sourceStream, reconnectConsumer, reconnectSubject, 4)
     const recovered: string[] = []
     const recoveredAcks: boolean[] = []
     const reconnecting = await startManaged(
+      client,
+      reconnectSubject,
       await consumeDurable(client, sourceStream, reconnectConsumer),
       async (message) => {
         recovered.push(message.string())
         recoveredAcks.push(await message.ackAck())
       }
     )
-    consumingTasks.push(reconnecting.consuming)
     await command(["docker", "stop", "--time", "1", container])
     await waitUntil(
       "official disconnect status",
@@ -603,11 +469,79 @@ async function main(): Promise<void> {
     )
     assert(!connection.isClosed() && !connection.isDraining(), "reconnect closed connection")
 
+    let caseNumber = 0
+    const nextJetStreamSubject = () => {
+      caseNumber += 1
+      const topic = `go-like.${prefix}.conformance.${caseNumber}`
+      const stream = `SUITE_${prefix}_${caseNumber}`
+      let consumers = 0
+      return {
+        ...brokerCaseSubject(
+          topic,
+          async () => {
+            await manager.streams.add({
+              name: stream,
+              subjects: [topic],
+              retention: RetentionPolicy.Limits,
+              storage: StorageType.Memory
+            })
+            return newNatsJetStreamBroker(client, async () => {
+              consumers += 1
+              const durable = `s${caseNumber}c${consumers}`
+              await manager.consumers.add(stream, {
+                durable_name: durable,
+                ack_policy: AckPolicy.Explicit,
+                deliver_policy: DeliverPolicy.New,
+                filter_subject: topic,
+                max_deliver: 1
+              })
+              const consumer = await client.consumers.get(stream, durable)
+              return consumer.consume()
+            })
+          },
+          async () => {
+            await manager.streams.delete(stream)
+          }
+        ),
+        settle(event: { native: { ack(): void } }) {
+          event.native.ack()
+        }
+      }
+    }
+    await runIsolatedBrokerCases(brokerConformance, nextJetStreamSubject)
+    await runIsolatedBrokerCases(brokerTelemetryConformance, nextJetStreamSubject)
+    const first = nextJetStreamSubject()
+    const firstBroker = await first.newBroker(background())
+    const seen: string[] = []
+    await firstBroker.subscribe(background(), first.topic, (_ctx, event) => {
+      seen.push(new TextDecoder().decode(event.message.body))
+    })
+    await first.close(background())
+    const second = nextJetStreamSubject()
+    const secondBroker = await second.newBroker(background())
+    const encode = (value: string): Uint8Array => new TextEncoder().encode(value)
+    await secondBroker.publish(background(), second.topic, {
+      headers: {},
+      body: encode("later")
+    })
+    try {
+      await secondBroker.publish(background(), first.topic, {
+        headers: {},
+        body: encode("stale-topic")
+      })
+    } catch {
+      // The first stream is already deleted. A throw is not a leftover delivery.
+    }
+    await connection.flush()
+    const deadline = Date.now() + 500
+    while (Date.now() < deadline && seen.length === 0) await Bun.sleep(20)
+    assert(seen.length === 0, `leftover subscriber received ${seen.join(",")}`)
+    await second.close(background())
+
     await Bun.sleep(50)
     assert(lateRejections.length === 0, `observed ${lateRejections.length} late rejection(s)`)
   } finally {
     await closeConnection(connection)
-    await Promise.allSettled(consumingTasks)
     if (statusTask !== null) await statusTask.catch(() => {})
     await command(["docker", "rm", "--force", container], true)
     process.off("unhandledRejection", recordLateRejection)

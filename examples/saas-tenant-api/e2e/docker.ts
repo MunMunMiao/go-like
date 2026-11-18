@@ -2,12 +2,24 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { newRedisCache } from "@go-like/cache-redis"
-import { newConfig, schema, source, type ConfigObject } from "@go-like/config"
-import { consulSource } from "@go-like/config-consul"
-import { background, withoutCancel } from "@go-like/context"
-import { afterStop, beforeStart, name, newApp, server, stopTimeout, type App } from "@go-like/core"
-import { newPinoServer } from "@go-like/pino"
+import { newRedisCache } from "@go-like/redis/cache"
+import { newConfig, schema, source, type ConfigObject } from "@go-like/core/config"
+import { newConsulClient } from "@go-like/consul"
+import { consulSource } from "@go-like/consul/config"
+import { withoutCancel } from "@go-like/core/context"
+import {
+  afterStart,
+  afterStop,
+  beforeStart,
+  name,
+  newApp,
+  resources,
+  stopTimeout,
+  telemetry,
+  type App
+} from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { newPinoHandler } from "@go-like/pino/log"
 import pino from "pino"
 
 import {
@@ -156,18 +168,19 @@ async function waitForGeneration(
   throw new Error(`Config did not publish ${expected}`)
 }
 
-/** Waits until the real Redis Cache server has completed connection admission. */
-async function waitForCache(cache: ReturnType<typeof newRedisCache>): Promise<void> {
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    try {
-      await cache.get(background(), "e2e-readiness")
-      return
-    } catch {
-      await pause(25)
-    }
+/** Waits until resource admission has finished, without polling the cache. */
+async function waitForAdmission(ready: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Redis Cache was not admitted"))
+    }, 10_000)
+  })
+  try {
+    await Promise.race([ready, expired])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
   }
-  throw new Error("Redis Cache did not become ready")
 }
 
 /** Stops and joins one Core application. */
@@ -263,11 +276,15 @@ async function main(): Promise<void> {
       throw new Error(`unexpected container versions: ${consulVersion}, redis ${redisVersion}`)
     }
     await putConfig(consulAddress, document("generation-1", true))
+    const consul = newConsulClient({
+      fetch(request) {
+        return fetch(request)
+      },
+      address: consulAddress
+    })
     const config = newConfig(
       source(
-        consulSource({
-          fetch,
-          address: consulAddress,
+        consulSource(consul, {
           key: ConfigKey,
           waitMs: 1_000,
           retryInitialMs: 50,
@@ -276,7 +293,7 @@ async function main(): Promise<void> {
       ),
       schema(tenantDocumentSchema)
     )
-    const runtimeState = newTenantRuntimeState(consulAddress, RunId)
+    const runtimeState = newTenantRuntimeState(consul, RunId)
     const cache = newRedisCache({
       url: redisUrl,
       prefix: `go-like:example:saas:${RunId}:`,
@@ -299,6 +316,7 @@ async function main(): Promise<void> {
         return request.headers.get("X-Demo-Tenant") ?? ""
       }
     })
+    const admitted = Promise.withResolvers<void>()
     app = newApp(
       name("saas-tenant-api"),
       stopTimeout(15_000),
@@ -306,7 +324,11 @@ async function main(): Promise<void> {
         await config.load(ctx)
         await runtimeState.publish(ctx)
       }),
-      server(newPinoServer(logger, destination), cache),
+      telemetry(newTelemetry({ logHandlers: [newPinoHandler(logger, destination)] })),
+      resources(cache),
+      afterStart(function cacheAdmitted(): void {
+        admitted.resolve()
+      }),
       afterStop(async function closeRuntime(ctx): Promise<void> {
         const cleanup = withoutCancel(ctx)
         try {
@@ -317,8 +339,13 @@ async function main(): Promise<void> {
       })
     )
     appRun = app.run()
-    void appRun.catch(() => {})
-    await Promise.all([waitForGeneration(config, "generation-1"), waitForCache(cache)])
+    void appRun.catch((error: unknown) => {
+      admitted.reject(error)
+    })
+    await Promise.all([
+      waitForGeneration(config, "generation-1"),
+      waitForAdmission(admitted.promise)
+    ])
     const call = (tenantId: string) =>
       handler(
         new Request("http://example.test/v1/tenant/config", {

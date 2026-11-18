@@ -1,5 +1,5 @@
-import type { Context } from "@go-like/context"
-import type { StoreRecord, StoreRecordInput } from "@go-like/store"
+import type { Context } from "@go-like/core/context"
+import type { StoreRecord, StoreRecordInput } from "@go-like/core/store"
 
 import { reportWindow, type ReportWindow } from "./report-window"
 

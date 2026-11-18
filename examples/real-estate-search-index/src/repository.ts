@@ -1,4 +1,4 @@
-import type { Context } from "@go-like/context"
+import type { Context } from "@go-like/core/context"
 
 import { listingFingerprint, type ListingUpdate, type SearchQuery } from "./service"
 

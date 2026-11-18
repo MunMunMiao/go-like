@@ -1,5 +1,5 @@
-import { struct } from "@go-like/struct"
-import { defineService } from "@go-like/transport"
+import { struct } from "@go-like/core/struct"
+import { defineService } from "@go-like/core/transport"
 
 const pricingRequest = struct.object({
   productId: struct.string(),

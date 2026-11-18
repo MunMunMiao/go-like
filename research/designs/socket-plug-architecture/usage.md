@@ -1,6 +1,6 @@
 # 使用示例
 
-本文的十个示例只使用设计的公开入口。它们与声明树一起通过 TypeScript 5.9.3 与 7.1.0-beta 的类型检查；它们是设计的演示，不能在当前的包上运行。`10-connect.ts` 导入的 `./generated` 是 `protoc-gen-like` 生成的代码，这里不重现。设计正文见[设计文档](README.md)，完整声明见 [Public API 参考](api-reference.md)，决定编号见[决策记录](decisions.md)。
+本文的十个示例只使用设计的公开入口。它们与声明树一起通过 TypeScript 5.9.3 与 7.1.0-beta 的类型检查；2026-11-17 起，它们也通过迁移后真实包（75 个入口）的类型检查。这些示例没有逐个运行，其中几个需要 Consul、NATS、Redis 等外部服务。`10-connect.ts` 导入的 `./generated` 是 `protoc-gen-like` 生成的代码，这里不重现。设计正文见[设计文档](README.md)，完整声明见 [Public API 参考](api-reference.md)，决定编号见[决策记录](decisions.md)。
 
 ## 1. 最小的 Web 服务与健康探针
 

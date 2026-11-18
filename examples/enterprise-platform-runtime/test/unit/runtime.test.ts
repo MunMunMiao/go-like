@@ -1,10 +1,13 @@
-import type { CallOption, Client } from "@go-like/client"
+import type { CallOption, CallOptions, Client } from "@go-like/core/client"
 import { describe, expect, test } from "bun:test"
 
-import { newConfig, objectSource, schema, source as configSource } from "@go-like/config"
-import { background, type Context } from "@go-like/context"
-import { newProbeRegistry } from "@go-like/health"
-import { createHealthHandler } from "@go-like/web/health"
+import { newConfig, objectSource, schema, source as configSource } from "@go-like/core/config"
+import { background, type Context } from "@go-like/core/context"
+import { newProbeRegistry } from "@go-like/core/health"
+import { info, type LogHandler } from "@go-like/core/log"
+import { name, newApp, server, telemetry } from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { createHealthHandler } from "@go-like/core/web"
 
 import { runtimeConfigSchema } from "../../src/config"
 import { echoService } from "../../src/contract"
@@ -35,6 +38,45 @@ describe("runtime configuration", () => {
       expect("issues" in result).toBe(true)
     }
   })
+})
+
+test("the App installs telemetry and shuts it down", async () => {
+  const events: string[] = []
+  const handler: LogHandler = {
+    enabled: () => true,
+    handle(_ctx, record) {
+      events.push(record.message)
+    },
+    lifecycle: {
+      async start() {
+        events.push("telemetry.start")
+      },
+      async stop() {
+        events.push("telemetry.stop")
+      }
+    }
+  }
+  const app = newApp(
+    name("enterprise-platform-runtime"),
+    telemetry(newTelemetry({ logHandlers: [handler] })),
+    server({
+      async start(ctx) {
+        info(ctx, "handler-installed")
+      },
+      async stop() {}
+    })
+  )
+  const running = app.run()
+  void running.catch(() => {})
+  const deadline = Date.now() + 1_000
+  while (!events.includes("handler-installed")) {
+    if (Date.now() > deadline) throw new Error(`telemetry was not installed: ${events.join(",")}`)
+    await Bun.sleep(5)
+  }
+  expect(events.indexOf("handler-installed")).toBeGreaterThan(events.indexOf("telemetry.start"))
+  await app.stop()
+  await running
+  expect(events.indexOf("telemetry.stop")).toBeGreaterThan(events.indexOf("handler-installed"))
 })
 
 test("echo handler reads the latest validated configuration", async () => {
@@ -98,7 +140,7 @@ test("registers the Echo handler on its exact service endpoint", () => {
 
 test("creates a typed Echo client that preserves calls and errors", async () => {
   const ctx = background()
-  const option: CallOption = (options) => options
+  const option = ((options: CallOptions) => options) as unknown as CallOption
   const failure = new Error("Echo unavailable")
   let rejected = false
   let observed: readonly unknown[] = Object.freeze([])

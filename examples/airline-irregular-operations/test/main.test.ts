@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 import { describe, expect, test } from "bun:test"
 import { newDisruptionHandler } from "../src/http"
 import { airlineRegistryFromEnvironment } from "../src/registry"

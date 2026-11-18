@@ -1,78 +1,137 @@
 # 驗證
 
-go-like 的驗證分成多條 evidence lane。命令存在唔代表已經通過；一條 lane 變綠，亦唔代表所有 provider、runtime、example 或 published package 都正常。記錄時應保留 candidate tree、工具版本、完整命令、退出狀態、數量同清理結果。
+命令可以存在而從未通過。一條綠色通道唔代表每隻插頭、每個 runtime、每個例子或每個已打包 tarball 都得。記錄候選樹、工具版本、完整命令、退出狀態、數目同清理。
 
-## Evidence lanes
+## 證據通道
 
-| Lane                | 會檢查                                                                 | 通常需唔需要外部服務 | 通過後仍然唔代表                                      |
-| ------------------- | ---------------------------------------------------------------------- | -------------------- | ----------------------------------------------------- |
-| Format              | 原始碼同文件格式                                                       | 唔需要               | runtime 行為或 API 相容性                             |
-| Lint                | Oxlint 靜態規則                                                        | 唔需要               | 類型正確性或 runtime 行為                             |
-| Typecheck           | root、E2E、package 同 example 的 TypeScript 契約                       | 唔需要               | build output、runtime 語意或 provider 行為            |
-| Unit                | 確定性 root、package 同 example 測試                                   | 唔需要               | 真實網絡、Docker、published tarball 或跨 runtime 行為 |
-| Build               | package ESM 同 declaration output                                      | 唔需要               | consumer resolution 或 runtime 行為                   |
-| Runtime E2E         | 已宣告嘅 Bun 同 Node.js fixture                                        | 通常唔需要           | 所有 provider 或所有 package 都支援每個 runtime       |
-| Provider E2E        | 真實 Consul、etcd、Kubernetes、ZooKeeper、Redis、RabbitMQ、NATS 等服務 | 需要                 | production 可用性或 hosted CI 結果                    |
-| Example E2E         | example process、request、readiness、停止同清理                        | 視乎 example         | 每個 example 喺獨立安裝中都正常                       |
-| Published           | 實際打包嘅 tarball 被 Node、Bun fixture 消費                           | 通常唔需要           | 已經發布到 npm 或有外部使用者採用                     |
-| Soak                | 長時間 HTTP 或 service 行為                                            | 通常唔需要           | 短測試或所有 provider 行為                            |
-| Documentation build | VitePress route 同 Markdown build                                      | 唔需要               | 瀏覽器 layout 或本地化語意 parity                     |
-| Audit               | dependency vulnerability report                                        | 唔需要               | application security design 或 authorization 完整性   |
+| 通道                | 檢查咩                                                                      | 外部服務                 | 通過仍然唔證明                    |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------ | --------------------------------- |
+| Format              | 原始碼同文件格式                                                            | 唔需要                   | Runtime 行為                      |
+| Lint                | Oxlint 規則                                                                 | 唔需要                   | 型別或 runtime 行為               |
+| Typecheck           | 根、套件、例子同 E2E TypeScript                                             | 唔需要                   | Build 輸出或 provider 行為        |
+| Unit                | 確定性測試                                                                  | 唔需要                   | 真實網絡、Docker 或已打包 tarball |
+| Build               | 套件 ESM 同宣告                                                             | 唔需要                   | Consumer resolution               |
+| Runtime E2E         | 已宣告嘅 Bun 同 Node fixture                                                | 通常唔需要               | 每隻插頭                          |
+| Provider E2E        | Consul、etcd、Kubernetes、ZooKeeper、Redis、RabbitMQ、NATS 同其他已宣告服務 | 需要                     | 正式可用性或 hosted CI            |
+| Example E2E         | 例子程序、請求、就緒、停止同清理                                            | 有時需要                 | 每個例子嘅獨立安裝                |
+| Published           | 已打包 tarball 被 Node 同 Bun fixture 消費                                  | 唔需要，插頭 import 除外 | npm 發布                          |
+| Soak                | 長時間 HTTP 或服務行為                                                      | 通常唔需要               | 短測試，或每隻插頭                |
+| Documentation build | VitePress                                                                   | 唔需要                   | 瀏覽器版面或翻譯質素              |
+| Audit               | 依賴漏洞報告                                                                | 唔需要                   | 應用授權                          |
 
-## 常用命令
+而家嘅公開清單係 20 個套件同 75 個入口。見[套件](/zh-Hant-HK/reference/packages)。
 
-喺 repository root 執行：
+## 已宣告命令
+
+由 repo 根：
 
 ```sh
 bun install --frozen-lockfile
 bun run verify
+```
+
+`bun run verify` 按次序行 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、`build` 同 `test:unit:coverage`。Coverage 階段行每個根同 workspace coverage script，並以 `coverage:verify` 結束。`examples/payments-ledger` 係單元範圍例外，佢嘅 coverage script 亦行 PostgreSQL 同 NATS 場景，因此需要 Docker。
+
+`fmt` 修復格式。`lint` 套用安全嘅 Oxlint 修正、格式化結果，而且只有零 warning 先成功：
+
+```sh
+bun run fmt
+bun run lint
+```
+
+個別階段收窄失敗。通過一個階段唔取代 `verify`：
+
+```sh
+bun run test:protobuf
+bun run fmt:check
+bun run lint:check
+bun run typecheck
+bun run build
+bun run test:unit
+bun run test:unit:coverage
 bun run test:parallel
 bun run test:stability
 ```
 
-`bun run verify` 係 repository 嘅標準門禁，會順序執行 `test:protobuf`、`fmt:check`、`lint:check`、`typecheck`、`build` 同 `test:unit:coverage`；coverage 階段會執行一次 root 同 workspace 嘅 coverage script，並強制校驗 coverage。`examples/payments-ledger` 係唯一超出單元測試範圍嘅例外：佢仲會執行真實 PostgreSQL/NATS integration scenario，所以需要 Docker。只有收窄失敗範圍時先單獨執行其中一個階段；單一階段通過唔可以取代完整門禁。`bun run fmt` 會修正格式。`bun run lint` 會套用安全嘅 Oxlint 修正、重新格式化，並喺仲有 warning 時失敗。門禁使用唔會修改檔案嘅 `fmt:check` 同 `lint:check`，而 `lint:check` 同樣要求零 warning。呢啲命令唔會做 TypeScript typecheck，亦唔會執行 runtime 行為。
+`test:unit:coverage` 檢查可執行原始碼清單，以及逐檔案嘅行同函式覆蓋。佢唔聲稱分支覆蓋。`test:stability` 隨機排列每次根同 workspace 運行，將每個測試檔案重複兩次，並印出 seed。佢唔 retry。`test:parallel` 用兩個隔離 Bun worker 行一次單元範圍。Stability 同 parallel 都唔屬於 `verify`。
 
-`test:parallel` 用兩個隔離嘅 Bun worker 執行一次相同單元測試範圍，專門檢查檔案級並行安全。`test:stability` 會隨機排列各段測試，將每個測試檔案重複兩次，輸出可以重現次序嘅 seed，而且唔會 retry。兩者都係獨立檢查，唔屬於 canonical gate，亦唔可以取代 `verify`；`test:stability` 係搵次序依賴同偶發失敗，唔同於驗證 60 分鐘運行行為嘅 `test:e2e:soak`。
-
-`doc:build` 同 `audit` 仍然係獨立 evidence lane：
+文件建置同審查保持獨立：
 
 ```sh
 bun run doc:build
 bun run audit
 ```
 
-E2E 唔屬於 canonical gate，可以按需要喺本地按 scope 執行：
+`test:protobuf` 行 Buf lint 同產生，檢查產生出嚟嘅 fixture 型別，並且執行佢嘅 RPC 整合測試。佢唔係唯讀格式檢查。
+
+## E2E 範圍
+
+根 script 係：
 
 ```sh
+bun run test:e2e:suites
 bun run test:e2e:runtimes
 bun run test:e2e:providers
 bun run test:e2e:examples
 bun run test:e2e:published
 bun run test:e2e
 bun run test:e2e:soak
+bun run test:e2e:grpc-soak
 ```
 
-公開 scope script 會先 build；直接執行 `bun e2e/run.ts ...` 或 workspace E2E command 就未必會先 build，所以 run record 要寫清楚前置條件。Provider E2E 需要指定 Docker service 同清理；soak script 預設要求 60 分鐘，短時間 k6 或 HTTP 測試唔可以當成 60 分鐘穩定性證明。
+範圍 script 會先 build，`test:e2e:grpc-soak` 除外，佢產生 protobuf 然後行 `e2e/grpc-soak.ts`。直接 `bun e2e/run.ts --scope <name>` 唔一定會 build。講清楚你行咗邊條。
 
-Repository 唔會將 runtime 或工具版本當成執行資格。每個被選中嘅驗證 lane 只會檢查所需工具能否運行，並記錄實際環境；工具缺失、逾時、異常終止、非零退出狀態或 consumer 失敗仍會令驗證失敗，版本值或未見過嘅版本輸出格式本身唔會。Dependency 版本、lockfile、Action SHA 同固定測試 fixture 係重現結果嘅輸入，而唔係 runtime 執行資格。完整 evidence lane、歷史 baseline 同文件 run record，請參考[英文 Verification](/reference/verification)。
+Provider E2E 需要佢宣告嘅 Docker 服務同清理。Published 檢查打包 tarball 並安裝入暫存 consumer。Soak 預設 60 分鐘：
 
-## 記錄結果時要講到幾盡
+```sh
+bun run test:e2e:soak
+```
 
-每次驗證至少記錄：
+一次短 HTTP 運行唔係該 soak。
+
+呢頁列出根 manifest 入面嘅 script。佢唔記錄佢哋嘅退出狀態。逐步 suite 佈局喺 E2E runner，唔喺呢度。
+
+## 工具鏈觀察
+
+Repo 唔將 runtime 或工具版本宣佈為執行要求。一條通道檢查每個所需工具可唔可以執行，然後記錄環境。缺少工具、逾時、非零狀態或失敗 consumer 會令該次運行失敗。版本字串本身唔會。
+
+依賴版本、lockfile 同固定 fixture 係可重現輸入。
+
+## 呢條文件軌道嘅基線證據
+
+提供嘅契約審查報告咗 commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675` 上嘅以下結果：
 
 ```text
-candidate tree:  <commit SHA 或明確的 dirty-tree 描述>
-environment:     <OS、container/host、process mode>
-Bun:             <版本或未使用>
-Node.js:         <版本或未使用>
-command:         <完整命令>
-started:         <開始時間>
-finished:        <完成時間>
-exit status:     <整數>
-summary:         <測試數量、package 數量或 route 數量>
-Docker residual: <none，或者列出仍然存在的 container>
-process/socket residual: <none，或者列出觀察結果>
-notes:           <已知限制同跳過嘅 scope>
+bun run typecheck  -> passed
+bun run test:unit  -> passed, 2,736 tests across root and 87 workspaces
+bun run fmt:check  -> passed, 1,514 files
+source export audit -> 66 declared entries imported without an import error
 ```
 
-`doc:build` 通過只可以話「VitePress 成功建立已設定嘅文件 route」；唔可以延伸成瀏覽器 layout、翻譯質素、runtime 行為、provider E2E、npm publication 或 production adoption 都已經通過。完整嘅 claim 邊界請看[英文 Claims](/reference/claims)。
+該審查描述遷移前嘅樹。而家嘅原始碼喺 20 個套件匯出 75 個入口。該審查冇行 `build`、`doc:build`、`audit`、Docker provider E2E、跨 runtime 執行、已發布 tarball 檢查、npm 查詢、hosted CI，或 60 分鐘 soak。呢次文件修改唔用一個新嘅通過結果取代該記錄。
+
+## 一個結果容許你講咩
+
+| 結果               | 安全講法                                         |
+| ------------------ | ------------------------------------------------ |
+| 原始碼 export 檢查 | 「呢個套件喺呢棵樹匯出呢個符號。」               |
+| 針對性 typecheck   | 「呢份原始碼喺呢條命令之下通過型別檢查。」       |
+| 針對性單元測試     | 「呢啲案例喺呢條命令之下通過。」                 |
+| `bun run verify`   | 「記錄到嘅 verify 序列喺呢棵樹同呢個環境通過。」 |
+| Provider E2E       | 「呢個場景喺記錄到嘅服務同清理之下通過。」       |
+| Runtime fixture    | 「呢個 fixture 喺呢個 runtime 版本之下通過。」   |
+| Published consumer | 「呢個已打包產物被記錄到嘅 fixture 消費。」      |
+| 文件建置           | 「VitePress 建置咗已設定嘅路由。」               |
+| Soak               | 「呢段時間同工作量喺記錄到嘅殘留之下完成。」     |
+
+編輯帳用[聲明](/reference/claims)。
+
+## 已知邊界
+
+- Manifest `publishConfig` 唔確立 npm 發布。
+- Workflow 檔案唔確立 hosted CI 結果。
+- 套件 script 可以係已宣告通道，而冇最近一次通過。
+- Memory provider 唔確立跨程序或廠商協議行為。
+- Web `ReadableStream` 唔確立內部全雙工 RPC。
+- TLS option 唔確立應用身分驗證。
+- 停止逾時唔確立每個原生資源已經結束。

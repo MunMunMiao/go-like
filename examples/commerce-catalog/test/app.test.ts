@@ -1,5 +1,5 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import { newMemoryCache } from "@go-like/cache-memory"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import { newMemoryCache } from "@go-like/core/cache/memory"
 import {
   newClient,
   withDiscovery,
@@ -9,13 +9,15 @@ import {
   type CallOptions,
   type CallOption,
   type Client
-} from "@go-like/client"
-import { background, type Context } from "@go-like/context"
-import { name, newApp, server } from "@go-like/core"
-import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@go-like/registry"
-import { address, newServer, transport as serverTransport } from "@go-like/server"
-import { newMemoryTransport } from "@go-like/transport-memory"
-import { executor, newHTTPTransport } from "@go-like/transport-http"
+} from "@go-like/core/client"
+import { newRedisCache } from "@go-like/redis/cache"
+import { background, type Context } from "@go-like/core/context"
+import { name, newApp, readyProbe, resources, server } from "@go-like/core"
+import { newProbeRegistry } from "@go-like/core/health"
+import { newRoundRobinSelector, type Discovery, type ServiceInstance } from "@go-like/core/registry"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
+import { executor, newHTTPTransport } from "@go-like/core/transport/http"
 import { expect, test } from "bun:test"
 
 import { findAmountMinor, type PriceQuote } from "../src/catalog"
@@ -108,7 +110,7 @@ test("creates a typed Pricing client that preserves codec, options and errors", 
     amountMinor: 1_299,
     validUntil: Date.now() + 60_000
   })
-  const option: CallOption = (options) => options
+  const option = ((options: CallOptions) => options) as unknown as CallOption
   const failure = new Error("Pricing unavailable")
   let rejected = false
   let observed: readonly unknown[] = Object.freeze([])
@@ -408,6 +410,65 @@ test("exposes live and cache readiness handlers", async () => {
   })
   expect((await handler(new Request("http://example.test/livez"))).status).toBe(200)
   expect((await handler(new Request("http://example.test/readyz"))).status).toBe(200)
+})
+
+/** Builds one Redis Cache whose connection is an in-process client double. */
+function localRedisCache() {
+  const values = new Map<string, string>()
+  return newRedisCache({
+    client() {
+      return {
+        isOpen: false,
+        on() {},
+        off() {},
+        withCommandOptions() {
+          return {
+            async get(key: string) {
+              return values.get(key) ?? null
+            },
+            async set(key: string, value: string) {
+              values.set(key, value)
+              return "OK"
+            },
+            async del(key: string) {
+              values.delete(key)
+              return 1
+            }
+          }
+        },
+        async connect() {},
+        async close() {},
+        destroy() {}
+      }
+    }
+  })
+}
+
+test("admits the cache through the resource tier before the server starts", async () => {
+  const cache = localRedisCache()
+  const probes = newProbeRegistry()
+  let admitted = false
+  const app = newApp(
+    name("commerce-catalog"),
+    resources(cache),
+    server({
+      async start(ctx) {
+        admitted = (await cache.get(ctx, "missing")) === null
+      },
+      async stop() {}
+    }),
+    readyProbe(probes)
+  )
+  const running = app.run()
+  void running.catch(() => {})
+  const deadline = Date.now() + 1_000
+  while (!admitted) {
+    if (Date.now() > deadline) throw new Error("downstream server did not start")
+    await Bun.sleep(5)
+  }
+  expect((await probes.check(background(), "ready")).ok).toBe(true)
+  await app.stop()
+  await running
 })
 
 test("serves authoritative Pricing when invalid-cache cleanup and population both fail", async () => {

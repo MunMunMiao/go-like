@@ -14,7 +14,9 @@
     "noEmit": true,
     "skipLibCheck": false,
     "paths": {
-      "@go-like/*": ["./authoring-stubs/go-like.d.ts"]
+      "@go-like/*": ["./authoring-stubs/go-like.d.ts"],
+      "@go-like/bullmq/job": ["./authoring-stubs/go-like.d.ts"],
+      "@go-like/croner/job": ["./authoring-stubs/go-like.d.ts"]
     }
   },
   "files": ["authoring-stubs/go-like.d.ts", "portable.ts", "node.ts", "bun.ts"]

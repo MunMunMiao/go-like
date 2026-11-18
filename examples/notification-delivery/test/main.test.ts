@@ -1,12 +1,79 @@
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
+import { info, type LogHandler } from "@go-like/core/log"
+import { name, newApp, server, telemetry } from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { isStructError } from "@go-like/core/struct"
 import { describe, expect, test } from "bun:test"
 
-import { newNotificationEvents } from "../src/events"
+import { newNotificationEvents, notificationReceiptCodec } from "../src/events"
 import { newNotificationHandler } from "../src/http"
 import { newMemoryNotificationProvider } from "../src/provider"
 import { newDeliverNotification, validateNotification } from "../src/service"
 
 describe("notification delivery", () => {
+  test("round-trips the JSON receipt and rejects a bad payload", () => {
+    const receipt = Object.freeze({
+      messageId: "wire-1",
+      channel: "sms" as const,
+      providerReference: "provider-wire-1",
+      status: "accepted" as const
+    })
+    const bytes = notificationReceiptCodec.encode(receipt)
+    expect(JSON.parse(new TextDecoder().decode(bytes))).toEqual(receipt)
+    expect(notificationReceiptCodec.decode(bytes)).toEqual(receipt)
+    expect(notificationReceiptCodec.mediaType).toBe("application/json")
+    let rejected: unknown
+    try {
+      notificationReceiptCodec.decode(
+        new TextEncoder().encode(
+          '{"messageId":"wire-1","channel":"push","providerReference":"provider-wire-1","status":"accepted"}'
+        )
+      )
+    } catch (error) {
+      rejected = error
+    }
+    expect(isStructError(rejected)).toBe(true)
+  })
+
+  test("the App installs telemetry and shuts it down", async () => {
+    const events: string[] = []
+    const handler: LogHandler = {
+      enabled: () => true,
+      handle(_ctx, record) {
+        events.push(record.message)
+      },
+      lifecycle: {
+        async start() {
+          events.push("telemetry.start")
+        },
+        async stop() {
+          events.push("telemetry.stop")
+        }
+      }
+    }
+    const app = newApp(
+      name("notification-delivery"),
+      telemetry(newTelemetry({ logHandlers: [handler] })),
+      server({
+        async start(ctx) {
+          info(ctx, "handler-installed")
+        },
+        async stop() {}
+      })
+    )
+    const running = app.run()
+    void running.catch(() => {})
+    const deadline = Date.now() + 1_000
+    while (!events.includes("handler-installed")) {
+      if (Date.now() > deadline) throw new Error(`telemetry was not installed: ${events.join(",")}`)
+      await Bun.sleep(5)
+    }
+    expect(events.indexOf("handler-installed")).toBeGreaterThan(events.indexOf("telemetry.start"))
+    await app.stop()
+    await running
+    expect(events.indexOf("telemetry.stop")).toBeGreaterThan(events.indexOf("handler-installed"))
+  })
+
   test("publishes a typed accepted event into the memory Store projection", async () => {
     const events = newNotificationEvents()
     const running = events.server.start(background())
@@ -160,19 +227,35 @@ describe("notification delivery", () => {
       await running
     }
 
-    const invalidEventCases: unknown[] = [null, { messageId: "bad", channel: "push" }]
-    for (const [index, invalidEvent] of invalidEventCases.entries()) {
-      const brokenEvents = newNotificationEvents()
-      const brokenRunning = brokenEvents.server.start(background())
-      void brokenRunning.catch(() => {})
-      await Bun.sleep(0)
-      await expect(brokenEvents.publish(background(), invalidEvent as never)).rejects.toThrow(
-        "invalid notification event"
+    const nullEvents = newNotificationEvents()
+    const nullRunning = nullEvents.server.start(background())
+    void nullRunning.catch(() => {})
+    await Bun.sleep(0)
+    await expect(nullEvents.publish(background(), null as never)).rejects.toThrow(TypeError)
+    await nullEvents.server.stop(background())
+    await nullRunning
+
+    const brokenEvents = newNotificationEvents()
+    const brokenRunning = brokenEvents.server.start(background())
+    void brokenRunning.catch(() => {})
+    await Bun.sleep(0)
+    const published = await brokenEvents
+      .publish(background(), { messageId: "bad", channel: "push" } as never)
+      .then(
+        () => null,
+        (error: unknown) => error
       )
-      await expect(brokenRunning).rejects.toThrow("invalid notification event")
-      await brokenEvents.server.stop(background()).catch(() => {})
-      expect(index).toBeLessThan(invalidEventCases.length)
-    }
+    expect(
+      isStructError(published) || (published instanceof Error && isStructError(published.cause))
+    ).toBe(true)
+    const stopped = await brokenRunning.then(
+      () => null,
+      (error: unknown) => error
+    )
+    expect(
+      isStructError(stopped) || (stopped instanceof Error && isStructError(stopped.cause))
+    ).toBe(true)
+    await brokenEvents.server.stop(background()).catch(() => {})
 
     expect(() =>
       validateNotification({

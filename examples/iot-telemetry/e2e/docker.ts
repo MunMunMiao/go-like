@@ -1,5 +1,5 @@
 import { newApp, server, stopTimeout, type App } from "@go-like/core"
-import { newNatsJetStreamBroker } from "@go-like/nats/jetstream/broker"
+import { newNatsJetStreamBroker } from "@go-like/nats/jetstream"
 import {
   AckPolicy,
   RetentionPolicy,

@@ -6,8 +6,8 @@ import {
   withEndpoint,
   withTransport,
   type Client
-} from "@go-like/client"
-import { background, withTimeout, type Context } from "@go-like/context"
+} from "@go-like/core/client"
+import { background, withTimeout, type Context } from "@go-like/core/context"
 import {
   id,
   metadata,
@@ -16,10 +16,9 @@ import {
   registrar,
   server as appServer,
   version,
-  type App,
-  type Endpointer,
-  type Server as LifecycleServer
+  type App
 } from "@go-like/core"
+import type { Endpointer, Server as LifecycleServer } from "@go-like/core/lifecycle"
 import {
   filterLabel,
   newRoundRobinSelector,
@@ -30,9 +29,14 @@ import {
   type ServiceEndpoint,
   type ServiceInstance,
   type Watcher
-} from "@go-like/registry"
-import { newConsulRegistry, type ConsulFetch } from "@go-like/registry-consul"
-import { address as serverAddress, newServer, transport as serverTransport } from "@go-like/server"
+} from "@go-like/core/registry"
+import { newConsulClient } from "@go-like/consul"
+import { newConsulRegistry } from "@go-like/consul/registry"
+import {
+  address as serverAddress,
+  newServer,
+  transport as serverTransport
+} from "@go-like/core/server"
 import {
   type Client as TransportClient,
   type DialOption,
@@ -41,9 +45,9 @@ import {
   type Option,
   type Options,
   type Transport
-} from "@go-like/transport"
-import { executor, type HTTPExecutor } from "@go-like/transport-http"
-import { newNodeHTTPTransport } from "@go-like/transport-http/node"
+} from "@go-like/core/transport"
+import { executor, type HTTPExecutor } from "@go-like/core/transport/http"
+import { newNodeHTTPTransport } from "@go-like/core/transport/http/node"
 
 const Image =
   "hashicorp/consul:2.0.2@sha256:7dcf35d6b2682831094f1680aa58be214134969505acce0a9b280249581aa7d2"
@@ -533,18 +537,21 @@ try {
   consulVersion = (await docker(["exec", ContainerName, "consul", "version"])).stdout
   ensure(consulVersion.includes("Consul v2.0.2"), "Consul version drifted")
 
-  const consulFetch: ConsulFetch = async function trackedConsulFetch(input, init) {
-    return await fetch(input, init)
-  }
-  const selectedRegistry = newConsulRegistry({
-    fetch: consulFetch,
-    address: consulAddress,
-    waitMs: 500,
-    minimumQueryIntervalMs: 20,
-    retryInitialMs: 50,
-    retryMaximumMs: 200,
-    deregisterCriticalServiceAfterMs: 60_000
-  })
+  const selectedRegistry = newConsulRegistry(
+    newConsulClient({
+      async fetch(request) {
+        return await fetch(request)
+      },
+      address: consulAddress
+    }),
+    {
+      waitMs: 500,
+      minimumQueryIntervalMs: 20,
+      retryInitialMs: 50,
+      retryMaximumMs: 200,
+      deregisterCriticalServiceAfterMs: 60_000
+    }
+  )
   registry = selectedRegistry
   const trackedFetch = httpExecutor(async function trackedHTTPFetch(input, init) {
     return await fetch(input, init)

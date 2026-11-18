@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { SQL } from "bun"
 
-import { background } from "@go-like/context"
-import { name, newApp, server } from "@go-like/core"
+import { afterStart, name, newApp, resources, server } from "@go-like/core"
+import { background } from "@go-like/core/context"
+import type { Server } from "@go-like/core/lifecycle"
+import type { NatsConnection } from "@nats-io/transport-node"
 
 import { newPaymentHandler } from "../src/http"
 import { postPayment } from "../src/post-payment"
 import { isPaymentFailure, parsePaymentRequest } from "../src/payment"
+import { newLedgerDatabaseResource, newLedgerNatsResource } from "../src/resources"
 import { newOutboxPublisherServer } from "../src/worker"
 
 const validPayment = Object.freeze({
@@ -298,5 +301,137 @@ describe("payment application lifecycle", () => {
       attempts: 1,
       published: 0
     })
+  })
+})
+
+/** Resolves `start` when `stop` runs, matching a resident server-tier participant. */
+function resident(label: string, events: string[]): Server {
+  let resolveStart: (() => void) | null = null
+  const started = new Promise<void>((resolve) => {
+    resolveStart = resolve
+  })
+  return {
+    async start(): Promise<void> {
+      events.push(`${label}-start`)
+      await started
+    },
+    async stop(): Promise<void> {
+      events.push(`${label}-stop`)
+      resolveStart?.()
+    }
+  }
+}
+
+/** Polls until the predicate holds. */
+async function waitFor(label: string, predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${label}`)
+    await Bun.sleep(1)
+  }
+}
+
+describe("ledger resources", () => {
+  test("closes the SQL pool with the existing five-second budget", async () => {
+    const timeouts: number[] = []
+    const sql = {
+      async close(options?: { timeout?: number }) {
+        timeouts.push(options?.timeout ?? -1)
+      }
+    } as unknown as SQL
+    const resource = newLedgerDatabaseResource(sql)
+
+    await resource.start(background())
+    await resource.stop(background())
+
+    expect(timeouts).toEqual([5])
+  })
+
+  test("does not drain a NATS connection that is already closed", async () => {
+    let drains = 0
+    const connection = {
+      closed: () => new Promise<Error | undefined>(() => {}),
+      isClosed: () => true,
+      async drain() {
+        drains += 1
+      }
+    } as unknown as NatsConnection
+    const resource = newLedgerNatsResource(connection)
+
+    await resource.start(background())
+    await resource.stop(background())
+
+    expect(drains).toBe(0)
+  })
+
+  test("stops the publisher and web server before draining NATS and closing SQL", async () => {
+    const events: string[] = []
+    const sql = {
+      async close(options?: { timeout?: number }) {
+        events.push(`sql-close:${options?.timeout ?? -1}`)
+      }
+    } as unknown as SQL
+    const connection = {
+      closed: () => new Promise<Error | undefined>(() => {}),
+      isClosed: () => false,
+      async drain() {
+        events.push("nats-drain")
+      }
+    } as unknown as NatsConnection
+    const app = newApp(
+      name("payments-ledger-order"),
+      resources(newLedgerDatabaseResource(sql), newLedgerNatsResource(connection)),
+      server(resident("publisher", events), resident("web", events))
+    )
+    const running = app.run()
+    void running.catch(() => {})
+
+    await waitFor(
+      "server start",
+      () => events.includes("publisher-start") && events.includes("web-start")
+    )
+    await app.stop()
+    await running
+
+    const publisherStop = events.indexOf("publisher-stop")
+    const webStop = events.indexOf("web-stop")
+    const drain = events.indexOf("nats-drain")
+    const sqlClose = events.indexOf("sql-close:5")
+    expect(publisherStop).toBeGreaterThanOrEqual(0)
+    expect(webStop).toBeGreaterThanOrEqual(0)
+    expect(drain).toBeGreaterThan(Math.max(publisherStop, webStop))
+    expect(sqlClose).toBeGreaterThan(drain)
+  })
+
+  test("a failed NATS close fails the running app", async () => {
+    const failure = new Error("NATS connection failed")
+    let finish: (error: Error) => void = () => {}
+    const terminal = new Promise<Error>((resolve) => {
+      finish = resolve
+    })
+    let drains = 0
+    const connection = {
+      closed: () => terminal,
+      isClosed: () => false,
+      async drain() {
+        drains += 1
+      }
+    } as unknown as NatsConnection
+    let ready = false
+    const app = newApp(
+      name("payments-ledger-terminal"),
+      resources(newLedgerNatsResource(connection)),
+      afterStart(() => {
+        ready = true
+      })
+    )
+    const running = app.run()
+    void running.catch(() => {})
+
+    await waitFor("admission", () => ready)
+    finish(failure)
+
+    await expect(running).rejects.toBe(failure)
+    expect(drains).toBe(1)
   })
 })

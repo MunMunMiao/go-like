@@ -1,13 +1,13 @@
 # 电力计量结算
 
 该示例演示电力计量结算微服务：标准 Fetch API 接收月度电表读数，应用从
-`@go-like/config` 的当前不可变配置读取固定分时费率，并以整数最小货币单位生成结算结果。
+`@go-like/core/config` 的当前不可变配置读取固定分时费率，并以整数最小货币单位生成结算结果。
 
 ## 主要演示
 
-- `@go-like/config` 作为费率配置来源，由 Core hook 在 HTTP Server 启动前 `load`、停止后 `close`。
-- `@go-like/context` 作为所有应用操作的首个参数。
-- `@go-like/web` 将 Context-first 入口适配为标准 Fetch `Handler`。
+- `@go-like/core/config` 作为费率配置来源，由 Core hook 在 HTTP Server 启动前 `load`、停止后 `close`。
+- `@go-like/core/context` 作为所有应用操作的首个参数。
+- `@go-like/core/web` 将 Context-first 入口适配为标准 Fetch `Handler`。
 - 结算规则、费率配置、HTTP 路由和进程生命周期按真实职责拆分。
 
 ## 源码结构

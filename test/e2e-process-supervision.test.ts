@@ -287,6 +287,32 @@ async function processIsRunning(processId: number): Promise<boolean> {
   }
 }
 
+/** Reads the fixture PID file. A missing or partial write is an empty list. */
+async function recordedProcessIds(processIdPath: string): Promise<number[]> {
+  if (!(await Bun.file(processIdPath).exists())) return []
+  try {
+    return Array.from(
+      new Set(
+        (await Bun.file(processIdPath).text())
+          .split("\n")
+          .map(Number)
+          .filter((value) => Number.isSafeInteger(value) && value > 0)
+      )
+    )
+  } catch {
+    return []
+  }
+}
+
+/** Existence probe only. Signal 0 does not terminate the process. */
+async function runningIds(processIds: readonly number[]): Promise<number[]> {
+  const alive: number[] = []
+  for (const processId of processIds) {
+    if (await processIsRunning(processId)) alive.push(processId)
+  }
+  return alive
+}
+
 async function waitForProcessExit(processId: number): Promise<void> {
   const deadline = performance.now() + 2_000
   while ((await processIsRunning(processId)) && performance.now() < deadline) await Bun.sleep(25)
@@ -299,29 +325,42 @@ async function processCommand(processId: number): Promise<string | null> {
   return command.length === 0 ? null : command
 }
 
+/**
+ * Kills the fork-storm fixture tree. The root is killed first so it stops spawning, then the
+ * recorded PIDs are swept until none is alive, because descendants spawned while the first pass
+ * runs appear in the PID file only afterwards.
+ */
 async function terminateForkStormFixture(processIdPath: string, directory: string): Promise<void> {
-  if (!(await Bun.file(processIdPath).exists())) return
-  const processIds = Array.from(
-    new Set(
-      (await Bun.file(processIdPath).text())
-        .split("\n")
-        .map(Number)
-        .filter((value) => Number.isSafeInteger(value) && value > 0)
-    )
-  )
   const fixturePaths = [runnerFixture("fork-storm.ts"), runnerFixture("persistent.ts")]
-  for (const processId of processIds.reverse()) {
-    const command = await processCommand(processId)
-    if (command === null) continue
-    if (!command.includes(directory) || !fixturePaths.some((path) => command.includes(path))) {
-      throw new Error(`refusing to terminate unrecognized fork-storm PID ${processId}`)
+  for (let pass = 0; pass < 50; pass += 1) {
+    if (!(await Bun.file(processIdPath).exists())) return
+    const processIds = Array.from(
+      new Set(
+        (await Bun.file(processIdPath).text())
+          .split("\n")
+          .map(Number)
+          .filter((value) => Number.isSafeInteger(value) && value > 0)
+      )
+    )
+    let alive = 0
+    for (const processId of processIds) {
+      const command = await processCommand(processId)
+      // A Linux zombie has already exited and no longer has a verifiable command line.
+      if (command === null || !(await processIsRunning(processId))) continue
+      if (!command.includes(directory) || !fixturePaths.some((path) => command.includes(path))) {
+        throw new Error(`refusing to terminate unrecognized fork-storm PID ${processId}`)
+      }
+      alive += 1
+      try {
+        process.kill(processId, "SIGKILL")
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error
+      }
     }
-    try {
-      process.kill(processId, "SIGKILL")
-    } catch (error) {
-      if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error
-    }
+    if (alive === 0) return
+    await Bun.sleep(20)
   }
+  throw new Error("fork-storm fixture processes survived 50 SIGKILL sweeps")
 }
 
 const Definition: SuiteDefinition = Object.freeze({
@@ -972,10 +1011,88 @@ test("macOS native helper default combined timeout bounds repeated KILL rounds",
     }
     expect(performance.now() - startedAt).toBeLessThan(4_000)
   } finally {
-    await supervisor.close()
+    // Kill the fixture tree first: if close() or the artifact assertion throws, an orphaned
+    // fork storm would otherwise keep spawning processes after the test is gone.
+    try {
+      await terminateForkStormFixture(processIdPath, directory)
+    } finally {
+      await supervisor.close()
+    }
     expect(await Bun.file(artifactDirectory).exists()).toBe(false)
-    await terminateForkStormFixture(processIdPath, directory)
     await rm(directory, { recursive: true, force: true })
+  }
+}, 15_000)
+
+test("fork-storm exits itself when its parent exits before the test kills it", async () => {
+  if (process.platform === "win32") return
+  const directory = await mkdtemp(join(tmpdir(), "go-like-fork-storm-orphan-"))
+  const processIdPath = join(directory, "target.pid")
+  const readyPath = join(directory, "descendant.ready")
+  const launcherPath = join(directory, "launcher.ts")
+  await Bun.write(
+    launcherPath,
+    [
+      'import { spawn } from "node:child_process"',
+      "const child = spawn(process.argv[2], process.argv.slice(3), {",
+      "  detached: true,",
+      '  stdio: "ignore"',
+      "})",
+      "if (child.pid === undefined) process.exit(1)",
+      "child.unref()",
+      "const pidFile = process.argv[5]",
+      "const deadline = Date.now() + 2_000",
+      "while (Date.now() < deadline) {",
+      '  const text = await Bun.file(pidFile).text().catch(() => "")',
+      '  if (text.split("\\n").includes(String(child.pid))) break',
+      "  await Bun.sleep(5)",
+      "}",
+      "process.exit(0)",
+      ""
+    ].join("\n")
+  )
+  const launcher = Bun.spawn(
+    [
+      process.execPath,
+      launcherPath,
+      process.execPath,
+      runnerFixture("fork-storm.ts"),
+      directory,
+      processIdPath,
+      readyPath
+    ],
+    { stdout: "ignore", stderr: "ignore" }
+  )
+  try {
+    const launcherExit = await launcher.exited
+    expect(launcherExit).toBe(0)
+    const deadline = performance.now() + 5_000
+    let recorded: number[] = []
+    let gone = false
+    while (performance.now() < deadline) {
+      recorded = await recordedProcessIds(processIdPath)
+      if (recorded.length > 0) {
+        const alive = await runningIds(recorded)
+        if (alive.length === 0) {
+          await Bun.sleep(50)
+          const again = await recordedProcessIds(processIdPath)
+          if ((await runningIds(again)).length === 0 && again.length >= recorded.length) {
+            recorded = again
+            gone = true
+            break
+          }
+        }
+      }
+      await Bun.sleep(25)
+    }
+    expect(gone).toBe(true)
+    expect(recorded.length).toBeGreaterThan(0)
+    expect(await runningIds(recorded)).toEqual([])
+  } finally {
+    try {
+      await terminateForkStormFixture(processIdPath, directory)
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   }
 }, 15_000)
 
@@ -1172,3 +1289,53 @@ test("supervisor close failure preserves an earlier definition failure", async (
   expect((failures[0] as Error).message).toContain("supervision-fixture exited 23")
   expect(failures[1]).toBe(closeFailure)
 })
+
+test.each([
+  ["tree-parent.ts", "wait"],
+  ["tree-parent.ts", "exit"],
+  ["tree-parent.ts", "inherit"],
+  ["breakaway-parent.ts", null]
+] as const)(
+  "%s %s bounds the wait when its descendant never becomes ready",
+  async (fixture, mode) => {
+    if (process.platform === "win32") return
+    const directory = await mkdtemp(join(tmpdir(), "go-like-fixture-readiness-"))
+    const processIdPath = join(directory, "descendant.pid")
+    const readyPath = join(directory, "never.ready")
+    const fixturePath = runnerFixture(fixture)
+    const argv = [
+      process.execPath,
+      fixturePath,
+      ...(mode === null ? [] : [mode]),
+      processIdPath,
+      readyPath
+    ]
+    // Run the real parent fixture. Only accelerate its long safety timer and replace its one
+    // descendant with a real process that exits before readiness. No fork-storm is launched.
+    const script = [
+      "const timer = globalThis.setTimeout",
+      "globalThis.setTimeout = (fn, ms, ...args) => timer(fn, ms === 60_000 ? 100 : ms, ...args)",
+      "const spawn = Bun.spawn",
+      'Bun.spawn = (_argv, options) => spawn([process.execPath, "-e", "process.exit(0)"], options)',
+      `process.argv = ${JSON.stringify(argv)}`,
+      `await import(${JSON.stringify(fixturePath)})`
+    ].join("\n")
+    const parent = Bun.spawn([process.execPath, "-e", script], {
+      stdout: "ignore",
+      stderr: "pipe",
+      timeout: 3_000,
+      killSignal: "SIGKILL"
+    })
+    try {
+      const stderr = new Response(parent.stderr).text()
+      expect(await parent.exited, await stderr).toBe(124)
+      expect((await recordedProcessIds(processIdPath)).length).toBe(1)
+      expect(await Bun.file(readyPath).exists()).toBe(false)
+    } finally {
+      if (parent.exitCode === null) parent.kill("SIGKILL")
+      await parent.exited
+      await rm(directory, { recursive: true, force: true })
+    }
+  },
+  5_000
+)

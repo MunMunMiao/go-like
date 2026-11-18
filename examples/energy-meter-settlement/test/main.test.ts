@@ -1,6 +1,12 @@
-import { newConfig, objectSource, source, type Config, type ConfigObject } from "@go-like/config"
-import { background, withCancel } from "@go-like/context"
-import type { Handler } from "@go-like/web"
+import {
+  newConfig,
+  objectSource,
+  source,
+  type Config,
+  type ConfigObject
+} from "@go-like/core/config"
+import { background, withCancel } from "@go-like/core/context"
+import type { Handler } from "@go-like/core/web"
 import { describe, expect, test } from "bun:test"
 
 import { newEnergySettlementHandler } from "../src/http"

@@ -1,108 +1,73 @@
-import { background, type Context } from "@go-like/context"
-import { newMetadata } from "@go-like/metadata"
-import { newServerContext, type TransportInfo } from "@go-like/transport"
-import {
-  newOtelServer,
-  traceBroker,
-  traceClient,
-  traceUnaryMiddleware,
-  traceWebHandler
-} from "@go-like/otel"
+import { background } from "@go-like/core/context"
+import { newOtelMeterProvider, newOtelPropagator, newOtelTracerProvider } from "@go-like/otel"
+import { W3CTraceContextPropagator } from "@opentelemetry/core"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import { MeterProvider } from "@opentelemetry/sdk-metrics"
-import { TracerProvider } from "@opentelemetry/sdk-trace"
+import { InMemorySpanExporter, SimpleSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace"
 
 const resource = resourceFromAttributes({ "service.name": "otel-node-runtime" })
-const tracerProvider = new TracerProvider({ resource, spanProcessors: [] })
+const spans = new InMemorySpanExporter()
+const tracerProvider = new TracerProvider({
+  resource,
+  spanProcessors: [new SimpleSpanProcessor({ exporter: spans })]
+})
 const meterProvider = new MeterProvider({ resource, readers: [] })
-const tracer = tracerProvider.getTracer("runtime")
-const meter = meterProvider.getMeter("runtime")
-const server = newOtelServer({ tracerProvider, meterProvider })
-const running = server.start(background())
+const traces = newOtelTracerProvider(tracerProvider)
+const metrics = newOtelMeterProvider(meterProvider)
+const propagator = newOtelPropagator(new W3CTraceContextPropagator())
+const traceRunning = traces.lifecycle.start(background())
+const metricRunning = metrics.lifecycle.start(background())
 await Promise.resolve()
 
-const response = new Response(new Uint8Array([2]))
-const metadataHeaders = newMetadata()
-const info: TransportInfo = {
-  kind: () => "http",
-  endpoint: () => "",
-  operation: () => "runtime/read",
-  requestHeaders: () => metadataHeaders,
-  replyHeaders: () => metadataHeaders,
-  peerIdentity: () => null
-}
-const client = traceClient(
-  {
-    async call() {
-      return response
-    },
-    async stream() {
-      throw new Error("unused")
-    },
-    async close() {}
-  },
-  tracer
-)
-const traced = await client.call(background(), {
-  service: "runtime",
-  endpoint: "read",
-  headers: {},
-  body: new Uint8Array([1])
+const span = traces.startSpan(background(), { name: "runtime" }, "runtime", {
+  kind: "internal",
+  attributes: {},
+  links: [],
+  root: true
 })
-if (!(traced instanceof Response) || new Uint8Array(await traced.arrayBuffer())[0] !== 2) {
-  throw new Error("traced Client did not preserve its response bytes")
-}
-
-const request = new Request("https://runtime.example.test/runtime/read", { method: "POST" })
-const unaryResponse = new Response(null, { status: 204 })
-const unary = traceUnaryMiddleware(tracer)(async () => unaryResponse)
-if ((await unary(newServerContext(background(), info), request)) !== unaryResponse) {
-  throw new Error("traced unary middleware did not preserve its response")
-}
-
-const webResponse = new Response("web")
-const web = traceWebHandler(() => webResponse, tracer)
-const webResult = web(new Request("https://runtime.example.test/web"))
-if (!(webResult instanceof Response) || (await webResult.text()) !== "web") {
-  throw new Error("traced Web handler changed its synchronous response")
-}
-
-let delivery: ((ctx: Context) => Promise<void> | void) | null = null
-const broker = traceBroker(
+span.end()
+const counter = metrics.instrument(
+  { name: "runtime" },
   {
-    async publish(ctx) {
-      if (delivery !== null) await delivery(ctx)
-    },
-    async subscribe(_ctx, topic, handler) {
-      delivery = async (ctx) => {
-        await handler(ctx, {
-          topic,
-          message: { headers: {}, body: new Uint8Array([3]) },
-          native: Object.freeze({ runtime: true })
-        })
-      }
-      return Object.freeze({
-        topic,
-        unsubscribe: async () => {}
-      })
-    },
-    string() {
-      return "runtime"
-    }
-  },
-  tracer
+    kind: "counter",
+    name: "runtime.counter",
+    unit: "",
+    description: "",
+    attributeKeys: [],
+    buckets: null
+  }
 )
-await broker.subscribe(background(), "runtime", async () => {})
-await broker.publish(background(), "runtime", { headers: {}, body: new Uint8Array([3]) })
-
-if (typeof tracer.startSpan !== "function") {
-  throw new Error("official Tracer API is unavailable")
+counter.record(background(), 1, {})
+if (spans.getFinishedSpans().some((item) => item.name === "runtime") !== true) {
+  throw new Error("runtime span was not exported")
 }
-if (typeof meter.createCounter !== "function") {
-  throw new Error("official Meter API is unavailable")
+const carrier = {
+  value: "",
+  get: () => null,
+  keys: () => [],
+  set(_key: string, value: string) {
+    this.value = value
+  }
+}
+const enter = traces.enter
+if (enter === undefined) throw new Error("enter is required")
+propagator.inject(
+  enter(background(), () => background()),
+  carrier
+)
+if (!propagator.fields().includes("traceparent")) {
+  throw new Error("W3C propagator did not declare traceparent")
 }
 
-await server.stop(background())
-await running
+await traces.lifecycle.stop(background())
+await metrics.lifecycle.stop(background())
+await traceRunning
+await metricRunning
+if (
+  typeof tracerProvider.getTracer !== "function" ||
+  typeof meterProvider.getMeter !== "function"
+) {
+  throw new Error("official provider APIs were replaced")
+}
 
 console.log("otel-node-runtime ok")

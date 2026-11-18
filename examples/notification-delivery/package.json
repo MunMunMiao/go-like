@@ -12,15 +12,7 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@go-like/broker": "workspace:*",
-    "@go-like/broker-memory": "workspace:*",
-    "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
-    "@go-like/event": "workspace:*",
-    "@go-like/resilience": "workspace:*",
-    "@go-like/store": "workspace:*",
-    "@go-like/store-memory": "workspace:*",
-    "@go-like/web": "workspace:*",
     "@go-like/winston": "workspace:*",
     "winston": "3.19.0"
   },

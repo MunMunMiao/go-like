@@ -1,100 +1,82 @@
 # Terminology
 
-This glossary keeps the English source precise and gives translators a stable semantic base. API identifiers, package names, route tokens, header names, commands, URLs, versions, and code remain unchanged in localized documentation.
+This glossary is the English source for translators. API identifiers, package names, route tokens, header names, commands, URLs, versions, and code stay unchanged in localized pages.
 
 ## Core terms
 
-| Term                   | Meaning in go-like                                                                                                                                   | Do not use it to mean                                                               |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Context**            | Explicit operation scope carrying deadline, cancellation result, cause, and values; passed first to blocking work                                    | Dependency-injection bag, ambient request state, Go ABI, or a goroutine/channel     |
-| **App**                | One-shot coordinator for startup, registration, hooks, Server stop calls, terminal joins, and lifecycle errors                                       | Global service container or process supervisor for resources it was never given     |
-| **Server**             | Structural `start(ctx)` / `stop(ctx)` lifecycle boundary                                                                                             | Automatically a Web server, readiness signal, or reverse-order dependency scheduler |
-| **Handler**            | Standard Web `(Request) => Response \| Promise<Response>` function, or the separate internal `(Context, Request) => Response` handler when qualified | A universal router handler or a listener by itself                                  |
-| **owner**              | Component responsible for admitting a resource and actually requesting/observing its cleanup                                                         | Any caller that merely waits for an operation                                       |
-| **admission**          | Point at which a resource has been accepted into a lifecycle and its owner is responsible for stopping it                                            | A health check or proof of production readiness                                     |
-| **terminal**           | Provider or resource fact that the native operation has finished                                                                                     | A caller timeout or an unresolved Promise that was abandoned                        |
-| **caller wait**        | The time a caller is willing to await a result, often bounded by Context                                                                             | Cancellation of the underlying owner operation                                      |
-| **unary**              | One JSON request body followed by one JSON response body                                                                                             | One-way delivery, streaming, or full duplex                                         |
-| **Message**            | Protobuf `MessageShape` in the Buf packages. The transport boundary is a Fetch `Request` and `Response`, not a Message type                          | The internal transport SPI, a socket frame, or a routing header                     |
-| **Endpoint**           | Named typed operation with service, endpoint, request Struct, and response Struct                                                                    | Network address, IDL, generated stub, or a Registry endpoint URL                    |
-| **operation identity** | Canonical `service/endpoint`, such as `appointment-policy.v1/check`                                                                                  | Hostname, port, or transport URL                                                    |
-| **transport address**  | Opaque destination passed to `Transport.dial`, such as `memory://orders` or `https://orders.example`                                                 | Operation name or inferred protocol contract                                        |
+| Term                   | Meaning in go-like                                                                                                                      | Do not use it to mean                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Socket**             | A structural contract core declares and a plug implements, such as `Server`, `LogHandler`, `Registry`, `Store`, `Broker`, or `JobQueue` | A TCP socket, or a wrapper around a core function                                            |
+| **Plug**               | A package that fills one or more sockets with an ecosystem client the application constructed                                           | A second framework, or a global registration                                                 |
+| **Context**            | Explicit operation scope: deadline, cancellation, cause, and values. Passed first                                                       | A dependency-injection bag, ambient request state, or a Go `context.Context`                 |
+| **App**                | One-shot coordinator for the telemetry, resource, and server tiers                                                                      | A global container or a supervisor for objects it was never given                            |
+| **Tier**               | Telemetry, resources, or servers. Order and budgets are fixed by the App                                                                | A dependency graph or a user-defined shutdown priority                                       |
+| **Server**             | Structural `start(ctx)` / `stop(ctx)`                                                                                                   | Automatically a Web server, a readiness signal, or a reverse-order scheduler of its siblings |
+| **Resource**           | A `Server` in `resources(...)` whose `start` resolves when the object is usable                                                         | A long-running listener. Those belong in `server(...)`                                       |
+| **Handler**            | Standard Web `(Request) => Response \| Promise<Response>`, or the internal `(Context, Request) => Response` when the sentence says so   | A router, or a listener by itself                                                            |
+| **Owner**              | The component that admits a resource and is the one caller of its drain                                                                 | Any caller that only waits                                                                   |
+| **Admission**          | The point at which `start` has resolved and the App owns `stop`                                                                         | A health check or a production-readiness proof                                               |
+| **Terminal**           | The native operation has finished                                                                                                       | A caller timeout, or a Promise that was abandoned                                            |
+| **Caller wait**        | How long a caller awaits, often bounded by Context or `stopTimeout`                                                                     | Cancellation of the owner operation                                                          |
+| **Endpoint**           | A named typed operation: service, endpoint, request Struct, response Struct                                                             | A network address or a registry URL                                                          |
+| **Operation identity** | `service/endpoint`, such as `appointment-policy.v1/check`                                                                               | A host, port, or URL                                                                         |
+| **Transport address**  | Opaque destination, such as `memory://orders` or `https://orders.example`                                                               | The operation name                                                                           |
 
-## Control-plane and data-plane terms
+## Control plane and data plane
 
-| Term                             | Meaning in go-like                                                                           | Do not collapse it into                                                            |
-| -------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Registry**                     | Contract for registering and reading service instance reachability                           | Durable business Store or global service locator                                   |
-| **Registrar**                    | Registration and deregistration interface                                                    | Discovery watcher or health probe                                                  |
-| **Discovery**                    | Reads and watches complete service-instance snapshots                                        | Registry backend protocol or selector policy                                       |
-| **Watcher**                      | Owns a stream of complete replacement snapshots and a stop operation                         | Add/remove patch event stream                                                      |
-| **authoritative empty snapshot** | Snapshot that says the service currently has no endpoints; selection fails closed            | A transient watcher outage that should retain stale endpoints forever              |
-| **Selector**                     | Chooses one `ServiceEndpoint` and receives explicit synchronous feedback                     | Circuit breaker, retry policy, Registry, or load balancer with universal semantics |
-| **Filter**                       | Pure ordered transformation of a discovered `ServiceInstance[]` snapshot                     | A security authorization check or endpoint health probe                            |
-| **ServiceInstance**              | Service identity plus version, metadata, and transport URLs                                  | A single operation or a database record                                            |
-| **selection feedback**           | Outcome facts sent to a Selector after the selected attempt                                  | Resource ownership transfer or an asynchronous settlement protocol                 |
-| **Config**                       | Immutable merged source snapshots, validation, reload, and accepted source watcher lifecycle | Ambient environment variable lookup or a transaction across resources              |
-| **last-good snapshot**           | Most recent accepted Config publication retained across a recoverable reload failure         | A claim that every backend read is current                                         |
-| **Store**                        | Context-first byte records with revision, CAS, TTL, and pagination options                   | Database, ORM, Cache, or Event Store                                               |
-| **Cache**                        | Disposable values with optional TTL that can be recomputed                                   | Authoritative state, durable record, lock, or CAS store                            |
-| **Broker**                       | Topic-based byte publish/subscribe while preserving native delivery identity                 | BullMQ queue, Event Store, or universal settlement API                             |
-| **Event**                        | Optional typed Codec projection over Broker bytes                                            | Durable event history, replay, or schema registry                                  |
-| **native delivery**              | Provider object retained as `event.native`, such as `Msg` or `JsMsg`                         | An object go-like can safely acknowledge with one common method                    |
-| **liveness**                     | Whether the process is alive enough for the platform's liveness policy                       | Readiness to receive traffic                                                       |
-| **readiness**                    | Whether the service should receive traffic now                                               | Proof that all external dependencies are permanently healthy                       |
-| **provider**                     | Backend implementation of a narrow contract                                                  | All lifecycle wrappers or one universal adapter bucket                             |
-| **lifecycle adapter**            | Server wrapper around an application-created native resource                                 | Replacement for the native library's API                                           |
+| Term                             | Meaning                                                                       | Do not collapse it into                            |
+| -------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Registry**                     | Register and read instance reachability                                       | A business store or a service locator              |
+| **Registrar**                    | Register and deregister                                                       | A discovery watcher                                |
+| **Discovery**                    | Read and watch complete instance snapshots                                    | A selector policy                                  |
+| **Watcher**                      | A stream of complete replacement snapshots, plus stop                         | An add/remove event stream                         |
+| **Authoritative empty snapshot** | The service currently has no endpoints. Selection fails closed                | A reason to keep the previous snapshot forever     |
+| **Selector**                     | Chooses one endpoint and receives synchronous feedback                        | A circuit breaker or a universal load balancer     |
+| **Filter**                       | A pure ordered transformation of a snapshot                                   | An authorization check                             |
+| **Config**                       | Immutable merged snapshots, validation, reload, last-good publication         | Ambient environment lookup                         |
+| **Last-good snapshot**           | The last accepted config publication kept across a recoverable reload failure | A claim that every backend read is current         |
+| **Store**                        | Context-first byte records with revision, CAS, TTL, and pages                 | A database, an ORM, a cache, or an event store     |
+| **Cache**                        | Disposable values with optional TTL                                           | Authoritative state                                |
+| **Broker**                       | Topic bytes, with native delivery identity preserved                          | A job queue or a universal ack API                 |
+| **Event**                        | A codec over broker bytes (`eventBroker`)                                     | History, replay, or a schema registry              |
+| **Job**                          | A `Schedule` timetable or a `JobQueue`                                        | A broker subscription                              |
+| **Native delivery**              | The provider object on `event.native`                                         | An object core can acknowledge with one method     |
+| **Liveness**                     | Whether the process should be considered alive                                | Readiness for traffic                              |
+| **Readiness**                    | Whether traffic should be admitted now                                        | Proof that every dependency is permanently healthy |
+| **Provider**                     | A plug's implementation of one socket                                         | Every lifecycle wrapper                            |
 
-## Runtime and security terms
+## Runtime and security
 
-| Term                       | Meaning in go-like                                                                  | Required qualification                                                                |
-| -------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **portable**               | Shared code uses standard Web/ECMAScript APIs or injected capabilities              | Not proof that every runtime can bind sockets, watch files, use UDP, or configure TLS |
-| **Fetch Handler**          | Standard one-argument `Request` to `Response` function                              | A Handler still needs a host/listener                                                 |
-| **`/node` subpath**        | Explicit runtime-specific entrypoint with Node capabilities                         | Do not infer portability from the root package                                        |
-| **standard Web streaming** | Request/Response bodies and Web Streams, including framework SSE/WebSocket behavior | Not an internal SSE server stream or bidi RPC                                         |
-| **TLS**                    | Transport encryption and peer certificate verification at the host/provider layer   | Not application authentication or authorization                                       |
-| **mTLS**                   | TLS configuration requiring a verified client certificate                           | Not automatic mapping from certificate to user, tenant, or role                       |
-| **metadata**               | Immutable transport/application key-value data with explicit propagation rules      | Trusted identity, claims, or automatic downstream forwarding                          |
-| **replay authorization**   | Caller declaration that a bounded retry may repeat an operation                     | Proof of business idempotency, deduplication, or exactly-once effects                 |
-| **redaction**              | Policy that avoids emitting secrets or payloads in a log/trace/health surface       | Constraint on application-owned native logger or exporter code                        |
+| Term                       | Meaning                                                           | Qualification                                                          |
+| -------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Portable**               | Standard Web or ECMAScript APIs, or an injected capability        | Not proof of a TCP listener, file watch, UDP, or TLS on every runtime  |
+| **`/node` subpath**        | An explicit Node entry                                            | Not implied by the package root                                        |
+| **Standard Web streaming** | Fetch bodies and Web Streams                                      | Not an internal SSE call or bidi RPC                                   |
+| **TLS / mTLS**             | Transport peer verification at the host or plug                   | Not application authentication or a mapping from certificate to user   |
+| **Metadata**               | Immutable key-value data with explicit propagation                | Not trusted identity, and not forwarded unless the handler forwards it |
+| **Replay authorization**   | The caller declared that a bounded retry may repeat the operation | Not proof of idempotency                                               |
+| **Redaction**              | The native logger or exporter omits secrets and payloads          | Core completion records already omit error text                        |
 
-## Recommended English phrasing
+## Phrasing
 
-Use these forms consistently:
+- "internal unary call" for the core Client and Transport contract;
+- "complete replacement snapshot" for a registry watch result;
+- "opaque transport address" for a network URL;
+- "caller-wait boundary" for `stopTimeout` and a plug drain timeout;
+- "application-owned provider" when the application created the connection, registry, or logger;
+- "declared lane" when a script exists and its result has not been recorded for this tree;
+- "baseline audit reported" for the historical command evidence on this site.
 
-- “internal unary call” rather than “RPC” when discussing the current go-like Client/Transport contract;
-- “complete replacement snapshot” rather than “watch event” for the public Registry watcher result;
-- “opaque transport address” rather than “endpoint” when referring to a network URL;
-- “caller-wait boundary” rather than “force timeout” unless a provider exposes a real force operation;
-- “explicit replay authorization” rather than “automatic retry safety”;
-- “application-owned provider” when the application created the native connection, Registry, logger, or telemetry provider;
-- “declared E2E lane” when a script exists but its current result has not been run;
-- “baseline audit reported” when referring to supplied historical/local command evidence;
-- “not established by this audit” for npm, hosted CI, production, published consumer, Docker, cross-runtime, or soak claims that were not executed.
+Do not call go-like a Go-compatible framework, an all-in-one microservice framework, a universal RPC stack, a database, a global DI container, an authentication system, or a production guarantee based on package count or version `0.0.1`.
 
-## Prohibited shortcuts
+## Translation parity
 
-Do not call go-like:
+Localized trees keep:
 
-- a Go-compatible framework;
-- an all-in-one microservice framework;
-- a universal RPC stack;
-- a Protobuf or IDL replacement;
-- a database, ORM, Event Store, or queue abstraction;
-- a global DI container or service locator;
-- an automatic authentication or authorization system;
-- a universal streaming framework;
-- a production guarantee based only on source, package count, or version.
+1. every package name, function, type, route, header, command, URL, version, and numeric limit;
+2. the distinctions among Registry and Discovery, Store and Cache, Broker and Event, socket and plug, resource tier and server tier;
+3. the portable Connect Fetch boundary, the managed gRPC `./node` boundary, and the exclusions for browser standard gRPC and Fetch bidi;
+4. the evidence label on a claim;
+5. the difference between a source contract, a declared test, a passing command, and a gap.
 
-## Translation parity rules
-
-The localized trees should preserve:
-
-1. every package name, public function, type, route token, header, command, URL, version, and numeric limit exactly;
-2. the distinction between `Registry` and `Discovery`, `Store` and `Cache`, `Broker` and `Event`, and `provider` and `lifecycle adapter`;
-3. the portable Protobuf/Connect Fetch boundary, the managed standard-gRPC `/native` boundary, and the exclusions for browser standard gRPC, Fetch request-streaming/bidi, global auth, and automatic instrumentation;
-4. the evidence label attached to claims;
-5. the difference between a source contract, a declared test, a passing command, and an unresolved evidence gap.
-
-For right-to-left pages, isolate code, URLs, `service/endpoint`, `Go-Like-Metadata`, shell commands, and version strings in code spans or fenced code blocks. Do not translate or reorder those identifiers.
+For right-to-left pages, isolate code, URLs, `service/endpoint`, shell commands, and versions in code spans. Do not translate those identifiers.

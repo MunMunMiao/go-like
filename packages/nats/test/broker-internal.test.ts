@@ -1,20 +1,20 @@
 import { describe, expect, test } from "bun:test"
 
-import type { BrokerEvent } from "@go-like/broker"
-import { registerSubscriberTerminal, subscriberTerminal } from "@go-like/broker/provider"
-import { background } from "@go-like/context"
+import type { BrokerEvent } from "@go-like/core/broker"
+import { registerSubscriberTerminal, subscriberTerminal } from "@go-like/core/broker/provider"
+import { background } from "@go-like/core/context"
 import { headers } from "@nats-io/transport-node"
 import {
   brokerEvent,
   prepareBrokerMessage,
   validateTopic,
   type NativeNatsMessage
-} from "../src/broker-message"
+} from "../src/shared/message"
 import {
   managedSubscriber,
   rejectNativeBrokerAdmission,
   type NativeBrokerLifecycle
-} from "../src/broker-runtime"
+} from "../src/shared/runtime"
 import { nextTurn } from "./broker-helpers"
 
 function event(value: string): BrokerEvent<string> {
@@ -37,6 +37,10 @@ describe("NATS Broker internal boundaries", () => {
     expect(() => validateTopic("\ud800x")).toThrow("well-formed")
     expect(() => validateTopic("\udc00")).toThrow("well-formed")
     expect(() => prepareBrokerMessage(null as never)).toThrow("object")
+    expect(() => prepareBrokerMessage({ headers: null as never, body: new Uint8Array() })).toThrow(
+      "object"
+    )
+    expect(() => prepareBrokerMessage({ headers: {}, body: [] as never })).toThrow("Uint8Array")
     expect(() =>
       prepareBrokerMessage({ headers: { "": "value" }, body: new Uint8Array() })
     ).toThrow("well-formed")
@@ -73,7 +77,7 @@ describe("NATS Broker internal boundaries", () => {
 
   test("rejects an invalid lifecycle runtime before starting delivery", () => {
     expect(() =>
-      managedSubscriber(background(), "events", empty(), {} as never, event, () => {})
+      managedSubscriber(background(), "events", empty(), {} as never, event, () => {}, "nats")
     ).toThrow("runtime")
     expect(() => registerSubscriberTerminal(null as never, Promise.resolve())).toThrow("object")
     expect(() =>
@@ -88,7 +92,15 @@ describe("NATS Broker internal boundaries", () => {
         throw "unsubscribe failed"
       }
     }
-    const managed = managedSubscriber(background(), "events", empty(), runtime, event, () => {})
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      empty(),
+      runtime,
+      event,
+      () => {},
+      "nats"
+    )
 
     await expect(managed.unsubscribe(background())).rejects.toMatchObject({
       message: "NATS Broker unsubscribe rejected with a non-Error value",
@@ -102,14 +114,49 @@ describe("NATS Broker internal boundaries", () => {
       running: Promise.resolve(),
       unsubscribe: async () => {}
     }
-    const managed = managedSubscriber(background(), "events", one(), runtime, event, () => {
-      throw failure
-    })
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      one(),
+      runtime,
+      event,
+      () => {
+        throw failure
+      },
+      "nats"
+    )
     const terminal = subscriberTerminal(managed)
 
     expect(Object.keys(managed)).toEqual(["topic", "unsubscribe"])
     expect(terminal).not.toBeNull()
     await expect(terminal).rejects.toBe(failure)
+  })
+
+  test("keeps a handler error ahead of a native completion failure", async () => {
+    const handlerFailure = new Error("handler failed")
+    const nativeFailure = new Error("native failed")
+    const running = Promise.reject(nativeFailure)
+    void running.catch(() => {})
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      one(),
+      {
+        running,
+        unsubscribe: async () => {}
+      },
+      event,
+      () => {
+        throw handlerFailure
+      },
+      "nats"
+    )
+    const failure = await subscriberTerminal(managed)?.catch((value: unknown) => value)
+
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors[0]).toBe(handlerFailure)
+    expect((failure as AggregateError).errors[1]).toBe(nativeFailure)
+    expect((failure as AggregateError).cause).toBe(handlerFailure)
   })
 
   test("aggregates distinct unsubscribe and delivery failures", async () => {
@@ -121,9 +168,17 @@ describe("NATS Broker internal boundaries", () => {
         throw nativeFailure
       }
     }
-    const managed = managedSubscriber(background(), "events", one(), runtime, event, () => {
-      throw handlerFailure
-    })
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      one(),
+      runtime,
+      event,
+      () => {
+        throw handlerFailure
+      },
+      "nats"
+    )
     await nextTurn()
     const failure = await managed.unsubscribe(background()).catch((value: unknown) => value)
 
@@ -140,9 +195,17 @@ describe("NATS Broker internal boundaries", () => {
         throw stopFailure
       }
     }
-    const managed = managedSubscriber(background(), "events", one(), runtime, event, () => {
-      throw "handler failed"
-    })
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      one(),
+      runtime,
+      event,
+      () => {
+        throw "handler failed"
+      },
+      "nats"
+    )
     await nextTurn()
     const failure = await managed.unsubscribe(background()).catch((value: unknown) => value)
 
@@ -201,5 +264,61 @@ describe("NATS Broker internal boundaries", () => {
     } finally {
       globalThis.setTimeout = originalSetTimeout
     }
+  })
+
+  test("an iterator AggregateError still requests the owner stop", async () => {
+    const iteratorFailure = new AggregateError([new Error("native")], "iterator failed")
+    async function* broken(): AsyncGenerator<string> {
+      yield "native"
+      throw iteratorFailure
+    }
+    let stops = 0
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      broken(),
+      {
+        running: Promise.resolve(),
+        unsubscribe() {
+          stops += 1
+          return Promise.resolve()
+        }
+      },
+      event,
+      () => {},
+      "nats"
+    )
+    const terminal = subscriberTerminal(managed)
+
+    expect(terminal).not.toBeNull()
+    await expect(terminal).rejects.toBe(iteratorFailure)
+    expect(stops).toBe(1)
+  })
+
+  test("a handler failure requests unsubscribe once", async () => {
+    const handlerFailure = new Error("handler failed")
+    let stops = 0
+    const managed = managedSubscriber(
+      background(),
+      "events",
+      one(),
+      {
+        running: Promise.resolve(),
+        unsubscribe() {
+          stops += 1
+          return Promise.resolve()
+        }
+      },
+      event,
+      () => {
+        throw handlerFailure
+      },
+      "nats"
+    )
+    const terminal = subscriberTerminal(managed)
+
+    expect(terminal).not.toBeNull()
+    await expect(terminal).rejects.toBe(handlerFailure)
+    expect(stops).toBe(1)
   })
 })

@@ -1,4 +1,10 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
+import {
+  newConfig,
+  source,
+  objectSource,
+  type Config,
+  type ConfigObject
+} from "@go-like/core/config"
 
 import { validateIrrigationPolicy, type IrrigationPolicy } from "./irrigation-policy"
 

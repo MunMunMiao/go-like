@@ -1,7 +1,7 @@
-import { newClient, withEndpoint, withTransport } from "@go-like/client"
-import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
-import type { ServiceClient } from "@go-like/transport"
-import { newMemoryTransport } from "@go-like/transport-memory"
+import { newClient, withEndpoint, withTransport } from "@go-like/core/client"
+import { address, newServer, transport as serverTransport, type Server } from "@go-like/core/server"
+import type { ServiceClient } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
 
 import { telecomProvisioning } from "./contract"
 import type { ProvisionTelecomService } from "./service"

@@ -2,13 +2,13 @@ import type { DescService } from "@bufbuild/protobuf"
 import { createEcmaScriptPlugin, safeIdentifier, type GeneratedFile } from "@bufbuild/protoplugin"
 
 function printService(output: GeneratedFile, service: DescService): void {
-  const context = output.import("Context", "@go-like/context", true)
+  const context = output.import("Context", "@go-like/core/context", true)
   const messageInitShape = output.import("MessageInitShape", "@bufbuild/protobuf", true)
   const messageShape = output.import("MessageShape", "@bufbuild/protobuf", true)
   const createClient = output.import("createClient", "@connectrpc/connect")
-  const serviceRegistrar = output.import("ServiceRegistrar", "@go-like/transport-grpc-buf", true)
-  const callOptions = output.import("callOptions", "@go-like/transport-grpc-buf")
-  const fromHandlerContext = output.import("fromHandlerContext", "@go-like/transport-grpc-buf")
+  const serviceRegistrar = output.import("ServiceRegistrar", "@go-like/connectrpc", true)
+  const callOptions = output.import("callOptions", "@go-like/connectrpc")
+  const fromHandlerContext = output.import("fromHandlerContext", "@go-like/connectrpc")
   const serviceSchema = output.importSchema(service)
   const handlerName = `${service.name}Handler`
   const clientName = `${service.name}Client`

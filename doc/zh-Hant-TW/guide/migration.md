@@ -1,188 +1,171 @@
 # 遷移與導入
 
-最穩妥的遷移原則是：**保留資料面，導入你能清楚說明的邊界**。這裡的資料面，指的是實際處理請求、訊息或工作的那部分系統。
+本頁把遷移前的套件對到目前的 20 個套件與 75 個入口。左欄是歷史名稱。新程式碼只使用右欄。本站其他地方的範例已經使用目前的入口。
 
-保留現有的 Web 框架、worker、排程器、訊息代理、logger 或 telemetry provider（具體實作）。針對一個真實的生命週期或服務呼叫問題，加上一個明確的 go-like 契約。確認這個邊界成立後，再導入下一個 provider。
+機械式修改涵蓋六條規則：
 
-## 分階段遷移
+1. 概念套件移到 core 底下：`@go-like/<concept>` 變成 `@go-like/core/<concept>`，仍然存在的子路徑也一樣。
+2. 記憶體套件移到 `@go-like/core/<concept>/memory`。
+3. 後端套件移到 `@go-like/<vendor>/<concept>`。共用用戶端與協定錯誤移到廠商根入口。插頭專屬的 `Fetch` 型別變成 `@go-like/core/fetch` 的 `Fetch`。
+4. 被折進去的子路徑，改 import 吸收它的那個概念入口。
+5. 少數符號會改名或改入口。它們列在離開的那個 specifier 底下。
+6. 可觀測性包裝、只做生命週期的 NATS server，以及手寫的長時間資源 adapter，不是機械式替換。它們列在表格之後。
 
-1. 保持現有的啟動流程，以及路由／資料面程式碼不變。
-2. 找出一個明確的擁有者：listener、worker、排程器、訊息代理訂閱、logger 輸出端或 telemetry provider。
-3. 增加結構式 `Server` adapter，或使用既有的 go-like adapter。定義資源如何被接納、如何停止、等待多久，以及在哪裡觀察終態。
-4. 在真正發生取消或 deadline 控制的邊界導入 `@go-like/context`，它提供帶有取消訊號、deadline 與 context value 的 Context，並把它當作操作的第一個參數往下傳。
-5. 使用 `@go-like/health` 與 `@go-like/web/health` 增加 liveness 和 readiness 檢查。
-6. 在測試中先用 `@go-like/transport-memory` 加上一個內部 typed unary call（帶型別的單請求／單回應呼叫）。
-7. 只有在確實需要網路線路或原生 Node host 時，才把這個呼叫切換到 `@go-like/transport-http` 或 `@go-like/transport-http/node`。
-8. 一次只增加一項能力：Registry、Config、Store、Cache、Broker、logging、metrics 或 tracing。
-9. 為每個新邊界記錄 provider、runtime、擁有者與證據通道。
+## Specifier codemod
 
-不要一開始就重寫整個服務。小型契約的價值，就在於遷移單位可以維持很小。
+| 歷史 specifier                       | 目前的 specifier                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@go-like/broker`                    | `@go-like/core/broker`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/broker/provider`           | `@go-like/core/broker/provider`                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/broker-memory`             | `@go-like/core/broker/memory`                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/broker-rabbitmq`           | `@go-like/rabbitmq/broker`                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/bullmq`                    | `@go-like/bullmq/job` 提供 `BullMqUnexpectedExitError` 與 `newBullMqJobQueue`。Job 概念移到 `@go-like/core/job`：`BullMqAlreadyStartedError` 改為 `JobStateError`，`BullMqWorkerShutdownTimeoutError` 改為 `JobDrainTimeoutError`，`BullMqWorkerServer` 改為 `JobQueue.worker` 回傳的 `Server`，`bullMqWorkerShutdownTimeout` 改為 `JobWorkerOptions.drainTimeoutMs`。`BullMqWorkerFactory` 已移除。 |
+| `@go-like/cache`                     | `@go-like/core/cache`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/cache/provider`            | `@go-like/core/cache`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/cache-memory`              | `@go-like/core/cache/memory`                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/cache-redis`               | `@go-like/redis/cache`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/client`                    | `@go-like/core/client`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/client/discovery`          | `@go-like/core/registry`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/config`                    | `@go-like/core/config`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/config/env`                | `@go-like/core/config`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/config/file`               | `@go-like/core/config`。`jsonFileDecoder` 改為 `jsonDecoder`。`FileDecoder` 改為 `ConfigDecoder`。                                                                                                                                                                                                                                                                                                   |
+| `@go-like/config/node`               | `@go-like/core/config/node`                                                                                                                                                                                                                                                                                                                                                                          |
+| `@go-like/config/yaml`               | `@go-like/yaml/config`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/config-consul`             | `@go-like/consul/config`。共用錯誤來自 `@go-like/consul`。`ConsulFetch` 改為 `@go-like/core/fetch` 的 `Fetch`。                                                                                                                                                                                                                                                                                      |
+| `@go-like/config-etcd`               | `@go-like/etcd/config`，同樣的拆分                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/config-kubernetes`         | `@go-like/kubernetes/config`，同樣的拆分                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/config-vault`              | `@go-like/vault/config`，同樣的拆分                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/context`                   | `@go-like/core/context`                                                                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/core`                      | `@go-like/core`。`Server` 與 `Endpointer` 移到 `@go-like/core/lifecycle`。                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/core/lifecycle`            | `waitForContext` 移到 `@go-like/core/context`。這個入口現在匯出 `Server`、`Endpointer` 與 `newResourceServer`。                                                                                                                                                                                                                                                                                      |
+| `@go-like/core/node`                 | `@go-like/core/node`                                                                                                                                                                                                                                                                                                                                                                                 |
+| `@go-like/croner`                    | `@go-like/croner/job` 匯出 `newCronerSchedule`。`CronerServer` 改為 `ScheduleServer`，`newCronerServer` 改為來自 `@go-like/core/job` 的 `newScheduleServer(newCronerSchedule(...), name, handler)`。`CronerFactory` 已移除。                                                                                                                                                                         |
+| `@go-like/event`                     | `@go-like/core/broker`（`eventBroker`、`Codec`）                                                                                                                                                                                                                                                                                                                                                     |
+| `@go-like/health`                    | `@go-like/core/health`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/metadata`                  | `@go-like/core/metadata`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/nats`                      | Drain timeout 與其錯誤移到 `@go-like/nats/broker`。`newNatsCoreServer` 由 `newBrokerServer(newNatsCoreBroker(...))` 取代。只負責生命週期的型別已移除。                                                                                                                                                                                                                                               |
+| `@go-like/nats/broker`               | `@go-like/nats/broker`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/nats/jetstream`            | `@go-like/nats/jetstream`。`natsJetStreamCloseTimeout` 與其兩個錯誤保留。生命週期 `Server` 已移除。                                                                                                                                                                                                                                                                                                  |
+| `@go-like/nats/jetstream/broker`     | `@go-like/nats/jetstream`                                                                                                                                                                                                                                                                                                                                                                            |
+| `@go-like/otel`                      | `@go-like/otel`，建構函式變更見下文                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/pino`                      | `@go-like/pino/log`                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/prometheus`                | `@go-like/prometheus/metric`                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/protoc-gen-like`           | `@go-like/protoc-gen-like`                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/registry`                  | `@go-like/core/registry`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/registry/provider`         | `@go-like/core/registry/provider`。`snapshotServiceInstance`、`snapshotServiceInstances` 與 `RegistrationErrorHandler` 改由 `@go-like/core/registry` 匯出。                                                                                                                                                                                                                                          |
+| `@go-like/registry-consul`           | `@go-like/consul/registry`。用戶端與共用錯誤來自 `@go-like/consul`。                                                                                                                                                                                                                                                                                                                                 |
+| `@go-like/registry-etcd`             | `@go-like/etcd/registry`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/registry-kubernetes`       | `@go-like/kubernetes/registry`                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/registry-mdns`             | `@go-like/mdns/registry`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/registry-mdns/node`        | `@go-like/mdns/registry/node`                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/registry-zookeeper`        | `@go-like/zookeeper/registry`。Node factory 是 `@go-like/zookeeper/registry/node`。                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/resilience`                | `@go-like/core/resilience`                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/server`                    | `@go-like/core/server`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/store`                     | `@go-like/core/store`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/store/provider`            | `@go-like/core/store/provider`                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/store-consul`              | `@go-like/consul/store`                                                                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/store-etcd`                | `@go-like/etcd/store`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/store-file`                | `@go-like/file/store`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/store-file/node`           | `@go-like/file/store/node`                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/store-memory`              | `@go-like/core/store/memory`                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/store-vault`               | `@go-like/vault/store`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/struct`                    | `@go-like/core/struct`                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/struct/codec`              | `@go-like/core/struct`（`encodeJson`、`decodeJson`、`jsonCodec`）                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/struct/runtime`            | 已從公開 API 移除。解析使用 `struct.parse`。                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/transport`                 | `@go-like/core/transport`。通用的 `Handler`、`Middleware` 與 `chain` 匯出已移除。                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/transport/headers`         | 已移除。內部使用。                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/transport/json`            | 已移除。內部使用。                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/transport/provider`        | `@go-like/core/transport/provider`。`observeCall` 與線上 codec 已移除。                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/transport/sse`             | 已移除。內部使用。                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/transport-grpc-buf`        | `@go-like/connectrpc`                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/transport-grpc-buf/native` | `@go-like/connectrpc/node`                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/transport-http`            | `@go-like/core/transport/http`                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/transport-http/node`       | `@go-like/core/transport/http/node`                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/transport-memory`          | `@go-like/core/transport/memory`                                                                                                                                                                                                                                                                                                                                                                     |
+| `@go-like/web`                       | `@go-like/core/web`                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/web/bun`                   | `@go-like/core/web/bun`                                                                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/web/health`                | `@go-like/core/web`（`createHealthHandler`）                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/web/node`                  | `@go-like/core/web/node`                                                                                                                                                                                                                                                                                                                                                                             |
+| `@go-like/winston`                   | `@go-like/winston/log`                                                                                                                                                                                                                                                                                                                                                                               |
 
-## 框架遷移矩陣
+Conformance 套件移到 `@go-like/core/testing`。名稱從 `*ConformanceCases` 改為 `*Conformance`，案例型別是 `ConformanceCase`。
 
-| 現有系統 | 保留原生部分                                                          | 優先導入                                                                 | 目前的邊界                                                                          |
-| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| NestJS   | Modules、controllers、decorators、DI、interceptors、pipes、adapter    | 在現有應用外包一層自訂結構式 Server，或建立獨立的內部 Client/Server 邊界 | 目前 repository 沒有 go-like Nest bridge，也沒有自動 DI 整合                        |
-| Fastify  | Routes、plugins、hooks、request/reply、原生 listener                  | 自訂生命週期 wrapper，或明確實作的 Fetch bridge                          | 目前沒有證據證明 Fastify request/reply 能自動轉換成 go-like Handler                 |
-| Hono     | Routes、middleware、sub-apps、`app.fetch`                             | `newNodeServer(app.fetch, ...)`，再接到 `newApp(...)`                    | `examples/hono` 展示了直接使用原生 Fetch 的整合方式                                 |
-| Elysia   | Route tree、schema、decorators、derives、hooks、Bun/Web Standard 行為 | 在適合的情況下使用原生 `app.fetch` 加上 Core host/lifecycle              | 保留 Bun 專屬的 `.listen()` 語意；不要把它說成跨 runtime 的 go-like API             |
-| H3       | H3 router 與原生 handler 轉換                                         | 目前 H3 範例中的 Fetch handler 路徑                                      | 目前展示的是 H3 2.x 的 `app.fetch`；舊版 `toWebHandler` 指引需要獨立固定版本的範例  |
-| Koa      | Middleware 與外部 router                                              | 自訂擁有者 wrapper，或內部服務呼叫                                       | `@go-like/web` 不會直接接收 Koa 的 Node request/reply 物件，除非應用自行提供 bridge |
-| tRPC     | Router、procedure middleware、輸入／輸出解析器、adapter               | 在 host 外圍加上 Core lifecycle，或使用獨立的內部 transport 邊界         | go-like Endpoint 不是 tRPC procedure router                                         |
+## 符號的結果
 
-### Hono 範例
+符號帳冊有 689 列。依結果計數：
 
-這是 repository 已經展示的整合方式：
+| 結果 | 符號 | 意思                         |
+| ---- | ---: | ---------------------------- |
+| 移轉 |  529 | 名稱相同，specifier 可能不同 |
+| 改名 |   12 | 仍有匯出，名稱已改           |
+| 合併 |   35 | 多個舊符號合成一個           |
+| 取代 |   39 | 已移除，有指名的後繼         |
+| 內部 |   38 | 不再匯出                     |
+| 移除 |   36 | 沒有後繼                     |
+| 合計 |  689 |                              |
+
+依領域：kernel 121、RPC 與 Web 189、探索與設定 204、資料與工作 124、telemetry 插頭 50、產生器 1。
+
+50 個 telemetry 插頭符號是刪除最集中的地方。Core 現在記錄工作單元，所以這些包裝沒有後繼：`traceClient`、`traceBroker`、`traceUnaryMiddleware`、`traceWebHandler`、`measureClient`、`measureClientMiddleware`、`measureUnaryMiddleware`、`measureWebHandler`、`measureBroker`、`logBroker`、`logClient`、`logUnaryMiddleware`、`logWebHandler`、`newRequestMetrics`、`RequestMetrics`、`OtelProviders`。`newOtelServer` 與 `OtelServer` 由 `newOtelTracerProvider`、`newOtelMeterProvider` 與 `newOtelLogHandler` 取代。`otelShutdownTimeout` 變成 `shutdownTimeoutMs` 選項。`newPinoServer` 變成 `newPinoHandler`。`newWinstonServer` 變成 `newWinstonHandler`。`TransportLogger` 已移除。`observeCall` 已從 transport provider 入口移除。
+
+用一個套組取代那樣的組裝：
+
+```ts
+import { newApp, server, telemetry } from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { newOtelMeterProvider, newOtelTracerProvider } from "@go-like/otel"
+import { newPinoHandler } from "@go-like/pino/log"
+
+const tel = newTelemetry({
+  tracerProvider: newOtelTracerProvider(sdkTracer),
+  meterProviders: [newOtelMeterProvider(sdkMeter)],
+  logHandlers: [newPinoHandler(logger, destination)]
+})
+const app = newApp(telemetry(tel), server(apiServer))
+void app
+```
+
+`server(logging, telemetry, apiServer)` 變成 `telemetry(tel)` 加上 `server(apiServer)`。手寫的「application started」日誌由 `go_like.app.ready` 事件取代。兩個請求計數器變成一個 `newCounter`。Winston 的 web 包裝變成 `newTelemetry({ logHandlers: [newWinstonHandler(logger)], completionLogs: "all" })`。Winston 的 `format.json()` 仍會丟掉 `Error` 的 message 與 stack，除非先展開 `info.error`。見[健康檢查與可觀測性](/zh-Hant-TW/guide/health-observability)。
+
+其他手工修改：
+
+- 唯一工作是把連線維持打開的 `Server`，改成 `resources(...)` 裡的 `newResourceServer`。
+- BullMQ 佇列是 `resources(...)` 裡的 `newBullMqJobQueue`。它的 worker 是 `server(...)` 裡的 `queue.worker(...)`。
+- Croner callback 變成 `newScheduleServer(newCronerSchedule(pattern), name, handler)`。
+- 只擁有連線的 NATS server 變成包住 `connection.closed()` 與 `connection.drain()` 的 `newResourceServer`。訂閱使用 `newBrokerServer`。
+
+## 導入一個邊界
+
+保留你已經在跑的框架、資料庫與訊息代理。一次改一個擁有者。
+
+| 現有系統         | 保留                   | 第一個 go-like 邊界                                                                                                 |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| NestJS           | Module、controller、DI | 在 Nest 程序外圍放一個由應用程式擁有的 `Server`。這個 repository 裡沒有 Nest bridge。                               |
+| Fastify          | 路由、plugin、hook     | 一個由應用程式擁有的 `Server`，或你自己寫的 Fetch adapter。                                                         |
+| Hono、Elysia、H3 | 路由與 `app.fetch`     | `server(...)` 裡的 `newNodeServer(app.fetch, port(3000))`。見 `examples/hono`、`examples/elysia` 與 `examples/h3`。 |
+| Koa              | Middleware 與其 router | 你自己寫的 `Server`。`@go-like/core/web` 接受 Fetch `Handler`。                                                     |
+| tRPC             | Procedure 與解析器     | 在 host 外圍加上 App 生命週期，或另做一次內部呼叫。Endpoint 不是 tRPC procedure。                                   |
 
 ```ts
 import { Hono } from "hono"
 import { name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { newNodeServer, port } from "@go-like/web/node"
+import { newNodeServer, port } from "@go-like/core/web/node"
 
-const web = new Hono().get("/users/:id", (c) => c.json({ id: c.req.param("id") }))
-
-const app = newApp(name("users"), server(newNodeServer(web.fetch, port(3000))), signal())
-
-await app.run()
+const routes = new Hono()
+routes.get("/hello", (c) => c.json({ ok: true }))
+const web = newNodeServer(routes.fetch, port(3000))
+await newApp(signal(), name("hono"), server(web)).run()
 ```
 
-目前的 Hono 範例保留 Hono 的路由擁有權，把原生 Fetch handler 交給 Node host。它沒有新增 go-like route table，也沒有 Hono 專用的 bridge 套件。
+把一個遷移步驟視為完成之前：
 
-### Elysia 與 H3
+- 擁有者與它所在的層級已經命名；
+- 操作使用的 Context 就是傳進來的那一個；
+- 就緒與 `start` 被區分開，露出 `/readyz` 時包含 `readyProbe`；
+- `stopTimeout` 被寫成等待，而不是原生終態的證明；
+- 重試授權符合業務操作；
+- credentials 與 payload 在原生 logger 或 exporter 上有脫敏政策；
+- 針對性的型別檢查或單元測試指令已經跑過，或把缺口寫下來。
 
-對於暴露標準 Fetch handler 的框架，可以採用相同的邊界：
-
-```text
-framework route table
-  -> framework native Fetch handler
-  -> @go-like/web/node (when using the Node host)
-  -> @go-like/core App
-```
-
-在匯入 Node 子路徑前，先檢查框架使用的 runtime adapter。Elysia 的 Bun adapter 與 Web Standard adapter 的 listen 行為並不完全相同；H3 的版本與 handler 轉換 API 也需要固定版本的範例。不要因為存在一個範例，就承諾所有框架版本或 runtime 組合都能運作。
-
-## Go 服務遷移
-
-如果你熟悉 Go 或 Kratos，遷移時應該遷移概念，而不是照抄拼法：
-
-| Go 概念           | go-like 概念                                                                                                       | 重要差異                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` 回傳的是 `AbortSignal` 或 null，不是 Go channel  |
-| Server lifecycle  | Core 結構式 `Server`                                                                                               | `start(ctx)` 可能長時間維持執行，不等於 readiness         |
-| App runner        | `newApp`、`App.run`、`App.stop`                                                                                    | `App.stop()` 沒有呼叫端 Context，並回傳一個共用的 Promise |
-| RPC client        | `@go-like/client`                                                                                                  | 內部呼叫是 JSON Fetch；retry 預設關閉                     |
-| Transport         | `@go-like/transport`                                                                                               | Provider 與 Fetch headers 都是 TypeScript/Web 契約        |
-| Registry          | `@go-like/registry`                                                                                                | Watcher 回傳完整替換後的 snapshot                         |
-| Selector          | `newRoundRobinSelector`、`newRandomSelector`、`newWeightedRoundRobinSelector`、`newP2CSelector`、`newEWMASelector` | feedback 是同步的，而且取決於具體策略                     |
-| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | 基於 Protobuf-ES 的 Context-first 程式碼                  |
-| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | `/native` 提供標準 gRPC 四種呼叫形態                      |
-
-一個適合漸進遷移的第一步，是用 Memory Transport 做一次直連位址的 typed call：
-
-```ts
-import { newClient, withEndpoint, withTransport } from "@go-like/client"
-import { background, type Context } from "@go-like/context"
-import { address, newServer, transport as serverTransport } from "@go-like/server"
-import { struct } from "@go-like/struct"
-import { defineService } from "@go-like/transport"
-import { newMemoryTransport } from "@go-like/transport-memory"
-
-const quoteService = defineService("pricing", {
-  quote: {
-    request: struct.object({ sku: struct.string() }),
-    response: struct.object({ amount: struct.number() })
-  }
-})
-
-const transport = newMemoryTransport()
-const server = newServer(serverTransport(transport), address("memory://pricing"))
-quoteService.registerHandler(server, {
-  quote(_ctx, request) {
-    return { amount: request.sku.length }
-  }
-})
-
-const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
-const caller = quoteService.newClient(client)
-const ctx: Context = background()
-const result = await caller.quote(ctx, { sku: "a" })
-void result
-```
-
-先把這個邊界測通，再引入 Discovery、真正的 Registry provider 或 HTTP transport。這樣替換的是目的地與所有權接線，領域契約仍然保持穩定。
-
-## Kubernetes 導入
-
-Kubernetes 的原生能力繼續由 Kubernetes 負責：
-
-- Deployment、Service、DNS、Ingress、RBAC、探針、發布策略、HPA 與 network policy 仍是平台責任；
-- `@go-like/config-kubernetes` 透過注入的 Fetch capability，從一個 namespace 內的 ConfigMap 或 Secret 讀取一個 key；
-- `@go-like/registry-kubernetes` 在確實需要直接探索時使用 EndpointSlice 記錄；
-- EndpointSlice 不是 Kubernetes Service DNS，也不會提供通用的註冊 TTL；
-- 可選的 Pod owner reference 與明確註銷具有不同的故障語意。
-
-先導入 health 與 configuration，再處理直接的 EndpointSlice selection。如果應用已有穩定的 Service DNS 名稱，`withEndpoint(...)` 加上 HTTP transport 可能比引入 Registry provider 更簡單，也更符合實際。
-
-## 訊息代理與工作導入
-
-保留原生的 settlement 語意與工作策略：
-
-| 現有資料面     | 保留                                                             | 用 go-like 增加                                                      |
-| -------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------- |
-| NATS Core      | Connection、subscription、queue group、`Msg`、drain              | `newNatsCoreServer`、`newNatsCoreBroker`、生命週期與位元組邊界       |
-| NATS JetStream | Stream、durable consumer、`JsMsg`、ack/nak/term、redelivery、DLQ | `newNatsJetStreamServer`、`newNatsJetStreamBroker`、生命週期         |
-| RabbitMQ       | Connection、topology、confirm policy、channel                    | 借用或復原中的 subscriber lifecycle，以及 generation-safe 的原生結算 |
-| BullMQ         | Queue、Worker、processor、retry/backoff、Redis                   | 圍繞官方 dormant Worker 使用 `newBullMqWorkerServer`                 |
-| Croner         | Cron expression、time zone、callback、overlap policy             | 圍繞暫停狀態的原生 Cron jobs 使用 `newCronerServer`                  |
-| Memory Broker  | 程序內 topic map 與測試語意                                      | `newBrokerServer` 與可選的 event codec                               |
-
-不要把 NATS ack/nak/term、JetStream durable settlement、RabbitMQ confirmations 或 BullMQ retries 搬進通用的 go-like Broker 抽象。正因為這些語意重要，provider 的原生物件才應該繼續可見。
-
-## 狀態遷移
-
-一次只遷移一個狀態領域：
-
-- Config 用於不可變的程序設定快照與 reload；
-- Registry 用於暫時性的服務可達性；
-- Store 用於權威記錄、revision、CAS、TTL 與分頁；
-- Cache 用於可以重新計算的可丟棄值。
-
-一個實用的遷移測試，是寫下程序重啟、讀到過期資料、provider 故障、watcher compaction、CAS 衝突和 cache miss 後會發生什麼。如果答案不同，它們就不應該共用一個通用 repository interface。
-
-## 增加可觀測性
-
-先建立原生 provider，再包住邊界：
-
-```text
-application creates logger / Registry / MeterProvider / TracerProvider
-  -> go-like wrapper records bounded operation facts
-  -> application-owned exporter or destination
-  -> explicit Core lifecycle adapter closes the admitted resource
-```
-
-`@go-like/prometheus` 不使用 global registry。`@go-like/otel` 不會安裝 global providers 或 exporters。Pino 與 Winston adapter 不會取代原生 logger 設定。讓 labels 與 attributes 保持有界，並另外為應用自有的 log 設定脫敏策略。
-
-## 遷移驗收清單
-
-合併一個邊界前，確認：
-
-- 有一個命名清楚的擁有者；
-- 擁有者拿到正確的 Context，且不會用 `background()` 取代它；
-- 啟動接納與 readiness 是兩個不同概念；
-- stop timeout 的行為已按等待邊界寫清楚；
-- 原生終態觀察能力仍然保留（如果 provider 有提供）；
-- 外部 Web handler 與內部 unary handler 沒有混用；
-- retry 授權符合業務操作；
-- credentials、metadata、log 與 trace attributes 有脫敏策略；
-- provider 專屬語意仍然可見；
-- 目標 checkout 中的 focused unit/typecheck 指令已通過；
-- 相關 runtime、provider、published 或 example E2E 指令要嘛已執行並記錄，要嘛明確標示為未執行。
-
-## 目前支援邊界
-
-`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 的 Fetch 入口支援 Connect/gRPC-Web unary 與 server-streaming；`/native` 提供標準 gRPC 的四種呼叫形態，包含 client-streaming 與 bidi。這是獨立於內部 Fetch/SSE 路徑。
-
-這不包含瀏覽器標準 gRPC、Fetch request-streaming/bidi、官方 health/reflection、通用驗證、Event Store/replay、ORM 或叢集編排。
-
-Node 26.12.1 與 Bun 1.4.4 的託管 gRPC 已通過[慢速消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 與 Bun 1.4.2 Fetch 的歷史[取消與停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+瀏覽器標準 gRPC、Fetch 的 request-streaming、Nest 或 Fastify bridge，以及通用的身分驗證，都不在目前的入口裡。託管 gRPC 的 drain 記錄是[聲明與證據](/reference/claims#native-grpc-drain-status)。

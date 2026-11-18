@@ -1,9 +1,10 @@
 import process from "node:process"
 
-import { afterStart, name, newApp, server } from "@go-like/core"
+import { afterStart, name, newApp, server, telemetry } from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
 import { signal } from "@go-like/core/node"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
-import { logWebHandler, newWinstonServer } from "@go-like/winston"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
+import { newWinstonHandler } from "@go-like/winston/log"
 import winston from "winston"
 
 import { newNotificationEvents } from "./events"
@@ -25,19 +26,17 @@ const logger = winston.createLogger({
   format: winston.format.json(),
   transports: [new winston.transports.Console()]
 })
-const handler = logWebHandler(
-  newNotificationHandler(async function deliverAndPublish(ctx, command) {
-    const receipt = await deliver(ctx, command)
-    await events.publish(ctx, receipt)
-    return receipt
-  }),
-  logger
-)
+const handler = newNotificationHandler(async function deliverAndPublish(ctx, command) {
+  const receipt = await deliver(ctx, command)
+  await events.publish(ctx, receipt)
+  return receipt
+})
 const webServer = newNodeServer(handler, hostname(host), port(portNumber))
 const app = newApp(
   signal(),
   name("notification-delivery"),
-  server(newWinstonServer(logger), events.server, webServer),
+  telemetry(newTelemetry({ logHandlers: [newWinstonHandler(logger)], completionLogs: "all" })),
+  server(events.server, webServer),
   afterStart(async function announceReady(ctx): Promise<void> {
     await webServer.endpoint(ctx)
     process.stdout.write(

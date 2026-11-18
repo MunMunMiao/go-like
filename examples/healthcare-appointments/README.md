@@ -6,8 +6,8 @@
 ## 程序结构
 
 - `service.ts`：预约模型、输入校验、预约与取消用例，以及带时段冲突检查的内存仓储。
-- `transport.ts`：使用 `@go-like/client`、`@go-like/server` 与
-  `@go-like/transport-memory` 完成进程内预约策略 unary 调用。契约是
+- `transport.ts`：使用 `@go-like/core/client`、`@go-like/core/server` 与
+  `@go-like/core/transport/memory` 完成进程内预约策略 unary 调用。契约是
   `defineService("appointment-policy.v1", { check })`，调用写成 `client.check(ctx, req)`。
 - `http.ts`：标准 Fetch API 入口。
 - `main.ts`：唯一可执行入口，组合内部策略服务、HTTP Server 和进程生命周期。

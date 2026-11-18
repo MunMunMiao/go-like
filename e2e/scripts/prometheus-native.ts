@@ -79,22 +79,29 @@ function manifestStrings(value: unknown): readonly string[] {
   return Object.values(value).flatMap(manifestStrings)
 }
 
-/** Returns dependency names declared by one built package manifest. */
+/** Returns production and peer names declared by one built package manifest. */
 function dependencyNames(
   manifest: Readonly<Record<string, unknown>>,
   label: string
 ): readonly string[] {
-  if (manifest.dependencies === undefined) return []
-  return Object.keys(jsonObject(manifest.dependencies, `${label} dependencies`))
+  const names = new Set<string>()
+  for (const field of ["dependencies", "peerDependencies"] as const) {
+    if (manifest[field] === undefined) continue
+    for (const name of Object.keys(jsonObject(manifest[field], `${label} ${field}`))) {
+      names.add(name)
+    }
+  }
+  return [...names]
 }
 
 /** Returns the built root import path relative to the package directory. */
 function rootRelativeImport(name: string, manifest: Readonly<Record<string, unknown>>): string {
   const exported = jsonObject(manifest.exports, `${name} exports`)
-  const root = exported["."]
-  const target = typeof root === "string" ? root : jsonObject(root, `${name} root export`).import
+  const metric = exported["./metric"]
+  const target =
+    typeof metric === "string" ? metric : jsonObject(metric, `${name} metric export`).import
   if (typeof target !== "string" || !target.startsWith("./")) {
-    throw new Error(`${name} dist root import is missing`)
+    throw new Error(`${name} dist metric import is missing`)
   }
   const relativePath = target.slice("./".length)
   if (
@@ -102,7 +109,7 @@ function rootRelativeImport(name: string, manifest: Readonly<Record<string, unkn
     relativePath.startsWith("../") ||
     relativePath.includes("/../")
   ) {
-    throw new Error(`${name} dist root import escapes the package`)
+    throw new Error(`${name} dist metric import escapes the package`)
   }
   return relativePath
 }

@@ -1,6 +1,6 @@
-import type { Context } from "@go-like/context"
-import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
-import { newRoundRobinSelector, type ServiceInstance } from "@go-like/registry"
+import type { Context } from "@go-like/core/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/core/health"
+import { newRoundRobinSelector, type ServiceInstance } from "@go-like/core/registry"
 
 import type { KitchenAssignment, KitchenStation, RouteKitchenTicketCommand } from "./service"
 

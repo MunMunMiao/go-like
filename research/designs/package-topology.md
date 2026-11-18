@@ -8,14 +8,16 @@
 
 ## 采用与放弃的方案
 
-| 方案                                      | 判断             | 理由                                                                                                  |
-| ----------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| 能力域契约包 + 独立 provider workspace    | 采用             | Transport、Registry、Config 等分别定义职责；实现可独立发布和按需引入依赖                              |
-| 保留 `adapters/`，仅重命名 npm 包         | 放弃             | 物理目录与产品能力表达两套分类，第三方原生服务被当成次级实现                                          |
-| 单一 Core/Micro 总管门面                  | 放弃             | 隐式聚合 router、client、日志和供应商配置，容易形成默认实现依赖环                                     |
-| 一个 Consul 包同时提供 Config 与 Registry | 放弃             | 同一供应商不意味着相同应用契约，故障和生命周期边界也不同                                              |
-| Hono/H3/Elysia 专用 Fetch 转发包          | 早期采用，后撤销 | 原生 `app.fetch` 或官方 Fetch 适配已足够，不需要第二层框架包装                                        |
-| 所有 RPC 共享一套 wire Transport          | 不采用           | Struct HTTP 与 Protobuf/gRPC 的流、trailers、registrar 和连接所有权不同；共享工作流不要求共享协议接口 |
+下表前三列是 2026-07 的记录。2026-11 的变更写在末列，前三列保持原判断与理由。
+
+| 方案                                      | 判断             | 理由                                                                                                  | 2026-11 修订                                                                                                                                                                                      |
+| ----------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 能力域契约包 + 独立 provider workspace    | 采用             | Transport、Registry、Config 等分别定义职责；实现可独立发布和按需引入依赖                              | 改为单一 `@go-like/core`（41 个入口），概念按子路径进入。总管门面继续放弃。理由是设计第 2.3 节。见 [ADR 0009](../adr/0009-single-core-package.md)、[D42](socket-plug-architecture/decisions.md)。 |
+| 保留 `adapters/`，仅重命名 npm 包         | 放弃             | 物理目录与产品能力表达两套分类，第三方原生服务被当成次级实现                                          | —                                                                                                                                                                                                 |
+| 单一 Core/Micro 总管门面                  | 放弃             | 隐式聚合 router、client、日志和供应商配置，容易形成默认实现依赖环                                     | 继续放弃。根入口是 App API，默认实现从显式子路径导入。见 [ADR 0009](../adr/0009-single-core-package.md)。                                                                                         |
+| 一个 Consul 包同时提供 Config 与 Registry | 放弃             | 同一供应商不意味着相同应用契约，故障和生命周期边界也不同                                              | 改为每个生态一个包、每个插座一个子路径；根入口只共享协议客户端与错误族。见 [ADR 0009](../adr/0009-single-core-package.md)、[D26](socket-plug-architecture/decisions.md)。                         |
+| Hono/H3/Elysia 专用 Fetch 转发包          | 早期采用，后撤销 | 原生 `app.fetch` 或官方 Fetch 适配已足够，不需要第二层框架包装                                        | —                                                                                                                                                                                                 |
+| 所有 RPC 共享一套 wire Transport          | 不采用           | Struct HTTP 与 Protobuf/gRPC 的流、trailers、registrar 和连接所有权不同；共享工作流不要求共享协议接口 | —                                                                                                                                                                                                 |
 
 ## 依赖与所有权
 
@@ -38,6 +40,9 @@
 2. 框架转发包被直接使用原生 Fetch Handler 的方式取代，避免为每个框架维护一层无业务价值的 wrapper。
 3. 初期不纳入 gRPC；后续选择 Buf/Connect runtime，在复用 Context、Metadata、Core Server 和服务发现的同时保持协议所有权独立，见 [HTTP/gRPC 设计](http-grpc-transport.md)。
 4. Message 与路由请求头被 Fetch `Request`/`Response` 和 URL path 替代，理由与流式协议见[内部 RPC 设计](internal-rpc-design.md)。
+5. 2026-11-17：上表第一行的采用判断，在[插座与插头架构（2026-11）](socket-plug-architecture/README.md)中改为单一 `@go-like/core`。该包有 41 个公开入口，概念从子路径进入；生态实现是插头包。理由是插座、机制、无外部系统的参考实现和 core 自己的运行时绑定同属一个不含第三方运行时库的包（设计第 2.3 节，[D41](socket-plug-architecture/decisions.md)、[D42](socket-plug-architecture/decisions.md)）。第三行的总管门面继续放弃：根入口是 App API，默认实现从显式子路径导入。见 [ADR 0009](../adr/0009-single-core-package.md)。
+6. 2026-11-17：上表“一个 Consul 包同时提供 Config 与 Registry”改为每个生态一个包、每个插座一个子路径，例如 `@go-like/consul` 的 `./registry`、`./config` 与 `./store`。契约边界是子路径。根入口只放该插头唯一的共享协议客户端与错误族。按能力域拆开的后端包重复了客户端，并在认证头、404 与错误码上发生漂移；各子路径仍各自声明选项、缺失规则与生命周期。见 [ADR 0009](../adr/0009-single-core-package.md)、[D26](socket-plug-architecture/decisions.md)，以及设计第 11.1 节第 3 条。
+7. 2026-11-17：第 1 条解散 `@go-like/fetch` 之后，`@go-like/core/fetch` 重新使用这个名字。它表示后端插头注入的 `Fetch` 插座，以及调用它的客户端机制。Web 处理器在 `@go-like/core/web`，RPC 传输在 `@go-like/core/transport`。解散旧包的理由不适用于这个入口。见 [ADR 0009](../adr/0009-single-core-package.md) 与设计第 11.1 节第 50 条。
 
 ## 上游依据
 

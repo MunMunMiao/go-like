@@ -14,6 +14,17 @@
 > 更新（2026-08-05）：`@go-like/web/node` 的 Node Fetch 协议转换已内置在 `@go-like/web` 包内，
 > 不再通过 `@hono/node-server` 进入供应链；该子路径仍只接收标准单参数 Web Handler，并继续独立于
 > transport HTTP host。
+>
+> 修订（2026-11-17）：“共享常驻策略”继续有效：准入后所有权转移，只有一个所有者排空，调用方 Context 只约束
+> 自己的等待，超时不是原生终态
+> （[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.2 节与第 6.7 节）。
+> [D31](../designs/socket-plug-architecture/decisions.md) 改了三处适配器边界，原文保留。Croner 插头是
+> `Schedule`：`newCronerSchedule` 提供 `next(afterMs)`；计时、不重叠、手动触发和回调排空由
+> `@go-like/core/job` 的 `newScheduleServer` 负责（第 11.1 节第 37 条）。BullMQ 插头 `newBullMqJobQueue`
+> 把应用的 Queue 作为资源接纳，构建 Worker，并通过 `dispatchJob` 持有处理器；重试执行、卡住恢复和持久化由
+> BullMQ 负责（第 11.1 节第 38 条）。NATS 的公开入口是 `./broker` 与 `./jetstream`，连接由应用作为资源持有
+> （第 11.1 节第 39 条）。理由是任务运行和消息投递要由 core 埋点。见
+> [ADR 0009](0009-single-core-package.md)。
 
 ## 背景
 

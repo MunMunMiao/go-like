@@ -2,7 +2,7 @@
 
 ## 主要演示
 
-演示一个拆成两个服务边界的选课系统：外部 Enrollment API 接受标准 Fetch 请求，应用层通过 `@go-like/transport-memory` 调用内部 Capacity 服务预占课程席位，再保存选课结果。
+演示一个拆成两个服务边界的选课系统：外部 Enrollment API 接受标准 Fetch 请求，应用层通过 `@go-like/core/transport/memory` 调用内部 Capacity 服务预占课程席位，再保存选课结果。
 
 ## 独有业务不变量
 
@@ -31,7 +31,7 @@ Fetch Request
 
 ## go-like 能力
 
-内部契约是 `defineService("learning-capacity.v1", { reserve })`，调用写成 `client.reserve(ctx, req)`。Enrollment 经 `@go-like/client` 的 `withEndpoint`、`@go-like/server` 与 `@go-like/transport-memory` 完成进程内 unary 调用，并由 `@go-like/core` 承接内部 Server。测试通过真实内存传输执行席位预占，不是直接函数调用伪装 RPC。
+内部契约是 `defineService("learning-capacity.v1", { reserve })`，调用写成 `client.reserve(ctx, req)`。Enrollment 经 `@go-like/core/client` 的 `withEndpoint`、`@go-like/core/server` 与 `@go-like/core/transport/memory` 完成进程内 unary 调用，并由 `@go-like/core` 承接内部 Server。测试通过真实内存传输执行席位预占，不是直接函数调用伪装 RPC。
 
 ## 验证
 

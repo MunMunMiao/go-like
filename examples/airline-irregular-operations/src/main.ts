@@ -2,7 +2,7 @@ import process from "node:process"
 
 import { afterStart, name, newApp, registrar, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import { newDisruptionHandler } from "./http"
 import { airlineRegistryFromEnvironment } from "./registry"

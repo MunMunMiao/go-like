@@ -1,5 +1,5 @@
-import type { BrokerEvent, BrokerMessage } from "@go-like/broker"
-import type { Context } from "@go-like/context"
+import type { BrokerEvent, BrokerMessage } from "@go-like/core/broker"
+import type { Context } from "@go-like/core/context"
 import type { JsMsg, PubAck } from "@nats-io/jetstream"
 
 import {

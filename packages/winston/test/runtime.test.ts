@@ -1,15 +1,20 @@
 import { describe, expect, test } from "bun:test"
-import { background, canceled, withCancelCause, withTimeout, type Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
-
-import { newWinstonServer } from "../src/index"
+import {
+  background,
+  canceled,
+  withCancelCause,
+  withTimeout,
+  type Context
+} from "@go-like/core/context"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
+import { newWinstonHandler } from "@go-like/winston/log"
 import { FakeLogger, turns } from "./helpers"
 
 describe("native Winston logger lifecycle", () => {
   test("construction validates without observing or taking over the logger", () => {
     const logger = new FakeLogger()
 
-    newWinstonServer(logger.official())
+    void newWinstonHandler(logger.official()).lifecycle
 
     expect(logger.endCalls).toBe(0)
     expect(logger.listenerCount("error")).toBe(0)
@@ -20,7 +25,7 @@ describe("native Winston logger lifecycle", () => {
   test("accepts an existing logger and ends it exactly once before finish", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server: Server = newWinstonServer(logger.official())
+    const server: TelemetryLifecycle = newWinstonHandler(logger.official()).lifecycle
     expect(logger.listenerCount("error")).toBe(0)
     expect(logger.listenerCount("finish")).toBe(0)
     expect(logger.listenerCount("close")).toBe(0)
@@ -49,7 +54,7 @@ describe("native Winston logger lifecycle", () => {
   test("keeps cancellation local to one stop waiter while owner drain continues", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const caller = withCancelCause(background())
     const failure = new Error("caller left")
@@ -65,7 +70,7 @@ describe("native Winston logger lifecycle", () => {
   test("preserves native logger error identity and waits for finish", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const failure = new Error("transport failed")
 
@@ -79,7 +84,7 @@ describe("native Winston logger lifecycle", () => {
   test("aggregates distinct native errors in observation order", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const first = new Error("first")
     const second = new Error("second")
@@ -95,7 +100,7 @@ describe("native Winston logger lifecycle", () => {
 
   test("classifies finish before owner stop as an unexpected terminal", async () => {
     const logger = new FakeLogger()
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     logger.finish()
     await expect(running).rejects.toMatchObject({
@@ -107,7 +112,7 @@ describe("native Winston logger lifecycle", () => {
 
   test("classifies close before finish as an unexpected terminal", async () => {
     const logger = new FakeLogger()
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     logger.close()
     await expect(running).rejects.toMatchObject({
@@ -122,7 +127,7 @@ describe("native Winston logger lifecycle", () => {
     logger.autoFinish = false
     const failure = new Error("end failed")
     logger.endThrown = failure
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
 
     const stopping = server.stop(background())
@@ -137,7 +142,7 @@ describe("native Winston logger lifecycle", () => {
   test("normalizes non-Error error events and end throws", async () => {
     const eventLogger = new FakeLogger()
     eventLogger.autoFinish = false
-    const eventServer = newWinstonServer(eventLogger.official())
+    const eventServer = newWinstonHandler(eventLogger.official()).lifecycle
     const eventRunning = eventServer.start(background())
     eventLogger.fail("transport")
     eventLogger.finish()
@@ -146,7 +151,7 @@ describe("native Winston logger lifecycle", () => {
     const endLogger = new FakeLogger()
     endLogger.autoFinish = false
     endLogger.endThrown = "end"
-    const endServer = newWinstonServer(endLogger.official())
+    const endServer = newWinstonHandler(endLogger.official()).lifecycle
     const endRunning = endServer.start(background())
     const ending = endServer.stop(background())
     await turns()
@@ -158,7 +163,7 @@ describe("native Winston logger lifecycle", () => {
   test("waits for a real terminal when close interrupts owner drain", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const stopping = server.stop(background())
     await turns()
@@ -172,7 +177,7 @@ describe("native Winston logger lifecycle", () => {
 
   test("pre-canceled startup has no logger side effect and consumes the server", async () => {
     const logger = new FakeLogger()
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const startup = withCancelCause(background())
     const failure = new Error("startup canceled")
     startup[1](failure)
@@ -192,7 +197,9 @@ describe("native Winston logger lifecycle", () => {
     const logger = new FakeLogger()
     const startup = withCancelCause(background())
     startup[1](null)
-    await expect(newWinstonServer(logger.official()).start(startup[0])).rejects.toBe(canceled)
+    await expect(newWinstonHandler(logger.official()).lifecycle.start(startup[0])).rejects.toBe(
+      canceled
+    )
     expect(logger.endCalls).toBe(0)
     expect(logger.listenerCount("finish")).toBe(0)
   })
@@ -217,7 +224,9 @@ describe("native Winston logger lifecycle", () => {
       }
     })
 
-    await expect(newWinstonServer(logger.official()).start(startup)).rejects.toBe(failure)
+    await expect(newWinstonHandler(logger.official()).lifecycle.start(startup)).rejects.toBe(
+      failure
+    )
     expect(errorReads).toBe(2)
     expect(logger.endCalls).toBe(0)
     expect(logger.listenerCount("error")).toBe(0)
@@ -227,7 +236,7 @@ describe("native Winston logger lifecycle", () => {
 
   test("rejects finish or close state observed only when startup is attempted", async () => {
     const finishedLogger = new FakeLogger()
-    const finished = newWinstonServer(finishedLogger.official())
+    const finished = newWinstonHandler(finishedLogger.official()).lifecycle
     expect(finishedLogger.listenerCount("finish")).toBe(0)
     finishedLogger.finish()
     await expect(finished.start(background())).rejects.toMatchObject({
@@ -235,7 +244,7 @@ describe("native Winston logger lifecycle", () => {
     })
 
     const closedLogger = new FakeLogger()
-    const closed = newWinstonServer(closedLogger.official())
+    const closed = newWinstonHandler(closedLogger.official()).lifecycle
     expect(closedLogger.listenerCount("close")).toBe(0)
     closedLogger.close()
     await expect(closed.start(background())).rejects.toMatchObject({
@@ -255,7 +264,7 @@ describe("native Winston logger lifecycle", () => {
       nativeOnce.call(this, event, listener)
       return this
     }
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
 
     await expect(server.start(background())).rejects.toBe(registrationFailure)
     expect(logger.endCalls).toBe(0)
@@ -273,7 +282,9 @@ describe("native Winston logger lifecycle", () => {
       return registered
     }
 
-    await expect(newWinstonServer(logger.official()).start(background())).rejects.toMatchObject({
+    await expect(
+      newWinstonHandler(logger.official()).lifecycle.start(background())
+    ).rejects.toMatchObject({
       name: "WinstonLoggerFinishedError",
       code: "GO_LIKE_WINSTON_LOGGER_FINISHED"
     })
@@ -292,7 +303,9 @@ describe("native Winston logger lifecycle", () => {
       return registered
     }
 
-    await expect(newWinstonServer(logger.official()).start(background())).rejects.toMatchObject({
+    await expect(
+      newWinstonHandler(logger.official()).lifecycle.start(background())
+    ).rejects.toMatchObject({
       name: "WinstonLoggerClosedError",
       code: "GO_LIKE_WINSTON_LOGGER_CLOSED"
     })
@@ -304,7 +317,7 @@ describe("native Winston logger lifecycle", () => {
 
   test("ignores stale duplicate native terminal callbacks without changing failure identity", async () => {
     const logger = new FakeLogger()
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const done = running
 
@@ -326,7 +339,7 @@ describe("native Winston logger lifecycle", () => {
   test("caller Context timeout never fabricates the shared native terminal", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const stopCtx = withTimeout(background(), 1)[0]
 
@@ -352,7 +365,7 @@ describe("native Winston logger lifecycle", () => {
   test("leaves a missing native terminal pending without fabricating completion", async () => {
     const logger = new FakeLogger()
     logger.autoFinish = false
-    const server = newWinstonServer(logger.official())
+    const server = newWinstonHandler(logger.official()).lifecycle
     const running = server.start(background())
     const stopping = server.stop(background())
     await turns()
@@ -377,7 +390,7 @@ describe("native Winston logger lifecycle", () => {
     const finishedLogger = new FakeLogger()
     finishedLogger.finish()
     await expect(
-      newWinstonServer(finishedLogger.official()).start(background())
+      newWinstonHandler(finishedLogger.official()).lifecycle.start(background())
     ).rejects.toMatchObject({
       name: "WinstonLoggerFinishedError"
     })
@@ -385,7 +398,7 @@ describe("native Winston logger lifecycle", () => {
     const closedLogger = new FakeLogger()
     closedLogger.close()
     await expect(
-      newWinstonServer(closedLogger.official()).start(background())
+      newWinstonHandler(closedLogger.official()).lifecycle.start(background())
     ).rejects.toMatchObject({
       name: "WinstonLoggerClosedError"
     })

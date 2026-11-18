@@ -61,7 +61,7 @@ export interface GrpcSoakTerminal {
 }
 
 const Root = resolve(import.meta.dir, "..")
-const Fixture = "packages/transport/grpc-buf/test/e2e/soak-runtime.ts"
+const Fixture = "packages/connectrpc/test/e2e/soak-runtime.ts"
 
 function boundedInteger(value: number, label: string, maximum: number): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {

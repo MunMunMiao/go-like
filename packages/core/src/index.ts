@@ -1,3 +1,5 @@
+export { newApp } from "./app/app"
+export { fromContext, newContext } from "./app/identity"
 export {
   afterStart,
   afterStop,
@@ -5,17 +7,18 @@ export {
   beforeStop,
   context,
   endpoint,
-  fromContext,
   id,
   metadata,
   name,
-  newApp,
-  newContext,
+  readyProbe,
   registrar,
   registrarTimeout,
+  resources,
   server,
   startTimeout,
   stopTimeout,
+  telemetry,
   version
-} from "./app"
-export type { App, AppHook, AppInfo, AppOption, Endpointer, Server } from "./app"
+} from "./app/options"
+export type { App, AppHook, AppInfo, AppOption } from "./app/options"
+export type { AppNotReadyError } from "./app/readiness"

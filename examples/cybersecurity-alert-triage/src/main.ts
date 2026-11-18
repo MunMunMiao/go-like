@@ -1,12 +1,13 @@
 import process from "node:process"
 
-import { withoutCancel } from "@go-like/context"
+import { withoutCancel } from "@go-like/core/context"
 import { afterStart, afterStop, beforeStart, name, newApp, registrar, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { newEtcdRegistry } from "@go-like/registry-etcd"
-import type { Handler } from "@go-like/web"
-import { createHealthHandler } from "@go-like/web/health"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { newEtcdClient } from "@go-like/etcd"
+import { newEtcdRegistry } from "@go-like/etcd/registry"
+import type { Handler } from "@go-like/core/web"
+import { createHealthHandler } from "@go-like/core/web"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import {
   newEtcdAlertTriageLedger,
@@ -26,11 +27,20 @@ if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
 
 const etcdAddress = process.env.ETCD_ADDRESS
 if (etcdAddress === "") throw new TypeError("ETCD_ADDRESS must not be empty")
-const etcdOptions =
+const etcdClient =
   etcdAddress === undefined
     ? null
-    : Object.freeze({
+    : newEtcdClient({
         address: etcdAddress,
+        fetch(request) {
+          return fetch(request)
+        }
+      })
+const etcdOptions =
+  etcdClient === null
+    ? null
+    : Object.freeze({
+        client: etcdClient,
         configKey: process.env.ETCD_CONFIG_KEY ?? "go-like/examples/security/triage/config"
       })
 const config =
@@ -45,11 +55,9 @@ const config =
 const ledger =
   etcdOptions === null ? newMemoryAlertTriageLedger() : newEtcdAlertTriageLedger(etcdOptions)
 const registry =
-  etcdOptions === null
+  etcdClient === null
     ? null
-    : newEtcdRegistry({
-        fetch,
-        address: etcdOptions.address,
+    : newEtcdRegistry(etcdClient, {
         prefix: "/go-like/examples/security/registry/"
       })
 const registration = registry === null ? [] : [registrar(registry)]

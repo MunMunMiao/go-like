@@ -13,10 +13,11 @@ import {
   withEndpoint,
   withTransport,
   type Client
-} from "@go-like/client"
-import { newConfig, schema, source } from "@go-like/config"
-import { vaultSource } from "@go-like/config-vault"
-import { background, withoutCancel } from "@go-like/context"
+} from "@go-like/core/client"
+import { newConfig, schema, source } from "@go-like/core/config"
+import { newVaultClient } from "@go-like/vault"
+import { vaultSource } from "@go-like/vault/config"
+import { background, withoutCancel } from "@go-like/core/context"
 import {
   afterStop,
   beforeStart,
@@ -28,23 +29,26 @@ import {
   registrar,
   server,
   stopTimeout,
+  telemetry as telemetryOption,
   version,
   type App
 } from "@go-like/core"
-import { newProbeRegistry } from "@go-like/health"
-import { newOtelServer, traceClient, traceUnaryMiddleware } from "@go-like/otel"
-import { newPinoServer } from "@go-like/pino"
-import { createPrometheusHandler } from "@go-like/prometheus"
-import { newRoundRobinSelector } from "@go-like/registry"
-import { newConsulRegistry } from "@go-like/registry-consul"
-import { address, middleware, newServer, transport as serverTransport } from "@go-like/server"
-import { newHTTPTransport } from "@go-like/transport-http"
-import { newNodeHTTPTransport } from "@go-like/transport-http/node"
-import { createHealthHandler } from "@go-like/web/health"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { newProbeRegistry } from "@go-like/core/health"
+import { newOtelMeterProvider, newOtelTracerProvider } from "@go-like/otel"
+import { newPinoHandler } from "@go-like/pino/log"
+import { createPrometheusHandler, newPrometheusMeterProvider } from "@go-like/prometheus/metric"
+import { newRoundRobinSelector } from "@go-like/core/registry"
+import { newConsulClient } from "@go-like/consul"
+import { newConsulRegistry } from "@go-like/consul/registry"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { newHTTPTransport } from "@go-like/core/transport/http"
+import { newNodeHTTPTransport } from "@go-like/core/transport/http/node"
+import { createHealthHandler } from "@go-like/core/web"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 import { context } from "@opentelemetry/api"
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
-import { ExportResultCode, W3CTraceContextPropagator, type ExportResult } from "@opentelemetry/core"
+import { ExportResultCode, type ExportResult } from "@opentelemetry/core"
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { resourceFromAttributes } from "@opentelemetry/resources"
@@ -62,7 +66,7 @@ import {
   type SpanExporter
 } from "@opentelemetry/sdk-trace"
 import pino from "pino"
-import { Counter, Registry } from "prom-client"
+import { Registry } from "prom-client"
 
 import {
   boundedTail,
@@ -641,7 +645,7 @@ async function run(): Promise<void> {
 
     const destination = pino.destination({ dest: logPath, mkdir: true, sync: false })
     const logger = pino({ base: null, timestamp: false, redact: ["secret", "token"] }, destination)
-    const logging = newPinoServer(logger, destination)
+    const logging = newPinoHandler(logger, destination)
     logger.info({ component: "enterprise", secret: vaultToken }, "runtime starting")
 
     const resource = resourceFromAttributes({
@@ -688,21 +692,18 @@ async function run(): Promise<void> {
         })
       ]
     })
-    const telemetry = newOtelServer({ tracerProvider, meterProvider })
-    const tracer = tracerProvider.getTracer("enterprise-platform")
-    const otelCalls = meterProvider
-      .getMeter("enterprise-platform")
-      .createCounter("enterprise.calls")
-    const propagator = new W3CTraceContextPropagator()
-
+    const vaultClient = newVaultClient({
+      fetch(request) {
+        return fetch(request)
+      },
+      address: vaultAddress,
+      token: vaultToken
+    })
     const runtimeConfig = newConfig(
       source(
-        vaultSource({
-          fetch,
-          address: vaultAddress,
+        vaultSource(vaultClient, {
           mount: "secret",
           path: "applications/platform/config",
-          token: vaultToken,
           pollIntervalMs: 50,
           retryInitialMs: 25,
           retryMaximumMs: 100
@@ -710,47 +711,37 @@ async function run(): Promise<void> {
       ),
       schema(runtimeConfigSchema)
     )
-    const runtimeState = newPlatformRuntimeState(vaultAddress, vaultToken, `platform-${runId}`)
-    const registry = newConsulRegistry({
-      fetch,
-      address: consulAddress,
-      waitMs: 1_000,
-      minimumQueryIntervalMs: 10,
-      retryInitialMs: 25,
-      retryMaximumMs: 100,
-      deregisterCriticalServiceAfterMs: 60_000
-    })
+    const runtimeState = newPlatformRuntimeState(vaultClient, `platform-${runId}`)
+    const registry = newConsulRegistry(
+      newConsulClient({
+        fetch(request) {
+          return fetch(request)
+        },
+        address: consulAddress
+      }),
+      {
+        waitMs: 1_000,
+        minimumQueryIntervalMs: 10,
+        retryInitialMs: 25,
+        retryMaximumMs: 100,
+        deregisterCriticalServiceAfterMs: 60_000
+      }
+    )
     let handlerCalls = 0
     const prometheus = new Registry()
-    const requests = new Counter({
-      name: "enterprise_requests_total",
-      help: "Enterprise unary requests by bounded result.",
-      labelNames: ["result"],
-      registers: [prometheus]
-    })
-    const echoServer = newServer(
-      serverTransport(newNodeHTTPTransport()),
-      address("127.0.0.1:0"),
-      middleware(traceUnaryMiddleware(tracer, propagator))
-    )
+    const echoServer = newServer(serverTransport(newNodeHTTPTransport()), address("127.0.0.1:0"))
     echoService.registerHandler(
       echoServer,
       newEchoHandler(runtimeConfig, function recordCall(): void {
         handlerCalls += 1
-        requests.inc({ result: "ok" })
-        otelCalls.add(1, { result: "ok" })
       })
     )
     const serviceEndpoint = await echoServer.endpoint(background())
-    client = traceClient(
-      newClient(
-        withDiscovery(registry),
-        withEndpoint(`discovery:///${echoServiceName}`),
-        withSelector(newRoundRobinSelector()),
-        withTransport(newHTTPTransport())
-      ),
-      tracer,
-      propagator
+    client = newClient(
+      withDiscovery(registry),
+      withEndpoint(`discovery:///${echoServiceName}`),
+      withSelector(newRoundRobinSelector()),
+      withTransport(newHTTPTransport())
     )
     const probes = newProbeRegistry()
     registerRuntimeProbes(probes, () => runtimeConfig.value("release").load() !== null)
@@ -774,7 +765,17 @@ async function run(): Promise<void> {
         await runtimeConfig.load(ctx)
         await runtimeState.publish(ctx)
       }),
-      server(logging, telemetry, echoServer, managementServer),
+      telemetryOption(
+        newTelemetry({
+          tracerProvider: newOtelTracerProvider(tracerProvider),
+          meterProviders: [
+            newOtelMeterProvider(meterProvider),
+            newPrometheusMeterProvider(prometheus)
+          ],
+          logHandlers: [logging]
+        })
+      ),
+      server(echoServer, managementServer),
       afterStop(async function closeRuntime(ctx): Promise<void> {
         const cleanup = withoutCancel(ctx)
         try {
@@ -805,7 +806,7 @@ async function run(): Promise<void> {
       "Consul-discovered call did not return Vault release 1"
     )
     const metricsBody = await (await fetch(new URL("/metrics", managementAddress))).text()
-    assert(metricsBody.includes("enterprise_requests_total"), "Prometheus metric was absent")
+    assert(metricsBody.includes("enterprise_calls_total"), "Prometheus metric was absent")
 
     await writeVaultConfig(vaultAddress, vaultToken, 2)
     await waitUntil("Vault revision 2", () => runtimeConfig.value("release").load() === 2)
@@ -823,8 +824,7 @@ async function run(): Promise<void> {
 
     await waitUntil("Collector trace and metric acknowledgements", () =>
       Boolean(
-        telemetryEvidence.spanNames.has(`go-like.client ${echoServiceName}/${echoEndpointName}`) &&
-        telemetryEvidence.spanNames.has(`go-like.server ${echoServiceName}/${echoEndpointName}`) &&
+        telemetryEvidence.spanNames.has(`${echoServiceName}/${echoEndpointName}`) &&
         telemetryEvidence.metricNames.has("enterprise.calls")
       )
     )

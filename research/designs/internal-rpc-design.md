@@ -908,3 +908,11 @@ B. 固定前缀如 `/rpc/<service>/<endpoint>`；C. 前缀可配置，直连地�
 | 单条消息超过上限                                          | 两端上限不一致时只有笼统的协议错误            | `resource_exhausted` 错误写明实际大小、上限与超限的一方                                                      | 运行期错误信息             |
 | deadline 太短导致流中途结束                               | 下游看到 `Canceled` 而不是 `DeadlineExceeded` | 调用方收到 `DeadlineExceeded`；文档说明下游看到的取消原因可能不同                                            | 运行期、文档               |
 | 在生成器里做以送达为前提的副作用                          | —                                             | 无法在类型上禁止；文档规则与示例给出“客户端提交游标”的写法                                                   | 文档                       |
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文。总决定见
+[ADR 0009](../adr/0009-single-core-package.md)。出处是
+[插座与插头架构（2026-11）](socket-plug-architecture/README.md)第 11.1 节。
+
+- 第 11 节把流响应体包装放在 `@go-like/transport`，供四个观测包共用。观测改由 core 拥有之后，响应体观察在 core 内部完成。`@go-like/core/transport/provider` 公开给监听器的是缩减后的 `observeResponseBody`。见第 11.1 节第 23 条、[D21](socket-plug-architecture/decisions.md)。

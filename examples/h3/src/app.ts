@@ -1,4 +1,4 @@
-import type { Handler } from "@go-like/web"
+import type { Handler } from "@go-like/core/web"
 import { H3 } from "h3"
 
 import { statusRoute } from "#src/routes"

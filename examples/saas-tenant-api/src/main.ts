@@ -1,13 +1,24 @@
 import process from "node:process"
 
-import { newRedisCache } from "@go-like/cache-redis"
-import { newConfig, schema, source } from "@go-like/config"
-import { consulSource } from "@go-like/config-consul"
-import { withoutCancel } from "@go-like/context"
-import { afterStart, afterStop, beforeStart, name, newApp, server } from "@go-like/core"
+import { newRedisCache } from "@go-like/redis/cache"
+import { newConfig, schema, source } from "@go-like/core/config"
+import { newConsulClient } from "@go-like/consul"
+import { consulSource } from "@go-like/consul/config"
+import { withoutCancel } from "@go-like/core/context"
+import {
+  afterStart,
+  afterStop,
+  beforeStart,
+  name,
+  newApp,
+  resources,
+  server,
+  telemetry
+} from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
 import { signal } from "@go-like/core/node"
-import { newPinoServer } from "@go-like/pino"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { newPinoHandler } from "@go-like/pino/log"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 import pino from "pino"
 
 import { tenantDocumentSchema } from "./config"
@@ -22,13 +33,17 @@ if (!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65_535) {
 const consulAddress = process.env.CONSUL_HTTP_ADDR ?? "http://127.0.0.1:28500"
 const redisUrl = process.env.REDIS_URL ?? "redis://127.0.0.1:26379"
 const configKey = process.env.CONFIG_KEY ?? "go-like/examples/saas-tenant-api/config"
-const runtimeState = newTenantRuntimeState(consulAddress, crypto.randomUUID())
+const consul = newConsulClient({
+  fetch(request) {
+    return fetch(request)
+  },
+  address: consulAddress
+})
+const runtimeState = newTenantRuntimeState(consul, crypto.randomUUID())
 
 const config = newConfig(
   source(
-    consulSource({
-      fetch,
-      address: consulAddress,
+    consulSource(consul, {
       key: configKey,
       waitMs: 1_000,
       retryInitialMs: 50,
@@ -51,7 +66,7 @@ const logger = pino(
   },
   destination
 )
-const logging = newPinoServer(logger, destination)
+const logging = newPinoHandler(logger, destination)
 const handler = newTenantHandler({
   config,
   cache,
@@ -69,7 +84,9 @@ const app = newApp(
     await config.load(ctx)
     await runtimeState.publish(ctx)
   }),
-  server(logging, cache, webServer),
+  telemetry(newTelemetry({ logHandlers: [logging] })),
+  resources(cache),
+  server(webServer),
   afterStart(async function announceReady(ctx): Promise<void> {
     await webServer.endpoint(ctx)
     process.stdout.write(

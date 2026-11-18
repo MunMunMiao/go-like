@@ -64,3 +64,12 @@ option。采用 Kratos 风格契约的 Registry 只承担注册和发现。
 - Protobuf-ES descriptor/codec、Connect client/protocol handler 与 ctx-first generated glue 只进入独立的
   `@go-like/protoc-gen-like` / `@go-like/transport-grpc-buf` 边界，不改变内部 Fetch JSON 与 SSE Transport。
 - Event Store、历史 replay 与更多 Registry provider 仍是已经批准的排除项。
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文。总决定见
+[ADR 0009](../adr/0009-single-core-package.md)。出处是
+[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.1 节。
+
+- `@go-like/core/lifecycle` 导出 `Server`、`Endpointer` 与 `newResourceServer`。持有原生资源的应用会导入它。它继续是稳定的低层入口。打包方案里删除该子路径的提议由 [D1](../designs/socket-plug-architecture/decisions.md) 推翻。见第 11.1 节第 10 条。上文“应用 happy path 不需要导入该子路径”保留作当时的定位。
+- 已批准的 `web`、`transport`、`transport-http` 名称现在是 `@go-like/core/web`、`@go-like/core/transport`、`@go-like/core/transport/http`。包前缀改为单一 core 包；概念名保留为子路径。见第 11.1 节第 51 条、[D24](../designs/socket-plug-architecture/decisions.md)、[D42](../designs/socket-plug-architecture/decisions.md)。

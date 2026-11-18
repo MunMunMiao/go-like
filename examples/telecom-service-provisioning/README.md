@@ -1,14 +1,14 @@
 # 电信业务开通
 
 该示例演示电信业务开通微服务：公共标准 Fetch API 不直接修改资源，而是通过
-`@go-like/client`、`@go-like/server` 与 `@go-like/transport-memory` 调用内部
+`@go-like/core/client`、`@go-like/core/server` 与 `@go-like/core/transport/memory` 调用内部
 `telecom-provisioning.v1` 的 `activate`，写成 `client.activate(ctx, req)`。
 
 ## 主要演示
 
 - go-like Client、Server declaration 与 Memory Transport 构成真实进程内内部调用。
 - 内部服务以结构式 `Server` 暴露 `start(ctx)`、`stop(ctx)` 生命周期。
-- `@go-like/context` 从公共请求传播到内部 unary endpoint 与仓储。
+- `@go-like/core/context` 从公共请求传播到内部 unary endpoint 与仓储。
 - 业务服务、仓储、内部 Transport、公共 HTTP 与运行入口按真实职责拆分。
 
 ## 业务不变量

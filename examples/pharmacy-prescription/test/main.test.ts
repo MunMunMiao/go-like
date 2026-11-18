@@ -1,4 +1,4 @@
-import { background, type Context } from "@go-like/context"
+import { background, type Context } from "@go-like/core/context"
 import { describe, expect, test } from "bun:test"
 import { newPrescriptionHandler } from "../src/http"
 import {

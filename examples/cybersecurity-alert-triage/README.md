@@ -1,16 +1,16 @@
 # 网络安全告警分诊
 
 该示例演示 SOC 告警分诊微服务：标准 Fetch API 接收身份、终端或网络告警，通过
-`@go-like/health` readiness 确认规则已发布，再从 `@go-like/config` 当前不可变配置读取阈值并计算
+`@go-like/core/health` readiness 确认规则已发布，再从 `@go-like/core/config` 当前不可变配置读取阈值并计算
 处置队列。默认模式无需外部服务；设置 `ETCD_ADDRESS` 后，同一程序改用真实
-`@go-like/config-etcd`、`@go-like/registry-etcd` 和 `@go-like/store-etcd`。
+`@go-like/etcd/config`、`@go-like/etcd/registry` 和 `@go-like/etcd/store`。
 
 ## 主要演示
 
 - Core hook 在 HTTP Server 启动前加载 Config，并在停止后关闭 Config。
 - etcd 模式从一个精确 KV key 读取规则、注册当前 App，并以原子 create-if-absent 持久化分诊结果后 fresh readback。
 - Health readiness 作为告警接纳前的 fail-closed 门禁。
-- `@go-like/context` 作为分诊和告警台账操作的首个参数。
+- `@go-like/core/context` 作为分诊和告警台账操作的首个参数。
 - 标准 Fetch Handler 与规则服务、Config、运行入口分离。
 
 ## 业务不变量

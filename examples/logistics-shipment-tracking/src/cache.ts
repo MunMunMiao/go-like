@@ -1,5 +1,5 @@
-import { newMemoryCache, type MemoryCache } from "@go-like/cache-memory"
-import type { Context } from "@go-like/context"
+import { newMemoryCache, type MemoryCache } from "@go-like/core/cache/memory"
+import type { Context } from "@go-like/core/context"
 import {
   newMemoryShipmentTrackingRepository,
   newTrackShipment,

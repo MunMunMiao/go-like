@@ -1,108 +1,96 @@
 # Packages
 
-The current source manifests contain **45 non-private `@go-like/*` packages**. Every package is version `0.0.1` in this checkout. The root workspace is private, and the manifest versions do not establish npm availability. The 44 `examples/*` directories are private workspace applications, not public packages.
+The workspace contains **20** public `@go-like/*` packages, each at version `0.0.1` in this checkout. The root workspace is private. The version does not establish npm availability. The 44 `examples/*` directories are private applications.
 
-Use [Providers](/reference/providers) for the detailed “what to use, when, and what it does not own” reference. This page is the inventory and import map.
+There are **75** public entries: 41 on `@go-like/core` and 34 on the plugs and the generator. A generated `dist/package.json` `./package.json` export is metadata, not another entry.
 
-## Package inventory
+`@go-like/core` has no third-party runtime dependency. Every other package except `@go-like/protoc-gen-like` peer-depends on the same core version. The generator does not depend on core. Plug behavior and limits are in each plug README. This page is the inventory.
 
-| Capability                  | Public packages                                                                                                                                                                                             |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Foundations                 | `@go-like/context`, `@go-like/core`, `@go-like/metadata`, `@go-like/struct`, `@go-like/health`, `@go-like/resilience`                                                                                       |
-| Web and internal calls      | `@go-like/web`, `@go-like/client`, `@go-like/server`, `@go-like/transport`, `@go-like/transport-http`, `@go-like/transport-memory`                                                                          |
-| Configuration               | `@go-like/config`, `@go-like/config-consul`, `@go-like/config-etcd`, `@go-like/config-kubernetes`, `@go-like/config-vault`                                                                                  |
-| Registration and selection  | `@go-like/registry`, `@go-like/registry-consul`, `@go-like/registry-etcd`, `@go-like/registry-kubernetes`, `@go-like/registry-mdns`, `@go-like/registry-zookeeper`                                          |
-| Records and cache           | `@go-like/store`, `@go-like/store-consul`, `@go-like/store-etcd`, `@go-like/store-file`, `@go-like/store-memory`, `@go-like/store-vault`, `@go-like/cache`, `@go-like/cache-memory`, `@go-like/cache-redis` |
-| Broker and events           | `@go-like/broker`, `@go-like/broker-memory`, `@go-like/broker-rabbitmq`, `@go-like/event`, `@go-like/nats`                                                                                                  |
-| Jobs and lifecycle adapters | `@go-like/croner`, `@go-like/bullmq`                                                                                                                                                                        |
-| Logging and observability   | `@go-like/pino`, `@go-like/winston`, `@go-like/otel`, `@go-like/prometheus`                                                                                                                                 |
-| Generated RPC and codegen   | `@go-like/transport-grpc-buf`, `@go-like/protoc-gen-like`                                                                                                                                                   |
+## The 20 packages
 
-Count check: 6 + 6 + 5 + 6 + 9 + 5 + 2 + 4 + 2 = 45.
+| Package                    | Entries                                  | Fills                                                        |
+| -------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| `@go-like/core`            | 41                                       | Sockets, mechanisms, memory references, and runtime bindings |
+| `@go-like/otel`            | `.`                                      | Tracer, meter, log handler, propagator                       |
+| `@go-like/pino`            | `./log`                                  | `LogHandler`                                                 |
+| `@go-like/winston`         | `./log`                                  | `LogHandler`                                                 |
+| `@go-like/prometheus`      | `./metric`                               | `MeterProvider` and a scrape `Handler`                       |
+| `@go-like/consul`          | `.`, `./registry`, `./config`, `./store` | Shared client, registry, config, store                       |
+| `@go-like/etcd`            | `.`, `./registry`, `./config`, `./store` | Shared client, registry, config, store                       |
+| `@go-like/vault`           | `.`, `./config`, `./store`               | Shared client, config, store                                 |
+| `@go-like/kubernetes`      | `.`, `./registry`, `./config`            | Shared client, registry, config                              |
+| `@go-like/zookeeper`       | `./registry`, `./registry/node`          | Registry over a client factory; Node factory                 |
+| `@go-like/mdns`            | `./registry`, `./registry/node`          | Registry over an `MDNSHost`; Node host                       |
+| `@go-like/yaml`            | `./config`                               | `ConfigDecoder`                                              |
+| `@go-like/nats`            | `./broker`, `./jetstream`                | Core and JetStream brokers                                   |
+| `@go-like/rabbitmq`        | `./broker`                               | Broker                                                       |
+| `@go-like/redis`           | `./cache`                                | Cache and a resource-tier `Server`                           |
+| `@go-like/bullmq`          | `./job`                                  | `JobQueue` and a resource-tier `Server`                      |
+| `@go-like/croner`          | `./job`                                  | `Schedule`                                                   |
+| `@go-like/file`            | `./store`, `./store/node`                | Store and a resource-tier `Server`; Node host                |
+| `@go-like/connectrpc`      | `.`, `./node`                            | Fetch handler; Node gRPC server and client                   |
+| `@go-like/protoc-gen-like` | `.`                                      | Buf plugin and `bin`. No socket                              |
 
-## Core import map
+Count: 41 + 4 + 8 + 6 + 10 + 6 = 75. The plug and generator entries are the 34 after core's 41.
 
-| Need                        | Import                                      | First API to read                                             |
-| --------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
-| Cancellation or deadline    | `@go-like/context`                          | `background`, `withCancel`, `withTimeout`, `cause`            |
-| App lifecycle               | `@go-like/core`                             | `newApp`, `server`, hooks, `stopTimeout`                      |
-| Process signals             | `@go-like/core/node`                        | `signal`                                                      |
-| Web handler                 | `@go-like/web`                              | `Handler`, `contextHandler`                                   |
-| Node Web host               | `@go-like/web/node`                         | `newNodeServer`, `hostname`, `port`                           |
-| Internal unary contract     | `@go-like/transport`                        | `defineService`, `endpoint`, `serviceError`, `ServerStream`   |
-| Typed runtime validation    | `@go-like/struct`                           | `struct`, `Infer`, `StructError`                              |
-| Internal Client             | `@go-like/client`                           | `newClient`, `withTransport`, `withEndpoint`                  |
-| Shared Discovery resolver   | `@go-like/client/discovery`                 | `newDiscoveryResolver`, `DiscoveryResolver`                   |
-| Internal Server             | `@go-like/server`                           | `newServer`, `Server.registerHandler`, `address`, `advertise` |
-| In-process transport        | `@go-like/transport-memory`                 | `newMemoryTransport`                                          |
-| Fetch-backed HTTP transport | `@go-like/transport-http`                   | `newHTTPTransport`                                            |
-| Native Node HTTP/TLS        | `@go-like/transport-http/node`              | `newNodeHTTPTransport`, `clientAuth`, `allowHTTP1`            |
-| Portable generated RPC      | `@go-like/transport-grpc-buf`               | `newHandler`, `fromHandlerContext`, `callOptions`             |
-| Managed standard gRPC       | `@go-like/transport-grpc-buf/native`        | `newClient`, `newServer`, construction options                |
-| Project-local RPC codegen   | `@go-like/protoc-gen-like`                  | `protoc-gen-like` Node binary, `protocGenLike`                |
-| Discovery and selection     | `@go-like/registry`                         | `Discovery`, `Watcher`, `filterVersion`, selectors            |
-| Configuration               | `@go-like/config`                           | `newConfig`, `source`, `objectSource`                         |
-| Records                     | `@go-like/store`                            | `Store`, `ifAbsent`, `ifRevision`, `prefix`                   |
-| Disposable values           | `@go-like/cache`                            | `Cache`, `expiresIn`                                          |
-| Broker bytes                | `@go-like/broker`                           | `Broker`, `BrokerEvent`, `newBrokerServer`                    |
-| Typed broker payloads       | `@go-like/event`                            | `Codec`, `eventBroker`                                        |
-| Health                      | `@go-like/health` and `@go-like/web/health` | `newProbeRegistry`, `createHealthHandler`                     |
-| Retry/circuit/rate limit    | `@go-like/resilience`                       | `retry`, `newCircuitBreaker`, `newTokenBucketLimiter`         |
+## Core entries
 
-## All 27 public source subpaths
+| Entry                               | Role         | First exports                                                                           |
+| ----------------------------------- | ------------ | --------------------------------------------------------------------------------------- |
+| `@go-like/core`                     | App          | `newApp`, `telemetry`, `resources`, `server`, `registrar`, `readyProbe`, hooks, budgets |
+| `@go-like/core/node`                | Node binding | `signal`                                                                                |
+| `@go-like/core/lifecycle`           | Socket       | `Server`, `Endpointer`, `newResourceServer`                                             |
+| `@go-like/core/context`             | Socket       | `background`, `withCancel`, `withTimeout`, `waitForContext`                             |
+| `@go-like/core/metadata`            | Mechanism    | `newMetadata`, client and server Context helpers                                        |
+| `@go-like/core/struct`              | Mechanism    | `struct`, `StructError`, `encodeJson`, `decodeJson`, `jsonCodec`                        |
+| `@go-like/core/health`              | Socket       | `newProbeRegistry`                                                                      |
+| `@go-like/core/resilience`          | Socket       | `retry`, `newCircuitBreaker`, `newTokenBucketLimiter`                                   |
+| `@go-like/core/telemetry`           | Socket       | `newTelemetry`, `withTelemetry`, semantic-convention constants                          |
+| `@go-like/core/telemetry/provider`  | Plug SDK     | `beginUnit`, `logCorrelation`, `resourceFromContext`                                    |
+| `@go-like/core/log`                 | Socket       | `log`, `info`, `error`, `LogHandler`                                                    |
+| `@go-like/core/trace`               | Socket       | `inSpan`, `newTraceContextPropagator`                                                   |
+| `@go-like/core/metric`              | Socket       | `newCounter`, `newHistogram`, `newGauge`, `newUpDownCounter`                            |
+| `@go-like/core/testing`             | Tests        | `newTelemetryRecorder`, `<concept>Conformance`                                          |
+| `@go-like/core/transport`           | Socket       | `defineService`, `serviceError`, `isServiceError`, `ServerStream`                       |
+| `@go-like/core/transport/provider`  | Plug SDK     | Transport error factories, `newServerContext`                                           |
+| `@go-like/core/transport/memory`    | Reference    | `newMemoryTransport`                                                                    |
+| `@go-like/core/transport/http`      | Reference    | `newHTTPTransport`                                                                      |
+| `@go-like/core/transport/http/node` | Node binding | `newNodeHTTPTransport`                                                                  |
+| `@go-like/core/server`              | Mechanism    | `newServer`, `address`, `advertise`, `rateLimitMiddleware`                              |
+| `@go-like/core/client`              | Mechanism    | `newClient`, `withEndpoint`, `withDiscovery`, `withRetry`, `circuitBreakerMiddleware`   |
+| `@go-like/core/web`                 | Socket       | `Handler`, `contextHandler`, `requestContext`, `createHealthHandler`                    |
+| `@go-like/core/web/node`            | Node binding | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                              |
+| `@go-like/core/web/bun`             | Bun binding  | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                                |
+| `@go-like/core/registry`            | Socket       | selectors, filters, `newDiscoveryResolver`, `selectEndpoint`                            |
+| `@go-like/core/registry/provider`   | Plug SDK     | `newSnapshotWatcher`, `startHeartbeat`                                                  |
+| `@go-like/core/registry/memory`     | Reference    | `newMemoryRegistry`                                                                     |
+| `@go-like/core/config`              | Socket       | `newConfig`, `objectSource`, `envSource`, `fileSource`, `jsonDecoder`                   |
+| `@go-like/core/config/provider`     | Plug SDK     | `newSourceWatcher`, `admitConfigObject`                                                 |
+| `@go-like/core/config/node`         | Node binding | `newNodeFileCapability`                                                                 |
+| `@go-like/core/fetch`               | Socket       | `Fetch`, `newFetchClient`                                                               |
+| `@go-like/core/cache`               | Socket       | `Cache`, `expiresIn`                                                                    |
+| `@go-like/core/cache/memory`        | Reference    | `newMemoryCache`                                                                        |
+| `@go-like/core/store`               | Socket       | `Store`, `ifAbsent`, `ifRevision`, `StoreConflictError`                                 |
+| `@go-like/core/store/provider`      | Plug SDK     | Option parsers, conflict factory                                                        |
+| `@go-like/core/store/memory`        | Reference    | `newMemoryStore`                                                                        |
+| `@go-like/core/broker`              | Socket       | `Broker`, `newBrokerServer`, `eventBroker`                                              |
+| `@go-like/core/broker/provider`     | Plug SDK     | `deliver`, `publish`                                                                    |
+| `@go-like/core/broker/memory`       | Reference    | `newMemoryBroker`                                                                       |
+| `@go-like/core/job`                 | Socket       | `newScheduleServer`, `newIntervalSchedule`, `JobQueue`                                  |
+| `@go-like/core/job/provider`        | Plug SDK     | `runJob`, `enqueue`, `dispatchJob`                                                      |
 
-|   # | Public entrypoint                    | Main exports                                                                         |
-| --: | ------------------------------------ | ------------------------------------------------------------------------------------ |
-|   1 | `@go-like/broker/provider`           | `registerSubscriberTerminal`, `subscriberTerminal`                                   |
-|   2 | `@go-like/cache/provider`            | `putOptions`                                                                         |
-|   3 | `@go-like/client/discovery`          | `newDiscoveryResolver`, `DiscoveryResolver`                                          |
-|   4 | `@go-like/config/env`                | `envSource`                                                                          |
-|   5 | `@go-like/config/file`               | `fileSource`, `jsonFileDecoder`                                                      |
-|   6 | `@go-like/config/node`               | `newNodeFileCapability`                                                              |
-|   7 | `@go-like/config/yaml`               | `decodeYaml`                                                                         |
-|   8 | `@go-like/core/lifecycle`            | `waitForContext`                                                                     |
-|   9 | `@go-like/core/node`                 | `signal`                                                                             |
-|  10 | `@go-like/nats/broker`               | `newNatsCoreBroker`                                                                  |
-|  11 | `@go-like/nats/jetstream`            | `newNatsJetStreamServer`, `natsJetStreamCloseTimeout`                                |
-|  12 | `@go-like/nats/jetstream/broker`     | `newNatsJetStreamBroker`                                                             |
-|  13 | `@go-like/registry/provider`         | provider options, snapshot helpers, registration diagnostics                         |
-|  14 | `@go-like/registry-mdns/node`        | `newNodeMDNSHost`                                                                    |
-|  15 | `@go-like/store/provider`            | Store option and snapshot helpers                                                    |
-|  16 | `@go-like/store-file/node`           | `newNodeFileStoreHost`                                                               |
-|  17 | `@go-like/struct/codec`              | `encodeJson`, `decodeJson`                                                           |
-|  18 | `@go-like/struct/runtime`            | Struct introspection and parsing helpers                                             |
-|  19 | `@go-like/transport/headers`         | `Go-Like-Metadata` and `Go-Like-Timeout-Ms`                                          |
-|  20 | `@go-like/transport/json`            | `encodeJsonBody`, `decodeJsonBody`, `jsonContentType`                                |
-|  21 | `@go-like/transport/provider`        | metadata, ServiceError codecs, transport errors, and `observeCall`                   |
-|  22 | `@go-like/transport-grpc-buf/native` | managed standard-gRPC `newClient`, `newServer`, options                              |
-|  23 | `@go-like/transport-http/node`       | `newNodeHTTPTransport`, `allowHTTP1`, `clientAuth`                                   |
-|  24 | `@go-like/web/health`                | `createHealthHandler`                                                                |
-|  25 | `@go-like/web/node`                  | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                           |
-|  26 | `@go-like/transport/sse`             | `encodeSSEComment`, `encodeSSEEvent`, `encodeSSEJsonEvent`, `eventStreamContentType` |
-|  27 | `@go-like/web/bun`                   | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                             |
+`@go-like/core/server` and `@go-like/core/client` both export `middleware` and `use`. Import one as a namespace when a file needs both. The root entry's `context`, `endpoint`, `server`, and `metadata` options are App options. Import the root as a namespace when those names collide with OpenTelemetry or with `defineService`.
 
-Generated `dist/package.json` files add a metadata-only `./package.json` export. That generated export is not a package and is not counted above.
+Application code does not import `/provider` or `/testing` except tests and plug implementations.
 
-## Runtime subpaths and stale aliases
+## Runtime subpaths
 
-Runtime selection is explicit in package names. Current runtime-specific subpaths include:
+Import the subpath you intend. Exports are not conditional on `bun` or `node`.
 
-- `@go-like/config/node`;
-- `@go-like/core/node`;
-- `@go-like/registry-mdns/node`;
-- `@go-like/store-file/node`;
-- `@go-like/transport-http/node`;
-- `@go-like/web/node`;
-- `@go-like/web/bun`.
+- Node: `@go-like/core/node`, `@go-like/core/transport/http/node`, `@go-like/core/web/node`, `@go-like/core/config/node`, `@go-like/mdns/registry/node`, `@go-like/zookeeper/registry/node`, `@go-like/file/store/node`, `@go-like/connectrpc/node`.
+- Bun host: `@go-like/core/web/bun`.
+- NATS, RabbitMQ, Redis, and BullMQ follow their native clients on Node and Bun.
 
-`@go-like/transport-grpc-buf/native` is capability-specific rather than runtime-named: Node is supported by upstream
-Connect-ES, while Bun 1.4.4 is a tested LikeGo compatibility target using the same public API.
-The full physical-package matrix also passes the slow-consumer drain regression on Node 26.12.1 and Bun 1.4.4; see the [native gRPC drain status](/reference/claims#native-grpc-drain-status) for its scope.
+## What this catalog leaves out
 
-The package manifests do not export `@go-like/otel/testing` or `@go-like/web/node/testing`; neither is a public entrypoint for application documentation.
-
-## What is not in this catalog
-
-This catalog includes generated ctx-first Protobuf RPC glue, a portable Connect/gRPC-Web Fetch bridge, and managed standard-gRPC owners at `/native`. Portable Fetch is limited to unary/server-streaming; managed standard gRPC covers all four cardinalities in the tested Node 26.12.1 and Bun 1.4.4 physical-package matrix. It does not claim browser standard gRPC, official health/reflection, validation, canonical error-details mapping, a Google gRPC runtime, Buf online services, or future runtime-version compatibility. It also does not claim Event Store/history/replay, generic auth, ORM, global DI, or cluster orchestration. Standard Web streaming and third-party provider features may exist outside go-like's internal contract; see [Streaming](/guide/streaming) and [Comparison](/guide/comparison).
-
-Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.
+Memory references are process-local. A plug README is the limit for leases, acknowledgement, TTL, and transactions. [Providers](/reference/providers) links those READMEs. [Errors](/reference/errors) lists the public codes. [Migration](/guide/migration) maps historical specifiers onto this table.

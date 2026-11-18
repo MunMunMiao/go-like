@@ -1,15 +1,9 @@
-import { background, canceled, withCancelCause, type Context } from "@go-like/context"
-import { eventBroker, type Codec } from "@go-like/event"
-import {
-  connect,
-  type Msg,
-  type NatsConnection,
-  type Status,
-  type Subscription,
-  type SubscriptionOptions
-} from "@nats-io/transport-node"
-import { natsCoreDrainTimeout, newNatsCoreServer } from "../../src/index"
-import { newNatsCoreBroker } from "../../src/broker"
+import { background } from "@go-like/core/context"
+import { eventBroker, type Codec } from "@go-like/core/broker"
+import { brokerConformance, brokerTelemetryConformance } from "@go-like/core/testing"
+import { connect, type Msg, type NatsConnection, type Status } from "@nats-io/transport-node"
+import { newNatsCoreBroker, type NatsCoreBrokerSubscribeOptions } from "../../src/broker"
+import { brokerCaseSubject, runIsolatedBrokerCases } from "../conformance-subject"
 
 const NatsImage =
   "docker.io/library/nats:2.14.4-alpine@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66"
@@ -19,11 +13,6 @@ if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwne
   throw new Error("invalid GO_LIKE_E2E_OWNER")
 const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
-interface Deferred<T> {
-  readonly promise: Promise<T>
-  resolve(value: T): void
-}
-
 interface CommandResult {
   readonly stdout: string
   readonly stderr: string
@@ -31,10 +20,7 @@ interface CommandResult {
 }
 
 interface ManagedSubscription {
-  readonly subscription: Subscription
-  readonly server: ReturnType<typeof newNatsCoreServer>
-  readonly running: Promise<void>
-  readonly consuming: Promise<void>
+  readonly unsubscribe: () => Promise<void>
 }
 
 interface TypedEvent {
@@ -59,29 +45,6 @@ const typedEventCodec: Codec<TypedEvent> = Object.freeze({
     return Object.freeze({ id, name })
   }
 })
-
-/** Creates a manually controlled Promise for one E2E synchronization point. */
-function deferred<T>(): Deferred<T> {
-  let resolvePromise: (value: T) => void = () => {}
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve
-  })
-  return { promise, resolve: resolvePromise }
-}
-
-/** Cancels at the final startup acceptance check without owning a native resource. */
-function cancelAtAcceptance(): Context {
-  let reads = 0
-  return {
-    deadline: () => [new Date(0), false],
-    done: () => null,
-    err: () => {
-      reads += 1
-      return reads >= 3 ? canceled : null
-    },
-    value: () => undefined
-  }
-}
 
 /** Throws when one real-service invariant is false. */
 function assert(condition: unknown, message: string): asserts condition {
@@ -152,29 +115,32 @@ async function connectWhenReady(server: string): Promise<NatsConnection> {
   })
 }
 
-/** Starts lifecycle ownership while the application consumes official raw messages. */
+/** Subscribes through the broker and delivers each official message to the caller. */
 async function startManaged(
   connection: NatsConnection,
   subject: string,
   onMessage: (message: Msg) => void | Promise<void>,
-  options?: SubscriptionOptions
+  options?: NatsCoreBrokerSubscribeOptions
 ): Promise<ManagedSubscription> {
-  const subscription = connection.subscribe(subject, options)
-  const server = newNatsCoreServer(subscription)
-  const running = server.start(background())
-  void running.catch(() => {})
-  const consuming = (async () => {
-    for await (const message of subscription) await onMessage(message)
-  })()
-  void consuming.catch(() => {})
-  return { subscription, server, running, consuming }
+  const broker = newNatsCoreBroker(connection)
+  const subscriber = await broker.subscribe(
+    background(),
+    subject,
+    async (_ctx, event) => {
+      await onMessage(event.native)
+    },
+    options
+  )
+  return {
+    async unsubscribe() {
+      await subscriber.unsubscribe(background())
+    }
+  }
 }
 
-/** Stops lifecycle ownership and waits for the application iterator to end. */
+/** Stops the broker subscription. */
 async function stopManaged(managed: ManagedSubscription): Promise<void> {
-  await managed.server.stop(background())
-  await managed.running
-  await managed.consuming
+  await managed.unsubscribe()
 }
 
 /** Closes the application-owned connection during final cleanup. */
@@ -195,7 +161,6 @@ async function main(): Promise<void> {
   const prefix = crypto.randomUUID().replaceAll("-", "")
   const lateRejections: unknown[] = []
   const statuses: Status["type"][] = []
-  const consumingTasks: Promise<void>[] = []
   let connection: NatsConnection | null = null
   let statusTask: Promise<void> | null = null
   let serverVersion = ""
@@ -237,61 +202,6 @@ async function main(): Promise<void> {
     })()
     void statusTask.catch(recordLateRejection)
 
-    const startupSubject = `${prefix}.startup.cancel`
-    const acquisition = deferred<Subscription>()
-    const [startupContext, cancelStartup] = withCancelCause(background())
-    const startupCause = new Error("startup canceled before native ownership transfer")
-    const startup = newNatsCoreServer(() => acquisition.promise).start(startupContext)
-    await Bun.sleep(0)
-    cancelStartup(startupCause)
-    const startupFailure = await startup.catch((error: unknown) => error)
-    assert(startupFailure === startupCause, "startup cancellation replaced its exact cause")
-    const lateSubscription = connection.subscribe(startupSubject)
-    acquisition.resolve(lateSubscription)
-    await Bun.sleep(0)
-    const consumeLateTerminal = (async () => {
-      for await (const _message of lateSubscription) {
-        // Rollback has no data-plane work; iteration admits the native unsubscribe callback.
-      }
-    })()
-    await consumeLateTerminal
-    await lateSubscription.closed
-    assert(lateSubscription.isClosed(), "late Subscription did not reach native terminal")
-    const deliveryBefore = lateSubscription.getReceived()
-    connection.publish(startupSubject, "must-not-deliver")
-    await connection.flush()
-    await Bun.sleep(50)
-    assert(
-      lateSubscription.getReceived() === deliveryBefore,
-      "startup rollback subscription still received data"
-    )
-    assert(!connection.isClosed() && !connection.isDraining(), "startup rollback closed connection")
-
-    const directStartupSubject = `${prefix}.startup.direct`
-    let directDeliveries = 0
-    const directSubscription = connection.subscribe(directStartupSubject, {
-      callback: (error, message) => {
-        if (error !== null) {
-          recordLateRejection(error)
-          return
-        }
-        if (message.string() === "application-still-owns") directDeliveries += 1
-      }
-    })
-    const directFailure = await newNatsCoreServer(directSubscription)
-      .start(cancelAtAcceptance())
-      .catch((error: unknown) => error)
-    assert(directFailure === canceled, "direct startup cancellation replaced its sentinel")
-    const openAfterRejectedStart = !directSubscription.isClosed()
-    connection.publish(directStartupSubject, "application-still-owns")
-    await connection.flush()
-    await waitUntil("direct Subscription after rejected startup", () => directDeliveries === 1)
-    directSubscription.unsubscribe()
-    await directSubscription.closed
-    assert(openAfterRejectedStart, "rejected startup closed an application-owned subscription")
-    assert(directSubscription.isClosed(), "application-owned subscription did not close")
-    assert(!connection.isClosed() && !connection.isDraining(), "direct startup closed connection")
-
     const rawSubject = `${prefix}.raw`
     const rawBodies: string[] = []
     const rawSubjects: string[] = []
@@ -299,7 +209,6 @@ async function main(): Promise<void> {
       rawBodies.push(message.string())
       rawSubjects.push(message.subject)
     })
-    consumingTasks.push(raw.consuming)
     connection.publish(rawSubject, "one")
     await connection.flush()
     await waitUntil("application raw consumption", () => rawBodies.length === 1)
@@ -366,7 +275,6 @@ async function main(): Promise<void> {
       },
       { queue: "workers" }
     )
-    consumingTasks.push(first.consuming, second.consuming)
     for (let index = 0; index < 20; index += 1) connection.publish(queueSubject, String(index))
     await connection.flush()
     await waitUntil("native queue distribution", () => firstIds.length + secondIds.length === 20)
@@ -391,7 +299,6 @@ async function main(): Promise<void> {
       }
       postFailure.push(message.string())
     })
-    consumingTasks.push(failureManaged.consuming)
     connection.publish(failureSubject, "bad")
     connection.publish(failureSubject, "good")
     await connection.flush()
@@ -404,25 +311,6 @@ async function main(): Promise<void> {
     assert(failedDeliveries === 1, "at-most-once handler failure redelivered")
     assert(postFailure[0] === "good", "handler failure blocked the following delivery")
 
-    const forceSubject = `${prefix}.force`
-    const forceSubscription = connection.subscribe(forceSubject)
-    const forceServer = newNatsCoreServer(forceSubscription, natsCoreDrainTimeout(0))
-    const forceRunning = forceServer.start(background())
-    void forceRunning.catch(() => {})
-    const forceConsuming = (async () => {
-      for await (const _message of forceSubscription) {
-        // The application owns iteration even in the force-lifecycle scenario.
-      }
-    })()
-    void forceConsuming.catch(() => {})
-    consumingTasks.push(forceConsuming)
-    const forceFailure = await forceServer.stop(background()).catch((error: unknown) => error)
-    assert(forceFailure instanceof Error, "zero boundary did not reject the owner waiter")
-    await forceRunning.catch(() => {})
-    await forceConsuming
-    const borrowedConnectionOpenAfterForce = !connection.isClosed() && !connection.isDraining()
-    assert(borrowedConnectionOpenAfterForce, "forced server stop closed borrowed connection")
-
     const reconnectSubject = `${prefix}.reconnect`
     const recovered: string[] = []
     const recoveredSubjects: string[] = []
@@ -430,7 +318,6 @@ async function main(): Promise<void> {
       recovered.push(message.string())
       recoveredSubjects.push(message.subject)
     })
-    consumingTasks.push(reconnecting.consuming)
     await command(["docker", "stop", "--time", "1", container])
     await waitUntil(
       "official disconnect status",
@@ -446,11 +333,45 @@ async function main(): Promise<void> {
     assert(recoveredSubjects[0] === reconnectSubject, "reconnect delivery subject changed")
     assert(!connection.isClosed() && !connection.isDraining(), "reconnect closed connection")
 
+    if (connection === null) throw new Error("connection missing")
+    const connected = connection
+    let caseNumber = 0
+    const nextCoreSubject = () => {
+      caseNumber += 1
+      return brokerCaseSubject(`${prefix}.orders.${caseNumber}`, async () =>
+        newNatsCoreBroker(connected)
+      )
+    }
+    await runIsolatedBrokerCases(brokerConformance, nextCoreSubject)
+    await runIsolatedBrokerCases(brokerTelemetryConformance, nextCoreSubject)
+    const earlier = nextCoreSubject()
+    const earlierBroker = await earlier.newBroker(background())
+    const seen: string[] = []
+    await earlierBroker.subscribe(background(), earlier.topic, (_ctx, event) => {
+      seen.push(new TextDecoder().decode(event.message.body))
+    })
+    await earlier.close(background())
+    const later = nextCoreSubject()
+    const laterBroker = await later.newBroker(background())
+    const encode = (value: string): Uint8Array => new TextEncoder().encode(value)
+    await laterBroker.publish(background(), later.topic, {
+      headers: {},
+      body: encode("later")
+    })
+    await laterBroker.publish(background(), earlier.topic, {
+      headers: {},
+      body: encode("stale-topic")
+    })
+    await connected.flush()
+    const deadline = Date.now() + 500
+    while (Date.now() < deadline && seen.length === 0) await Bun.sleep(20)
+    assert(seen.length === 0, `leftover subscriber received ${seen.join(",")}`)
+    await later.close(background())
+
     await Bun.sleep(50)
     assert(lateRejections.length === 0, `observed ${lateRejections.length} late rejection(s)`)
   } finally {
     await closeConnection(connection)
-    await Promise.allSettled(consumingTasks)
     if (statusTask !== null) await statusTask.catch(() => {})
     await command(["docker", "rm", "--force", container], true)
     process.off("unhandledRejection", recordLateRejection)

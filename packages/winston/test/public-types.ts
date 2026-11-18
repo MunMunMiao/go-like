@@ -1,48 +1,26 @@
-import type { Broker } from "@go-like/broker"
-import type { Client } from "@go-like/client"
-import type { Server } from "@go-like/core"
-import type { Middleware } from "@go-like/server"
-import winston, { type Logger } from "winston"
-
+import { background } from "@go-like/core/context"
+import type { LogHandler } from "@go-like/core/log"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
 import {
-  logBroker,
-  logClient,
-  logUnaryMiddleware,
-  logWebHandler,
-  newWinstonServer,
+  newWinstonHandler,
   type WinstonAlreadyStartedError,
+  type WinstonHandler,
   type WinstonLoggerClosedError,
-  type WinstonLoggerFinishedError,
-  type WinstonServer
-} from "../src/index"
+  type WinstonLoggerFinishedError
+} from "@go-like/winston/log"
+import winston, { type Logger } from "winston"
 
 const logger: Logger = winston.createLogger({
   format: winston.format.json(),
   transports: [new winston.transports.Console()]
 })
-const logging: WinstonServer = newWinstonServer(logger)
-const structural: Server = logging
-declare const client: Client
-declare const broker: Broker<void, void, void, unknown>
-declare const webHandler: (request: Request) => Response | Promise<Response>
-const loggedClient: Client = logClient(client, logger)
-const loggedBroker: Broker<void, void, void, unknown> = logBroker(broker, logger)
-const loggedUnary: Middleware = logUnaryMiddleware(logger)
-const loggedWeb: (request: Request) => Response | Promise<Response> = logWebHandler(
-  webHandler,
-  logger
-)
+const handler: WinstonHandler = newWinstonHandler(logger)
+const asLog: LogHandler = handler
+const lifecycle: TelemetryLifecycle = handler.lifecycle
+const running: Promise<void> = lifecycle.start(background())
+const stopping: Promise<void> = lifecycle.stop(background())
 
 declare const already: WinstonAlreadyStartedError
 declare const closed: WinstonLoggerClosedError
 declare const finished: WinstonLoggerFinishedError
-void [
-  structural,
-  loggedClient,
-  loggedBroker,
-  loggedUnary,
-  loggedWeb,
-  already.status,
-  closed.code,
-  finished.code
-]
+void [asLog, running, stopping, already.status, already.code, closed.code, finished.code]

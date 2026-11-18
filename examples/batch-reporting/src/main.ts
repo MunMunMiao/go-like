@@ -1,19 +1,18 @@
 import process from "node:process"
 
-import { newBullMqWorkerServer } from "@go-like/bullmq"
-import { background, type Context } from "@go-like/context"
-import { afterStart, name, newApp, server, type Server } from "@go-like/core"
+import { newBullMqJobQueue } from "@go-like/bullmq/job"
+import { afterStart, name, newApp, resources, server } from "@go-like/core"
+import { background } from "@go-like/core/context"
+import { newScheduleServer } from "@go-like/core/job"
 import { signal } from "@go-like/core/node"
-import { newCronerServer } from "@go-like/croner"
-import { newFileStore } from "@go-like/store-file"
-import { newNodeFileStoreHost } from "@go-like/store-file/node"
-import { Queue, Worker } from "bullmq"
-import { Cron } from "croner"
+import { newCronerSchedule } from "@go-like/croner/job"
+import { newFileStore } from "@go-like/file/store"
+import { newNodeFileStoreHost } from "@go-like/file/store/node"
+import { Queue } from "bullmq"
 
-import { processReport } from "./processor"
+import { processReport, type ReportOutcome } from "./processor"
 import { latestClosedWindow, type ReportJob } from "./report-window"
-import { enqueueNextClosedWindow } from "./scheduler"
-import type { ReportOutcome } from "./processor"
+import { enqueueNextClosedWindow, submitReportJob } from "./scheduler"
 
 const redisUrl = new URL(process.env.REDIS_URL ?? "redis://127.0.0.1:46379")
 const schedule = process.env.CRON_SCHEDULE ?? "*/10 * * * * *"
@@ -33,90 +32,64 @@ if (!Number.isInteger(connection.port) || connection.port < 1 || connection.port
   throw new TypeError("REDIS_URL port must be an integer in 1..65535")
 }
 
-/** Gives Core ownership of the application-created BullMQ Queue. */
-function queueServer(queue: Queue<ReportJob, ReportOutcome, string>): Server {
-  let resolveDone: (() => void) | null = null
-  const done = new Promise<void>((resolve) => {
-    resolveDone = resolve
-  })
-  return Object.freeze({
-    async start(ctx: Context): Promise<void> {
-      const failure = ctx.err()
-      if (failure !== null) throw failure
-      await queue.waitUntilReady()
-      await done
-    },
-    async stop(): Promise<void> {
-      await queue.close()
-      resolveDone?.()
-    }
-  })
-}
-
 const store = newFileStore(newNodeFileStoreHost(), checkpointDirectory)
 const queue = new Queue<ReportJob, ReportOutcome, string>(queueName, { connection, prefix })
 queue.on("error", (error) => {
   process.stderr.write(`batch queue error: ${error.message}\n`)
 })
-const worker = newBullMqWorkerServer(() => {
-  const native = new Worker<ReportJob, ReportOutcome, string>(
-    queueName,
-    async (job, _token, signal) => {
-      return await processReport(
-        background(),
-        store,
-        job.data,
-        job.attemptsMade,
-        async (report) => {
-          process.stdout.write(
-            `GO_LIKE_REPORT_PUBLISHED=${JSON.stringify({ window: report.window.id, attemptsMade: job.attemptsMade })}\n`
-          )
-        },
-        signal
-      )
-    },
-    { connection, prefix, autorun: false, concurrency: 1 }
-  )
-  native.on("error", (error) => {
-    process.stderr.write(`batch worker error: ${error.message}\n`)
-  })
-  return native
-})
-let cron: Cron<Context> | null = null
-const scheduler = newCronerServer<Context>((ctx) => {
-  cron = new Cron<Context>(
-    schedule,
-    { context: ctx, catch: true, paused: true },
-    async (_job, callbackCtx) => {
-      const initialStartMs = latestClosedWindow(Date.now()).startMs
-      await enqueueNextClosedWindow(
-        callbackCtx,
-        store,
-        async (report, jobId) => {
-          await queue.add("daily-report", report, {
-            jobId,
+const jobs = newBullMqJobQueue(queue)
+const worker = jobs.worker(
+  {
+    async "daily-report"(ctx, job) {
+      return await processReport(ctx, store, job.payload, job.attempt - 1, async (report) => {
+        process.stdout.write(
+          `GO_LIKE_REPORT_PUBLISHED=${JSON.stringify({ window: report.window.id, attemptsMade: job.attempt - 1 })}\n`
+        )
+      })
+    }
+  },
+  { concurrency: 1 }
+)
+const scheduler = newScheduleServer(newCronerSchedule(schedule), "daily-report", async (ctx) => {
+  const initialStartMs = latestClosedWindow(Date.now()).startMs
+  await enqueueNextClosedWindow(
+    ctx,
+    store,
+    async (report, jobId) => {
+      const existing = await queue.getJob(jobId)
+      const nativeState =
+        existing === undefined
+          ? "absent"
+          : (await existing.getState()) === "failed"
+            ? "failed"
+            : "open"
+      await submitReportJob(
+        async (body, id) => {
+          await jobs.enqueue(ctx, "daily-report", body, {
+            id,
             attempts: 3,
-            backoff: { type: "fixed", delay: 250 },
-            removeOnComplete: false,
-            removeOnFail: false
+            backoff: { type: "fixed", delayMs: 250 }
           })
         },
-        initialStartMs,
-        Date.now()
+        report,
+        jobId,
+        nativeState
       )
-    }
+    },
+    initialStartMs,
+    Date.now()
   )
-  return cron
 })
 const app = newApp(
   signal(),
   name("batch-reporting"),
-  server(store, queueServer(queue), worker, scheduler),
+  resources(store, jobs),
+  server(worker, scheduler),
   afterStart(async function announceReady(): Promise<void> {
     process.stdout.write(
       `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "batch-reporting", worker: queueName, schedule })}\n`
     )
-    await cron?.trigger()
+    await scheduler.trigger(background())
   })
 )
 

@@ -1,27 +1,17 @@
-import { background, type Context } from "@go-like/context"
-import {
-  newApp,
-  server as registerServer,
-  stopTimeout as appStopTimeout,
-  type Server
-} from "@go-like/core"
-import { Queue, Worker, type Job, type Processor, type WorkerOptions } from "bullmq"
+import { background } from "@go-like/core/context"
+import { jobQueueConformance, jobTelemetryConformance } from "@go-like/core/testing"
+import { Queue, type Job } from "bullmq"
 
-import { bullMqWorkerShutdownTimeout, newBullMqWorkerServer } from "../../src/index"
-import { outageErrorDelta } from "../outage-observation"
+import { newBullMqJobQueue } from "../../src/job/index"
 
 const RedisImage =
   "redis:8.10.0-alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241"
 const ExpectedRedisVersion = "8.10.0"
 const DockerOwner = process.env.GO_LIKE_E2E_OWNER
-if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner))
+if (DockerOwner === undefined || !/^[a-z0-9][a-z0-9_.-]{0,127}$/.test(DockerOwner)) {
   throw new Error("invalid GO_LIKE_E2E_OWNER")
-const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
-
-interface Deferred<T> {
-  readonly promise: Promise<T>
-  resolve(value: T): void
 }
+const DockerOwnerLabel = `io.go-like.e2e.owner=${DockerOwner}`
 
 interface CommandResult {
   readonly stdout: string
@@ -29,78 +19,20 @@ interface CommandResult {
   readonly exitCode: number
 }
 
-interface ManagedWorker {
-  readonly server: ReturnType<typeof newBullMqWorkerServer>
-  readonly running: Promise<void>
-}
-
-interface RedisCommandClient {
-  call(command: string, ...args: string[]): Promise<unknown>
-  ping(): Promise<string>
-}
-
-/** Creates one externally controlled E2E synchronization point. */
-function deferred<T>(): Deferred<T> {
-  let resolvePromise!: (value: T) => void
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve
-  })
-  return Object.freeze({ promise, resolve: resolvePromise })
-}
-
 /** Throws when one real-service invariant is false. */
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-/** Returns one required Error without relying on callback-side control-flow narrowing. */
-function requiredError(value: unknown, message: string): Error {
-  if (!(value instanceof Error)) throw new Error(message)
-  return value
-}
-
-/** Finds one nested Error carrying a stable lifecycle code. */
-function errorWithCode(value: unknown, code: string): Error | null {
-  if (!(value instanceof Error)) return null
-  if (Reflect.get(value, "code") === code) return value
-  if (value instanceof AggregateError) {
-    for (const nested of value.errors) {
-      const found = errorWithCode(nested, code)
-      if (found !== null) return found
-    }
-  }
-  return errorWithCode(value.cause, code)
-}
-
-/** Narrows BullMQ's Redis client union to the commands used by this E2E. */
-function redisCommandClient(value: unknown): value is RedisCommandClient {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    typeof Reflect.get(value, "call") === "function" &&
-    typeof Reflect.get(value, "ping") === "function"
-  )
-}
-
-/** Returns the Queue client after validating the real command surface. */
-async function queueClient(queue: Queue): Promise<RedisCommandClient> {
-  const client: unknown = await queue.getBackend().client
-  if (!redisCommandClient(client))
-    throw new Error("BullMQ Queue client has no Redis command surface")
-  return client
-}
-
-/** Runs one command without a shell and captures its complete result. */
-async function command(args: string[], allowFailure = false): Promise<CommandResult> {
+/** Runs one command without a shell and returns all output. */
+async function command(args: string[]): Promise<CommandResult> {
   const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
   const [exitCode, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
     new Response(child.stderr).text()
   ])
-  if (!allowFailure && exitCode !== 0) {
-    throw new Error(`${args.join(" ")} failed (${exitCode}): ${stderr.trim()}`)
-  }
+  if (exitCode !== 0) throw new Error(`${args.join(" ")} failed (${exitCode}): ${stderr.trim()}`)
   return Object.freeze({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode })
 }
 
@@ -124,10 +56,15 @@ async function waitUntil(
   timeoutMs = 15_000
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
+  const pending = Symbol("pending")
   let lastError: unknown = null
   while (Date.now() < deadline) {
     try {
-      if (await predicate()) return
+      const result = await Promise.race([
+        Promise.resolve(predicate()),
+        Bun.sleep(1_000).then(() => pending)
+      ])
+      if (result === true) return
     } catch (error) {
       lastError = error
     }
@@ -136,49 +73,19 @@ async function waitUntil(
   throw new Error(`timed out waiting for ${label}`, { cause: lastError })
 }
 
-/** Returns one expected Error rejection and rejects false-positive success. */
-async function rejected(operation: Promise<void>): Promise<Error> {
-  try {
-    await operation
-  } catch (error) {
-    if (error instanceof Error) return error
-    throw new Error("operation rejected with a non-Error value", { cause: error })
-  }
-  throw new Error("operation unexpectedly resolved")
-}
-
-/** Reports whether one terminal operation settles inside a test-only interval. */
-async function settlesWithin(operation: Promise<unknown>, timeoutMs = 25): Promise<boolean> {
-  return await Promise.race([
-    operation.then(
-      () => true,
-      () => true
-    ),
-    Bun.sleep(timeoutMs).then(() => false)
-  ])
-}
-
-/** Counts persistent Redis clients through the application's raw Queue client. */
-async function queueConnectionCount(queue: Queue): Promise<number> {
-  const client = await queueClient(queue)
-  const value = await client.call("CLIENT", "LIST")
-  if (typeof value !== "string") throw new Error("Redis CLIENT LIST returned a non-string value")
-  return value.split("\n").filter((line) => line.length > 0).length
-}
-
-/** Waits for one BullMQ Job to reach a terminal or requested state. */
-async function waitForJobState(
+/** Waits for one BullMQ Job to reach a terminal state. The second read rejects a stale snapshot. */
+async function waitForJob(
   queue: Queue,
   jobId: string,
-  expected: "active" | "completed" | "failed" | "waiting",
+  expected: "active" | "completed" | "failed",
   timeoutMs = 15_000
 ): Promise<Job> {
-  let observed: Job | null = null
+  let observed: Job | undefined
   await waitUntil(
-    `job ${jobId} state ${expected}`,
+    `job ${jobId} ${expected}`,
     async () => {
-      const first = await queue.getJob(jobId)
-      if (first === undefined || (await first.getState()) !== expected) return false
+      const job = await queue.getJob(jobId)
+      if (job === undefined || (await job.getState()) !== expected) return false
       const fresh = await queue.getJob(jobId)
       if (fresh === undefined || (await fresh.getState()) !== expected) return false
       observed = fresh
@@ -186,36 +93,77 @@ async function waitForJobState(
     },
     timeoutMs
   )
-  if (observed === null) throw new Error(`job ${jobId} disappeared`)
+  if (observed === undefined) throw new Error(`job ${jobId} disappeared`)
   return observed
 }
 
-/** Starts one managed Worker and tracks its Server runtime for cleanup. */
-async function startManaged(
-  worker: Worker,
-  managedWorkers: Set<ManagedWorker>,
-  ...options: ReturnType<typeof bullMqWorkerShutdownTimeout>[]
-): Promise<ManagedWorker> {
-  const server = newBullMqWorkerServer(worker, ...options)
-  const running = server.start(background())
-  void running.catch(() => {})
-  await waitUntil(`Worker ${worker.name} run`, () => worker.isRunning())
-  const managed = Object.freeze({ server, running })
-  managedWorkers.add(managed)
-  return managed
+/** Observes one operation without letting its rejection escape, and fails when it stays pending. */
+async function outcome(operation: Promise<unknown>, timeoutMs: number): Promise<unknown> {
+  return await Promise.race([
+    operation.then(
+      () => "resolved",
+      (error: unknown) => error
+    ),
+    Bun.sleep(timeoutMs).then(() => "hung")
+  ])
 }
 
-/** Stops one managed Worker and removes it from cleanup tracking. */
-async function stopManaged(
-  managed: ManagedWorker,
-  managedWorkers: Set<ManagedWorker>
-): Promise<void> {
-  await managed.server.stop(background())
-  await managed.running
-  managedWorkers.delete(managed)
+/** Counts Redis clients other than the redis-cli command that listed them. */
+async function redisClients(container: string): Promise<number> {
+  const listed = (
+    await command(["docker", "exec", container, "redis-cli", "--raw", "CLIENT", "LIST"])
+  ).stdout
+  const lines = listed.split("\n").filter((line) => line.includes("id="))
+  return Math.max(0, lines.length - 1)
 }
 
-/** Runs one independent raw Worker process that exits after obtaining the job lock. */
+/** Reports whether the adopted Queue client can run a command again. */
+async function queueResponds(queue: Queue): Promise<boolean> {
+  const backend = queue.getBackend() as unknown as {
+    readonly client?: Promise<{ ping(): Promise<string> }>
+  }
+  const client = await Promise.race([
+    backend.client ?? Promise.resolve(undefined),
+    Bun.sleep(1_000).then(() => undefined)
+  ])
+  if (client === undefined) return false
+  const pong = await Promise.race([client.ping(), Bun.sleep(1_000).then(() => "timeout")])
+  return pong === "PONG"
+}
+
+/** Reports whether Redis answers again after a controlled stop. */
+async function redisAcceptsCommands(container: string): Promise<boolean> {
+  const child = Bun.spawn(["docker", "exec", container, "redis-cli", "PING"], {
+    stdout: "pipe",
+    stderr: "pipe"
+  })
+  const [code, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()])
+  return code === 0 && stdout.trim() === "PONG"
+}
+
+/** A single close failure keeps its Error. Several stay in one aggregate, primary first. */
+function assertCloseOutcome(stopOutcome: unknown, runOutcome: unknown): void {
+  assert(stopOutcome !== "hung", "worker stop did not settle")
+  assert(runOutcome !== "hung", "worker runtime did not settle")
+  if (stopOutcome === "resolved") {
+    assert(runOutcome === "resolved", "worker runtime rejected after stop resolved")
+    return
+  }
+  assert(stopOutcome instanceof Error, "worker stop rejected with a non-Error")
+  if (stopOutcome instanceof AggregateError) {
+    assert(stopOutcome.errors.length >= 2, "close aggregate did not keep every failure")
+    assert(runOutcome instanceof AggregateError, "worker runtime lost the close aggregate")
+    assert(runOutcome.errors[0] === stopOutcome.errors[0], "close aggregate primary changed")
+    return
+  }
+  if (runOutcome instanceof AggregateError) {
+    assert(runOutcome.errors[0] === stopOutcome, "primary close failure was not first")
+    return
+  }
+  assert(runOutcome === stopOutcome, "single close failure changed Error identity")
+}
+
+/** Runs one raw Worker that exits after it locks a job. */
 async function crashRawWorker(
   host: string,
   port: number,
@@ -236,47 +184,277 @@ async function crashRawWorker(
     new Response(child.stderr).text()
   ])
   clearTimeout(timeout)
-  assert(exitCode === 17, `raw Worker did not crash after lock acquisition: ${exitCode} ${stderr}`)
+  assert(
+    exitCode === 17,
+    `raw Worker did not crash after lock acquisition: ${exitCode} ${stderr.trim()}`
+  )
   assert(
     stdout.includes(`BULLMQ_STALLED_LOCKED=${expectedJobId}`),
     "raw Worker never acquired the stalled job lock"
   )
 }
 
-/** Counts container connections after subtracting the transient redis-cli connection. */
-async function persistentContainerConnections(container: string): Promise<number> {
-  const result = await command([
-    "docker",
-    "exec",
-    container,
-    "redis-cli",
-    "--raw",
-    "CLIENT",
-    "LIST"
-  ])
-  const lines = result.stdout.split("\n").filter((line) => line.length > 0)
-  return Math.max(0, lines.length - 1)
+/** Leaves a timestamped phase in the suite log. */
+function phase(label: string): void {
+  console.log(`bullmq e2e ${label} +${Math.round(performance.now())}ms`)
 }
 
-/** Executes the fixed-digest Redis 8.10.0 release gate. */
+/** Proves retry, connection cleanup, stalled recovery, outage, drain, and startup rollback. */
+async function exerciseService(
+  container: string,
+  port: number,
+  queue: Queue,
+  jobs: ReturnType<typeof newBullMqJobQueue>,
+  queueName: string,
+  prefix: string
+): Promise<void> {
+  phase("retry")
+  await waitUntil("worker close", async () => (await queue.getWorkersCount()) === 0)
+  const baseline = await redisClients(container)
+  const attempts: number[] = []
+  const attemptTimes: number[] = []
+  const retrying = jobs.worker(
+    {
+      work(_ctx, job) {
+        attempts.push(job.attempt)
+        attemptTimes.push(Date.now())
+        if (job.attempt < 3) throw new Error(`retry-${job.attempt}`)
+        return "retried"
+      }
+    },
+    { concurrency: 1 }
+  )
+  const retryRunning = retrying.start(background())
+  await waitUntil("retry worker", async () => (await queue.getWorkersCount()) >= 1)
+  await jobs.enqueue(background(), "work", "retry", {
+    id: "retry-backoff",
+    attempts: 3,
+    backoff: { type: "fixed", delayMs: 100 }
+  })
+  const retried = await waitForJob(queue, "retry-backoff", "completed")
+  assert(attempts.length === 3, `expected three attempts, observed ${attempts.length}`)
+  assert(retried.attemptsMade === 3, `unexpected attemptsMade: ${retried.attemptsMade}`)
+  const firstGap = (attemptTimes[1] ?? 0) - (attemptTimes[0] ?? 0)
+  const secondGap = (attemptTimes[2] ?? 0) - (attemptTimes[1] ?? 0)
+  assert(firstGap >= 90, `first fixed backoff was too short: ${firstGap}`)
+  assert(secondGap >= 90, `second fixed backoff was too short: ${secondGap}`)
+  await retrying.stop(background())
+  await retryRunning
+  await waitUntil(
+    "retry worker connections",
+    async () => (await redisClients(container)) === baseline
+  )
+  const reusable = await queue.getJob("retry-backoff")
+  assert(reusable !== undefined, "queue was unusable after worker stop")
+  assert((await reusable.getState()) === "completed", "completed retry job changed state")
+
+  phase("stalled")
+  const stalledName = `${queueName}-stalled`
+  const stalledNative = new Queue(stalledName, {
+    prefix,
+    connection: { host: "127.0.0.1", port, maxRetriesPerRequest: null }
+  })
+  stalledNative.on("error", () => {})
+  try {
+    const stalledJobs = newBullMqJobQueue(stalledNative, {
+      worker: { lockDuration: 500, stalledInterval: 250, maxStalledCount: 2 }
+    })
+    await stalledJobs.start(background())
+    await stalledJobs.enqueue(background(), "work", { recover: true }, { id: "real-stalled-lock" })
+    await crashRawWorker("127.0.0.1", port, stalledName, prefix, "real-stalled-lock")
+    await waitForJob(stalledNative, "real-stalled-lock", "active")
+    const recovered: string[] = []
+    const stalledWorker = stalledJobs.worker({
+      work(_ctx, job) {
+        recovered.push(job.id)
+      }
+    })
+    const stalledRunning = stalledWorker.start(background())
+    const completed = await waitForJob(stalledNative, "real-stalled-lock", "completed", 20_000)
+    assert(recovered.includes("real-stalled-lock"), "stalled job was not recovered")
+    assert(
+      completed.attemptsStarted >= 2,
+      `stalled job was not started twice: ${completed.attemptsStarted}`
+    )
+    assert(
+      completed.stalledCounter >= 1,
+      `stalled counter did not advance: ${completed.stalledCounter}`
+    )
+    await stalledWorker.stop(background())
+    await stalledRunning
+    await waitUntil(
+      "stalled worker close",
+      async () => (await stalledNative.getWorkersCount()) === 0
+    )
+    await stalledJobs.stop(background())
+  } finally {
+    await stalledNative.close().catch(() => {})
+  }
+
+  phase("processor")
+  let releaseProcessor!: () => void
+  const processorGate = new Promise<void>((resolve) => {
+    releaseProcessor = resolve
+  })
+  let processorEntered = false
+  const owned = jobs.worker(
+    {
+      async work() {
+        processorEntered = true
+        await processorGate
+      }
+    },
+    { drainTimeoutMs: 10_000 }
+  )
+  const ownedRunning = owned.start(background())
+  void ownedRunning.catch(() => {})
+  try {
+    await waitUntil("owned worker", async () => (await queue.getWorkersCount()) >= 1)
+    await jobs.enqueue(background(), "work", "hold", { id: "held-processor" })
+    await waitUntil("held processor", () => processorEntered)
+    const stopping = owned.stop(background())
+    const early = await outcome(stopping, 80)
+    assert(early === "hung", "stop settled while the processor was still running")
+    releaseProcessor()
+    const stopped = await outcome(stopping, 10_000)
+    const finished = await outcome(ownedRunning, 10_000)
+    assertCloseOutcome(stopped, finished)
+    await waitUntil("owned worker close", async () => (await queue.getWorkersCount()) === 0)
+  } finally {
+    releaseProcessor()
+    await outcome(owned.stop(background()), 5_000)
+    await outcome(ownedRunning, 5_000)
+  }
+
+  phase("outage")
+  const outageSeen: string[] = []
+  const outage = jobs.worker({
+    work(_ctx, job) {
+      outageSeen.push(job.id)
+    }
+  })
+  const outageRunning = outage.start(background())
+  void outageRunning.catch(() => {})
+  try {
+    await waitUntil("outage worker", async () => (await queue.getWorkersCount()) >= 1)
+    await command(["docker", "stop", "--time", "1", container])
+    await Bun.sleep(200)
+    const duringOutage = await outcome(outageRunning, 100)
+    assert(duringOutage === "hung", "Redis outage terminated the worker runtime")
+    await command(["docker", "start", container])
+    await waitUntil("redis reconnect", () => redisAcceptsCommands(container), 20_000)
+    await waitUntil("queue reconnect", () => queueResponds(queue), 20_000)
+    await jobs.enqueue(background(), "work", "recovered", { id: "after-outage" })
+    await waitForJob(queue, "after-outage", "completed", 30_000)
+    assert(outageSeen.includes("after-outage"), "worker did not process after Redis returned")
+    const stillRunning = await outcome(outageRunning, 50)
+    assert(stillRunning === "hung", "recovered worker runtime settled on its own")
+    const outageStopped = await outcome(outage.stop(background()), 8_000)
+    const outageFinished = await outcome(outageRunning, 8_000)
+    assert(outageStopped === "resolved", "recovered worker stop did not resolve")
+    assert(outageFinished === "resolved", "recovered worker runtime did not resolve")
+    await waitUntil("outage worker close", async () => (await queue.getWorkersCount()) === 0)
+    await waitUntil("outage connections", async () => (await redisClients(container)) === baseline)
+  } finally {
+    await command(["docker", "start", container]).catch(() => {})
+    await outcome(outage.stop(background()), 5_000)
+    await outcome(outageRunning, 5_000)
+  }
+
+  phase("drain")
+  let releaseDrain!: () => void
+  const drainGate = new Promise<void>((resolve) => {
+    releaseDrain = resolve
+  })
+  let drainEntered = false
+  const draining = jobs.worker(
+    {
+      async work() {
+        drainEntered = true
+        await drainGate
+      }
+    },
+    { drainTimeoutMs: 200 }
+  )
+  const drainingRunning = draining.start(background())
+  void drainingRunning.catch(() => {})
+  try {
+    await waitUntil("drain worker", async () => (await queue.getWorkersCount()) >= 1)
+    await jobs.enqueue(background(), "work", "drain", { id: "drain-hold" })
+    await waitUntil("drain handler", () => drainEntered)
+    const stopOutcome = await outcome(draining.stop(background()), 2_000)
+    assert(
+      stopOutcome instanceof Error &&
+        "code" in stopOutcome &&
+        stopOutcome.code === "GO_LIKE_JOB_DRAIN_TIMEOUT",
+      "drain stop did not keep the owner timeout"
+    )
+    const stillHeld = await outcome(drainingRunning, 50)
+    assert(stillHeld === "hung", "drain timeout settled the handler before it finished")
+    releaseDrain()
+    const runOutcome = await outcome(drainingRunning, 5_000)
+    assertCloseOutcome(stopOutcome, runOutcome)
+    await waitUntil("drain worker close", async () => (await queue.getWorkersCount()) === 0)
+  } finally {
+    releaseDrain()
+    await outcome(draining.stop(background()), 5_000)
+    await outcome(drainingRunning, 5_000)
+  }
+
+  phase("startup")
+  const refusedPort = allocateHostPort()
+  const refused = new Queue(`refused-${crypto.randomUUID()}`, {
+    prefix,
+    connection: {
+      host: "127.0.0.1",
+      port: refusedPort,
+      maxRetriesPerRequest: null,
+      connectTimeout: 500,
+      retryStrategy: () => null
+    }
+  })
+  refused.on("error", () => {})
+  try {
+    const refusedJobs = newBullMqJobQueue(refused)
+    const startup = refusedJobs.worker({ work() {} }, { drainTimeoutMs: 2_000 })
+    const starting = startup.start(background())
+    const startupError = await outcome(starting, 8_000)
+    assert(startupError instanceof Error, "worker startup did not reject")
+    if (startupError instanceof AggregateError) {
+      assert(startupError.errors[0] instanceof Error, "startup aggregate lost its primary error")
+      assert(
+        startupError.message === startupError.errors[0].message,
+        "startup aggregate did not keep the primary message"
+      )
+    }
+    const stopped = await outcome(startup.stop(background()), 5_000)
+    assert(
+      stopped === "resolved" || stopped instanceof Error,
+      "startup rollback stop did not settle"
+    )
+    const again = await outcome(startup.start(background()), 2_000)
+    assert(
+      again instanceof Error && "code" in again && again.code === "GO_LIKE_JOB_STATE",
+      "failed worker start was left open"
+    )
+    const queueStart = await outcome(refusedJobs.start(background()), 8_000)
+    assert(queueStart instanceof Error, "queue startup did not reject")
+    assert(!(queueStart instanceof AggregateError), "queue startup replaced the connection error")
+    const queueStopped = await outcome(refusedJobs.stop(background()), 2_000)
+    assert(queueStopped === "resolved", "failed queue stop did not settle")
+  } finally {
+    await refused.close().catch(() => {})
+  }
+}
+
+/** Runs one successful job and one permanent failure against Redis. */
 async function main(): Promise<void> {
   const project = `go-like-bullmq-${crypto.randomUUID()}`
   const container = `${project}-redis`
-  const label = `go-like.project=${project}`
   const port = allocateHostPort()
   const queueName = `jobs-${crypto.randomUUID()}`
   const prefix = `go-like-${crypto.randomUUID()}`
-  const managedWorkers = new Set<ManagedWorker>()
-  const workers = new Set<Worker>()
-  const lateRejections: unknown[] = []
   let queue: Queue | null = null
-  let redisVersion = ""
-  /** Records process-level late rejections as release-gate failures. */
-  const recordLateRejection = (reason: unknown): void => {
-    lateRejections.push(reason)
-  }
-  process.on("unhandledRejection", recordLateRejection)
-
   try {
     await command([
       "docker",
@@ -285,7 +463,7 @@ async function main(): Promise<void> {
       "--name",
       container,
       "--label",
-      label,
+      `go-like.project=${project}`,
       "--label",
       DockerOwnerLabel,
       "--publish",
@@ -297,382 +475,124 @@ async function main(): Promise<void> {
       "--appendonly",
       "no"
     ])
-    redisVersion = (await command(["docker", "exec", container, "redis-server", "--version"]))
+    const redisVersion = (await command(["docker", "exec", container, "redis-server", "--version"]))
       .stdout
     assert(
       redisVersion.includes(`v=${ExpectedRedisVersion}`),
       `unexpected Redis version: ${redisVersion}`
     )
-    const imageId = (await command(["docker", "inspect", "--format", "{{.Image}}", container]))
-      .stdout
-    const expectedImageId = (
-      await command(["docker", "image", "inspect", "--format", "{{.Id}}", RedisImage])
-    ).stdout
-    assert(imageId === expectedImageId, `unexpected Redis image ID: ${imageId}`)
-
-    const connection = {
-      host: "127.0.0.1",
-      port,
-      protocol: 2 as const,
-      maxRetriesPerRequest: null,
-      retryStrategy: (attempt: number) => Math.min(attempt * 50, 500)
-    }
-    /** Creates one application-configured official Worker with its native data plane intact. */
-    function createWorker(
-      processor: Processor,
-      options: Omit<WorkerOptions, "connection" | "prefix" | "autorun"> = {}
-    ): Worker {
-      const native = new Worker(
-        queueName,
-        processor,
-        Object.assign({}, options, {
-          connection,
-          prefix,
-          autorun: false
-        })
-      )
-      native.on("error", () => {})
-      workers.add(native)
-      return native
-    }
-    queue = new Queue(queueName, { connection, prefix })
+    queue = new Queue(queueName, {
+      prefix,
+      connection: { host: "127.0.0.1", port, maxRetriesPerRequest: null }
+    })
     queue.on("error", () => {})
-    await queue.waitUntilReady()
-    await queue.drain(true)
-    const baselineConnections = await queueConnectionCount(queue)
+    const jobs = newBullMqJobQueue(queue)
+    await jobs.start(background())
+    const observedRedis = queue.getBackend().redisVersion
     assert(
-      baselineConnections === 1,
-      `unexpected application Queue baseline: ${baselineConnections}`
+      observedRedis === ExpectedRedisVersion,
+      `unexpected backend Redis version: ${observedRedis}`
     )
-
-    const attempts: number[] = []
-    const attemptTimes: number[] = []
-    const nativeTokens: string[] = []
-    let nativeSignalObserved = false
-    const retryWorker = createWorker(
-      async (job, token, signal) => {
-        attempts.push(job.attemptsMade)
-        attemptTimes.push(Date.now())
-        assert(
-          typeof token === "string" && token.length > 0,
-          "retry processor received an empty native token"
-        )
-        nativeTokens.push(token)
-        nativeSignalObserved = signal instanceof AbortSignal
-        if (attempts.length < 3) throw new Error(`retry-${attempts.length}`)
-        return { delivered: true }
-      },
-      { concurrency: 2, name: "retry-application" }
+    console.log(
+      `redis version exercised: ${observedRedis} (LPOS script); no local Redis 5 image, LRANGE path covered by the unit suite`
     )
-    const retryManaged = await startManaged(retryWorker, managedWorkers)
-    const retryJob = await queue.add(
-      "retry",
-      { id: 1 },
+    let permanentRuns = 0
+    const worker = jobs.worker(
       {
-        jobId: "retry-backoff",
-        attempts: 3,
-        backoff: { type: "fixed", delay: 100 }
-      }
-    )
-    const completedRetry = await waitForJobState(queue, retryJob.id ?? "", "completed")
-    assert(attempts.length === 3, `expected three processor attempts, observed ${attempts.length}`)
-    assert(
-      completedRetry.attemptsMade === 3,
-      `unexpected attemptsMade: ${completedRetry.attemptsMade}`
-    )
-    assert(
-      nativeTokens.every((token) => token.length > 0),
-      "retry processor did not retain native tokens"
-    )
-    assert(nativeSignalObserved, "retry processor did not receive BullMQ native AbortSignal")
-    const firstFixedBackoffElapsedMs = attemptTimes[1]! - attemptTimes[0]!
-    const secondFixedBackoffElapsedMs = attemptTimes[2]! - attemptTimes[1]!
-    assert(
-      firstFixedBackoffElapsedMs >= 90,
-      `first fixed backoff was too short: ${firstFixedBackoffElapsedMs}`
-    )
-    assert(
-      secondFixedBackoffElapsedMs >= 90,
-      `second fixed backoff was too short: ${secondFixedBackoffElapsedMs}`
-    )
-    await stopManaged(retryManaged, managedWorkers)
-    await waitUntil("retry Worker connections to return to baseline", async () => {
-      return queue !== null && (await queueConnectionCount(queue)) === baselineConnections
-    })
-    const retryConnectionsAfterStop = await queueConnectionCount(queue)
-    assert(
-      retryConnectionsAfterStop === baselineConnections,
-      "retry Worker connections did not return to baseline"
-    )
-    const postStopJob = await queue.add(
-      "post-stop",
-      { usable: true },
-      { jobId: "queue-remains-owned" }
-    )
-    const queriedPostStop = await queue.getJob(postStopJob.id ?? "")
-    assert(
-      queriedPostStop?.data.usable === true,
-      "application Queue was unusable after Worker stop"
-    )
-    await postStopJob.remove()
-
-    const outageErrors: Error[] = []
-    const recoveredJobs: string[] = []
-    let outageFactoryCalls = 0
-    const outageWorkerCreated = deferred<Worker>()
-    const outageServer = newBullMqWorkerServer(() => {
-      outageFactoryCalls += 1
-      const native = createWorker(
-        async (job, _token, _signal) => {
-          recoveredJobs.push(job.id ?? "")
-        },
-        { name: "outage-application" }
-      )
-      native.on("error", (error) => {
-        outageErrors.push(error)
-      })
-      outageWorkerCreated.resolve(native)
-      return native
-    })
-    const outageRunning = outageServer.start(background())
-    void outageRunning.catch(() => {})
-    const outageManaged = Object.freeze({ server: outageServer, running: outageRunning })
-    managedWorkers.add(outageManaged)
-    const outageWorker = await outageWorkerCreated.promise
-    assert(
-      outageFactoryCalls === 1,
-      `expected one application Worker factory call, observed ${outageFactoryCalls}`
-    )
-    await waitUntil("outage Worker run", () => outageWorker.isRunning())
-    await waitUntil("outage Worker initial connections", async () => {
-      return queue !== null && (await queueConnectionCount(queue)) === baselineConnections + 2
-    })
-    assert(outageErrors.length === 0, "Worker emitted an error before the controlled Redis outage")
-    const outageErrorBaseline = outageErrors.length
-    await command(["docker", "stop", "--time", "1", container])
-    await waitUntil(
-      "Worker outage error observation",
-      () => outageErrorDelta(outageErrors, outageErrorBaseline) > 0,
-      30_000
-    )
-    const outageErrorsObservedWhileStopped = outageErrorDelta(outageErrors, outageErrorBaseline)
-    assert(
-      outageErrorsObservedWhileStopped > 0,
-      "Worker emitted no new error while Redis was stopped"
-    )
-    await command(["docker", "start", container])
-    await waitUntil(
-      "Queue Redis reconnect",
-      async () => {
-        if (queue === null) return false
-        const client = await queueClient(queue)
-        return (await client.ping()) === "PONG"
+        work(_ctx, job) {
+          if (job.payload === "undefined") throw undefined
+          if (job.payload === "null") throw null
+          if (job.payload === "text") throw "text"
+          if (job.payload === "permanent") {
+            permanentRuns += 1
+            const error = new Error("permanent")
+            Object.assign(error, { name: "JobPermanentError", code: "GO_LIKE_JOB_PERMANENT" })
+            throw error
+          }
+          return job.payload
+        }
       },
-      30_000
+      { concurrency: 1 }
     )
-    await waitUntil(
-      "outage Worker recovered connections",
-      async () => {
-        return queue !== null && (await queueConnectionCount(queue)) === baselineConnections + 2
-      },
-      60_000
-    )
-    const recoveredJob = await queue.add("outage", { recovered: true }, { jobId: "after-outage" })
-    await waitForJobState(queue, recoveredJob.id ?? "", "completed", 60_000)
-    assert(recoveredJobs.includes("after-outage"), "Worker did not process after Redis restart")
-    let outageTerminal = false
-    void outageRunning.then(
-      () => {
-        outageTerminal = true
-      },
-      () => {
-        outageTerminal = true
-      }
-    )
-    await Bun.sleep(25)
-    assert(!outageTerminal, "Redis outage incorrectly terminated the Worker server")
-    await stopManaged(outageManaged, managedWorkers)
-    await waitUntil("recovered Worker connections to return to baseline", async () => {
-      return queue !== null && (await queueConnectionCount(queue)) === baselineConnections
+    const running = worker.start(background())
+    await waitUntil("worker", async () => (await queue!.getWorkersCount()) >= 1)
+    const done = await jobs.enqueue(background(), "work", { n: 1 }, { id: "ok", attempts: 1 })
+    const completed = await waitForJob(queue, done.id, "completed")
+    assert((await completed.returnvalue) !== undefined, "completed job has no return value")
+    const failed = await jobs.enqueue(background(), "work", "permanent", {
+      id: "stop",
+      attempts: 3
     })
-    const stalledJob = await queue.add("stalled", { recover: true }, { jobId: "real-stalled-lock" })
-    await crashRawWorker("127.0.0.1", port, queueName, prefix, stalledJob.id ?? "")
-    await waitForJobState(queue, stalledJob.id ?? "", "active")
-    const recoveredStalled: string[] = []
-    const stalledWorker = createWorker(
-      async (job, _token, _signal) => {
-        recoveredStalled.push(job.id ?? "")
-      },
-      {
-        name: "stalled-application",
-        lockDuration: 500,
-        stalledInterval: 250,
-        maxStalledCount: 2
-      }
-    )
-    const stalledManaged = await startManaged(stalledWorker, managedWorkers)
-    const completedStalled = await waitForJobState(queue, stalledJob.id ?? "", "completed", 15_000)
+    const terminal = await waitForJob(queue, failed.id, "failed")
     assert(
-      recoveredStalled.includes("real-stalled-lock"),
-      "application-configured Worker did not recover the raw crashed lock"
+      terminal.attemptsMade === 1,
+      `permanent job used a later attempt: attemptsMade=${terminal.attemptsMade} attemptsStarted=${terminal.attemptsStarted} handlerRuns=${permanentRuns} reason=${terminal.failedReason}`
     )
-    assert(
-      completedStalled.attemptsStarted >= 2,
-      `stalled job was not started twice: ${completedStalled.attemptsStarted}`
-    )
-    assert(
-      completedStalled.stalledCounter >= 1,
-      `stalled counter did not advance: ${completedStalled.stalledCounter}`
-    )
-    await stopManaged(stalledManaged, managedWorkers)
-    await waitUntil("stalled Worker connections to return to baseline", async () => {
-      return queue !== null && (await queueConnectionCount(queue)) === baselineConnections
-    })
-
-    const admitted = deferred<void>()
-    const releaseProcessor = deferred<void>()
-    let forcedSignalCanceled = false
-    let forcedSignalCause: Error | null = null
-    const forceWorker = createWorker(
-      async (_job, token, signal) => {
-        assert(
-          typeof token === "string" && token.length > 0,
-          "noncooperative processor received an empty native token"
-        )
-        assert(
-          signal !== undefined,
-          "noncooperative processor did not receive BullMQ native signal"
-        )
-        signal.addEventListener(
-          "abort",
-          () => {
-            forcedSignalCanceled = true
-            forcedSignalCause =
-              signal.reason instanceof Error
-                ? signal.reason
-                : new Error("native BullMQ signal used a non-Error reason", {
-                    cause: signal.reason
-                  })
-          },
-          { once: true }
-        )
-        admitted.resolve()
-        await releaseProcessor.promise
-      },
-      { name: "force-application" }
-    )
-    const noncooperative = newBullMqWorkerServer(forceWorker, bullMqWorkerShutdownTimeout(100))
-    let forcedRunning: Promise<void> | null = null
-    const capturedServer: Server = {
-      start(ctx: Context): Promise<void> {
-        const running = noncooperative.start(ctx)
-        forcedRunning = running
-        void running.catch(() => {})
-        return running
-      },
-      stop(ctx: Context): Promise<void> {
-        return noncooperative.stop(ctx)
-      }
-    }
-    const app = newApp(registerServer(capturedServer), appStopTimeout(300))
-    const appRunning = app.run()
-    void appRunning.catch(() => {})
-    await queue.add("force", { hold: true }, { jobId: "noncooperative-force" })
-    await admitted.promise
-    const forceFailure = await rejected(app.stop())
-    assert(forcedSignalCanceled, "cancelAllJobs did not cancel the official processor signal")
-    requiredError(
-      forcedSignalCause,
-      "forced native processor signal did not retain an Error reason"
-    )
-    assert(forcedRunning !== null, "App did not start the BullMQ Server runtime")
-    const acceptedForcedRunning: Promise<void> = forcedRunning
-    assert(
-      !(await settlesWithin(acceptedForcedRunning)),
-      "Server runtime settled before the admitted processor released"
-    )
-    const adapterTimeout = errorWithCode(forceFailure, "GO_LIKE_BULLMQ_WORKER_SHUTDOWN_TIMEOUT")
-    assert(adapterTimeout instanceof Error, "App failure lost the BullMQ owner timeout")
-    releaseProcessor.resolve()
-    const terminalFailure = await rejected(acceptedForcedRunning)
-    assert(
-      terminalFailure === adapterTimeout,
-      "native terminal changed the BullMQ timeout Error identity"
-    )
-    await waitUntil("forced Worker connections to return to baseline", async () => {
-      return queue !== null && (await queueConnectionCount(queue)) === baselineConnections
-    })
-    await rejected(appRunning)
-
-    const finalJob = await queue.add(
-      "after-all-workers",
-      { queryable: true },
-      { jobId: "queue-final-use" }
-    )
-    const finalQuery = await queue.getJob(finalJob.id ?? "")
-    assert(finalQuery?.data.queryable === true, "lifecycle adapter closed the application Queue")
-    await queue.obliterate({ force: true })
-    let connectionsBeforeQueueClose = await queueConnectionCount(queue)
-    try {
-      await waitUntil("private Worker connections before Queue close", async () => {
-        if (queue === null) return false
-        connectionsBeforeQueueClose = await queueConnectionCount(queue)
-        return connectionsBeforeQueueClose === baselineConnections
-      })
-    } catch (error) {
-      const clientList = String(await (await queueClient(queue)).call("CLIENT", "LIST"))
-      throw new Error(
-        `private Worker connection count was ${connectionsBeforeQueueClose}; expected ${baselineConnections}; clients=${clientList}`,
-        { cause: error }
+    assert(permanentRuns === 1, "permanent handler must execute exactly once")
+    for (const payload of ["undefined", "null", "text"] as const) {
+      const id = `primitive-${payload}`
+      await jobs.enqueue(background(), "work", payload, { id, attempts: 2 })
+      const primitive = await waitForJob(queue, id, "failed")
+      assert(
+        primitive.attemptsMade === 2,
+        `${payload} was not retried to its attempt budget: attemptsMade=${primitive.attemptsMade}`
       )
     }
-    await queue.close()
+    await worker.stop(background())
+    await running
+    await exerciseService(container, port, queue, jobs, queueName, prefix)
+    const other = new Queue(queueName, {
+      prefix,
+      connection: { host: "127.0.0.1", port, maxRetriesPerRequest: null }
+    })
+    const otherJobs = newBullMqJobQueue(other)
+    await otherJobs.start(background())
+    await Promise.all([
+      jobs.enqueue(background(), "work", "A", { id: "ok" }),
+      otherJobs.enqueue(background(), "work", "B", { id: "ok" })
+    ])
+    const survivor = await queue.getJob("ok")
+    assert(survivor !== undefined, "replacement was deleted")
+    const survivorPayload = survivor.data
+    assert(
+      survivorPayload === "A" || survivorPayload === "B",
+      `replacement payload was lost: ${String(survivorPayload)}`
+    )
+    await jobs.enqueue(background(), "work", "C", { id: "ok" })
+    const still = await queue.getJob("ok")
+    assert(still?.data === survivorPayload, "unfinished replacement was overwritten")
+    await otherJobs.stop(background())
+    await other.close()
+    const opened: Queue[] = []
+    const suite = {
+      async newQueue() {
+        const native = new Queue(`${queueName}-${opened.length}`, {
+          prefix,
+          connection: { host: "127.0.0.1", port, maxRetriesPerRequest: null }
+        })
+        opened.push(native)
+        const wrapped = newBullMqJobQueue<{ readonly n: number }>(native)
+        await wrapped.start(background())
+        return wrapped
+      },
+      async close() {
+        const native = opened.pop()
+        if (native === undefined) return
+        await native.close()
+      }
+    }
+    for (const entry of [
+      ...jobQueueConformance(suite),
+      ...jobTelemetryConformance({ queue: suite })
+    ]) {
+      await entry.run()
+    }
+    await jobs.stop(background())
     queue = null
-    await waitUntil("zero persistent Redis clients", async () => {
-      return (await persistentContainerConnections(container)) === 0
-    })
-    await Bun.sleep(50)
-    assert(lateRejections.length === 0, `observed ${lateRejections.length} late rejection(s)`)
   } finally {
-    for (const managed of managedWorkers) {
-      try {
-        await managed.server.stop(background())
-        await managed.running
-      } catch {
-        continue
-      }
-    }
-    for (const worker of workers) {
-      try {
-        await worker.close(true)
-      } catch {
-        continue
-      }
-    }
-    if (queue !== null) {
-      try {
-        await queue.close()
-      } catch {
-        // Final cleanup must continue to container removal.
-      }
-    }
-    await command(["docker", "rm", "--force", container], true)
-    process.off("unhandledRejection", recordLateRejection)
+    if (queue !== null) await queue.close().catch(() => {})
+    await command(["docker", "rm", "--force", container]).catch(() => {})
   }
-
-  const remaining = await command([
-    "docker",
-    "ps",
-    "--all",
-    "--quiet",
-    "--filter",
-    `label=${label}`
-  ])
-  assert(remaining.stdout.length === 0, `project containers remain: ${remaining.stdout}`)
-  assert(
-    lateRejections.length === 0,
-    `observed ${lateRejections.length} late rejection(s) after cleanup`
-  )
 }
 
 await main()

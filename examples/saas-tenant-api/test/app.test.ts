@@ -1,8 +1,23 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import { newMemoryCache } from "@go-like/cache-memory"
-import { newConfig, objectSource, schema, source, type ConfigObject } from "@go-like/config"
-import { background, withoutCancel } from "@go-like/context"
-import { afterStop, beforeStart, newApp, stopTimeout, type App } from "@go-like/core"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import { newMemoryCache } from "@go-like/core/cache/memory"
+import { newConfig, objectSource, schema, source, type ConfigObject } from "@go-like/core/config"
+import { background, withoutCancel } from "@go-like/core/context"
+import { newProbeRegistry } from "@go-like/core/health"
+import { info, type LogHandler } from "@go-like/core/log"
+import { newRedisCache } from "@go-like/redis/cache"
+import {
+  afterStop,
+  beforeStart,
+  name,
+  newApp,
+  readyProbe,
+  resources,
+  server,
+  stopTimeout,
+  telemetry,
+  type App
+} from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
 import { afterEach, describe, expect, test } from "bun:test"
 import pino from "pino"
 
@@ -86,6 +101,104 @@ afterEach(async () => {
     await application.app.stop()
     await application.running
   }
+})
+
+/** Builds one Redis Cache whose connection is an in-process client double. */
+function localRedisCache() {
+  const values = new Map<string, string>()
+  return newRedisCache({
+    client() {
+      return {
+        isOpen: false,
+        on() {},
+        off() {},
+        withCommandOptions() {
+          return {
+            async get(key: string) {
+              return values.get(key) ?? null
+            },
+            async set(key: string, value: string) {
+              values.set(key, value)
+              return "OK"
+            },
+            async del(key: string) {
+              values.delete(key)
+              return 1
+            }
+          }
+        },
+        async connect() {},
+        async close() {},
+        destroy() {}
+      }
+    }
+  })
+}
+
+test("admits the cache through the resource tier before the server starts", async () => {
+  const cache = localRedisCache()
+  const probes = newProbeRegistry()
+  let admitted = false
+  const app = newApp(
+    name("saas-tenant-api"),
+    resources(cache),
+    server({
+      async start(ctx) {
+        admitted = (await cache.get(ctx, "missing")) === null
+      },
+      async stop() {}
+    }),
+    readyProbe(probes)
+  )
+  const running = app.run()
+  void running.catch(() => {})
+  const deadline = Date.now() + 1_000
+  while (!admitted) {
+    if (Date.now() > deadline) throw new Error("downstream server did not start")
+    await Bun.sleep(5)
+  }
+  expect((await probes.check(background(), "ready")).ok).toBe(true)
+  await app.stop()
+  await running
+})
+
+test("the App installs telemetry and shuts it down", async () => {
+  const events: string[] = []
+  const handler: LogHandler = {
+    enabled: () => true,
+    handle(_ctx, record) {
+      events.push(record.message)
+    },
+    lifecycle: {
+      async start() {
+        events.push("telemetry.start")
+      },
+      async stop() {
+        events.push("telemetry.stop")
+      }
+    }
+  }
+  const app = newApp(
+    name("saas-tenant-api"),
+    telemetry(newTelemetry({ logHandlers: [handler] })),
+    server({
+      async start(ctx) {
+        info(ctx, "handler-installed")
+      },
+      async stop() {}
+    })
+  )
+  const running = app.run()
+  void running.catch(() => {})
+  const deadline = Date.now() + 1_000
+  while (!events.includes("handler-installed")) {
+    if (Date.now() > deadline) throw new Error(`telemetry was not installed: ${events.join(",")}`)
+    await Bun.sleep(5)
+  }
+  expect(events.indexOf("handler-installed")).toBeGreaterThan(events.indexOf("telemetry.start"))
+  await app.stop()
+  await running
+  expect(events.indexOf("telemetry.stop")).toBeGreaterThan(events.indexOf("handler-installed"))
 })
 
 describe("tenant configuration schema", () => {

@@ -1,13 +1,13 @@
 import process from "node:process"
 
-import { newRedisCache } from "@go-like/cache-redis"
+import { newRedisCache } from "@go-like/redis/cache"
 import {
   newClient,
   withDiscovery,
   withEndpoint,
   withSelector,
   withTransport
-} from "@go-like/client"
+} from "@go-like/core/client"
 import {
   afterStart,
   id,
@@ -15,18 +15,20 @@ import {
   name,
   newApp,
   registrar,
+  resources,
   server,
   stopTimeout,
   version
 } from "@go-like/core"
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 import { signal } from "@go-like/core/node"
-import { newRoundRobinSelector } from "@go-like/registry"
-import { newConsulRegistry } from "@go-like/registry-consul"
-import { address, newServer, transport as serverTransport } from "@go-like/server"
-import { newHTTPTransport } from "@go-like/transport-http"
-import { newNodeHTTPTransport } from "@go-like/transport-http/node"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { newRoundRobinSelector } from "@go-like/core/registry"
+import { newConsulClient } from "@go-like/consul"
+import { newConsulRegistry } from "@go-like/consul/registry"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { newHTTPTransport } from "@go-like/core/transport/http"
+import { newNodeHTTPTransport } from "@go-like/core/transport/http/node"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import { newCatalogHandler } from "./http"
 import { pricing as pricingService } from "./contract"
@@ -41,15 +43,21 @@ const consulAddress = process.env.CONSUL_HTTP_ADDR ?? "http://127.0.0.1:18500"
 const redisUrl = process.env.REDIS_URL ?? "redis://127.0.0.1:16379"
 const instanceId = `pricing-${crypto.randomUUID()}`
 
-const registry = newConsulRegistry({
-  fetch,
-  address: consulAddress,
-  waitMs: 1_000,
-  minimumQueryIntervalMs: 20,
-  retryInitialMs: 50,
-  retryMaximumMs: 500,
-  deregisterCriticalServiceAfterMs: 60_000
-})
+const registry = newConsulRegistry(
+  newConsulClient({
+    fetch(request) {
+      return fetch(request)
+    },
+    address: consulAddress
+  }),
+  {
+    waitMs: 1_000,
+    minimumQueryIntervalMs: 20,
+    retryInitialMs: 50,
+    retryMaximumMs: 500,
+    deregisterCriticalServiceAfterMs: 60_000
+  }
+)
 const cache = newRedisCache({
   url: redisUrl,
   prefix: "go-like:example:commerce:",
@@ -83,7 +91,8 @@ const catalogApp = newApp(
   signal(),
   name("commerce-catalog"),
   stopTimeout(5_000),
-  server(cache, catalogServer),
+  resources(cache),
+  server(catalogServer),
   afterStart(async function announceReady(ctx): Promise<void> {
     await catalogServer.endpoint(ctx)
     process.stdout.write(

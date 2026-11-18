@@ -1,40 +1,44 @@
-import type { OtelAlreadyStartedError, OtelShutdownTimeoutError } from "./types"
+import type {
+  OtelAlreadyStartedError,
+  OtelContextManagerMissingError,
+  OtelShutdownTimeoutError
+} from "./types"
 
-export type OtelServerState = "idle" | "starting" | "running" | "stopping" | "stopped" | "failed"
-
-const alreadyStartedName: OtelAlreadyStartedError["name"] = "OtelAlreadyStartedError"
-const alreadyStartedCode: OtelAlreadyStartedError["code"] = "GO_LIKE_OTEL_ALREADY_STARTED"
-const shutdownTimeoutName: OtelShutdownTimeoutError["name"] = "OtelShutdownTimeoutError"
-const shutdownTimeoutCode: OtelShutdownTimeoutError["code"] = "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT"
-
-/** Builds the immutable error returned by every attempt to restart one server. */
-export function newOtelAlreadyStartedError(
-  status: Exclude<OtelServerState, "idle">
+/** Second start, or a start after stop, while the provider is no longer idle. */
+export function otelAlreadyStarted(
+  status: OtelAlreadyStartedError["status"]
 ): OtelAlreadyStartedError {
   return Object.freeze(
-    Object.assign(new Error("OpenTelemetry server has already started"), {
-      name: alreadyStartedName,
-      code: alreadyStartedCode,
+    Object.assign(new Error("OpenTelemetry provider already started"), {
+      name: "OtelAlreadyStartedError" as const,
+      code: "GO_LIKE_OTEL_ALREADY_STARTED" as const,
       status
     })
   )
 }
 
-/** Builds the immutable error for an exceeded owner shutdown wait. */
-export function newOtelShutdownTimeoutError(timeoutMs: number): OtelShutdownTimeoutError {
+/** Owner wait failed. The native shutdown is still running. */
+export function shutdownExceeded(timeoutMs: number): OtelShutdownTimeoutError {
   return Object.freeze(
-    Object.assign(new Error(`OpenTelemetry provider shutdown exceeded ${timeoutMs}ms`), {
-      name: shutdownTimeoutName,
-      code: shutdownTimeoutCode,
+    Object.assign(new Error(`OpenTelemetry shutdown exceeded ${timeoutMs} ms`), {
+      name: "OtelShutdownTimeoutError" as const,
+      code: "GO_LIKE_OTEL_SHUTDOWN_TIMEOUT" as const,
       timeoutMs
     })
   )
 }
 
-/** Preserves native Error identity and normalizes non-Error lifecycle rejections. */
-export function normalizeOtelError(operation: string, value: unknown): Error {
-  if (value instanceof Error) return value
+/** Construction required a ContextManager and `context.with` was a no-op. */
+export function otelContextManagerMissing(): OtelContextManagerMissingError {
   return Object.freeze(
-    new Error(`OpenTelemetry ${operation} rejected with a non-Error value`, { cause: value })
+    Object.assign(
+      new TypeError(
+        "an OpenTelemetry ContextManager must be registered before newOtelTracerProvider"
+      ),
+      {
+        name: "OtelContextManagerMissingError" as const,
+        code: "GO_LIKE_OTEL_CONTEXT_MANAGER_MISSING" as const
+      }
+    )
   )
 }

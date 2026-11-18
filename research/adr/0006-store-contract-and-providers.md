@@ -6,6 +6,23 @@
 
 状态：已接受
 
+> 修订（2026-11-17）：`Store` 插座继续只有 CRUD 与诊断名，没有能力协商、watch 或事务
+> （[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.2 节）。下列三处边界已
+> 更新，下文原文保留。见 [ADR 0009](0009-single-core-package.md)。
+>
+> 一致性用例集从 `@go-like/core/testing` 公开导出，命名为 `<concept>Conformance`
+> （[D32](../designs/socket-plug-architecture/decisions.md)，第 11.1 节第 4 条）。插头离开原包后不能再导入
+> core 的非公开文件，第三方插头作者也要能运行这些用例。设计第 12 章的 OQ10（minor 版本可以增加用例）仍待
+> 确认；本次迁移已经发布这个入口。
+>
+> 资源型提供者的 `start` 在准入完成、资源可用时 resolve。所有者清理由 `stop` 共享的 promise 表示。调用方
+> Context 只结束自己的等待（[D3](../designs/socket-plug-architecture/decisions.md)，OQ2 已于 2026-11-16
+> 批准，第 11.1 节第 5 条）。
+>
+> Consul、etcd 与 Vault 的 Store 位于各后端包的 `./store`。所有权与运行时按子路径声明，Store 语义不变
+> （[D26](../designs/socket-plug-architecture/decisions.md)，第 11.1 节第 6 条）。按能力域拆开的后端包重复了
+> 协议客户端。
+
 ## 背景
 
 go-micro 提供通用 Store 与多个后端实现。go-like 也需要承载配置快照、幂等记录和小型服务状态，但不能把

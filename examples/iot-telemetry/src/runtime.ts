@@ -1,5 +1,4 @@
-import type { Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
+import { newResourceServer, type Server } from "@go-like/core/lifecycle"
 import { AckPolicy, RetentionPolicy, StorageType, type JetStreamManager } from "@nats-io/jetstream"
 import { nanos, type NatsConnection } from "@nats-io/transport-node"
 
@@ -48,18 +47,15 @@ export async function ensureTelemetryTopology(manager: JetStreamManager): Promis
   }
 }
 
-/** Adapts one application-owned NATS connection to the standard Core Server contract. */
-export function newNatsConnectionServer(connection: NatsConnection): Server {
-  const done = connection.closed().then((failure) => {
-    if (failure !== undefined) throw failure
-  })
-  return Object.freeze({
-    async start(ctx: Context): Promise<void> {
-      const failure = ctx.err()
-      if (failure !== null) throw failure
-      await done
-    },
-    async stop(): Promise<void> {
+/**
+ * Admits an application-owned NATS connection into the resource tier.
+ * Start resolves while the connection is open. Stop drains it once.
+ * An unexpected close is the resource terminal and fails the App.
+ */
+export function newNatsConnectionResource(connection: NatsConnection): Server {
+  return newResourceServer({
+    terminal: connection.closed(),
+    close: async () => {
       if (!connection.isClosed()) await connection.drain()
     }
   })

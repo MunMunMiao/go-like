@@ -19,7 +19,7 @@
 
 ## go-like 能力
 
-主要演示 `@go-like/cache-memory` 对已验证风险评估进行带身份指纹的 TTL 缓存，以及 `@go-like/resilience` Circuit Breaker 对评分依赖失败进行熔断；Memory Cache 构造后即可使用，外部入口继续使用标准 Fetch Handler。
+主要演示 `@go-like/core/cache/memory` 对已验证风险评估进行带身份指纹的 TTL 缓存，以及 `@go-like/core/resilience` Circuit Breaker 对评分依赖失败进行熔断；Memory Cache 构造后即可使用，外部入口继续使用标准 Fetch Handler。
 
 ## 验证矩阵
 

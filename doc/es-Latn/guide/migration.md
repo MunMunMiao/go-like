@@ -1,188 +1,171 @@
 # Migración y adopción
 
-La regla más segura para migrar es: **conserva el plano de datos y adopta la frontera que puedas explicar**.
+Esta página hace corresponder los paquetes anteriores a la migración con los 20 paquetes y 75 entradas actuales. La columna de la izquierda es histórica. El código nuevo usa solo la columna de la derecha. Los ejemplos del resto del sitio ya usan las entradas actuales.
 
-Conserva el framework Web, worker, scheduler, broker, logger o proveedor de telemetría que ya tienes. Añade un contrato explícito de go-like alrededor de un problema real de ciclo de vida o de llamadas entre servicios. Verifica esa frontera antes de sumar otro provider.
+Seis reglas cubren las ediciones mecánicas:
 
-## Una migración por etapas
+1. Un paquete de concepto pasa bajo core: `@go-like/<concept>` se convierte en `@go-like/core/<concept>`, incluido un subpath que sigue existiendo.
+2. Un paquete de memoria pasa a `@go-like/core/<concept>/memory`.
+3. Un paquete de backend pasa a `@go-like/<vendor>/<concept>`. El cliente compartido y los errores de protocolo pasan a la raíz del vendor. Los tipos `Fetch` propios del plug pasan a ser `Fetch` de `@go-like/core/fetch`.
+4. Un subpath plegado importa la entrada de concepto que lo absorbió.
+5. Un puñado de símbolos cambia de nombre o de entrada. Están listados bajo el specifier del que salen.
+6. Los wrappers de observabilidad, los servidores NATS que solo tenían ciclo de vida y los adaptadores de recursos de larga duración escritos a mano no son mecánicos. Están listados después de la tabla.
 
-1. Deja intactos el arranque existente y el código de rutas/plano de datos.
-2. Identifica un responsable: listener, worker, scheduler, suscripción a un broker, destino de logs o proveedor de telemetría.
-3. Añade un adaptador estructural `Server` o usa un adaptador existente de go-like. Define admisión, parada, timeout y observación terminal.
-4. Añade `@go-like/context` en las fronteras reales de cancelación o deadline. Pásalo como primer argumento de la operación.
-5. Añade liveness y readiness con `@go-like/health` y `@go-like/web/health`.
-6. Añade una llamada interna unary tipada usando `@go-like/transport-memory` en las pruebas.
-7. Mueve esa llamada a `@go-like/transport-http` o `@go-like/transport-http/node` solo cuando necesites un wire real o un host nativo de Node.
-8. Añade Registry, Config, Store, Cache, Broker, logs, métricas o trazas, una capacidad a la vez.
-9. Registra el provider, runtime, responsable y nivel de evidencia de cada frontera nueva.
+## Codemod de specifiers
 
-No empieces reescribiendo todo el servicio. La idea de los contratos pequeños es que la unidad de migración pueda seguir siendo pequeña.
+| Specifier histórico                  | Specifier actual                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@go-like/broker`                    | `@go-like/core/broker`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/broker/provider`           | `@go-like/core/broker/provider`                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/broker-memory`             | `@go-like/core/broker/memory`                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `@go-like/broker-rabbitmq`           | `@go-like/rabbitmq/broker`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/bullmq`                    | `@go-like/bullmq/job` para `BullMqUnexpectedExitError` y `newBullMqJobQueue`. Los conceptos de job pasan a `@go-like/core/job`: `BullMqAlreadyStartedError` pasa a ser `JobStateError`, `BullMqWorkerShutdownTimeoutError` pasa a ser `JobDrainTimeoutError`, `BullMqWorkerServer` pasa a ser el `Server` de `JobQueue.worker`, `bullMqWorkerShutdownTimeout` pasa a ser `JobWorkerOptions.drainTimeoutMs`. `BullMqWorkerFactory` se elimina. |
+| `@go-like/cache`                     | `@go-like/core/cache`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/cache/provider`            | `@go-like/core/cache`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/cache-memory`              | `@go-like/core/cache/memory`                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/cache-redis`               | `@go-like/redis/cache`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/client`                    | `@go-like/core/client`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/client/discovery`          | `@go-like/core/registry`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/config`                    | `@go-like/core/config`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/config/env`                | `@go-like/core/config`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/config/file`               | `@go-like/core/config`. `jsonFileDecoder` pasa a ser `jsonDecoder`. `FileDecoder` pasa a ser `ConfigDecoder`.                                                                                                                                                                                                                                                                                                                                 |
+| `@go-like/config/node`               | `@go-like/core/config/node`                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/config/yaml`               | `@go-like/yaml/config`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/config-consul`             | `@go-like/consul/config`. Errores compartidos de `@go-like/consul`. `ConsulFetch` pasa a ser `Fetch` de `@go-like/core/fetch`.                                                                                                                                                                                                                                                                                                                |
+| `@go-like/config-etcd`               | `@go-like/etcd/config`, la misma división                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `@go-like/config-kubernetes`         | `@go-like/kubernetes/config`, la misma división                                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/config-vault`              | `@go-like/vault/config`, la misma división                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/context`                   | `@go-like/core/context`                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/core`                      | `@go-like/core`. `Server` y `Endpointer` pasan a `@go-like/core/lifecycle`.                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/core/lifecycle`            | `waitForContext` pasa a `@go-like/core/context`. La propia entrada exporta ahora `Server`, `Endpointer` y `newResourceServer`.                                                                                                                                                                                                                                                                                                                |
+| `@go-like/core/node`                 | `@go-like/core/node`                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `@go-like/croner`                    | `@go-like/croner/job` exporta `newCronerSchedule`. `CronerServer` pasa a ser `ScheduleServer` y `newCronerServer` pasa a ser `newScheduleServer(newCronerSchedule(...), name, handler)` de `@go-like/core/job`. `CronerFactory` se elimina.                                                                                                                                                                                                   |
+| `@go-like/event`                     | `@go-like/core/broker` (`eventBroker`, `Codec`)                                                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/health`                    | `@go-like/core/health`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/metadata`                  | `@go-like/core/metadata`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/nats`                      | El timeout de drain y sus errores pasan a `@go-like/nats/broker`. `newBrokerServer(newNatsCoreBroker(...))` sustituye a `newNatsCoreServer`. Se eliminan los tipos que solo tenían ciclo de vida.                                                                                                                                                                                                                                             |
+| `@go-like/nats/broker`               | `@go-like/nats/broker`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/nats/jetstream`            | `@go-like/nats/jetstream`. `natsJetStreamCloseTimeout` y sus dos errores se quedan. Se elimina el `Server` de ciclo de vida.                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/nats/jetstream/broker`     | `@go-like/nats/jetstream`                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `@go-like/otel`                      | `@go-like/otel`, con el cambio de constructor de abajo                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/pino`                      | `@go-like/pino/log`                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/prometheus`                | `@go-like/prometheus/metric`                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/protoc-gen-like`           | `@go-like/protoc-gen-like`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/registry`                  | `@go-like/core/registry`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/registry/provider`         | `@go-like/core/registry/provider`. `snapshotServiceInstance`, `snapshotServiceInstances` y `RegistrationErrorHandler` se exportan desde `@go-like/core/registry`.                                                                                                                                                                                                                                                                             |
+| `@go-like/registry-consul`           | `@go-like/consul/registry`. Cliente y errores compartidos de `@go-like/consul`.                                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/registry-etcd`             | `@go-like/etcd/registry`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/registry-kubernetes`       | `@go-like/kubernetes/registry`                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/registry-mdns`             | `@go-like/mdns/registry`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/registry-mdns/node`        | `@go-like/mdns/registry/node`                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `@go-like/registry-zookeeper`        | `@go-like/zookeeper/registry`. La factory de Node es `@go-like/zookeeper/registry/node`.                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/resilience`                | `@go-like/core/resilience`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/server`                    | `@go-like/core/server`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/store`                     | `@go-like/core/store`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/store/provider`            | `@go-like/core/store/provider`                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/store-consul`              | `@go-like/consul/store`                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/store-etcd`                | `@go-like/etcd/store`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/store-file`                | `@go-like/file/store`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/store-file/node`           | `@go-like/file/store/node`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/store-memory`              | `@go-like/core/store/memory`                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `@go-like/store-vault`               | `@go-like/vault/store`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/struct`                    | `@go-like/core/struct`                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `@go-like/struct/codec`              | `@go-like/core/struct` (`encodeJson`, `decodeJson`, `jsonCodec`)                                                                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/struct/runtime`            | Eliminado de la API pública. El análisis es `struct.parse`.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/transport`                 | `@go-like/core/transport`. Se eliminan los exports genéricos `Handler`, `Middleware` y `chain`.                                                                                                                                                                                                                                                                                                                                               |
+| `@go-like/transport/headers`         | Eliminado. Interno.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/transport/json`            | Eliminado. Interno.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/transport/provider`        | `@go-like/core/transport/provider`. Se eliminan `observeCall` y los codecs de cable.                                                                                                                                                                                                                                                                                                                                                          |
+| `@go-like/transport/sse`             | Eliminado. Interno.                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/transport-grpc-buf`        | `@go-like/connectrpc`                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@go-like/transport-grpc-buf/native` | `@go-like/connectrpc/node`                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `@go-like/transport-http`            | `@go-like/core/transport/http`                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `@go-like/transport-http/node`       | `@go-like/core/transport/http/node`                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/transport-memory`          | `@go-like/core/transport/memory`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `@go-like/web`                       | `@go-like/core/web`                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `@go-like/web/bun`                   | `@go-like/core/web/bun`                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `@go-like/web/health`                | `@go-like/core/web` (`createHealthHandler`)                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@go-like/web/node`                  | `@go-like/core/web/node`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `@go-like/winston`                   | `@go-like/winston/log`                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
-## Matriz de migración de frameworks
+Las suites de conformidad pasan a `@go-like/core/testing`. Los nombres cambian de `*ConformanceCases` a `*Conformance`, y el tipo de caso es `ConformanceCase`.
 
-| Sistema existente | Conserva lo nativo                                                        | Adopta primero                                                                                                       | Frontera actual                                                                                                               |
-| ----------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| NestJS            | Modules, controllers, decorators, DI, interceptors, pipes, adapter        | Un `Server` estructural propio alrededor de la aplicación existente o una frontera interna separada de Client/Server | En este repositorio no existe un bridge de NestJS para go-like ni integración automática con DI                               |
-| Fastify           | Routes, plugins, hooks, request/reply, native listener                    | Un wrapper de ciclo de vida propio o un bridge Fetch implementado de forma explícita                                 | No se ha demostrado una conversión actual de Fastify request/reply a go-like Handler                                          |
-| Hono              | Routes, middleware, sub-apps, `app.fetch`                                 | `newNodeServer(app.fetch, ...)`, seguido de `newApp(...)`                                                            | La integración nativa con Fetch está demostrada en `examples/hono`                                                            |
-| Elysia            | Route tree, schema, decorators, derives, hooks, Bun/Web Standard behavior | `app.fetch` nativo más el host/ciclo de vida de Core cuando corresponda                                              | Conserva la semántica Bun específica de `.listen()`; no lo llames una API de go-like para todos los runtimes                  |
-| H3                | H3 router and native handler conversion                                   | La ruta de handler Fetch del ejemplo actual de H3                                                                    | `app.fetch` de H3 2.x es la forma demostrada actualmente; la guía antigua de `toWebHandler` necesita su propio ejemplo fijado |
-| Koa               | Middleware and external router                                            | Un wrapper del responsable o una llamada interna al servicio                                                         | `@go-like/web` no acepta el objeto Node request/reply de Koa sin un bridge de aplicación                                      |
-| tRPC              | Router, procedure middleware, input/output parsers, adapter               | El ciclo de vida de Core alrededor del host o una frontera de transporte interna separada                            | go-like Endpoint no es un router de procedimientos de tRPC                                                                    |
+## Resultados de los símbolos
 
-### Ejemplo con Hono
+El registro de símbolos tiene 689 filas. Recuentos por resultado:
 
-Esta es la forma de integración demostrada:
+| Resultado   | Símbolos | Significado                                |
+| ----------- | -------: | ------------------------------------------ |
+| Movido      |      529 | Mismo nombre, quizá un specifier nuevo     |
+| Renombrado  |       12 | Sigue exportado, con un nombre nuevo       |
+| Fusionado   |       35 | Varios símbolos antiguos pasaron a ser uno |
+| Reemplazado |       39 | Eliminado, con un sucesor con nombre       |
+| Interno     |       38 | Ya no se exporta                           |
+| Eliminado   |       36 | Sin sucesor                                |
+| Total       |      689 |                                            |
+
+Por área: núcleo 121, RPC y Web 189, descubrimiento y configuración 204, datos y jobs 124, plugs de telemetría 50, generador 1.
+
+Los 50 símbolos de plugs de telemetría son donde se concentra la mayoría de las eliminaciones. Core registra ahora la unidad de trabajo, así que estos wrappers no tienen sucesor: `traceClient`, `traceBroker`, `traceUnaryMiddleware`, `traceWebHandler`, `measureClient`, `measureClientMiddleware`, `measureUnaryMiddleware`, `measureWebHandler`, `measureBroker`, `logBroker`, `logClient`, `logUnaryMiddleware`, `logWebHandler`, `newRequestMetrics`, `RequestMetrics`, `OtelProviders`. `newOtelTracerProvider`, `newOtelMeterProvider` y `newOtelLogHandler` sustituyen a `newOtelServer` y `OtelServer`. `otelShutdownTimeout` pasa a ser la opción `shutdownTimeoutMs`. `newPinoServer` pasa a ser `newPinoHandler`. `newWinstonServer` pasa a ser `newWinstonHandler`. `TransportLogger` se elimina. `observeCall` se elimina de la entrada del proveedor de transporte.
+
+Hay que sustituir esa composición por un bundle:
+
+```ts
+import { newApp, server, telemetry } from "@go-like/core"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { newOtelMeterProvider, newOtelTracerProvider } from "@go-like/otel"
+import { newPinoHandler } from "@go-like/pino/log"
+
+const tel = newTelemetry({
+  tracerProvider: newOtelTracerProvider(sdkTracer),
+  meterProviders: [newOtelMeterProvider(sdkMeter)],
+  logHandlers: [newPinoHandler(logger, destination)]
+})
+const app = newApp(telemetry(tel), server(apiServer))
+void app
+```
+
+`server(logging, telemetry, apiServer)` pasa a ser `telemetry(tel)` más `server(apiServer)`. Los logs escritos a mano de "application started" los sustituye el evento `go_like.app.ready`. Dos contadores de petición pasan a ser un `newCounter`. Un wrapper web de Winston pasa a ser `newTelemetry({ logHandlers: [newWinstonHandler(logger)], completionLogs: "all" })`. `format.json()` de Winston sigue descartando el mensaje y el stack de un `Error` salvo que se expanda `info.error` antes. Véase [Salud y observabilidad](/es-Latn/guide/health-observability).
+
+Otras ediciones a mano:
+
+- Un `Server` cuyo único trabajo es mantener abierta una conexión pasa a ser `newResourceServer` en `resources(...)`.
+- Una cola de BullMQ es `newBullMqJobQueue` en `resources(...)`. Su worker es `queue.worker(...)` en `server(...)`.
+- Un callback de Croner pasa a ser `newScheduleServer(newCronerSchedule(pattern), name, handler)`.
+- Un servidor NATS que solo poseía la conexión pasa a ser `newResourceServer` alrededor de `connection.closed()` y `connection.drain()`. Las suscripciones usan `newBrokerServer`.
+
+## Adoptar una frontera
+
+Hay que conservar el framework, la base de datos y el broker que ya se ejecutan. Se cambia un propietario cada vez.
+
+| Sistema existente | Se conserva              | Primera frontera de go-like                                                                                                |
+| ----------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| NestJS            | Modules, controllers, DI | Un `Server` propiedad de la aplicación alrededor del proceso de Nest. En este repositorio no hay un puente de Nest.        |
+| Fastify           | Rutas, plugins, hooks    | Un `Server` propiedad de la aplicación, o un adaptador Fetch que se escriba.                                               |
+| Hono, Elysia, H3  | Rutas y `app.fetch`      | `newNodeServer(app.fetch, port(3000))` dentro de `server(...)`. Véanse `examples/hono`, `examples/elysia` y `examples/h3`. |
+| Koa               | Middleware y su router   | Un `Server` que se escriba. `@go-like/core/web` acepta un `Handler` de Fetch.                                              |
+| tRPC              | Procedimientos y parsers | El ciclo de vida de la App alrededor del host, o una llamada interna aparte. Un endpoint no es un procedimiento de tRPC.   |
 
 ```ts
 import { Hono } from "hono"
 import { name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { newNodeServer, port } from "@go-like/web/node"
+import { newNodeServer, port } from "@go-like/core/web/node"
 
-const web = new Hono().get("/users/:id", (c) => c.json({ id: c.req.param("id") }))
-
-const app = newApp(name("users"), server(newNodeServer(web.fetch, port(3000))), signal())
-
-await app.run()
+const routes = new Hono()
+routes.get("/hello", (c) => c.json({ ok: true }))
+const web = newNodeServer(routes.fetch, port(3000))
+await newApp(signal(), name("hono"), server(web)).run()
 ```
 
-El ejemplo actual con Hono conserva el control de Hono sobre las rutas y pasa el handler Fetch nativo al host de Node. No añade una tabla de rutas de go-like ni un paquete bridge específico de Hono.
+Antes de dar por hecho un paso de migración:
 
-### Elysia y H3
+- el propietario y su nivel están nombrados;
+- el Context de la operación es el que se pasó;
+- readiness y `start` se distinguen, incluido `readyProbe` cuando se expone `/readyz`;
+- `stopTimeout` se describe como una espera, no como prueba de un estado terminal nativo;
+- la autorización del retry coincide con la operación de negocio;
+- las credenciales y los payloads tienen una policy de redacción en el logger o el exporter nativos;
+- se ejecutó el typecheck o el comando unitario enfocado, o el hueco quedó escrito.
 
-Aplica la misma frontera a un framework que expone un handler Fetch estándar:
-
-```text
-framework route table
-  -> framework native Fetch handler
-  -> @go-like/web/node (when using the Node host)
-  -> @go-like/core App
-```
-
-Revisa el adaptador de runtime del framework antes de importar un subpath de Node. El adaptador Bun de Elysia y su adaptador Web Standard no tienen un comportamiento de escucha idéntico. Las versiones de H3 y sus APIs para convertir handlers también necesitan un ejemplo fijado. No uses la existencia de un solo ejemplo para prometer cualquier combinación de versión de framework y runtime.
-
-## Migrar un servicio de Go
-
-Para quien viene de Go o Kratos, migra conceptos, no nombres:
-
-| Concepto de Go    | Concepto de go-like                                                                                                | Diferencia importante                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `context.Context` | `@go-like/context` `Context`                                                                                       | `done()` es un `AbortSignal` o `null`, no un canal de Go                         |
-| Server lifecycle  | `Server` estructural de Core                                                                                       | `start(ctx)` puede durar toda la vida del servicio y no significa readiness      |
-| App runner        | `newApp`, `App.run`, `App.stop`                                                                                    | `App.stop()` no recibe Context del caller y devuelve una sola Promise compartida |
-| RPC client        | `@go-like/client`                                                                                                  | Las llamadas internas son JSON Fetch o SSE; el retry es opt-in                   |
-| Transport         | `@go-like/transport`                                                                                               | Los providers y los headers Fetch son contratos de TypeScript/Web                |
-| Registry          | `@go-like/registry`                                                                                                | Los watchers devuelven snapshots de reemplazo completo                           |
-| Selector          | `newRoundRobinSelector`, `newRandomSelector`, `newWeightedRoundRobinSelector`, `newP2CSelector`, `newEWMASelector` | El feedback es síncrono y depende de la policy                                   |
-| Protobuf/IDL      | `@go-like/protoc-gen-like`                                                                                         | Código Context-first sobre Protobuf-ES                                           |
-| gRPC stream       | `@go-like/transport-grpc-buf/native`                                                                               | gRPC estándar con cuatro cardinalidades mediante `/native`                       |
-
-Un primer paso incremental es hacer una llamada tipada a una dirección directa sobre Memory Transport:
-
-```ts
-import { newClient, withEndpoint, withTransport } from "@go-like/client"
-import { background, type Context } from "@go-like/context"
-import { address, newServer, transport as serverTransport } from "@go-like/server"
-import { struct } from "@go-like/struct"
-import { defineService } from "@go-like/transport"
-import { newMemoryTransport } from "@go-like/transport-memory"
-
-const quoteService = defineService("pricing", {
-  quote: {
-    request: struct.object({ sku: struct.string() }),
-    response: struct.object({ amount: struct.number() })
-  }
-})
-
-const transport = newMemoryTransport()
-const server = newServer(serverTransport(transport), address("memory://pricing"))
-quoteService.registerHandler(server, {
-  quote(_ctx, request) {
-    return { amount: request.sku.length }
-  }
-})
-
-const client = newClient(withTransport(transport), withEndpoint("memory://pricing"))
-const caller = quoteService.newClient(client)
-const ctx: Context = background()
-const result = await caller.quote(ctx, { sku: "a" })
-void result
-```
-
-Solo después de probar esta frontera conviene introducir Discovery, un provider real de Registry o un transporte HTTP. Así conservas el contrato de dominio mientras sustituyes el destino y la configuración de ownership.
-
-## Adoptar Kubernetes
-
-Conserva Kubernetes como está:
-
-- Deployments, Services, DNS, Ingress, RBAC, probes, estrategia de rollout, HPA y network policy siguen siendo responsabilidades de la plataforma;
-- `@go-like/config-kubernetes` lee una clave de un solo ConfigMap o Secret dentro de un namespace mediante una capacidad Fetch inyectada;
-- `@go-like/registry-kubernetes` usa registros de EndpointSlice cuando el discovery directo es realmente necesario;
-- un EndpointSlice no es el DNS de un Kubernetes Service ni ofrece un TTL universal de registro;
-- las referencias opcionales al owner del Pod y el deregistration explícito tienen semánticas de fallo distintas.
-
-Empieza por health y configuración antes de seleccionar directamente desde EndpointSlice. Si la aplicación ya tiene un nombre DNS estable de Service, `withEndpoint(...)` más un transporte HTTP puede ser más sencillo y más honesto que añadir un provider de Registry.
-
-## Adoptar brokers y jobs
-
-Conserva nativos el settlement y la policy de jobs:
-
-| Plano de datos existente | Conserva                                                         | Añade go-like para                                                                                  |
-| ------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| NATS Core                | Connection, subscription, queue group, `Msg`, drain              | `newNatsCoreServer`, `newNatsCoreBroker`, ciclo de vida y frontera de bytes                         |
-| NATS JetStream           | Stream, durable consumer, `JsMsg`, ack/nak/term, redelivery, DLQ | `newNatsJetStreamServer`, `newNatsJetStreamBroker`, ciclo de vida                                   |
-| RabbitMQ                 | Connection, topology, confirm policy, channel                    | Ciclo de vida del subscriber borrowed o recovering y settlement nativo seguro frente a generaciones |
-| BullMQ                   | Queue, Worker, processor, retry/backoff, Redis                   | `newBullMqWorkerServer` alrededor de un Worker oficial en pausa                                     |
-| Croner                   | Cron expression, time zone, callback, overlap policy             | `newCronerServer` alrededor de jobs Cron nativos pausados                                           |
-| Memory Broker            | Mapa de topics en proceso y semántica de pruebas                 | `newBrokerServer` y un codec de eventos opcional                                                    |
-
-No migres ack/nak/term de NATS, el settlement durable de JetStream, las confirmaciones de RabbitMQ ni los retries de BullMQ a una abstracción genérica de go-like Broker. Esas semánticas son precisamente la razón por la que el objeto nativo del provider sigue visible.
-
-## Migrar el estado
-
-Elige un dominio de estado a la vez:
-
-- Config para snapshots inmutables de configuración del proceso y reload;
-- Registry para reachability efímera de servicios;
-- Store para registros autoritativos, revisiones, CAS, TTL y páginas;
-- Cache para valores desechables que se pueden recalcular.
-
-Una prueba útil de migración es anotar qué sucede después de un reinicio del proceso, una lectura stale, una caída del provider, una compactación del watcher, un conflicto de CAS y un cache miss. Si la respuesta cambia, no deberían compartir una interfaz de repository genérica.
-
-## Añadir observabilidad
-
-Añade primero el provider nativo y después envuelve la frontera:
-
-```text
-application creates logger / Registry / MeterProvider / TracerProvider
-  -> go-like wrapper records bounded operation facts
-  -> application-owned exporter or destination
-  -> explicit Core lifecycle adapter closes the admitted resource
-```
-
-`@go-like/prometheus` no usa el registro global. `@go-like/otel` no instala providers ni exporters globales. Los adaptadores de Pino y Winston no reemplazan la configuración nativa del logger. Mantén acotados los labels y attributes, y redacta por separado los logs que son responsabilidad de la aplicación.
-
-## Checklist de aceptación de la migración
-
-Antes de integrar una frontera, verifica:
-
-- existe un responsable claramente nombrado;
-- el responsable recibe el Context correcto y no lo reemplaza por `background()`;
-- la admisión durante el arranque y readiness son cosas distintas;
-- el comportamiento del timeout de stop está documentado como una frontera de espera;
-- se conserva la observación terminal nativa cuando existe;
-- no se mezclan handlers Web externos con handlers internos unary;
-- la autorización del retry corresponde a la operación de negocio;
-- credenciales, metadata, logs y atributos de trace tienen una policy de redacción;
-- las semánticas específicas del provider siguen visibles;
-- pasó el comando de unit/typecheck enfocado en el checkout objetivo;
-- el comando E2E relevante de runtime, provider, published o example se ejecutó y quedó registrado, o se marcó explícitamente como no ejecutado.
-
-## Frontera de soporte actual
-
-`@go-like/protoc-gen-like` genera código Protobuf RPC con `Context` como primer argumento sobre Protobuf-ES. `@go-like/transport-grpc-buf` ofrece unary y server-streaming de Connect/gRPC-Web mediante Fetch; `/native` añade gRPC estándar con las cuatro cardinalidades, incluidas client-streaming y bidi. Es una vía independiente del camino interno Fetch/SSE.
-
-Esto no incluye gRPC estándar en el navegador, request-streaming/bidi mediante Fetch, health/reflection oficiales, autenticación genérica, Event Store/replay, ORM ni orquestación de clústeres.
-
-gRPC administrado en Node 26.12.1 y Bun 1.4.4 pasó la [regresión de drain con un consumidor lento](/reference/claims#native-grpc-drain-status). No se ha verificado la resolución de los [límites históricos de cancelación y apagado](/reference/claims#stream-cancellation-limits) de Connect 2.1.2 y Bun 1.4.2 Fetch.
+gRPC estándar en el navegador, el request-streaming de Fetch, un puente de Nest o Fastify y la autenticación universal quedan fuera de las entradas actuales. El registro del drain de gRPC administrado es [Afirmaciones](/reference/claims#native-grpc-drain-status).

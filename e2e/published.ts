@@ -2,7 +2,9 @@ import { createHash, X509Certificate } from "node:crypto"
 import {
   chmod,
   copyFile,
+  cp,
   lstat,
+  mkdir,
   readFile,
   readdir,
   realpath,
@@ -176,6 +178,36 @@ export interface PublishedMtlsEvidence {
   readonly runtimes: readonly PublishedMtlsRuntimeEvidence[]
 }
 
+/** Public entries the published consumer must resolve and type-check (README 3.3 / 3.4). */
+export const PublishedPublicEntryCount = 75
+
+/** Evaluation-time failure when a second, different core copy is loaded. */
+export const DuplicateCoreCode = "GO_LIKE_CORE_DUPLICATE_INSTANCE"
+
+/** npm's failure when a plug's core peer version cannot be installed. */
+export const PeerResolveCode = "ERESOLVE"
+
+/** Package hidden by the published negative case. Core replaced the old context package. */
+export const PublishedHiddenPackageName = "@go-like/core"
+
+export interface PublishedInstallEvidence {
+  readonly entries: {
+    readonly resolved: typeof PublishedPublicEntryCount
+    readonly typeChecked: typeof PublishedPublicEntryCount
+  }
+  readonly physicalCoreDirectories: 1
+  readonly duplicateInstance: {
+    readonly node: typeof DuplicateCoreCode
+    readonly bun: typeof DuplicateCoreCode
+  }
+  readonly peerInstall: typeof PeerResolveCode
+}
+
+export interface PublishedRunEvidence {
+  readonly install: PublishedInstallEvidence
+  readonly native: PublishedNativeEvidence
+}
+
 export interface PublishedNativeEvidence {
   readonly entry: "compiled/native-runtime.js"
   readonly sha256: string
@@ -239,6 +271,7 @@ const FixtureFiles = Object.freeze([
   "portable.ts",
   "node.ts",
   "bun.ts",
+  "smoke.ts",
   "tsconfig.authoring.json",
   "tsconfig.types.json",
   "tsconfig.node.json",
@@ -906,8 +939,29 @@ function dependencyValues(manifest: Record<string, unknown>): readonly unknown[]
   })
 }
 
-async function validateInstalledPackages(stage: string, packages: readonly PublishedPackage[]) {
+/**
+ * Lists public entry specifiers from a packed manifest.
+ * `.` becomes the package name and `./log` becomes `name/log`. `./package.json` is skipped.
+ */
+export function publishedEntrySpecifiers(manifest: Record<string, unknown>): readonly string[] {
+  if (typeof manifest.name !== "string" || manifest.name.length === 0) {
+    throw new TypeError("packed manifest is missing a package name")
+  }
+  const specifiers: string[] = []
+  for (const key of Object.keys(record(manifest.exports))) {
+    if (key === "./package.json") continue
+    specifiers.push(`${manifest.name}${key.slice(1)}`)
+  }
+  return specifiers
+}
+
+/** Checks each installed package contract and returns its public entry specifiers. */
+export async function validateInstalledPackages(
+  stage: string,
+  packages: readonly { readonly name: string }[]
+): Promise<readonly string[]> {
   const nodeModules = join(stage, "node_modules")
+  const specifiers: string[] = []
   for (const entry of packages) {
     const packagePath = join(nodeModules, ...entry.name.split("/"))
     const metadata = await lstat(packagePath)
@@ -919,13 +973,18 @@ async function validateInstalledPackages(stage: string, packages: readonly Publi
       throw new Error(`installed package escaped stage node_modules: ${entry.name}`)
     }
     const manifest = record(JSON.parse(await readFile(join(packagePath, "package.json"), "utf8")))
-    if (
-      manifest.name !== entry.name ||
-      manifest.exports === undefined ||
-      typeof manifest.types !== "string"
-    ) {
+    if (manifest.name !== entry.name || manifest.exports === undefined) {
       throw new Error(`installed package contract is incomplete: ${entry.name}`)
     }
+    let exportMap: Record<string, unknown>
+    let entrySpecifiers: readonly string[]
+    try {
+      exportMap = record(manifest.exports)
+      entrySpecifiers = publishedEntrySpecifiers(manifest)
+    } catch (error) {
+      throw new Error(`installed package contract is incomplete: ${entry.name}`, { cause: error })
+    }
+    const hasRoot = Object.hasOwn(exportMap, ".")
     if (
       dependencyValues(manifest).some(
         (value) => typeof value === "string" && value.startsWith("workspace:")
@@ -933,19 +992,29 @@ async function validateInstalledPackages(stage: string, packages: readonly Publi
     ) {
       throw new Error(`installed package retained a workspace dependency: ${entry.name}`)
     }
-    const typesPath = resolve(packagePath, manifest.types)
-    if (!isPathContained(packagePath, typesPath) || !(await lstat(typesPath)).isFile()) {
-      throw new Error(`installed package types escaped or are missing: ${entry.name}`)
+    if (hasRoot) {
+      if (typeof manifest.types !== "string") {
+        throw new Error(`installed package contract is incomplete: ${entry.name}`)
+      }
+      const typesPath = resolve(packagePath, manifest.types)
+      if (!isPathContained(packagePath, typesPath) || !(await lstat(typesPath)).isFile()) {
+        throw new Error(`installed package types escaped or are missing: ${entry.name}`)
+      }
     }
+    specifiers.push(...entrySpecifiers)
   }
+  return specifiers
 }
 
-/** Requires every public package root import to resolve inside the staged physical node_modules. */
+/**
+ * Requires every public entry specifier to resolve inside the staged physical node_modules.
+ * Returns the number of those entries the trace resolved.
+ */
 export function validatePublishedTrace(
   trace: string,
   stage: string,
-  packageNames: readonly string[]
-): void {
+  entrySpecifiers: readonly string[]
+): number {
   const nodeModules = join(resolve(stage), "node_modules")
   const resolved = new Map<string, string>()
   const pattern = /Module name '(@go-like\/[^']+)' was successfully resolved to '([^']+)'/gu
@@ -959,15 +1028,125 @@ export function validatePublishedTrace(
     resolved.set(specifier, path)
   }
   if (resolved.size === 0) throw new Error("published type trace contained no @go-like resolutions")
-  const missing = packageNames.filter((name) => !resolved.has(name))
+  const missing = entrySpecifiers.filter((name) => !resolved.has(name))
   if (missing.length > 0) {
-    throw new Error(`published type trace missed public packages: ${missing.join(", ")}`)
+    throw new Error(`published type trace missed public entries: ${missing.join(", ")}`)
   }
+  return entrySpecifiers.length
+}
+
+/**
+ * Requires the successful per-entry trace to cover every public entry.
+ * Resolution and type-checking are the same count: `tsc --traceResolution` exited 0.
+ */
+export function assertPublishedEntryResolution(count: number): {
+  readonly resolved: typeof PublishedPublicEntryCount
+  readonly typeChecked: typeof PublishedPublicEntryCount
+} {
+  if (count !== PublishedPublicEntryCount) {
+    throw new Error(
+      `published type resolution covered ${count} public entries, expected ${PublishedPublicEntryCount}`
+    )
+  }
+  return Object.freeze({
+    resolved: PublishedPublicEntryCount,
+    typeChecked: PublishedPublicEntryCount
+  })
+}
+
+/** Counts real `@go-like/core` directories under a staged node_modules tree. Symlinks are not physical copies. */
+export async function countPhysicalCoreDirectories(stage: string): Promise<number> {
+  const physical = new Set<string>()
+  await collectPhysicalCoreDirectories(join(stage, "node_modules"), physical)
+  return physical.size
+}
+
+async function collectPhysicalCoreDirectories(
+  directory: string,
+  physical: Set<string>
+): Promise<void> {
+  let entries
+  try {
+    entries = await readdir(directory, { withFileTypes: true })
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+    throw error
+  }
+  for (const entry of entries) {
+    if (entry.isSymbolicLink() || !entry.isDirectory()) continue
+    const path = join(directory, entry.name)
+    if (entry.name === "core" && basename(directory) === "@go-like") {
+      await recordPhysicalCore(path, physical)
+    }
+    if (entry.name !== ".bin") await collectPhysicalCoreDirectories(path, physical)
+  }
+}
+
+async function recordPhysicalCore(path: string, physical: Set<string>): Promise<void> {
+  let text: string
+  try {
+    text = await readFile(join(path, "package.json"), "utf8")
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+    throw error
+  }
+  if (record(JSON.parse(text)).name !== "@go-like/core") return
+  const metadata = await lstat(path)
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) return
+  physical.add(await realpath(path))
+}
+
+/** Reads the duplicate-core loader report and requires the specific evaluation failure. */
+export function duplicateCoreFailureCode(stdout: string): typeof DuplicateCoreCode {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout.trim())
+  } catch (error) {
+    throw new Error("published duplicate core load did not report JSON", { cause: error })
+  }
+  const value = record(parsed)
+  if (value.name !== "CoreInstanceError" || value.code !== DuplicateCoreCode) {
+    throw new Error(
+      `published duplicate core load reported ${String(value.name)} ${String(value.code)}, expected CoreInstanceError ${DuplicateCoreCode}`
+    )
+  }
+  return DuplicateCoreCode
+}
+
+/** Requires the loader message to name both the installed core version and the nested copy. */
+export function assertDuplicateCoreVersions(
+  stdout: string,
+  installed: string,
+  conflicting: string
+): void {
+  const message = record(JSON.parse(stdout.trim())).message
+  if (
+    typeof message !== "string" ||
+    !message.includes(`(${installed})`) ||
+    !message.includes(`(${conflicting})`)
+  ) {
+    throw new Error(
+      `published duplicate core load did not report versions ${installed} and ${conflicting}`
+    )
+  }
+}
+
+/** Requires npm's peer conflict code, not merely a non-zero install exit. */
+export function peerInstallFailureCode(output: string): typeof PeerResolveCode {
+  if (!/\bcode ERESOLVE\b/u.test(output)) {
+    throw new Error("published peer install failed without ERESOLVE")
+  }
+  return PeerResolveCode
 }
 
 async function validateNodeOutput(paths: PublishedStagePaths): Promise<void> {
   const entries = (await readdir(paths.nodeOutput)).sort()
-  if (entries.length !== 2 || entries[0] !== "node.js" || entries[1] !== "portable.js") {
+  if (
+    entries.length !== 3 ||
+    entries[0] !== "node.js" ||
+    entries[1] !== "portable.js" ||
+    entries[2] !== "smoke.js"
+  ) {
     throw new Error(`published Node emit produced unexpected files: ${entries.join(", ")}`)
   }
 }
@@ -1030,7 +1209,7 @@ export async function validatePublishedBrowserBundle(
     "browser.ts",
     ".artifacts/gen/published/v1/probe_pb.ts",
     ".artifacts/gen/published/v1/probe_like.ts",
-    "node_modules/@go-like/transport-grpc-buf/index.js"
+    "node_modules/@go-like/connectrpc/index.js"
   ]
   await validatePublishedMetafile(stage, metafilePath, "browser", requiredInputs)
   await assertRegularContained(stage, outputPath)
@@ -1064,7 +1243,7 @@ export async function validatePublishedBrowserBundle(
 
   const graph = JSON.stringify({ inputs, outputs })
   if (
-    /node:|@connectrpc[/\\]connect-node|@grpc[/\\]grpc-js|@go-like[/\\]transport-grpc-buf[/\\]native|transport-grpc-buf[/\\](?:client|server|native)\.[cm]?[jt]s|Http2SessionManager|connectNodeAdapter|gRPC client is closed|gRPC server is stopped/u.test(
+    /node:|@connectrpc[/\\]connect-node|@grpc[/\\]grpc-js|@go-like[/\\]connectrpc[/\\]node|connectrpc[/\\](?:client|server|node)\.[cm]?[jt]s|Http2SessionManager|connectNodeAdapter|gRPC client is closed|gRPC server is stopped/u.test(
       graph
     )
   ) {
@@ -2057,6 +2236,7 @@ async function expectConsumerFailure(
   argv: readonly string[],
   environment: Readonly<Record<string, string | undefined>>,
   marker: string,
+  packageName: string,
   signal?: AbortSignal
 ): Promise<void> {
   const result = await execute(root, directory, stage, argv, environment, 120_000, signal)
@@ -2073,12 +2253,214 @@ async function expectConsumerFailure(
   ) {
     throw failure
   }
-  if (!`${result.stdout}\n${result.stderr}`.includes("@go-like/context")) {
+  if (!`${result.stdout}\n${result.stderr}`.includes(packageName)) {
     throw new Error(`${sanitizeArgv(argv).join(" ")} failed for an unrelated reason`, {
       cause: failure
     })
   }
   await assertMissing(marker)
+}
+
+const DuplicatePlugName = "@go-like/mdns"
+const DuplicatePlugSpecifier = "@go-like/mdns/registry"
+
+function conflictingCoreVersion(installed: string): string {
+  return installed === "9.9.9" ? "9.9.8" : "9.9.9"
+}
+
+function negativeFailureOutput(argv: readonly string[], result: CommandResult): string {
+  const rendered = sanitizeArgv(argv).join(" ")
+  if (
+    result.exitCode === 0 &&
+    result.termination === "exit" &&
+    !result.timedOut &&
+    result.cleanupFailures.length === 0
+  ) {
+    throw new Error(`${rendered} unexpectedly succeeded`)
+  }
+  if (
+    result.cleanupFailures.length > 0 ||
+    result.timedOut ||
+    result.termination !== "exit" ||
+    result.exitCode === null
+  ) {
+    throw commandFailure(argv, result) ?? new Error(`${rendered} did not fail cleanly`)
+  }
+  return `${result.stdout}\n${result.stderr}`
+}
+
+async function readInstalledCoreVersion(stage: string): Promise<string> {
+  const manifest = record(
+    JSON.parse(await readFile(join(stage, "node_modules/@go-like/core/package.json"), "utf8"))
+  )
+  if (typeof manifest.version !== "string" || manifest.version.length === 0) {
+    throw new Error("installed core version is missing")
+  }
+  return manifest.version
+}
+
+async function rewriteNestedCoreVersion(
+  packageRoot: string,
+  from: string,
+  to: string
+): Promise<void> {
+  const manifestPath = join(packageRoot, "package.json")
+  const manifest = record(JSON.parse(await readFile(manifestPath, "utf8")))
+  if (manifest.version !== from) {
+    throw new Error(`nested core version was ${String(manifest.version)}, expected ${from}`)
+  }
+  manifest.version = to
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`, { encoding: "utf8" })
+
+  const needle = `const coreVersion = ${JSON.stringify(from)};`
+  const replacement = `const coreVersion = ${JSON.stringify(to)};`
+  let rewrites = 0
+  const walk = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        await walk(path)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".js")) continue
+      const source = await readFile(path, "utf8")
+      const count = source.split(needle).length - 1
+      if (count === 0) continue
+      rewrites += count
+      await writeFile(path, source.replaceAll(needle, replacement), { encoding: "utf8" })
+    }
+  }
+  await walk(packageRoot)
+  if (rewrites !== 1) throw new Error(`nested core version literal was rewritten ${rewrites} times`)
+}
+
+async function runDuplicateCoreNegative(
+  root: string,
+  directory: TempDirectory,
+  stage: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  installedVersion: string,
+  signal?: AbortSignal
+): Promise<PublishedInstallEvidence["duplicateInstance"]> {
+  const conflicting = conflictingCoreVersion(installedVersion)
+  const duplicateRoot = join(stage, "duplicate-core")
+  const installedCore = join(stage, "node_modules/@go-like/core")
+  const installedPlug = join(stage, "node_modules", ...DuplicatePlugName.split("/"))
+  const nestedCore = join(
+    duplicateRoot,
+    "node_modules",
+    ...DuplicatePlugName.split("/"),
+    "node_modules/@go-like/core"
+  )
+  await mkdir(join(duplicateRoot, "node_modules/@go-like"), { recursive: true })
+  await cp(installedCore, join(duplicateRoot, "node_modules/@go-like/core"), {
+    recursive: true,
+    dereference: true
+  })
+  await cp(installedPlug, join(duplicateRoot, "node_modules", ...DuplicatePlugName.split("/")), {
+    recursive: true,
+    dereference: true
+  })
+  await mkdir(join(nestedCore, ".."), { recursive: true })
+  await cp(installedCore, nestedCore, { recursive: true, dereference: true })
+  await rewriteNestedCoreVersion(nestedCore, installedVersion, conflicting)
+  const loader = join(duplicateRoot, "load.mjs")
+  await copyFile(join(root, "e2e/fixtures/published-duplicate-core/load.mjs"), loader)
+
+  const codes: Array<typeof DuplicateCoreCode> = []
+  for (const runtime of ["node", "bun"] as const) {
+    const argv =
+      runtime === "node"
+        ? (["node", loader, "@go-like/core", DuplicatePlugSpecifier] as const)
+        : (["bun", "--no-install", loader, "@go-like/core", DuplicatePlugSpecifier] as const)
+    const result = await execute(root, directory, duplicateRoot, argv, environment, 120_000, signal)
+    negativeFailureOutput(argv, result)
+    const code = duplicateCoreFailureCode(result.stdout)
+    assertDuplicateCoreVersions(result.stdout, installedVersion, conflicting)
+    codes.push(code)
+  }
+  const node = codes[0]
+  const bun = codes[1]
+  if (node === undefined || bun === undefined) {
+    throw new Error("published duplicate core load did not run on Node and Bun")
+  }
+  return Object.freeze({ node, bun })
+}
+
+async function runPeerVersionNegative(
+  root: string,
+  directory: TempDirectory,
+  stage: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  coreTarball: string,
+  installedVersion: string,
+  signal?: AbortSignal
+): Promise<typeof PeerResolveCode> {
+  const conflicting = conflictingCoreVersion(installedVersion)
+  const mismatchRoot = join(stage, "peer-mismatch")
+  const plugDir = join(mismatchRoot, "plug")
+  const consumerDir = join(mismatchRoot, "consumer")
+  await mkdir(consumerDir, { recursive: true })
+  await cp(join(stage, "node_modules", ...DuplicatePlugName.split("/")), plugDir, {
+    recursive: true,
+    dereference: true
+  })
+  const plugManifestPath = join(plugDir, "package.json")
+  const plugManifest = record(JSON.parse(await readFile(plugManifestPath, "utf8")))
+  const peers = record(plugManifest.peerDependencies)
+  if (peers["@go-like/core"] !== installedVersion) {
+    throw new Error(
+      `published plug core peer ${String(peers["@go-like/core"])} does not match installed core ${installedVersion}`
+    )
+  }
+  peers["@go-like/core"] = conflicting
+  await writeFile(plugManifestPath, `${JSON.stringify(plugManifest)}\n`, { encoding: "utf8" })
+
+  const packOutput = await command(
+    root,
+    directory,
+    plugDir,
+    ["npm", "pack", "--json", "--ignore-scripts", "--pack-destination", mismatchRoot],
+    environment,
+    120_000,
+    signal
+  )
+  const mismatchedTarball = join(mismatchRoot, parseNpmPackOutput(packOutput, DuplicatePlugName))
+  const fixtureManifest = record(
+    JSON.parse(
+      await readFile(join(root, "e2e/fixtures/published-peer-mismatch/package.json"), "utf8")
+    )
+  )
+  if (
+    fixtureManifest.name !== "go-like-published-peer-mismatch" ||
+    fixtureManifest.private !== true
+  ) {
+    throw new Error("published peer mismatch fixture contract is incomplete")
+  }
+  await writeFile(
+    join(consumerDir, "package.json"),
+    `${JSON.stringify({
+      ...fixtureManifest,
+      dependencies: {
+        "@go-like/core": `file:${coreTarball}`,
+        [DuplicatePlugName]: `file:${mismatchedTarball}`
+      }
+    })}\n`,
+    { encoding: "utf8" }
+  )
+
+  const argv = [
+    "npm",
+    "install",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    "--package-lock=false",
+    "--loglevel=error"
+  ] as const
+  const result = await execute(root, directory, consumerDir, argv, environment, 120_000, signal)
+  return peerInstallFailureCode(negativeFailureOutput(argv, result))
 }
 
 async function runHidePackageNegatives(
@@ -2089,8 +2471,11 @@ async function runHidePackageNegatives(
   environment: Readonly<Record<string, string | undefined>>,
   signal?: AbortSignal
 ): Promise<void> {
-  const installed = join(stage, "node_modules/@go-like/context")
-  const hidden = join(stage, "node_modules/@go-like/.context-hidden")
+  const slash = PublishedHiddenPackageName.lastIndexOf("/")
+  const scope = PublishedHiddenPackageName.slice(0, slash)
+  const leaf = PublishedHiddenPackageName.slice(slash + 1)
+  const installed = join(stage, "node_modules", scope, leaf)
+  const hidden = join(stage, "node_modules", scope, `.${leaf}-hidden`)
   await rename(installed, hidden)
   let primary: Error | null = null
   try {
@@ -2101,6 +2486,7 @@ async function runHidePackageNegatives(
       ["node", "compiled/node/node.js"],
       environment,
       join(paths.markers, "node-hidden"),
+      PublishedHiddenPackageName,
       signal
     )
     await expectConsumerFailure(
@@ -2110,6 +2496,7 @@ async function runHidePackageNegatives(
       ["bun", "--no-install", "bun.ts"],
       environment,
       join(paths.markers, "bun-hidden"),
+      PublishedHiddenPackageName,
       signal
     )
   } catch (error) {
@@ -2130,7 +2517,7 @@ export async function copyPublishedFixture(
   const stage = directory.path
   const fixture = join(root, "e2e/fixtures/published-consumer")
   for (const path of FixtureFiles) await copyFile(join(fixture, path), join(stage, path))
-  const nativeSource = join(root, "packages/transport/grpc-buf/test/e2e")
+  const nativeSource = join(root, "packages/connectrpc/test/e2e")
   for (const path of NativeSourceFiles) {
     await copyFile(join(nativeSource, path), join(stage, "test/e2e", path))
   }
@@ -2148,17 +2535,19 @@ async function writeMarker(paths: PublishedStagePaths, name: string): Promise<vo
 export async function runPublishedE2e(
   root: string,
   signal?: AbortSignal
-): Promise<PublishedNativeEvidence> {
+): Promise<PublishedRunEvidence> {
   signal?.throwIfAborted()
   const directory = await createTempDirectory("go-like-published-")
   const stage = directory.path
   let primary: Error | null = null
+  let installEvidence: PublishedInstallEvidence | null = null
   let nativeEvidence: PublishedNativeEvidence | null = null
   try {
     const paths = await copyPublishedFixture(root, directory)
     const environment = publishedEnvironment(stage)
     const packages = await packageRoots(root)
     const tarballs: string[] = []
+    const tarballByName = new Map<string, string>()
     for (const entry of packages) {
       const output = await command(
         root,
@@ -2172,6 +2561,7 @@ export async function runPublishedE2e(
       const tarball = join(paths.tarballs, parseNpmPackOutput(output, entry.name))
       await assertRegularContained(paths.tarballs, tarball)
       tarballs.push(tarball)
+      tarballByName.set(entry.name, tarball)
     }
 
     await command(
@@ -2193,7 +2583,36 @@ export async function runPublishedE2e(
       300_000,
       signal
     )
-    await validateInstalledPackages(stage, packages)
+    const entrySpecifiers = await validateInstalledPackages(stage, packages)
+    if (new Set(entrySpecifiers).size !== entrySpecifiers.length) {
+      throw new Error("published entry specifiers contain duplicates")
+    }
+    const physicalCoreDirectories = await countPhysicalCoreDirectories(stage)
+    if (physicalCoreDirectories !== 1) {
+      throw new Error(
+        `published install has ${physicalCoreDirectories} physical @go-like/core directories`
+      )
+    }
+    const coreTarball = tarballByName.get("@go-like/core")
+    if (coreTarball === undefined) throw new Error("published core tarball is missing")
+    const installedVersion = await readInstalledCoreVersion(stage)
+    const peerInstall = await runPeerVersionNegative(
+      root,
+      directory,
+      stage,
+      environment,
+      coreTarball,
+      installedVersion,
+      signal
+    )
+    const duplicateInstance = await runDuplicateCoreNegative(
+      root,
+      directory,
+      stage,
+      environment,
+      installedVersion,
+      signal
+    )
     const pluginTarget = await validateInstalledProtocGenLike(stage)
     const nodeVersion = await command(
       root,
@@ -2254,11 +2673,15 @@ export async function runPublishedE2e(
       120_000,
       signal
     )
-    validatePublishedTrace(
-      trace,
-      stage,
-      packages.map((entry) => entry.name)
+    const entries = assertPublishedEntryResolution(
+      validatePublishedTrace(trace, stage, entrySpecifiers)
     )
+    installEvidence = Object.freeze({
+      entries,
+      physicalCoreDirectories,
+      duplicateInstance,
+      peerInstall
+    })
     await command(
       root,
       directory,
@@ -2300,8 +2723,10 @@ export async function runPublishedE2e(
     removeTempDirectory(directory)
   )
   finalizeWithCleanup(primary, cleanupFailures, "published E2E failed and cleanup failed")
-  if (nativeEvidence === null) throw new Error("published E2E produced no native evidence")
-  return nativeEvidence
+  if (nativeEvidence === null || installEvidence === null) {
+    throw new Error("published E2E produced no evidence")
+  }
+  return Object.freeze({ install: installEvidence, native: nativeEvidence })
 }
 
 if (import.meta.main) {
@@ -2311,8 +2736,17 @@ if (import.meta.main) {
   process.once("SIGINT", onSigint)
   process.once("SIGTERM", onSigterm)
   try {
-    const native = await runPublishedE2e(resolve(import.meta.dir, ".."), controller.signal)
-    process.stdout.write(`${JSON.stringify({ published: true, native })}\n`)
+    const evidence = await runPublishedE2e(resolve(import.meta.dir, ".."), controller.signal)
+    process.stdout.write(
+      `${JSON.stringify({
+        published: true,
+        entries: evidence.install.entries,
+        physicalCoreDirectories: evidence.install.physicalCoreDirectories,
+        duplicateInstance: evidence.install.duplicateInstance,
+        peerInstall: evidence.install.peerInstall,
+        native: evidence.native
+      })}\n`
+    )
   } catch (error) {
     process.stderr.write(`${errorSummary(error)}\n`)
     process.exitCode = 1

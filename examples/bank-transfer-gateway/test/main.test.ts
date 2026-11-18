@@ -1,5 +1,5 @@
-import type { CallOption, Client } from "@go-like/client"
-import { background, withCancel } from "@go-like/context"
+import type { CallOption, CallOptions, Client } from "@go-like/core/client"
+import { background, withCancel } from "@go-like/core/context"
 import { name, newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { bankTransfer } from "../src/contract"
@@ -98,7 +98,7 @@ describe("bank transfer gateway", () => {
       feeMinor: 35,
       settlementBusinessDays: 1
     })
-    const option: CallOption = (options) => options
+    const option = ((options: CallOptions) => options) as unknown as CallOption
     const failure = new Error("bank transfer unavailable")
     let rejected = false
     let observed: readonly unknown[] = Object.freeze([])

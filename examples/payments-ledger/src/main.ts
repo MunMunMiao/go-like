@@ -2,10 +2,11 @@ import process from "node:process"
 
 import { SQL } from "bun"
 
-import type { Context } from "@go-like/context"
-import { afterStart, name, newApp, server, type Server } from "@go-like/core"
+import type { Context } from "@go-like/core/context"
+import { afterStart, name, newApp, resources, server } from "@go-like/core"
+import type { Server } from "@go-like/core/lifecycle"
 import { signal } from "@go-like/core/node"
-import type { Handler } from "@go-like/web"
+import type { Handler } from "@go-like/core/web"
 import { RetentionPolicy, StorageType, jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { connect, type NatsConnection } from "@nats-io/transport-node"
 
@@ -13,6 +14,7 @@ import { newPaymentHandler } from "./http"
 import { publishNextOutbox } from "./nats"
 import { paymentStream, paymentSubject } from "./payment"
 import { createLedgerAccount, migrateLedger } from "./postgres"
+import { newLedgerDatabaseResource, newLedgerNatsResource } from "./resources"
 import { newOutboxPublisherServer } from "./worker"
 
 const host = process.env.HOST ?? "127.0.0.1"
@@ -67,24 +69,6 @@ function newBunWebServer(handler: Handler): Server {
         throw ctx.err() ?? new Error("Bun web server stop deadline exceeded")
       }
       resolveDone?.()
-    }
-  })
-}
-
-/** Gives Core ownership of the SQL and NATS client resources. */
-function dependencyServer(sql: SQL, connection: NatsConnection): Server {
-  const done = connection.closed().then((failure) => {
-    if (failure !== undefined) throw failure
-  })
-  return Object.freeze({
-    async start(ctx: Context): Promise<void> {
-      const failure = ctx.err()
-      if (failure !== null) throw failure
-      await done
-    },
-    async stop(): Promise<void> {
-      if (!connection.isClosed()) await connection.drain()
-      await sql.close({ timeout: 5 })
     }
   })
 }
@@ -147,7 +131,8 @@ try {
   const app = newApp(
     signal(),
     name("payments-ledger"),
-    server(dependencyServer(sql, connection), publisher, newBunWebServer(handler)),
+    resources(newLedgerDatabaseResource(sql), newLedgerNatsResource(connection)),
+    server(publisher, newBunWebServer(handler)),
     afterStart(function announceReady(): void {
       process.stdout.write(
         `GO_LIKE_EXAMPLE_READY=${JSON.stringify({ example: "payments-ledger", origin })}\n`

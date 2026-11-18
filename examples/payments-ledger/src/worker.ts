@@ -1,5 +1,5 @@
-import { withCancel, withoutCancel, type Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
+import { withCancel, withoutCancel, type Context } from "@go-like/core/context"
+import type { Server } from "@go-like/core/lifecycle"
 
 import { requireActiveContext, type OutboxPublishResult } from "./payment"
 

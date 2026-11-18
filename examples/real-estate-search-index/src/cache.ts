@@ -1,5 +1,5 @@
-import { newMemoryCache, type MemoryCache } from "@go-like/cache-memory"
-import type { Handler } from "@go-like/web"
+import { newMemoryCache, type MemoryCache } from "@go-like/core/cache/memory"
+import type { Handler } from "@go-like/core/web"
 
 import { newRealEstateHandler } from "./http"
 import { newMemoryListingRepository, type ListingRepository } from "./repository"

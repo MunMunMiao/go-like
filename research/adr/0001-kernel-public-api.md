@@ -8,6 +8,14 @@
 
 > 本 ADR 记录早期 `ServerHandle/AppHandle` 方案，不再是当前公共契约。当前生命周期与用户体验基线见
 > [生命周期与架构说明](../../doc/guide/architecture.md)。
+>
+> 修订（2026-11-17）：下文关于 `waitForContext` 与 `./headers` 的导出位置有后续决定，原文保留。
+> `waitForContext` 从 `@go-like/core/context` 导出，因为它是纯 Context 辅助函数
+> （[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.1 节第 9 条、第 4.2 节）。
+> `Go-Like-` 线协议头名称是内部常量，线协议写入文档；41 个公开入口中没有 `./headers`
+> （第 11.1 节第 25 条，[D24](../designs/socket-plug-architecture/decisions.md)）。单参数 Web `Handler`、
+> Context 经 `requestContext` 进入，以及 Transport 与 Web 互不重导出，见同文第 11.2 节。见
+> [ADR 0009](0009-single-core-package.md)。
 
 ## 背景
 

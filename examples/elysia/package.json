@@ -19,9 +19,7 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun ../../e2e/example.ts"
   },
   "dependencies": {
-    "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
-    "@go-like/web": "workspace:*",
     "elysia": "1.4.32"
   },
   "devDependencies": {

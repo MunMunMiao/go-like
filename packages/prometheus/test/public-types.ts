@@ -1,42 +1,22 @@
-import type { Broker } from "@go-like/broker"
-import type { Client } from "@go-like/client"
-import type { Middleware } from "@go-like/server"
-import { Registry } from "prom-client"
-
-import type { Handler } from "@go-like/web"
+import { background } from "@go-like/core/context"
+import type { MeterProvider } from "@go-like/core/metric"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
+import type { Handler } from "@go-like/core/web"
 import {
   createPrometheusHandler,
-  measureBroker,
-  measureClient,
-  measureUnaryMiddleware,
-  measureWebHandler,
-  newRequestMetrics,
+  newPrometheusMeterProvider,
   type PrometheusHandlerOptions,
-  type RequestComponent,
-  type RequestMetricLabel,
-  type RequestMetrics,
-  type RequestOutcome
-} from "../src/index"
+  type PrometheusMeterProvider
+} from "@go-like/prometheus/metric"
+import { Registry } from "prom-client"
 
 const registry: Registry = new Registry()
 const options: PrometheusHandlerOptions = { path: "/internal/metrics" }
+const provider: PrometheusMeterProvider = newPrometheusMeterProvider(registry)
+const asMeter: MeterProvider = provider
+const lifecycle: TelemetryLifecycle = provider.lifecycle
+const started: Promise<void> = lifecycle.start(background())
+const stopped: Promise<void> = lifecycle.stop(background())
 const handler: Handler = createPrometheusHandler(registry, options)
-const metrics: RequestMetrics = newRequestMetrics(registry)
-declare const client: Client
-declare const broker: Broker<void, void, void, unknown>
-const measuredClient: Client = measureClient(client, metrics)
-const measuredBroker: Broker<void, void, void, unknown> = measureBroker(broker, metrics)
-const measuredUnary: Middleware = measureUnaryMiddleware(metrics)
-const measuredWeb: Handler = measureWebHandler(handler, metrics)
-const component: RequestComponent = "client"
-const label: RequestMetricLabel = "operation"
-const outcome: RequestOutcome = "success"
 
-void handler
-void measuredClient
-void measuredBroker
-void measuredUnary
-void measuredWeb
-void component
-void label
-void outcome
+void [asMeter, started, stopped, handler]

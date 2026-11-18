@@ -4,10 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { expect, test } from "bun:test"
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
+import type { TelemetryLifecycle } from "@go-like/core/telemetry"
 import pino, { symbols } from "pino"
 
-import { pinoDrainTimeout, newPinoServer } from "../src/index"
+import { pinoDrainTimeout, newPinoHandler } from "@go-like/pino/log"
 
 interface StartOutcome {
   readonly error: unknown
@@ -34,7 +35,7 @@ function destinationState(value: unknown): DestinationState {
 }
 
 /** Observes the synchronous admission result without waiting for the full runtime. */
-async function observeStart(server: ReturnType<typeof newPinoServer>): Promise<StartOutcome> {
+async function observeStart(server: TelemetryLifecycle): Promise<StartOutcome> {
   let error: unknown = null
   const running = server.start(background())
   void running.then(
@@ -62,7 +63,7 @@ test("uses the file destination implementation owned by Pino", async () => {
   const closed = once(destination, "close")
   try {
     const logger = pino({ base: null, timestamp: false }, destination)
-    const server = newPinoServer(logger, destination)
+    const server = newPinoHandler(logger, destination).lifecycle
     const running = server.start(background())
     logger.info({ dependencyBoundary: "pino-owned" }, "published dependency boundary")
     await server.stop(background())
@@ -97,7 +98,7 @@ test("uses stable file-destination methods first observed at construction", asyn
       writable: true
     })
     const logger = pino({ base: null, timestamp: false }, destination)
-    const server = newPinoServer(logger, destination)
+    const server = newPinoHandler(logger, destination).lifecycle
     const running = server.start(background())
     await server.stop(background())
     await running
@@ -119,7 +120,7 @@ test("revalidates the file-destination prototype method after construction and b
   })
   const closed = once(destination, "close")
   const logger = pino({ base: null, timestamp: false }, destination)
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   const destinationPrototype = Object.getPrototypeOf(destination) as {
     end: typeof destination.end
   }
@@ -151,7 +152,7 @@ test("rejects an own end override introduced after construction", async () => {
   })
   const closed = once(destination, "close")
   const logger = pino({ base: null, timestamp: false }, destination)
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   try {
     await once(destination, "ready")
     const baselineErrorListeners = destination.listenerCount("error")
@@ -181,7 +182,7 @@ test("revalidates the exact logger stream binding at ownership admission", async
   const firstClosed = once(first, "close")
   const secondClosed = once(second, "close")
   const logger = pino({ base: null, timestamp: false }, first)
-  const server = newPinoServer(logger, first)
+  const server = newPinoHandler(logger, first).lifecycle
   const streamDescriptor = Object.getOwnPropertyDescriptor(logger, symbols.streamSym)
   try {
     await Promise.all([once(first, "ready"), once(second, "ready")])
@@ -219,7 +220,7 @@ test("revalidates construction operations after synchronous listener-registratio
   })
   const closed = once(destination, "close")
   const logger = pino({ base: null, timestamp: false }, destination)
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   const destinationPrototype = Object.getPrototypeOf(destination) as {
     end: typeof destination.end
   }
@@ -270,7 +271,7 @@ test("rejects lifecycle method drift during owner operation capture", async () =
   const flushDescriptor = Object.getOwnPropertyDescriptor(logger, "flush")
   const nativeFlush = logger.flush
   const replacementFlush = function replacementFlush(): void {}
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   let reads = 0
   try {
     await once(destination, "ready")
@@ -307,7 +308,7 @@ test("rejects lifecycle method drift after owner operation capture", async () =>
   const flushDescriptor = Object.getOwnPropertyDescriptor(logger, "flush")
   const nativeFlush = logger.flush
   const replacementFlush = function replacementFlush(): void {}
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   let reads = 0
   try {
     await once(destination, "ready")
@@ -359,7 +360,7 @@ test("rejects a destination destroyed during owner operation capture", async () 
     value: admittedFlush,
     writable: true
   })
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   try {
     await once(destination, "ready")
     const baselineErrorListeners = destination.listenerCount("error")
@@ -415,7 +416,7 @@ test("preserves an error emitted during owner operation capture", async () => {
     value: admittedFlush,
     writable: true
   })
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   try {
     await once(destination, "ready")
     const baselineCloseListeners = destination.listenerCount("close")
@@ -485,7 +486,7 @@ test("rejects a close emitted during owner operation capture", async () => {
     value: admittedFlush,
     writable: true
   })
-  const server = newPinoServer(logger, destination)
+  const server = newPinoHandler(logger, destination).lifecycle
   try {
     await once(destination, "ready")
     const baselineErrorListeners = destination.listenerCount("error")
@@ -529,7 +530,7 @@ test("uses the admitted prototype end after ownership transfer", async () => {
   })
   const closed = once(destination, "close")
   const logger = pino({ base: null, timestamp: false }, destination)
-  const server = newPinoServer(logger, destination, pinoDrainTimeout(100))
+  const server = newPinoHandler(logger, destination, pinoDrainTimeout(100)).lifecycle
   const running = server.start(background())
   const destinationPrototype = Object.getPrototypeOf(destination) as {
     end: typeof destination.end
@@ -561,7 +562,7 @@ test("uses admitted own lifecycle targets after destination method drift", async
   })
   const closed = once(destination, "close")
   const logger = pino({ base: null, timestamp: false }, destination)
-  const server = newPinoServer(logger, destination, pinoDrainTimeout(100))
+  const server = newPinoHandler(logger, destination, pinoDrainTimeout(100)).lifecycle
   const running = server.start(background())
   let endCalls = 0
   let destroyCalls = 0
@@ -639,7 +640,7 @@ test("uses the admitted Logger flush target after method drift", async () => {
       },
       writable: true
     })
-    const server = newPinoServer(logger, destination, pinoDrainTimeout(100))
+    const server = newPinoHandler(logger, destination, pinoDrainTimeout(100)).lifecycle
     const running = server.start(background())
     Object.defineProperty(logger, "flush", {
       configurable: true,
@@ -676,7 +677,7 @@ test("fails closed on owner Logger stream drift while closing the transferred de
   const firstClosed = once(first, "close")
   const secondClosed = once(second, "close")
   const logger = pino({ base: null, timestamp: false }, first)
-  const server = newPinoServer(logger, first)
+  const server = newPinoHandler(logger, first).lifecycle
   const running = server.start(background())
   const streamDescriptor = Object.getOwnPropertyDescriptor(logger, symbols.streamSym)
   try {

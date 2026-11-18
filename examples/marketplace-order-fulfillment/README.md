@@ -19,7 +19,7 @@
 
 ## go-like 能力
 
-使用 `@go-like/core` 启停并排空结构式履约 worker；只有 worker 处于运行期时才接收履约事件。`@go-like/web` 暴露标准 Web API。事件重投由确定性内存仓储模拟，不声称已经连接真实 Broker。
+使用 `@go-like/core` 启停并排空结构式履约 worker；只有 worker 处于运行期时才接收履约事件。`@go-like/core/web` 暴露标准 Web API。事件重投由确定性内存仓储模拟，不声称已经连接真实 Broker。
 
 ## 验证矩阵
 

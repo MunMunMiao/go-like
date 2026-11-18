@@ -12,25 +12,12 @@
     "test:e2e": "bun ../../e2e/example-task.ts -- bun e2e/docker.ts"
   },
   "dependencies": {
-    "@go-like/cache": "workspace:*",
-    "@go-like/cache-redis": "workspace:*",
-    "@go-like/client": "workspace:*",
-    "@go-like/context": "workspace:*",
+    "@go-like/redis": "workspace:*",
     "@go-like/core": "workspace:*",
-    "@go-like/health": "workspace:*",
-    "@go-like/registry": "workspace:*",
-    "@go-like/registry-consul": "workspace:*",
-    "@go-like/resilience": "workspace:*",
-    "@go-like/server": "workspace:*",
-    "@go-like/struct": "workspace:*",
-    "@go-like/transport": "workspace:*",
-    "@go-like/transport-http": "workspace:*",
-    "@go-like/web": "workspace:*",
+    "@go-like/consul": "workspace:*",
     "hono": "4.13.18"
   },
   "devDependencies": {
-    "@go-like/cache-memory": "workspace:*",
-    "@go-like/transport-memory": "workspace:*",
     "@types/node": "26.6.6"
   },
   "license": "MIT"

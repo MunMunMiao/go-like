@@ -1,5 +1,5 @@
-import { newClient, poolSize, poolTtl, withEndpoint, withTransport } from "@go-like/client"
-import { background, type Context } from "@go-like/context"
+import { newClient, poolSize, poolTtl, withEndpoint, withTransport } from "@go-like/core/client"
+import { background, type Context } from "@go-like/core/context"
 import {
   type Client as TransportClient,
   type DialOption,
@@ -8,8 +8,8 @@ import {
   type Option,
   type Options,
   type Transport
-} from "@go-like/transport"
-import { newHTTPTransport } from "@go-like/transport-http"
+} from "@go-like/core/transport"
+import { newHTTPTransport } from "@go-like/core/transport/http"
 import { createServer as createHTTPServer } from "node:http"
 import { mkdir, readdir } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
@@ -846,19 +846,9 @@ export async function runSoak(requestedDurationMs: number, output: string): Prom
     await Bun.write(join(artifactRoot, "runtime.json"), `${JSON.stringify(runtime, null, 2)}\n`)
 
     if (requestedDurationMs >= LongSoakDurationMs) {
-      await runProviderScenario(
-        "@go-like/broker-rabbitmq",
-        dockerOwner,
-        artifactRoot,
-        interrupted.signal
-      )
+      await runProviderScenario("@go-like/rabbitmq", dockerOwner, artifactRoot, interrupted.signal)
       rabbitConfirmInterruption = true
-      await runProviderScenario(
-        "@go-like/cache-redis",
-        dockerOwner,
-        artifactRoot,
-        interrupted.signal
-      )
+      await runProviderScenario("@go-like/redis", dockerOwner, artifactRoot, interrupted.signal)
       redisFailover = true
     }
 

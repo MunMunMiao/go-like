@@ -1,9 +1,16 @@
-import { newConfig, source, objectSource, type Config, type ConfigObject } from "@go-like/config"
-import { etcdSource } from "@go-like/config-etcd"
-import type { Context } from "@go-like/context"
-import { newProbeRegistry, type ProbeRegistry } from "@go-like/health"
-import { ifAbsent, type Store, type StoreRecord } from "@go-like/store"
-import { newEtcdStore } from "@go-like/store-etcd"
+import {
+  newConfig,
+  source,
+  objectSource,
+  type Config,
+  type ConfigObject
+} from "@go-like/core/config"
+import type { EtcdClient } from "@go-like/etcd"
+import { etcdSource } from "@go-like/etcd/config"
+import type { Context } from "@go-like/core/context"
+import { newProbeRegistry, type ProbeRegistry } from "@go-like/core/health"
+import { ifAbsent, type Store, type StoreRecord } from "@go-like/core/store"
+import { newEtcdStore } from "@go-like/etcd/store"
 
 import {
   validateSecurityAlert,
@@ -17,7 +24,7 @@ export interface AlertTriageLedger {
 }
 
 export interface TriageEtcdOptions {
-  readonly address: string
+  readonly client: EtcdClient
   readonly configKey: string
 }
 
@@ -154,17 +161,7 @@ export function newTriageConfig(rules: TriageRules): Config<ConfigObject> {
 
 /** Creates a Config that loads and watches the complete SOC rule document in real etcd. */
 export function newEtcdTriageConfig(options: TriageEtcdOptions): Config<ConfigObject> {
-  return newConfig(
-    source(
-      etcdSource({
-        fetch(request) {
-          return fetch(request)
-        },
-        address: options.address,
-        key: options.configKey
-      })
-    )
-  )
+  return newConfig(source(etcdSource(options.client, { key: options.configKey })))
 }
 
 /** Creates a readiness registry that fails closed until Config has published rules. */
@@ -198,12 +195,7 @@ export function newMemoryAlertTriageLedger(): AlertTriageLedger {
 
 /** Atomically admits immutable alert decisions into real etcd Store records. */
 export function newEtcdAlertTriageLedger(options: TriageEtcdOptions): AlertTriageLedger {
-  const store: Store = newEtcdStore({
-    fetch(request) {
-      return fetch(request)
-    },
-    address: options.address
-  })
+  const store: Store = newEtcdStore(options.client)
   const encoder = new TextEncoder()
   return Object.freeze({
     async record(ctx: Context, decision: TriageDecision): Promise<TriageDecision> {

@@ -1,105 +1,101 @@
 # go-like
 
-go-like is a set of small, explicit TypeScript building blocks for backend services that run on Bun and Node.js. It gives an application contracts for Context cancellation, application and resource lifecycle, standard Fetch handlers, internal unary service calls, generated Protobuf RPC over Connect/gRPC-Web and managed standard gRPC, discovery and selection, configuration, stores, caches, brokers, health, resilience, and optional logging and telemetry adapters.
+go-like is a set of explicit TypeScript building blocks for backend services on Bun and Node.js. `@go-like/core` is the zero-runtime-dependency socket panel: Context, application lifecycle, internal calls, configuration, discovery, records, cache, messaging, jobs, health, and the telemetry base. Nineteen other packages are plugs. A plug fills one or more sockets with an ecosystem client the application creates. `@go-like/protoc-gen-like` is the build-time Protobuf generator and does not depend on core.
 
-go-like is deliberately complementary to an application framework. Your framework still owns routes, middleware, request policy, Web Streams, WebSocket upgrades, dependency composition, and business behavior. Your provider still owns its native connection, acknowledgement model, lease, retry, or protocol. go-like supplies narrow contracts and lifecycle ownership where those boundaries are useful.
+The application remains the composition root. It constructs native objects, passes them to plug constructors, and installs the results on `newApp`. There is no global registry of servers, loggers, or telemetry providers.
 
 > [!IMPORTANT]
-> This checkout is a private `0.0.1` workspace. A manifest version does not establish npm availability. The examples below use workspace packages and are intended to be run from a checkout unless a published release is independently confirmed.
+> This checkout is a private `0.0.1` workspace. A manifest version does not establish npm availability. The examples use workspace packages and are intended to be run from a checkout unless a published release is independently confirmed.
 
 > [!NOTE]
 > The English `doc/` tree is the canonical source for this documentation track. Package source, manifests, and focused tests are the API authority. A test or E2E script that exists in the repository is declared coverage; it is not a passing result until a command has actually run and its exit status has been recorded.
 
 ## Choose a path
 
-| Reader                          | Start here                                 | Then read                                                                   | You are ready when                                                                    |
-| ------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| New to go-like                  | [Getting started](/guide/getting-started)  | [Architecture](/guide/architecture), [Clinic project](/guide/zero-to-one)   | You can start one Web service, pass a Context, expose health, and stop it             |
-| Experienced TypeScript engineer | [Architecture](/guide/architecture)        | [Service calls](/guide/service-call), [Comparison](/guide/comparison)       | You can name the owner and terminal boundary for each resource                        |
-| Go or Kratos reader             | [Getting started](/guide/getting-started)  | [Terminology](/reference/terminology), [Service calls](/guide/service-call) | You can map Context and Server concepts without assuming gRPC or Go ABI compatibility |
-| Framework user                  | [Comparison](/guide/comparison)            | [Migration](/guide/migration), [Architecture](/guide/architecture)          | You can keep the native router and add only the lifecycle or call boundary you need   |
-| Provider or platform engineer   | [Provider reference](/reference/providers) | [Verification](/reference/verification), [Claims](/reference/claims)        | You can state runtime, backend, ownership, and evidence limits for a provider         |
+| Reader                          | Start here                                | Then read                                                                   | You are ready when                                                                    |
+| ------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| New to go-like                  | [Getting started](/guide/getting-started) | [Architecture](/guide/architecture), [Clinic project](/guide/zero-to-one)   | You can start one Web service, pass a Context, expose health, and stop it             |
+| Experienced TypeScript engineer | [Architecture](/guide/architecture)       | [Service calls](/guide/service-call), [Comparison](/guide/comparison)       | You can name the owner, tier, and terminal boundary for each resource                 |
+| Go or Kratos reader             | [Getting started](/guide/getting-started) | [Terminology](/reference/terminology), [Service calls](/guide/service-call) | You can map Context and Server concepts without assuming gRPC or Go ABI compatibility |
+| Framework user                  | [Comparison](/guide/comparison)           | [Migration](/guide/migration), [Architecture](/guide/architecture)          | You can keep the native router and add only the lifecycle or call boundary you need   |
+| Plug author                     | [Provider index](/reference/providers)    | [Verification](/reference/verification), [Claims](/reference/claims)        | You can state the socket, runtime, ownership, and evidence limits for a plug          |
 
 ## Canonical learning path
 
 The four-page canonical path under `doc/guide/` is deliberately progressive:
 
-1. [Getting started](/guide/getting-started) runs a standard Fetch Handler, a Node host, an admission signal, and one Core App.
+1. [Getting started](/guide/getting-started) runs a standard Fetch Handler, a Node host, an admission signal, and one App.
 2. [Clinic Appointment Booking](/guide/zero-to-one) turns the lifecycle into a concrete domain, internal unary call, cache, health, test, and shutdown exercise.
 3. [Comparison](/guide/comparison) explains where go-like differs intentionally from NestJS, Fastify, Hono, Elysia, Koa, tRPC, go-micro, and go-kratos.
-4. [Migration](/guide/migration) shows how to add one ownership boundary at a time while leaving the existing data plane in place.
+4. [Migration](/guide/migration) maps the pre-migration packages onto the 20-package layout.
 
-[Provider reference](/reference/providers) is the separate reference track for package families, runtime paths, ownership, and backend limits.
+[Packages](/reference/packages) is the inventory of 20 packages and 75 public entries. [Providers](/reference/providers) points at each ecosystem plug README.
 
 ## The mental model
 
-The smallest useful model has five nouns:
+Three rules run through the library:
 
-- **Context** is the explicit first argument for cancellable work. It carries a deadline, an `AbortSignal`-style cancellation result, an optional cause, and values.
-- **Server** is a structural lifecycle object with `start(ctx)` and `stop(ctx)`. It owns one admitted resource boundary.
-- **App** composes Servers, hooks, registration, startup admission, and graceful shutdown. It does not become a dependency-injection container.
-- **Handler** is the standard Web function `(Request) => Response | Promise<Response>`. A Handler is not, by itself, a listening server.
-- **Endpoint** is a named typed internal operation. It is distinct from a network address such as `memory://pricing` or `https://pricing.example`.
-
-The external Web and internal service planes are separate:
+1. **Context first.** Every I/O operation takes `ctx: Context` as its first argument. Context carries cancellation, a deadline, AppInfo, request metadata, and the current telemetry state.
+2. **Explicit composition.** The application constructs every implementation and passes it in. Plugs do not register themselves globally.
+3. **One path for each job.** Subscribe with `newBrokerServer`, schedule with `newScheduleServer`, consume a queue with `JobQueue.worker`, attach a native resource with `newResourceServer`, and publish readiness with `readyProbe` plus `createHealthHandler`.
 
 ```text
-External Web request
-  Request
-    -> framework router or application handler
-    -> @go-like/web Handler
-    -> Web host, such as @go-like/web/node
-    -> @go-like/core App / Server lifecycle
-
-Internal unary call
-  @go-like/client
-    -> Discovery, Filter, Selector, or direct address
-    -> @go-like/transport Client
-    -> Client.fetch POST /<service>/<endpoint>
-    -> @go-like/server handler
-    -> JSON body or SSE ServerStream
+Application main.ts
+  construct plugs from native objects the application created
+  newTelemetry({...})  newConfig(...)  newServer(...)  newClient(...)
+        |
+        v
+@go-like/core  newApp(...)
+  telemetry(tel)     admitted first, drained last
+  resources(...)     started in order, each start awaited, stopped in reverse
+  server(...)        started together, stopped together
+  registrar(r)       after the server tier is admitted
+  readyProbe(...)    ready only between startup completion and stop
 ```
 
-Generated RPC is a separate optional path: project-local `@go-like/protoc-gen-like` uses upstream Protobuf-ES descriptors/codecs to generate ctx-first `registerXHandler(server, handler)` and `newXClient(client)` glue. `@go-like/transport-grpc-buf` adapts upstream Connect and gRPC-Web handlers to a standard `Request`/`Response` Fetch handler, while its `/native` subpath owns a managed standard-gRPC Client and Server. These packages are not Transport SPI providers. Portable Fetch evidence covers unary and server-streaming only; `/native` covers all four cardinalities in the tested Node 26.12.1 and Bun 1.4.4 physical-package matrix.
+Five nouns are enough to read the rest of the site:
 
-## What go-like intentionally does not own
+- **Socket** is a structural contract core declares (`Server`, `LogHandler`, `Registry`, `Broker`, `Store`, and the others). A plug implements the socket. It does not wrap a core call site.
+- **Context** is the explicit scope for cancellable work.
+- **Server** is `start(ctx)` and `stop(ctx)`. In `resources(...)` start resolves when the resource is usable. In `server(...)` start may stay pending until the native object ends.
+- **App** admits those tiers, hooks, registration, and shutdown. It is not a dependency-injection container.
+- **Handler** is the standard Web function `(Request) => Response | Promise<Response>`. A Handler is not, by itself, a listening server.
 
-The current product boundary does not claim:
+External Web and internal service calls stay separate. Generated Protobuf RPC is a further optional path: `@go-like/protoc-gen-like` emits ctx-first glue, `@go-like/connectrpc` adapts Connect and gRPC-Web to Fetch, and `@go-like/connectrpc/node` hosts standard gRPC. See [Streaming](/guide/streaming).
 
-- browser standard gRPC, official gRPC health/reflection, validation, canonical error-details mapping, Google gRPC runtime, Buf online services, or future runtime-version compatibility inferred from the pinned native matrix;
-- Fetch request-streaming or bidi, or a go-like-owned half-close protocol, frame model, or backpressure contract;
-- an external router or framework-specific middleware DSL;
-- a global dependency-injection container or service locator;
-- automatic JWT, OAuth, OIDC, claims, ACL, or application authorization;
-- an Event Store, history query, replay engine, or universal durable message settlement model;
-- automatic global OpenTelemetry providers, exporters, context managers, or instrumentation;
-- a distributed, durable, or cross-process meaning for memory providers;
-- npm publication, production adoption, hosted CI status, or a production-readiness guarantee merely from a manifest or script.
+## What the application still owns
 
-Public Web streaming remains standard Fetch `Request`/`Response` and Web Streams. It is not internal full-duplex RPC. See [Streaming](/guide/streaming) for the boundary.
+The current product boundary leaves these with the application or the native library:
+
+- routes, framework middleware, Web Streams, and WebSocket upgrades;
+- business policy, credentials, and authorization;
+- native acknowledgement, leases, retries, and protocol details;
+- OpenTelemetry SDK construction, logger configuration, and exporter choice;
+- durability, transactions, and any cross-process meaning of an in-memory reference implementation;
+- npm publication, hosted CI status, or a production-readiness claim inferred from a manifest.
 
 ## Public inventory
 
-The current source manifests contain **45 non-private `@go-like/*` packages**, all at version `0.0.1` in this checkout, plus **27 public source subpaths**. `@go-like/struct` is the runtime contract used by typed `Endpoint` calls; `@go-like/transport-grpc-buf` contains the portable Fetch root and managed `/native` RPC subpath, and `@go-like/protoc-gen-like` is the build-time Node generator. Generated `dist/package.json` metadata exports are not additional packages or source APIs.
+The workspace publishes **20** `@go-like/*` packages, all at version `0.0.1` in this checkout, and **75** public entries. `@go-like/core` contributes 41 entries. The other 34 entries belong to the plugs and the generator. Generated `dist/package.json` metadata exports are not additional source APIs.
 
-Use the [package reference](/reference/packages) to choose a contract or provider, and the [provider reference](/reference/providers) to compare backend and runtime semantics. The [claims ledger](/reference/claims) records the evidence level behind public wording.
+Use the [package reference](/reference/packages) to choose an entry, and the [provider index](/reference/providers) to open a plug README. The [claims ledger](/reference/claims) records the evidence level behind public wording.
 
 ## Verification boundary
 
-The repository contract audit reported these local results on the documentation baseline commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`: `bun run typecheck`, `bun run test:unit`, and `bun run fmt:check` passed, covering the root, packages, examples, and the declared unit-test scope. That report counted 2,736 unit tests, 1,514 formatted files, and a successful import audit for 66 declared source export entries.
+A historical repository contract audit reported local results on commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`: `bun run typecheck`, `bun run test:unit`, and `bun run fmt:check` passed. That report counted 2,736 unit tests, 1,514 formatted files, and a successful import audit for 66 source export entries. That count describes the pre-migration tree. The current inventory is 75 entries. The audit did not establish `build`, `doc:build`, Docker provider E2E, published tarball consumers, npm publication, hosted CI, or the 60-minute soak.
 
-That report did **not** establish `build`, `doc:build`, Docker provider E2E, cross-runtime execution, published tarball consumers, npm publication, hosted CI, production adoption, or the 60-minute soak. Read [Verification](/reference/verification) before turning a source or script claim into a release claim.
+Read [Verification](/reference/verification) before turning a source or script claim into a release claim.
 
 ## Next steps
 
-- [Getting started](/guide/getting-started): install or use a checkout, run a Web handler, and understand the first lifecycle checkpoint.
-- [Architecture](/guide/architecture): study planes, ownership, Context scopes, lifecycle order, and runtime portability.
-- [Clinic Appointment Booking](/guide/zero-to-one): follow one concrete business invariant from HTTP request to internal unary policy call, health, tests, and shutdown.
-- [Service calls](/guide/service-call): use typed Memory Transport first, then add discovery, selection, retry, and cleanup deliberately.
-- [Configuration, registry, store, and cache](/guide/config-registry-store): choose state contracts without collapsing their guarantees.
-- [Broker and events](/guide/broker-events): preserve native delivery, acknowledgement, durable consumer, and job semantics.
-- [Health and observability](/guide/health-observability): add readiness, metrics, traces, and logs without silently installing global infrastructure.
-- [Comparison](/guide/comparison) and [Migration](/guide/migration): compare ownership with third-party frameworks and adopt go-like incrementally.
-- [Packages](/reference/packages), [Providers](/reference/providers), [Terminology](/reference/terminology), and [Verification](/reference/verification): use the reference track when the API or evidence boundary matters.
+- [Getting started](/guide/getting-started): run a Web handler and the first lifecycle checkpoint.
+- [Architecture](/guide/architecture): tiers, Context scopes, start and stop order, readiness, and budgets.
+- [Clinic Appointment Booking](/guide/zero-to-one): one business invariant from HTTP to an internal policy call, health, and shutdown.
+- [Service calls](/guide/service-call): typed Memory Transport, then discovery, selection, and retry.
+- [Configuration, registry, store, and cache](/guide/config-registry-store): four contracts, one shared client per ecosystem.
+- [Broker, events, and jobs](/guide/broker-events): bytes, codecs, schedules, and queues.
+- [Health and observability](/guide/health-observability): probes, `newTelemetry`, and the four telemetry plugs.
+- [Comparison](/guide/comparison) and [Migration](/guide/migration): ownership against other tools, and the import codemod.
+- [Packages](/reference/packages), [Providers](/reference/providers), [Errors](/reference/errors), [Terminology](/reference/terminology), and [Verification](/reference/verification).
 
-Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is verified in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits); this run does not establish that those limitations are fixed.
+Managed gRPC slow-consumer drain on Node 26.12.1 and Bun 1.4.4 is recorded in the [native gRPC drain matrix](/reference/claims#native-grpc-drain-status). The earlier Connect 2.1.2 and Bun 1.4.2 Fetch cancellation observations remain in the [claims ledger](/reference/claims#stream-cancellation-limits).

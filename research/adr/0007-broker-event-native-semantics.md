@@ -9,6 +9,13 @@
 > Broker/Event 的数据面和原生消息所有权决策仍有效。`subscribe(...)` 直接返回上游式 `Subscriber`
 > handle；需要 Core 生命周期时使用 `newBrokerServer(...)`，不再发布 `eventSubscription(...)` 或第二套
 > Event 生命周期入口。
+>
+> 修订（2026-11-17）：四个类型槽、`native`、插座中的确认语义，以及处理器失败终止订阅，继续有效
+> （[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.2 节）。NATS 的公开入口
+> 是 `@go-like/nats/broker` 与 `@go-like/nats/jetstream`。连接由应用作为资源持有。看不到消息的生命周期
+> Server 已离开公开入口，因为那样的 Server 无法埋点（第 11.1 节第 39 条，
+> [D31](../designs/socket-plug-architecture/decisions.md)）。下文“两类入口”的句子保留作当时的划分。见
+> [ADR 0009](0009-single-core-package.md)。
 
 ## 背景
 

@@ -1,16 +1,22 @@
-import type { Broker, Subscriber } from "@go-like/broker"
-import { background } from "@go-like/context"
+import type { Broker, Subscriber } from "@go-like/core/broker"
+import { background } from "@go-like/core/context"
 import type { Msg, NatsConnection } from "@nats-io/transport-node"
 import {
   newNatsCoreBroker,
+  type NatsCoreBroker,
   type NatsCoreBrokerPublishOptions,
   type NatsCoreBrokerSubscribeOptions
 } from "../src/broker"
 
 declare const connection: NatsConnection
 
-const broker: Broker<NatsCoreBrokerPublishOptions, void, NatsCoreBrokerSubscribeOptions, Msg> =
-  newNatsCoreBroker(connection)
+const broker: NatsCoreBroker = newNatsCoreBroker(connection)
+const brokerSocket: Broker<
+  NatsCoreBrokerPublishOptions,
+  void,
+  NatsCoreBrokerSubscribeOptions,
+  Msg
+> = broker
 const published: Promise<void> = broker.publish(
   background(),
   "events",
@@ -27,7 +33,7 @@ const subscribed: Promise<Subscriber> = broker.subscribe(
   { queue: "workers" }
 )
 
-void [published, subscribed]
+void [brokerSocket, published, subscribed]
 
 // @ts-expect-error BrokerMessage is the only public header source.
 const invalidPublishOptions: NatsCoreBrokerPublishOptions = { headers: undefined }

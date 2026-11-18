@@ -2,9 +2,9 @@ import { mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { background } from "@go-like/context"
-import { newFileStore, type FileStore } from "@go-like/store-file"
-import { newNodeFileStoreHost } from "@go-like/store-file/node"
+import { background } from "@go-like/core/context"
+import { newFileStore, type FileStore } from "@go-like/file/store"
+import { newNodeFileStoreHost } from "@go-like/file/store/node"
 
 const SnapshotName = ".go-like-store.snapshot"
 const TempName = ".go-like-store.tmp"
@@ -31,34 +31,14 @@ interface StartedStore {
   readonly running: Promise<void>
 }
 
-/** Starts one Store without joining its resident lifetime. */
+/** Starts one Store. `start` resolves when the directory lock and snapshot are admitted. */
 async function startStore(store: FileStore): Promise<StartedStore> {
   const running = store.start(background())
-  void running.catch(() => {})
-  for (;;) {
-    try {
-      await store.read(background(), "__go-like_e2e_readiness__")
-      return Object.freeze({ store, running })
-    } catch (value) {
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        "code" in value &&
-        value.code === "GO_LIKE_FILE_STORE_STATE" &&
-        "state" in value
-      ) {
-        if (value.state === "starting") {
-          await Bun.sleep(1)
-          continue
-        }
-        if (value.state === "failed") await running
-      }
-      throw value
-    }
-  }
+  await running
+  return Object.freeze({ store, running })
 }
 
-/** Stops one admitted Store and joins its resident start operation. */
+/** Stops one admitted Store. */
 async function stopStore(started: StartedStore): Promise<void> {
   await started.store.stop(background())
   await started.running

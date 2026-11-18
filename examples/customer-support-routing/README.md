@@ -1,12 +1,12 @@
 # 客户支持工单路由
 
 该示例演示客服工单路由微服务：标准 Fetch API 接收带语言和优先级的支持请求，先筛选符合技能约束的
-客服实例，再调用 `@go-like/registry` round-robin selector 分配实际 endpoint。
+客服实例，再调用 `@go-like/core/registry` round-robin selector 分配实际 endpoint。
 
 ## 主要演示
 
 - Registry `ServiceInstance` 快照与 selector 的应用侧显式组合。
-- `@go-like/context` 作为路由应用和存储操作的首个参数。
+- `@go-like/core/context` 作为路由应用和存储操作的首个参数。
 - 标准 Fetch Handler 与路由服务、实例选择、运行入口分离。
 - 语言、资历与工单幂等规则的业务测试。
 

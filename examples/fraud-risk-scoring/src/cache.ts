@@ -1,7 +1,7 @@
-import { expiresIn, type Cache } from "@go-like/cache"
-import { newMemoryCache, type MemoryCache } from "@go-like/cache-memory"
-import type { Context } from "@go-like/context"
-import { newCircuitBreaker, type CircuitBreaker } from "@go-like/resilience"
+import { expiresIn, type Cache } from "@go-like/core/cache"
+import { newMemoryCache, type MemoryCache } from "@go-like/core/cache/memory"
+import type { Context } from "@go-like/core/context"
+import { newCircuitBreaker, type CircuitBreaker } from "@go-like/core/resilience"
 
 import {
   newAssessTransaction,

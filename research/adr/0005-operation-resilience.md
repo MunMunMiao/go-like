@@ -6,6 +6,13 @@
 
 v1 已接受。
 
+> 修订（2026-11-17）：重试保持显式 `idempotent` 或 `caller-approved` 授权，调用默认不重试
+> （[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.2 节）。
+> `RateLimiter.allow(ctx)` 的返回类型是 `RateLimitDecision | Promise<RateLimitDecision>`。`snapshot()` 在
+> `TokenBucketLimiter` 上；内存令牌桶的 `allow` 保持同步，并且不创建计时器（第 11.1 节第 14 条）。插头在
+> 可能发生 I/O 的插座上可以异步回答。下文把 `allow` 写成同步、并把 `snapshot` 放在插座上的句子保留作当时的
+> 契约。见 [ADR 0009](0009-single-core-package.md)。
+
 ## 背景
 
 Kratos 通过 middleware 提供 circuit breaker 与 rate limiter，而 go-micro 提供 client retry 与 backoff

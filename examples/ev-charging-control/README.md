@@ -1,13 +1,13 @@
 # 电动汽车充电控制
 
 该示例演示电动汽车充电控制微服务：标准 Fetch API 接受充电会话，站点控制仓储在单个
-原子操作中检查在线状态、连接器占用和功率容量，`@go-like/health` 暴露可独立执行的 readiness。
+原子操作中检查在线状态、连接器占用和功率容量，`@go-like/core/health` 暴露可独立执行的 readiness。
 
 ## 主要演示
 
-- `@go-like/health` 聚合充电站可用性，全部离线时 readiness fail closed。
-- `@go-like/context` 作为充电与健康检查的首个参数。
-- `@go-like/web` 输出可挂载到任意标准 Fetch runtime 的 Handler。
+- `@go-like/core/health` 聚合充电站可用性，全部离线时 readiness fail closed。
+- `@go-like/core/context` 作为充电与健康检查的首个参数。
+- `@go-like/core/web` 输出可挂载到任意标准 Fetch runtime 的 Handler。
 - 充电规则、站点状态、HTTP 路由和进程生命周期按真实职责拆分。
 
 ## 源码结构

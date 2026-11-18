@@ -18,7 +18,7 @@
 
 ## go-like 能力
 
-使用 `@go-like/context` 贯穿发布和查询操作，使用 `@go-like/web` 暴露标准 Fetch 的预测发布与到站查询入口，并使用 `@go-like/health` 把实时预测源 freshness 纳入 readiness。
+使用 `@go-like/core/context` 贯穿发布和查询操作，使用 `@go-like/core/web` 暴露标准 Fetch 的预测发布与到站查询入口，并使用 `@go-like/core/health` 把实时预测源 freshness 纳入 readiness。
 
 ## 验证矩阵
 

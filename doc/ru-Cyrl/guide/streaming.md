@@ -1,15 +1,84 @@
 # Потоки
 
-go-like использует потоковую модель самой Web-платформы. Запрос — обычный `Request`, ответ — обычный `Response`, а body может быть `ReadableStream<Uint8Array>`. Отдельного класса Stream, DSL для кадров и выдуманного двунаправленного канала поверх одноразового body здесь нет.
+У go-like три границы потоков.
 
-Публичный HTTP streaming принадлежит `@go-like/web` и нативному Handler выбранного фреймворка. Unary-вызов несёт одно JSON-тело. Server stream с `stream: true` — это SSE на `POST /<service>/<endpoint>` (`accept: text/event-stream`), а не двусторонний многокадровый протокол. Handler — `async *`. Клиент сначала `await` получает `ServerStream`, затем `for await`. Закрытие: `close()` или `await using`. `streamKeepAlive` по умолчанию 15000 мс; `0` оставляет только первый комментарий. `maxSendMessageBytes` по умолчанию 4 МиБ и считает целое UTF-8 SSE-событие; превышение — `resource_exhausted` / HTTP 429. Memory опережает не больше чем на одно сообщение; HTTP prefetch ограничен и не совпадает 1:1 с `for await`. Не делайте в генераторе эффект, который предполагает, что событие уже доставлено. При deadline клиент пишет `Go-Like-Timeout-Ms`. Context запроса живёт до конца тела ответа. Client-streaming и bidi остаются в `@go-like/transport-grpc-buf/native`.
+1. **Публичный Web-поток** использует тело Fetch `Request` и `Response` и Web Streams API.
+2. **Внутренние вызовы сервисов** используют один Fetch-запрос и один Fetch-ответ. Унарный вызов несёт одно JSON-тело. Серверный поток задаёт `stream: true` и возвращает `text/event-stream`. На этом пути нет SPI клиентского потока и двунаправленного вызова.
+3. **Сгенерированный Protobuf RPC** использует `@go-like/connectrpc` для Connect и gRPC-Web на Fetch и `@go-like/connectrpc/node` для управляемого стандартного gRPC. Переносимый Fetch покрывает унарные вызовы и server-streaming. Точка входа Node покрывает унарные вызовы, server-streaming, client-streaming и bidi. `@go-like/protoc-gen-like` генерирует связку клиента и Handler с Context первым аргументом.
 
-Web body читается только один раз. Middleware не должен потреблять его, если не собирается явно предоставить замену. Отмена проходит через первый `Context` и signal запроса. Transport проверяет, что каждый chunk является `Uint8Array`; неверное значение превращается в ошибку протокола, а не в загадочно пустые данные.
+`ReadableStream`, SSE-ответ фреймворка или апгрейд WebSocket — это Web-поток. Внутренний серверный поток — это SSE на `POST /<service>/<endpoint>` с `accept: text/event-stream`.
 
-Для внешнего HTTP используйте `@go-like/web` вместе с Hono, Elysia, H3 или собственным handler. SSE, потоковые ответы и runtime-specific WebSocket upgrade остаются в исходном фреймворке; go-like сохраняет нативные объекты и ошибки.
+Управляемый drain gRPC при медленном потребителе на Node 26.12.1 и Bun 1.4.4 записан в [матрице drain нативного gRPC](/reference/claims#native-grpc-drain-status). Более ранние наблюдения отмены Fetch в Connect 2.1.2 и Bun 1.4.2 остаются в [журнале утверждений](/reference/claims#stream-cancellation-limits). Сгенерированный RPC не добавляет повтор потока.
 
-`contextHandler` освобождает свой Context после возврата Response из Handler, а не после завершения body. Долгоживущий producer должен следить за `request.signal` или владеть отдельной областью отмены.
+## Публичный Web-поток
 
-`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
+```ts
+import { contextHandler, type Handler } from "@go-like/core/web"
 
-Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Ранее наблюдались сохранение таймера deadline в Connect 2.1.2 после отмены приостановленного потока ответа и отсутствие доставки отмены Fetch в Bun 1.4.2 серверу, молчащему после первого chunk. См. [доказательства и ограничения](/reference/claims#stream-cancellation-limits); этот прогон не подтверждает исправление двух ранее выявленных ограничений.
+export const streamHandler: Handler = contextHandler(async () => {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode("first\n"))
+      controller.enqueue(encoder.encode("second\n"))
+      controller.close()
+    }
+  })
+  return new Response(body, {
+    headers: { "content-type": "text/plain; charset=utf-8" }
+  })
+})
+```
+
+Приложение или фреймворк владеет форматом потока, flush, соглашениями SSE, апгрейдом WebSocket и политикой разрыва. `contextHandler` завершает свой Context, когда Handler возвращает `Response`. Долгоживущее тело должно также наблюдать `request.signal`. Context внутреннего RPC живёт, пока не закончится тело ответа.
+
+Hono, Elysia и H3 сохраняют собственные API потоков и WebSocket. Передайте `app.fetch` в `@go-like/core/web/node` или `@go-like/core/web/bun`, когда нужен жизненный цикл App.
+
+## Внутренние серверные потоки
+
+Объявите `stream: true`. Handler — асинхронный генератор. Клиент читает `ServerStream` через `for await`. `close()`, `await using`, `break` и отмена со стороны вызывающего прерывают запрос.
+
+```ts
+import { newClient, withEndpoint, withTransport } from "@go-like/core/client"
+import { background } from "@go-like/core/context"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { struct } from "@go-like/core/struct"
+import { defineService } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
+
+const orders = defineService("orders", {
+  watch: {
+    request: struct.object({ after: struct.string() }),
+    response: struct.object({ id: struct.string() }),
+    stream: true
+  }
+})
+
+const transport = newMemoryTransport()
+const rpc = newServer(serverTransport(transport), address("memory://orders"))
+orders.registerHandler(rpc, {
+  async *watch(_ctx, request) {
+    yield { id: request.after }
+  }
+})
+
+const api = orders.newClient(newClient(withTransport(transport), withEndpoint("memory://orders")))
+const stream = await api.watch(background(), { after: "0" })
+for await (const event of stream) {
+  console.log(event.id)
+  break
+}
+await stream.close()
+```
+
+`streamKeepAlive` и `maxSendMessageBytes` в `@go-like/core/server` ограничивают интервал SSE-комментария и размер кадра. Они не меняют вид вызова. По-прежнему одно тело запроса и последовательность событий ответа.
+
+## Сгенерированный RPC
+
+`@go-like/connectrpc` экспортирует `newHandler`, `callOptions` и `fromHandlerContext`. Handler — это Fetch `Handler` для Connect и gRPC-Web. Смонтируйте его на Web-host core так же, как любой другой Handler.
+
+`@go-like/connectrpc/node` экспортирует `newServer`, `newClient` и параметры адреса, advertise и TLS. Этот сервер — `Server` жизненного цикла и `Endpointer` для яруса серверов. Node-клиент потребляет `Discovery` и `Selector`, когда вы их передаёте. Стандартный gRPC на этой точке входа — путь, который покрывает client-streaming и bidi.
+
+`@go-like/protoc-gen-like` — плагин Buf. Сгенерированный код импортирует `@go-like/core/context` и `@go-like/connectrpc`. У генератора нет runtime-socket.
+
+Стандартный gRPC в браузере, официальные gRPC health и reflection, а также гарантия будущих runtime находятся вне этой матрицы. Проверенный управляемый drain — это [запись утверждений](/reference/claims#native-grpc-drain-status).

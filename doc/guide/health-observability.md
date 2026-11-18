@@ -1,172 +1,187 @@
 # Health and observability
 
-Health and observability are explicit composition points in go-like. The application creates probes, logger destinations, OpenTelemetry providers, and Prometheus registries. go-like wraps their request or lifecycle boundary; it does not silently install global infrastructure.
+Health probes and telemetry are composition points. The application creates the probe registry, the logger, the OpenTelemetry SDK providers, and the Prometheus registry. Core owns the work-unit records. Plugs fill `LogHandler`, `TracerProvider`, `MeterProvider`, and `Propagator`. Nothing in this path installs a global logger, meter, tracer, or propagator for you.
 
 ## Liveness and readiness
 
-`@go-like/health` has two probe kinds:
+`@go-like/core/health` has two probe kinds:
 
 - `live`: should the process be considered alive?
 - `ready`: should traffic be admitted now?
 
-The empty-registry rules are intentionally different:
-
-- empty liveness is healthy;
-- empty readiness fails closed because a service with no readiness evidence should not be assumed ready;
-- when readiness probes exist, all registered readiness probes must pass.
-
-The public registry API is:
+Empty liveness is healthy. Empty readiness fails closed. When readiness probes exist, every one of them must pass.
 
 ```ts
-import { newProbeRegistry } from "@go-like/health"
+import { readyProbe } from "@go-like/core"
+import { newProbeRegistry } from "@go-like/core/health"
+import { createHealthHandler } from "@go-like/core/web"
 
 const probes = newProbeRegistry()
-probes.register("live", "process", async (ctx) => {
-  if (ctx.err() !== null) throw ctx.err() as Error
-})
 probes.register("ready", "policy", async (ctx) => {
+  if (ctx.err() !== null) throw ctx.err() as Error
   await policyServer.endpoint(ctx)
 })
-```
-
-`register(kind, name, probe, options?)` returns an idempotent unregister function. Probe names are restricted public identifiers. The default probe timeout is 1,000 ms; provide `timeoutMs` when a dependency has a different honest budget. Checks run concurrently against a stable registration snapshot and return results in registration order.
-
-`@go-like/web/health` provides the standard handler:
-
-```ts
-import { createHealthHandler } from "@go-like/web/health"
 
 const health = createHealthHandler(probes)
+const app = newApp(readyProbe(probes))
+void health
+void app
 ```
 
-The default routes are `/livez` and `/readyz`. The handler accepts `GET` and `HEAD`, returns `200` for a passing report, `503` for unavailable or failing probes, `404` for unknown paths, and `405` for unsupported methods. Responses use `Cache-Control: no-store` and redact probe errors from the public payload.
+`register(kind, name, probe)` returns an idempotent unregister function. The default routes are `/livez` and `/readyz`. The handler accepts `GET` and `HEAD`, returns 200 when the report passes, 503 when it does not, 404 for any other path, and 405 for other methods. Responses use `Cache-Control: no-store`. Probe errors stay off the public body.
 
-If you need one application router, delegate the health Handler from the framework route table. go-like does not mount the route into your application automatically.
+`readyProbe(probes)` registers the App window on that same registry under the name `"app"` unless you pass another name. The probe passes only from the moment startup completes until `stop()` begins, together with the `go_like.app.ready` gauge. Without it, or without some other ready probe, `/readyz` stays 503. That is the fail-closed rule.
 
-`ProbeRegistry.check(...)` can be called directly by an application with no HTTP surface. `/livez` and `/readyz` are projected only when the application explicitly uses `@go-like/web/health`; they are not automatic business routes or a management service.
+Delegate the health `Handler` from your own router. Core does not mount it. `ProbeRegistry.check(...)` works with no HTTP surface at all. A unary `newServer` listener also answers `GET` and `HEAD` `/healthz` with an empty 200. That check means the listener accepted the request. It does not run the probe registry.
 
-## Unary Server process check
+## One telemetry bundle
 
-`@go-like/server` is a different surface from `@go-like/web/health`. A `newServer(...)` listener that uses Node HTTP transport answers `GET` and `HEAD` `/healthz` with HTTP `200` and an empty body by default. That check means the unary listener accepted the request; it is not a readiness registry and it does not inspect brokers, stores, or TLS peers.
-
-`httpRoute("GET", "/healthz", …)` replaces that default. Unmatched `/livez` and `/readyz` on the unary listener stay `404` unless the application mounts `@go-like/web/health` (or another Handler) on those paths.
-
-A TCP connect to a published Docker port is not proof that this `/healthz` is live. Docker Desktop can accept host TCP through docker-proxy before the process TLS or HTTP listener is ready. Probe the HTTP (or TLS HTTP/2) response and retry on disconnect during startup. An HTTP response, including `503`, proves that the management endpoint is responding; it does not prove business admission. A separate management listener, or a health route on the application listener, may bind early and report `/livez` as `200` while `/readyz` remains `503` until required work-plane resources have admitted. When health and business routes share a listener, business routes must still fail closed before readiness.
-
-## Readiness is an admission policy
-
-A readiness probe should answer whether this process should receive traffic, not whether every dependency in the universe is reachable. Examples include:
-
-- the internal policy Server has admitted its listener;
-- a required Config snapshot has loaded;
-- a local Store is readable;
-- a native consumer is connected and able to accept work.
-
-Do not make liveness depend on a remote database unless your deployment policy truly treats that database as process liveness. Do not make readiness a permanent success flag when the service has not loaded its required configuration.
-
-The request Context passed into a probe is authoritative. A slow probe should observe cancellation and return a useful error. A timeout means the probe did not establish readiness within its budget; it is not proof that the dependency is dead.
-
-## Signals are distinct facts
-
-| Signal                     | Question answered                                               | go-like expression                                                             | Does not prove                                                    |
-| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Address discovery          | Where can another service call it?                              | Explicit `endpoint(...)` or a network Server's `Endpointer.endpoint(ctx)`      | Process health, dependency health, or successful work             |
-| Process liveness           | Should a supervisor consider the process still making progress? | `ProbeRegistry.check(ctx, "live")`, with optional HTTP projection              | Business traffic or queue work can be admitted                    |
-| Work admission / readiness | Is this instance willing to accept the next unit of work?       | Application-defined ready probes; protocol management owns actual draining     | Running work succeeds or remote dependencies stay healthy forever |
-| Work outcome               | Did one request, message, or job complete?                      | Handler or processor result, ack/nack, exit code, or Job condition             | Long-lived process health or admission of the next unit           |
-| Progress / telemetry       | Has a resident process recently shown activity or failure?      | Metrics, logs, traces, application heartbeat, or an optional platform watchdog | A discoverable address or a business-completion promise           |
-
-`/livez` and `/readyz` are HTTP expressions of process liveness and work admission, not a new business data plane. Early health routes do not admit business routes.
-
-## Workload admission matrix
-
-| Workload                           | Admission evidence                                                                                                            | Health expression                                                                       | Stop accepting new work                                                                                                                                   | Completion expression                                   |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| HTTP/internal unary service        | The listener has bound, its advertised address can be obtained, and dependencies required by application policy are satisfied | It may install `/livez` and `/readyz`; a Service can use readiness for traffic draining | Listener/registrar stop and deregistration                                                                                                                | Request result                                          |
-| Resident BullMQ/NATS/Broker worker | A native Worker is ready and running, or its subscription has admitted                                                        | `ProbeRegistry.check(...)` can be called directly; management HTTP is optional          | The application requests App/Server stop; the adapter then invokes the native pause/unsubscribe/drain/close it owns. Readiness alone does not drain work. | Processor/handler result and native settlement          |
-| Resident Croner scheduler          | Paused jobs have been validated and resumed, with future schedules remaining                                                  | Readiness can mean only that the scheduler and required configuration have admitted     | The application requests App/Server stop and the adapter prevents future schedules; do not invent callback draining                                       | Each callback's result, logs, and metrics               |
-| Kubernetes Job/CronJob             | A new process starts one explicit unit of work                                                                                | Long-lived readiness is usually unnecessary; a bounded execution diagnostic is optional | Controller, deadline, signal, and process exit                                                                                                            | Exit code, Job `Complete`/`Failed`, retry, and deadline |
-
-Kubernetes readiness affects Service routing only; it does not pause a broker consumer. A Job or CronJob expresses completion through its exit code and Job condition, not a long-lived readiness state.
-
-## Prometheus
-
-`@go-like/prometheus` uses an application-owned `prom-client` `Registry`:
+Build the native SDK objects yourself. Adapt them with the plug constructors. Pass the bundle to `telemetry(tel)` on `newApp`. Core then records RPC, HTTP, messaging, job, config, registry, and lifecycle units. Business code uses `@go-like/core/log`, `inSpan`, and the typed metric handles.
 
 ```ts
-import { Registry } from "prom-client"
-import { createPrometheusHandler, newRequestMetrics } from "@go-like/prometheus"
+import { name, newApp, server, telemetry, version } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newTelemetry } from "@go-like/core/telemetry"
+import { contextHandler } from "@go-like/core/web"
+import { newNodeServer, port } from "@go-like/core/web/node"
+import { newOtelMeterProvider, newOtelTracerProvider } from "@go-like/otel"
+import { newPinoHandler } from "@go-like/pino/log"
+import { context } from "@opentelemetry/api"
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks"
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http"
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics"
+import { BatchSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace"
+import pino from "pino"
 
-const metricsRegistry = new Registry()
-const requestMetrics = newRequestMetrics(metricsRegistry)
-const metricsHandler = createPrometheusHandler(metricsRegistry)
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
+
+const sdkTracer = new TracerProvider({
+  spanProcessors: [new BatchSpanProcessor({ exporter: new OTLPTraceExporter() })]
+})
+const sdkMeter = new MeterProvider({
+  readers: [new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() })]
+})
+const destination = pino.destination({ dest: 1, sync: false })
+const logger = pino({ base: null, level: "info" }, destination)
+const tel = newTelemetry({
+  tracerProvider: newOtelTracerProvider(sdkTracer, { requireContextManager: true }),
+  meterProviders: [newOtelMeterProvider(sdkMeter)],
+  logHandlers: [newPinoHandler(logger, destination)],
+  completionLogs: "failures",
+  ignoreRequest: (request) => {
+    const { pathname } = new URL(request.url)
+    return pathname === "/livez" || pathname === "/readyz" || pathname === "/metrics"
+  }
+})
+
+const web = newNodeServer(
+  contextHandler(async () => Response.json({ ok: true })),
+  port(8080)
+)
+export const app = newApp(signal(), name("shop"), version("v1"), telemetry(tel), server(web))
 ```
 
-The exact `newRequestMetrics` overload is defined by the package's public types. The important ownership rule is stable: the application creates the Registry, and the go-like instrumentation records bounded request metrics against it. It does not access the global Prometheus registry and does not create a background collection task.
+`newPinoHandler` must receive the same `destination` object that constructed the logger. `ignoreRequest` drops the whole unit for probe and scrape paths, which keeps Kubernetes probes out of completion logs. Build the OpenTelemetry `Resource` from the same `name` and `version` constants you pass to `newApp`.
 
-Instrumented components include client, unary server, Web, and broker wrappers. Keep labels low-cardinality. An operation such as `orders/Orders.Get` is a safer label than an arbitrary URL, user ID, topic with unbounded tenant data, or request ID. Metrics should not contain credentials, raw request bodies, metadata, or payload values.
+`completionLogs` is `"failures"` or `"all"`. Span and metric attribute keys are a closed set. Core does not put error messages, stacks, or causes on spans, metric labels, or completion records. Diagnostic events may attach the local `Error` as `LogField.exception`. The plug maps that field onto the native slot.
+
+### Bootstrapping before newApp
+
+Configuration often has to load before the servers exist. The bundle can observe that work before the App owns it:
+
+```ts
+import { background, withTimeout } from "@go-like/core/context"
+import { newTelemetry, withTelemetry } from "@go-like/core/telemetry"
+
+const tel = newTelemetry({ logHandlers: [handler] })
+const bootCtx = withTelemetry(background(), tel)
+try {
+  await config.load(bootCtx)
+} catch (error) {
+  const [ctx, cancel] = withTimeout(background(), 5_000)
+  try {
+    await tel.stop(ctx)
+  } finally {
+    cancel()
+  }
+  throw error
+}
+const app = newApp(telemetry(tel))
+void app
+```
+
+`Telemetry.stop` before `start` drains each provider without admitting it, and the bundle cannot be started afterwards. A script that never calls `newApp` uses `withTelemetry`, `tel.start`, and `tel.stop` directly. `newTelemetryRecorder` from `@go-like/core/testing` records spans, metrics, and logs in tests.
 
 ## OpenTelemetry
 
-`@go-like/otel` accepts application-configured providers:
+`@go-like/otel` exports `newOtelTracerProvider`, `newOtelMeterProvider`, `newOtelLogHandler`, and `newOtelPropagator`. The peer dependency is `@opentelemetry/api`. The application constructs the SDK providers, registers a context manager, and leaves the global propagator unset. Registering one can duplicate `traceparent`.
+
+Each provider is shut down once. The default shutdown wait is `defaultOtelShutdownTimeoutMs` (25 seconds). `shutdownTimeoutMs: 0` fails the owner wait immediately. Public errors are `OtelAlreadyStartedError` (`GO_LIKE_OTEL_ALREADY_STARTED`), `OtelShutdownTimeoutError` (`GO_LIKE_OTEL_SHUTDOWN_TIMEOUT`), and `OtelContextManagerMissingError` (`GO_LIKE_OTEL_CONTEXT_MANAGER_MISSING`).
+
+## Prometheus
+
+`@go-like/prometheus/metric` exports `newPrometheusMeterProvider(registry)` and `createPrometheusHandler(registry, { path? })`. Pass the registry you created. The plug does not touch the global registry. `start` registers `target_info` from the App resource and then resolves. The scrape handler is an ordinary Web `Handler`: mount it on the core Web host, in the server tier, so it stops before the telemetry tier.
 
 ```ts
-import { newOtelServer, traceWebHandler } from "@go-like/otel"
+import { createPrometheusHandler, newPrometheusMeterProvider } from "@go-like/prometheus/metric"
+import { Registry } from "prom-client"
 
-const tracedHandler = traceWebHandler(webHandler, tracer)
-const otelServer = newOtelServer({
-  tracerProvider,
-  meterProvider
-})
+const registry = new Registry()
+const meters = newPrometheusMeterProvider(registry)
+const metrics = createPrometheusHandler(registry)
+void meters
+void metrics
 ```
 
-The public package offers explicit wrappers such as `traceClient`, `traceUnaryMiddleware`, `traceWebHandler`, `traceBroker`, `measureClient`, `measureClientMiddleware`, `measureUnaryMiddleware`, and `newRequestMetrics`. `newOtelServer(...)` owns the lifecycle boundary for the supplied providers after admission.
+## Pino
 
-It does **not** install a global `TracerProvider`, `MeterProvider`, exporter, context manager, propagator, or automatic instrumentation. Install those through the OpenTelemetry SDK and runtime-specific setup that your application controls. A trace wrapper cannot create asynchronous context propagation that the selected runtime has not configured.
+`newPinoHandler(logger, destination, ...options)` maps `LogField.exception` to Pino's `err` key. Pino's default `err` serializer already writes `name`, `message`, and `stack`. `pinoDrainTimeout(ms)` sets the owner drain boundary. The lifecycle checks that `destination` is the stream the logger was built with, then flushes, ends, and closes it. Errors: `GO_LIKE_PINO_ALREADY_STARTED`, `GO_LIKE_PINO_DRAIN_TIMEOUT`, `GO_LIKE_PINO_DESTINATION_CLOSED`.
 
-Keep `operation`, outcome, and bounded component identity in attributes. Avoid credentials, raw headers, payloads, full URLs with secrets, and high-cardinality user or topic values. The adapter's safe records do not constrain application-owned native logger or exporter code; that code still needs its own redaction policy.
+## Winston
 
-## Pino and Winston
+`newWinstonHandler(logger)` maps `LogField.exception` to Winston's native `error` key. `winston.format.json()` alone serializes an `Error` as `{}`, so the message and stack disappear. Put an Error-aware format in front of JSON. Pino does not need this step.
 
-`@go-like/pino` and `@go-like/winston` are lifecycle and wrapper packages, not replacement logging systems. The application owns logger construction, levels, formats, redaction, child loggers, destinations, and transports.
+```ts
+import { LogField, newTelemetry } from "@go-like/core/telemetry"
+import { newWinstonHandler } from "@go-like/winston/log"
+import winston from "winston"
 
-The adapters expose wrappers such as:
+const expandError = winston.format((info) => {
+  const error: unknown = info.error
+  if (error instanceof Error) {
+    info.error = { name: error.name, message: error.message, stack: error.stack }
+  }
+  return info
+})
 
-- Pino: `logClient`, `logUnaryMiddleware`, `logWebHandler`, `logBroker`, `newPinoServer`, `pinoDrainTimeout`;
-- Winston: corresponding client, unary, Web, and broker wrappers plus `newWinstonServer`.
+const logger = winston.createLogger({
+  format: winston.format.combine(expandError(), winston.format.json()),
+  transports: [new winston.transports.Console()]
+})
 
-After successful admission, the adapter joins the native destination or logger shutdown to Core. A timeout is a wait boundary; do not report that an asynchronous ThreadStream, file destination, or Winston transport is terminal unless its native finish/close signal says so.
+export const tel = newTelemetry({ logHandlers: [newWinstonHandler(logger)] })
+void LogField
+```
 
-## Security boundary
+Admission rebinds the logger with `child(...)` from the App resource. `stop` calls `logger.end()` and waits for `finish` or `close`. There is no Winston force-close and no plug timeout; the App `stopTimeout` is the caller wait, and the default is unlimited. Errors: `GO_LIKE_WINSTON_ALREADY_STARTED`, `GO_LIKE_WINSTON_LOGGER_FINISHED`, `GO_LIKE_WINSTON_LOGGER_CLOSED`.
 
-Health and observability do not authenticate a caller. The security layers are separate:
+Business logs go through `@go-like/core/log` (`log.info(ctx, message, attrs)`). The active handlers receive `trace_id`, `span_id`, and `trace_flags` when a span is current. Redaction of application fields stays on the native logger (`pino({ redact })`, Winston formats).
 
-| Layer                | go-like contribution                                                                                                 | Application or platform responsibility                                                  |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Transport encryption | Node HTTP transport can use explicit TLS material; `clientAuth("require")` can require a verified client certificate | Certificates, CA rotation, SNI policy, deployment defaults, trust model                 |
-| Authentication       | No universal JWT, OAuth, OIDC, or bearer-token validator                                                             | Parse and validate credentials, identity, issuer, audience, and expiry                  |
-| Authorization        | No generic claims or ACL engine                                                                                      | Map identity to tenant, role, operation, and data permissions                           |
-| Metadata             | Immutable snapshots, client/server separation, explicit propagation allowlists, bounded wire header                  | Treat metadata as untrusted until authenticated; decide what may cross a hop            |
-| Logs and traces      | Low-level wrappers can avoid raw payloads and headers                                                                | Application-owned logs, exporters, and custom diagnostics still need redaction          |
-| Retry                | Explicit replay authorization and bounded attempts                                                                   | Idempotency keys, deduplication, transaction policy, and duplicate side-effect handling |
+## What is recorded
 
-Default Node HTTP transport options are not a security policy. Plain HTTP can be configured, TLS is not automatically enabled for every entrypoint, and mTLS certificate admission does not map a certificate to a business principal. Portable Fetch clients cannot portably inject custom PEM CA or mTLS material.
+Core units include RPC server and client, HTTP server, messaging publish and process, job run and enqueue, config load and reload, registry register and watch, retry, circuit transitions, rate-limit rejections, and App start, ready, stopping, stopped, and participant failure. Cache and store calls are not given a core unit: the application calls the plug directly. Health scrapes are omitted when `ignoreRequest` says so.
 
-Metadata headers are data, not trusted identity. The server only forwards metadata downstream through explicit `exact` or `prefix` rules. Keep authorization and cookie fields out of broad propagation rules.
+Attribute keys, metric names, and log event names are the constants on `@go-like/core/telemetry` (`SemconvVersion` is `"1.45.0"`). Metric attributes come only from the `attributeKeys` declared on `newCounter`, `newHistogram`, `newUpDownCounter`, and `newGauge`. A topic, URL, or user id does not belong on a metric.
+
+When no `LogHandler` is installed, error-level diagnostic events are written as one JSON line to `console.error` with `event.name`, `error.type`, and `go_like.operation`. The line does not include the error text. There is no console log plug.
 
 ## Operations checklist
 
-For each service, record:
-
-- the liveness and readiness route paths;
-- which readiness dependencies are required before traffic admission;
-- probe timeout and cancellation behavior;
-- the application-owned Prometheus Registry and scrape route;
-- the OpenTelemetry providers, exporters, and context manager;
-- logger destination and drain terminal signal;
-- label and attribute cardinality policy;
-- credential and payload redaction policy;
-- the difference between caller timeout, adapter owner timeout, and native terminal state;
-- the command and runtime evidence that actually exercised the setup.
-
-The [claims ledger](/reference/claims) and [verification reference](/reference/verification) define the language to use when a wrapper exists in source but a provider E2E or runtime result has not been run.
+- The application constructed the SDK, logger, and Prometheus registry.
+- The global OpenTelemetry propagator is unset.
+- `telemetry(tel)` is on the App, not inside `server(...)`.
+- `/readyz` has a real ready probe, including `readyProbe` when the process should report the App window.
+- Probe and scrape paths are listed in `ignoreRequest` when their logs would drown the signal.
+- Winston expands `info.error` before `format.json()`.
+- Labels and log fields have a redaction policy on the native logger or exporter.

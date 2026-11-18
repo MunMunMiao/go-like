@@ -12,7 +12,7 @@ function frameworkKind(value: string | undefined): FrameworkKind {
 
 const root = resolve(import.meta.dir, "../..")
 const kind = frameworkKind(process.argv[2])
-const builtPackages = ["@go-like/context", "@go-like/core", "@go-like/web"]
+const builtPackages = ["@go-like/core"]
 const vendorPackages: VendorPackageSource[] = []
 if (kind === "hono") {
   vendorPackages.push({ name: "hono", source: resolve(root, "examples/hono/node_modules/hono") })

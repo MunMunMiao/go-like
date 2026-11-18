@@ -9,21 +9,21 @@
 - `src/postgres.ts`：迁移、延迟约束、不可变触发器与账户写入。
 - `src/nats.ts`：短租约领取、JetStream `PubAck` 与失败释放。
 - `src/worker.ts`：把 outbox publisher 承接为结构式 go-like Server。
+- `src/resources.ts`：用 `newResourceServer` 接入已打开的 SQL 池和 NATS 连接。
 - `src/http.ts`：标准 Web API 支付入口。
-- `src/main.ts`：连接 PostgreSQL 与 NATS、组装所有 Server，并直接启动完整小程序。
+- `src/main.ts`：连接 PostgreSQL 与 NATS，以 `resources(...)` 与 `server(...)` 启动完整小程序。
 
 本示例展示一个最小但可审计的支付入账服务：PostgreSQL 是唯一金融事实源；一笔支付在同一个数据库事务内写入
 双录分录、幂等结果和 outbox 事件；事务提交后，独立 publisher 再把 outbox 事件可靠发布到 NATS
 JetStream。go-like 管理请求 Context 与标准 Handler 边界；SQL、NATS 和进程生命周期由应用拥有。go-like 不充当
 账本、ORM 或跨系统事务协调器。
 
-`src/main.ts` 创建标准 Web `Handler`，同时把
-`publishNextOutbox(...)` 轮询包装为结构式 Server，并通过
-`newApp(name("payments-ledger"), server(dependencies, publisher, web))` 一次性把全部 Server
-交给 `@go-like/core`。App
-成功接纳后由 Core 调用 Server 的 `start(ctx)`，并在停止时调用 `stop(ctx)`；停止会取消当前 publisher
-Context、清除 poll timer，并等待已接纳 attempt 收敛。Core 会并发请求停止 Web、publisher 与依赖资源；
-当前入口没有协调 Web/publisher 先于 NATS/SQL 关闭；生产接入须显式落实这个依赖顺序，不能从 Core 的并发 stop 推导有序排空。
+`src/main.ts` 创建标准 Web `Handler`，把 `publishNextOutbox(...)` 轮询包装为结构式 Server，并用
+`newLedgerDatabaseResource` 与 `newLedgerNatsResource` 接入已打开的 SQL 池和 NATS 连接。
+`newApp(signal(), name("payments-ledger"), resources(database, nats), server(publisher, web))`
+把资源与服务器交给 `@go-like/core`。资源先准入；publisher 与 Web 的 `start(ctx)` 在运行期保持挂起。
+停止时 Core 先并发停止 Web 与 publisher。publisher 的停止取消其 Context、清除 poll timer，并等待已接纳 attempt。
+随后按声明逆序 drain NATS，再以 `sql.close({ timeout: 5 })` 关闭数据库池。
 
 ## 直接运行
 
@@ -144,22 +144,22 @@ PostgreSQL transaction 绝不跨越 NATS 网络调用。JetStream 是通知和�
 
 ## go-like 包映射
 
-| 能力               | 采用方式与边界                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `@go-like/context` | 作为 HTTP 与 publisher attempt 的独立首参语义；终止的 Context 不启动金融事务。                                |
-| `@go-like/web`     | `contextHandler(...)` 承接标准 `Request`/`Response`，租户由接收 Context 的服务端 resolver 注入。              |
-| TypeScript + JSON  | 声明请求与 outbox event shape；required presence、字符串类型、金额和账户规则由应用显式检查。                  |
-| Bun `SQL`          | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 go-like SQL 抽象。                         |
-| 官方 NATS SDK      | `@nats-io/transport-node` 拥有连接，`@nats-io/jetstream` 发布并保留真实 `PubAck`。                            |
-| `@go-like/store`   | **禁止用于账本、余额、幂等行或 outbox。** Store 没有关系 transaction、数据库约束、索引查询或 migration 契约。 |
+| 能力                    | 采用方式与边界                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `@go-like/core/context` | 作为 HTTP 与 publisher attempt 的独立首参语义；终止的 Context 不启动金融事务。                                |
+| `@go-like/core/web`     | `contextHandler(...)` 承接标准 `Request`/`Response`，租户由接收 Context 的服务端 resolver 注入。              |
+| TypeScript + JSON       | 声明请求与 outbox event shape；required presence、字符串类型、金额和账户规则由应用显式检查。                  |
+| Bun `SQL`               | 直接提供参数化查询、连接池和 scoped PostgreSQL transaction，不创建 go-like SQL 抽象。                         |
+| 官方 NATS SDK           | `@nats-io/transport-node` 拥有连接，`@nats-io/jetstream` 发布并保留真实 `PubAck`。                            |
+| `@go-like/core/store`   | **禁止用于账本、余额、幂等行或 outbox。** Store 没有关系 transaction、数据库约束、索引查询或 migration 契约。 |
 
 go-like 当前没有 SQL/ORM 抽象。实现应直接选择一个支持参数化查询、连接池和 scoped transaction 的 PostgreSQL
 driver，并固定其版本；不要为了本示例先造通用 database package。
 
 ## 生产不变量与接入要求
 
-以下同时列出已实现的数据库不变量和生产接入要求。当前示例未实现认证、冲正、自动处理 commit 结果不明、
-停机依赖顺序或积压告警；这些要求不能视为已完成的功能。
+以下同时列出已实现的数据库不变量和生产接入要求。当前示例未实现认证、冲正、自动处理 commit 结果不明或积压告警；
+这些要求不能视为已完成的功能。入口已经先停止 Web 与 publisher，再 drain NATS、关闭 SQL。
 
 1. PostgreSQL 中已提交的 journal/posting 是唯一金融事实；JetStream、日志、缓存和 go-like Store 都不是。
 2. 每个 transaction 在数据库提交点至少有两条 posting，且按货币求和严格为零。

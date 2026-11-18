@@ -1,6 +1,6 @@
 # @go-like/prometheus
 
-该适配器通过 `@go-like/web` 的标准单参数 `Handler`，暴露由应用拥有的
+该适配器通过 `@go-like/core/web` 的标准单参数 `Handler`，暴露由应用拥有的
 [`prom-client`](https://github.com/prometheus/client_js) `Registry`。
 
 ## 所有权
@@ -10,56 +10,55 @@
 - `createPrometheusHandler()` 非驻留，不创建定时器、监听器或后台服务。
 - 该适配器绝不读取或修改 prom-client 全局 registry。
 
-除下述固定请求指标外，应用自行注册的指标名称和 label schema 仍由应用拥有。必须限制 label 值域；
+除应用通过 `newPrometheusMeterProvider(registry)` 登记的指标外，应用自行注册的指标名称和 label schema 仍由应用拥有。必须限制 label 值域；
 不要把请求 ID、用户 ID、URL 或其他无界值作为 label。原始 Registry 契约有意不假装能在运行时强制
 应用控制基数。
 
-## 请求指标
+## Meter provider
 
-`newRequestMetrics(registry)` 创建两个固定 collector：
+公开入口是 `@go-like/prometheus/metric`。它填充 `MeterProvider`、`Instrument` 与 `TelemetryLifecycle`。
+抓取用的 `createPrometheusHandler` 返回 `@go-like/core/web` 的 `Handler`，留在同一入口，这是文档化的命名例外。
 
-- `go_like_requests_total`
-- `go_like_request_duration_seconds`
+## 依赖
 
-它们只有 `component`、`operation`、`outcome` 三个 label。`outcome` 只会是 `success`、`failure`
-或 `canceled`。包装器不会读取或记录 body、header、错误消息、URL、请求 ID 或用户 ID。
+`@go-like/core` 的 peer 是锁步精确版本，dev 依赖是 `workspace:*`。`prom-client` 是 peer。本包没有可选 peer，
+也没有常规运行时依赖。开发依赖把 `prom-client` 钉在 `15.1.3`。
+
+| 种类 | 包              | 范围      |
+| ---- | --------------- | --------- |
+| peer | `@go-like/core` | `0.0.1`   |
+| peer | `prom-client`   | `^15.1.3` |
+
+- `newPrometheusMeterProvider(registry)` 返回 core `MeterProvider`。它从不读取或修改全局 registry。
+  `start` 在资源非空且 registry 还没有 `target_info` 时登记一次 `target_info`，然后立即返回；`stop` 立即返回。
+- descriptor 名称里非 `[a-zA-Z0-9_]` 的字符变成 `_`，并追加单位后缀（`s` → `_seconds`，`ms` → `_milliseconds`，`By` → `_bytes`）。
+  以 `{` 开头的单位不加后缀；其他未知单位先按同一规则清洗再追加。counter 在名称尚未以 `_total` 结尾时追加 `_total`。
+  同名不同类型抛出 `TypeError`。
+- `createPrometheusHandler(registry, { path? })` 返回 `@go-like/core/web` 的 `Handler`。默认路径是 `/metrics`。
+  GET 与 HEAD 返回 registry 的文本暴露格式，并设置 `Cache-Control: no-store`。
 
 ```ts
-import {
-  measureBroker,
-  measureClient,
-  measureUnaryMiddleware,
-  measureWebHandler,
-  newRequestMetrics
-} from "@go-like/prometheus"
+import { createPrometheusHandler, newPrometheusMeterProvider } from "@go-like/prometheus/metric"
 import { Registry } from "prom-client"
 
 const registry = new Registry()
-const metrics = newRequestMetrics(registry)
-
-const client = measureClient(applicationClient, metrics)
-const unary = measureUnaryMiddleware(metrics)
-const web = measureWebHandler(applicationWebHandler, metrics)
-const broker = measureBroker(applicationBroker, metrics)
+const meters = newPrometheusMeterProvider(registry)
+const metrics = createPrometheusHandler(registry)
 ```
 
-operation 采用稳定的低基数名称：
-
-- Client 与内部 Server：`service/endpoint`。Client 来自 `CallRequest`，Server 来自 `TransportInfo.operation()`，不读取路由头。
-  服务端流在 body 结束时把 `messageCount` 计入 `go_like_stream_messages_total`，label 含 `direction`。
-- Web：仅 HTTP method，不包含 URL。
-- Broker：仅 `publish` 或 `consume`。
-
-Broker topic 不进入 label；动态 subject 不会按消息、订单或租户放大时间序列。Client 按逻辑 call 计量一次，
-不因内部 retry 重复计数。Web 在 Response header 可用时完成计量；服务端 `5xx` 记为 `failure`，其他
-Response 记为 `success`，请求取消优先记为 `canceled`。
+请求完成指标由 `@go-like/core` 的遥测层写入这个 meter provider。operation 采用稳定的低基数名称，
+Broker topic、URL、请求 ID 与用户 ID 不进入 label。
 
 v1 适配器有意不封装 `collectDefaultMetrics()`。部分默认 collector 会创建驻留的原生 observer 或事件循环
 monitor，而上游辅助函数并未暴露清理 handle。若应用明确愿意拥有该进程级生命周期，可以直接调用官方函数。
+
+## 错误码
+
+本包不定义 `GO_LIKE_` 错误码。非法 registry、非法抓取路径，以及同名指标的类型冲突，都抛出 `TypeError`。
 
 ## 运行时验证
 
 运行时检查使用当前环境中可执行的工具，并记录实际观察值；版本号不构成执行或支持门禁。依赖版本继续由 package manifest 与 lockfile 管理。
 
-返回的处理器只依赖标准 Web API，可交给 `@go-like/web/node` 或任何接受 go-like `Handler` 的自实现 Server；
-该包不依赖 `@go-like/web/node`，也不拥有 listener 生命周期。
+返回的处理器只依赖标准 Web API，可交给 `@go-like/core/web/node` 或任何接受 go-like `Handler` 的自实现 Server；
+该包不依赖 `@go-like/core/web/node`，也不拥有 listener 生命周期。

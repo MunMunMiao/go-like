@@ -1,7 +1,7 @@
 import process from "node:process"
 
 import { newApp } from "../../../src/index"
-import { signal } from "../../../src/node"
+import { signal } from "../../../src/node/index"
 
 const before = process.listenerCount("SIGUSR2")
 let rejected = false

@@ -3,42 +3,40 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { background } from "@go-like/context"
-import { logWebHandler, newPinoServer } from "@go-like/pino"
+import { background } from "@go-like/core/context"
+import type { LogRecord } from "@go-like/core/log"
+import { newPinoHandler } from "@go-like/pino/log"
 import pino from "pino"
+
+function record(message: string, attrs: LogRecord["attrs"]): LogRecord {
+  return Object.freeze({ time: 0, level: "info", message, event: "", attrs })
+}
 
 const directory = await mkdtemp(join(tmpdir(), "go-like-pino-native-"))
 try {
   const sonicPath = join(directory, "sonic.log")
   const sonic = pino.destination({ dest: sonicPath, mkdir: true, sync: false })
   const sonicLogger = pino({ base: null, timestamp: false, redact: ["secret"] }, sonic)
-  const sonicServer = newPinoServer(sonicLogger, sonic)
-  const sonicRunning = sonicServer.start(background())
-  sonicLogger.info({ component: "sonic", secret: "hidden" }, "native destination")
-  const response = logWebHandler(
-    () => new Response(null, { status: 204 }),
-    sonicLogger
-  )(new Request("https://example.test/private", { method: "PATCH" }))
-  assert.equal(response instanceof Promise, false)
-  assert.equal((response as Response).status, 204)
-  await sonicServer.stop(background())
+  const sonicHandler = newPinoHandler(sonicLogger, sonic)
+  const sonicRunning = sonicHandler.lifecycle.start(background())
+  sonicHandler.handle(background(), record("native destination", { component: "handler" }))
+  sonicLogger.info({ component: "sonic", secret: "hidden" }, "redacted")
+  await sonicHandler.lifecycle.stop(background())
   await sonicRunning
   const sonicRecords = (await readFile(sonicPath, "utf8"))
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line) as Record<string, unknown>)
-  const sonicRecord = sonicRecords.find((record) => record.component === "sonic")
-  const webRecord = sonicRecords.find((record) => record.component === "web")
+  const handlerRecord = sonicRecords.find((item) => item.component === "handler")
+  const sonicRecord = sonicRecords.find((item) => item.component === "sonic")
+  assert.notEqual(handlerRecord, undefined)
   assert.notEqual(sonicRecord, undefined)
-  assert.notEqual(webRecord, undefined)
-  if (sonicRecord === undefined || webRecord === undefined)
+  if (handlerRecord === undefined || sonicRecord === undefined) {
     throw new Error("Pino runtime records missing")
+  }
+  assert.equal(handlerRecord.msg, "native destination")
   assert.equal(sonicRecord.component, "sonic")
   assert.equal(sonicRecord.secret, "[Redacted]")
-  assert.equal(webRecord.operation, "PATCH")
-  assert.equal(webRecord.outcome, "success")
-  assert.equal(webRecord.httpStatus, 204)
-  assert.equal(JSON.stringify(webRecord).includes("/private"), false)
 
   const transportPath = join(directory, "transport.log")
   const transport = pino.transport({
@@ -46,16 +44,17 @@ try {
     options: { destination: transportPath, mkdir: true }
   })
   const transportLogger = pino({ base: null, timestamp: false }, transport)
-  const transportServer = newPinoServer(transportLogger, transport)
-  const transportRunning = transportServer.start(background())
-  transportLogger.info({ component: "thread" }, "native transport")
-  await transportServer.stop(background())
+  const transportHandler = newPinoHandler(transportLogger, transport)
+  const transportRunning = transportHandler.lifecycle.start(background())
+  transportHandler.handle(background(), record("native transport", { component: "thread" }))
+  await transportHandler.lifecycle.stop(background())
   await transportRunning
   const transportRecord = JSON.parse((await readFile(transportPath, "utf8")).trim()) as Record<
     string,
     unknown
   >
   assert.equal(transportRecord.component, "thread")
+  assert.equal(transportRecord.msg, "native transport")
 
   console.log("log-pino-node-runtime ok")
 } finally {

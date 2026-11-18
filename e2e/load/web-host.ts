@@ -1,7 +1,7 @@
-import { background } from "@go-like/context"
-import { address, newServer, transport, type Server as ServiceServer } from "@go-like/server"
-import { newNodeHTTPTransport } from "@go-like/transport-http/node"
-import { hostname, newNodeServer, nodeShutdownTimeout, port } from "@go-like/web/node"
+import { background } from "@go-like/core/context"
+import { address, newServer, transport, type Server as ServiceServer } from "@go-like/core/server"
+import { newNodeHTTPTransport } from "@go-like/core/transport/http/node"
+import { hostname, newNodeServer, nodeShutdownTimeout, port } from "@go-like/core/web/node"
 import { readdir } from "node:fs/promises"
 
 const AdmittedMarker = "GO_LIKE_SOAK_WEB_DRAIN_ADMITTED="

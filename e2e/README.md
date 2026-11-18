@@ -44,9 +44,24 @@ Specialized scenario 的 container/network/volume create 必须通过共享 `Own
 
 Web 的 package-owned `web-node-native` 与 built-dist `web-bridge-dist` 进入默认 suites/all。`vanilla-node`、`hono-node`、`h3-node` 与 `elysia-node` 是显式可选的原生 Fetch Handler 兼容性测试，不对应 go-like 框架桥接包；其中 `h3-node` 使用私有 H3 example 固定的依赖版本，不在运行时追踪 npm `latest`。Framework vendor dependency staging 使用 invocation-scoped secure temp，不写入仓库内 `e2e/node_modules`。
 
+## 套件布局
+
+Runtime scope 固定为 12 个套件。`runtime-core` 在 `packages/core` 运行 `test:e2e:runtimes`，其中包含原先 11 个 core 侧包的运行时 fixture。其余每个有运行时通道的插头包只登记一次：`runtime-bullmq`、`runtime-connectrpc`、`runtime-consul`、`runtime-croner`、`runtime-etcd`、`runtime-mdns`、`runtime-otel`、`runtime-pino`、`runtime-prometheus`、`runtime-winston`、`runtime-zookeeper`。Consul 的 config 与 registry、etcd 的 registry 与 store 都留在该包自己的 `test:e2e:runtimes` 里。每个 runtime 套件的命令都是 `bun run test:e2e:runtimes`。
+
+Provider scope 保留原来的 20 个 ID。每个 ID 在拥有该插座的包目录执行 `bun run test:e2e:<socket>`，失败仍能对应到具体插座。`registry-transport-consul-docker` 从 `packages/consul` 运行 `test:e2e:registry-transport`（脚本本体仍是 `e2e/scripts/registry-transport-consul-docker.ts`）。`transport-http-node-security` 从 `packages/core` 运行 `test:e2e:transport`。
+
+四项发布关卡已登记：
+
+- `release-traceparent`：suites，`bun e2e/release/traceparent.ts`，需要 Bun 与 Node，无 Docker。
+- `release-etcd-auth-docker`：providers，`bun e2e/release/etcd-auth-docker.ts`，Docker suite owner。它同时属于 suites，因此 `suites` 与 `all` 也会运行它。
+- `release-dist-brands`：suites，`bun e2e/release/dist-brands.ts`。
+- `release-binding-types`：suites，`bun e2e/release/binding-types.ts`。
+
+`e2e/scripts/`、`e2e/soak.ts`、`e2e/grpc-soak.ts` 与 `e2e/load/web-host.ts` 使用平铺后的包路径：Winston 从 `dist/log/index.js` 与 `@go-like/core/context` 加载，Web framework 只暂存 `@go-like/core`，Consul registry transport 从 `@go-like/core/*` 与 `@go-like/consul` 导入，长时间 soak 的 RabbitMQ 与 Redis 场景分别是 `@go-like/rabbitmq` 和 `@go-like/redis`，gRPC soak fixture 是 `packages/connectrpc/test/e2e/soak-runtime.ts`。
+
 ## Registered runtimes 与工具观察
 
-runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启动前验证：
+runtime scope 使用静态 registered plan，当前为上面的 12 个套件。每个 entry 在任何 consumer 启动前验证：
 
 - registered cwd 存在且是目录；
 - `package.json` 可解析；
@@ -59,7 +74,7 @@ runtime scope 使用静态 registered plan。每个 entry 在任何 consumer 启
 
 Published lane 动态发现实际 non-private publishable packages，生成并安装真实 npm tarball。Root authoring config 只检查 committed fixture 的语法与控制流，不是 package contract；staged checks 才从安装后的 `node_modules` 验证 DTS 与 package-name resolution。Node 使用 committed TypeScript 的 NodeNext 实际 emit 后在 clean environment 执行，Bun 使用 `--no-install` 防止隐藏依赖。
 
-当前已知限制：Bun 1.4.2 的真实 HTTP Fetch 流取消有底层复现：`reader.cancel()` 或 AbortController 取消后，服务端 quiet response/socket 未在 500ms 内关闭；这与原生 gRPC HTTP/2 流测试是不同边界。失败后尚未执行的后续协议分支不算通过。证据与支持边界见 [grpc-buf README](../packages/transport/grpc-buf/README.md) 和 [能力声明](../doc/reference/claims.md)。这些是既有故障记录，不能替代当前环境的重跑结果。
+当前已知限制：Bun 1.4.2 的真实 HTTP Fetch 流取消有底层复现：`reader.cancel()` 或 AbortController 取消后，服务端 quiet response/socket 未在 500ms 内关闭；这与原生 gRPC HTTP/2 流测试是不同边界。失败后尚未执行的后续协议分支不算通过。证据与支持边界见 [grpc-buf README](../packages/connectrpc/README.md) 和 [能力声明](../doc/reference/claims.md)。这些是既有故障记录，不能替代当前环境的重跑结果。
 
 gRPC 的可选本地检查由 `bun run test:e2e:grpc-soak` 执行，默认使用独立 Bun server/load 进程、30 秒、8 并发和 256 字节业务载荷，结果默认写入 `.artifacts/soak/grpc-bun.json`（Node 为 `grpc-node.json`）。使用 `bun run test:e2e:grpc-soak --runtime node` 可切换两个子进程的 runtime；`--duration 60s --concurrency 16 --payload-bytes 1024 --output .artifacts/soak/grpc.json` 可覆盖负载与结果路径。结果记录 runtime 版本、请求数、错误率、有界直方图的延迟分位数上界、RSS、HTTP/2 session 数和进程清理结果，并要求零错误、单连接复用及关闭后零活动 session。该检查使用 workspace 源码和生成代码，覆盖 loopback unary h2c，不替代 published lane、TLS、故障回归或目标部署环境的容量验证；默认不进入 CI。
 

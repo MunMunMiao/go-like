@@ -2,7 +2,7 @@
 
 ## 主要演示
 
-演示一个面向在线游戏的匹配微服务：外部请求使用标准 Fetch API，应用层按地区和技能差进行组队，基础设施层使用 `@go-like/registry` 的轮询 Selector 为已完成的对局选择游戏服节点。
+演示一个面向在线游戏的匹配微服务：外部请求使用标准 Fetch API，应用层按地区和技能差进行组队，基础设施层使用 `@go-like/core/registry` 的轮询 Selector 为已完成的对局选择游戏服节点。
 
 ## 独有业务不变量
 
@@ -21,9 +21,9 @@
 
 ## go-like 能力
 
-除 `@go-like/context` 和 `@go-like/web` 外，本例实际调用 `@go-like/registry` 的
+除 `@go-like/core/context` 和 `@go-like/core/web` 外，本例实际调用 `@go-like/core/registry` 的
 `newRoundRobinSelector`，并在测试中证明连续对局落到不同端点。默认节点来自显式内存快照。设置
-`KUBERNETES_API_ADDRESS` 后，当前匹配服务会通过 `@go-like/registry-kubernetes` 向指定 namespace
+`KUBERNETES_API_ADDRESS` 后，当前匹配服务会通过 `@go-like/kubernetes/registry` 向指定 namespace
 写入真实 EndpointSlice；业务游戏服快照仍保持显式，不把 App 自注册伪装成游戏服发现。
 
 ## 验证

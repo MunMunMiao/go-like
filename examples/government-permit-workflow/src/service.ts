@@ -1,4 +1,4 @@
-import type { Handler } from "@go-like/web"
+import type { Handler } from "@go-like/core/web"
 
 import { newGetPermit, newMemoryPermitRepository, newSubmitPermit } from "./permits"
 import { newPermitHandler } from "./http"

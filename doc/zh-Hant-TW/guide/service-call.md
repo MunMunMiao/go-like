@@ -1,53 +1,107 @@
 # 服務呼叫
 
-一次內部 unary 呼叫是幾個小元件的組合。`@go-like/client` 把 `Discovery` 快照交給 `Selector`，再透過 `Transport` 完成一次 `fetch`。建立 Client 時使用 functional options：
+一次內部服務呼叫就是一次 Fetch 交換。操作名稱與傳輸位址是不同的值。帶型別的呼叫會在 JSON body 上加上 Struct 驗證。產生的 Protobuf RPC 是另一條路徑；見[串流處理](/zh-Hant-TW/guide/streaming)。
+
+## 操作身分與位址
+
+`defineService("appointment-policy.v1", { check })` 把操作命名為 `appointment-policy.v1/check`。`withEndpoint("memory://appointment-policy.v1")` 與 `address("memory://appointment-policy.v1")` 指出位元組要送到哪裡。Registry 的 `ServiceInstance` 把傳輸 URL 放在 `endpoints`。篩選與 selector 在那些 URL 之中選擇。它們不選擇操作。
+
+## 帶型別的 Memory Transport
+
+兩邊使用同一個 `newMemoryTransport()`。它只在這個程序裡，而且每個實例私有。這是 `examples/healthcare-appointments` 裡的形狀：
 
 ```ts
-import type { Context } from "@go-like/context"
-import {
-  newClient,
-  withDiscovery,
-  withEndpoint,
-  withFilter,
-  withSelector,
-  withTransport,
-  type CallRequest
-} from "@go-like/client"
-import {
-  filterLabel,
-  filterVersion,
-  newRoundRobinSelector,
-  type Discovery,
-  type Filter
-} from "@go-like/registry"
-import type { Transport } from "@go-like/transport"
+import { newClient, withEndpoint, withTransport } from "@go-like/core/client"
+import { background } from "@go-like/core/context"
+import { name, newApp, server } from "@go-like/core"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { struct } from "@go-like/core/struct"
+import { defineService, serviceError } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
 
-declare const ctx: Context
-declare const discovery: Discovery
-declare const serviceTransport: Transport
-declare const requestBytes: Uint8Array
+const math = defineService("math", {
+  add: {
+    request: struct.object({ left: struct.number(), right: struct.number() }),
+    response: struct.object({ sum: struct.number() })
+  }
+})
 
-const client = newClient(
-  withDiscovery(discovery),
-  withEndpoint("discovery:///orders"),
-  withSelector(newRoundRobinSelector()),
-  withTransport(serviceTransport)
-)
-const filters: readonly Filter[] = [filterVersion("v1"), filterLabel("zone", "a")]
-const request: CallRequest = {
-  service: "orders",
-  endpoint: "get",
-  headers: { "content-type": "application/json" },
-  body: requestBytes
+const transport = newMemoryTransport()
+const rpc = newServer(serverTransport(transport), address("memory://math"))
+math.registerHandler(rpc, {
+  add(_ctx, request) {
+    if (!Number.isFinite(request.left) || !Number.isFinite(request.right)) {
+      throw serviceError("math_rejected", "operands must be finite", 400)
+    }
+    return { sum: request.left + request.right }
+  }
+})
+
+const client = newClient(withTransport(transport), withEndpoint("memory://math"))
+const api = math.newClient(client)
+const app = newApp(name("math"), server(rpc))
+const running = app.run()
+await rpc.endpoint(background())
+try {
+  const result = await api.add(background(), { left: 2, right: 3 })
+  console.log(result.sum)
+} finally {
+  await client.close(background())
+  await app.stop()
+  await running
 }
-const reply = await client.call(ctx, request, withFilter(...filters))
-void reply
 ```
 
-`Filter`、`filterVersion(...)` 與 `filterLabel(...)` 都屬於 Registry 根入口；Filter 會在 `Selector.select` 前依宣告順序執行。直連目標要在建構時使用 `newClient(withTransport(serviceTransport), withEndpoint(serviceAddress))`；`withEndpoint(...)` 會略過 Discovery，但仍經過與發現快照相同的 Selector。設定 Discovery 的 Client 要同時使用 `withEndpoint("discovery:///<name>")` 與 `withDiscovery(discovery)`，再依服務名稱延遲建立 watcher，並從最新完整快照選擇節點。只有確認操作可安全重播，或已經明確核准後，才以 `withRetry(...)` 設定有限 attempts、失敗分類與可選 backoff；每次獲准的 retry 都會從最新快照重新選擇，預設每次 call 只嘗試一次。不再使用 Client 時呼叫 `client.close(ctx)`。`closeTimeout(...)` 只限制邏輯 Transport Client 的清理時間，實體連線重用由 Transport 與 runtime 負責。
+`service.registerHandler` 在啟動前綁定每個帶型別的 handler。`service.newClient(client).add(ctx, value)` 驗證請求與回應。`client.close(ctx)` 是應用程式的清理。在真實程序裡，從 `afterStop` 關閉用戶端，並讓 `app.run()` 擁有生命週期。
 
-`@go-like/server` 把業務 handler 對應到 Transport，並公開實際 bind 位址。用 `transport(...)`、`address(...)`、`middleware(...)` 與 `listenOption(...)` 建構 Server，再於啟動前透過 `server.registerHandler(...)` 註冊 route；`listenOption(...)` 會把 provider 專屬 `ListenOption` 傳給 `Transport.listen`。`endpoint(ctx)` 與 `start(ctx)` 共用同一次真實 bind。設定為 `newApp(registrar(registry), server(serviceServer))` 的 Core App，會把這個 endpoint 當成應用程式的 `ServiceInstance` 統一發布與撤銷。
+`newHTTPTransport()` 是可攜的 Fetch 用戶端。它不監聽。Node listener 在 server 與 Node 用戶端兩邊都使用 `@go-like/core/transport/http/node` 的 `newNodeHTTPTransport()`。把 `newHTTPTransport()` 傳給 `newServer` 可以通過型別檢查，然後在 listen 時以 `GO_LIKE_TRANSPORT_UNSUPPORTED_CAPABILITY` 失敗。
 
-每次 unary attempt 都會把 client-side `TransportInfo` 注入交給 Transport 的 Context，內容包含實際 target、穩定的 `service/endpoint` operation 與真實 wire headers。Server 會在呼叫業務 handler 前注入對應的 server-side 值。Client 與 Server 透過有界且規範的 `Go-Like-Metadata` envelope 編碼多值 Context metadata；Transport provider 只需將它當成不透明的 Fetch header。`propagateToClientContext(...)` 只會依照明確的 `exact` 或 `prefix` allowlist，把 server metadata 傳到下游。
+`@go-like/core/server` 與 `@go-like/core/client` 都匯出 `middleware` 與 `use`。同一個檔案兩邊都需要時，把其中一個當成 namespace import。
 
-呼叫會等待 feedback，以及邏輯 Transport Client 歸還 pool 或依需要關閉。成功 client 預設可以重用，`poolSize(0)` 才會停用保留。收到 response 後若清理失敗，`AggregateError.cause` 保留 response，`errors` 依序保存清理錯誤，不會因此重播業務呼叫。不再使用 owner 時呼叫 `client.close(ctx)`。
+## 一次嘗試
+
+預設呼叫只做一次嘗試。用戶端建立一個 `content-type: application/json` 的 `POST`，撥出或重用一個 transport，然後讀取回應。符合服務錯誤信封的非 2xx JSON body 會變成 `ServiceError`。讀取 `code`、`status` 或 `metadata` 之前，先用 `@go-like/core/transport` 的 `isServiceError` 辨認它。`ServiceError.code` 由應用程式擁有。它不是 `GO_LIKE_*` code。
+
+原始的 `client.call` 接受 `{ service, endpoint, headers, body }`，並回傳 Fetch `Response`。呼叫端讀取 body，或取消它。
+
+Metadata 走在 Context 上。`@go-like/core/metadata` 提供 `newClientContext`、`fromServerContext` 與 `propagateToClientContext`。傳遞是明確的。進來的 metadata 不會複製到下一跳，除非 handler 自己這樣做。
+
+## 服務探索、篩選與選擇
+
+`@go-like/core/registry` 的 `newDiscoveryResolver` 監看一個服務，並保留一份完整替換快照。空快照具有權威：選擇會以 `GO_LIKE_NO_AVAILABLE_ENDPOINT` 失敗，而不是重用先前的實例。
+
+```ts
+import { newClient, withDiscovery, withEndpoint, withSelector } from "@go-like/core/client"
+import { newP2CSelector } from "@go-like/core/registry"
+
+const client = newClient(
+  withDiscovery(registry),
+  withEndpoint("discovery:///pricing"),
+  withSelector(newP2CSelector())
+)
+void client
+```
+
+`withDiscovery` 接受 `Discovery`。用戶端會建立一個私有的 resolver。只有當應用程式的程式碼需要用戶端之外的快照時，才呼叫 `newDiscoveryResolver(discovery)`。同一個 Discovery 上的兩個 resolver 不共用 watcher。
+
+篩選是純的，而且有順序。內建的是 `filterVersion` 與 `filterLabel`，用 `withFilter` 按次呼叫傳入。Selector 是 `newRoundRobinSelector`、`newWeightedRoundRobinSelector`、`newRandomSelector`、`newP2CSelector` 與 `newEWMASelector`。P2C 與 EWMA 在嘗試之後接受同步 feedback。那個狀態與 `circuitBreakerMiddleware` 分開；後者把斷路器鍵在一個操作上。
+
+`withBlock()` 等待第一份非空快照。直接的 `withEndpoint` 位址清單是一份靜態快照，仍然會經過 selector。`withEndpoint("discovery:///name")` 指出要監看的服務名稱。
+
+## 重試是重送授權
+
+`@go-like/core/client` 的 `withRetry` 要求：
+
+- `authorization`：`"idempotent"` 或 `"caller-approved"`；
+- `maxAttempts`：正整數，把第一次嘗試算進去；
+- `shouldRetry(ctx, error, attempt)` 回傳布林值。
+
+這份授權是呼叫端的宣告。Core 不檢查副作用。每一次嘗試都會重新進入服務探索與選擇。已經收到回應，其後的 feedback 或清理失敗，不會被重送。
+
+`@go-like/core/resilience` 裡的 `retry` 與 `exponentialBackoff` 是同一種想法，給用戶端之外的應用程式使用。`newCircuitBreaker` 與 `circuitBreakerMiddleware` 在呼叫端定義的失敗上打開。`circuitOpen` 是斷路器打開時丟出的 sentinel。`newTokenBucketLimiter` 與 `rateLimitMiddleware` 拒絕超量的呼叫。
+
+## 清理
+
+- 在 `afterStop` 關閉用戶端與設定 watcher，或用 `newResourceServer` 接納一條原生連線。
+- 呼叫時保留請求 Context。把它換成 `background()` 會丟掉取消與目前的 span。
+- 用 sentinel、`isServiceError` 或文件中的 `code` 對上失敗。訊息留給診斷。目錄是[錯誤處理](/reference/errors)。

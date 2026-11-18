@@ -1,12 +1,12 @@
-import { newMemoryCache, type MemoryCache } from "@go-like/cache-memory"
-import type { Context } from "@go-like/context"
+import { newMemoryCache, type MemoryCache } from "@go-like/core/cache/memory"
+import type { Context } from "@go-like/core/context"
 import {
   newCircuitBreaker,
   newTokenBucketLimiter,
   type CircuitState,
   type RateLimiter
-} from "@go-like/resilience"
-import type { Handler } from "@go-like/web"
+} from "@go-like/core/resilience"
+import type { Handler } from "@go-like/core/web"
 
 import {
   newCachedCreativeGateway,
@@ -33,7 +33,8 @@ export function newServeAd(
 ): ServeAd {
   return async function serveAd(ctx: Context, request: AdRequest): Promise<ServedAd> {
     validateAdRequest(request)
-    if (!limiter.allow(ctx).allowed) throw new Error("ad request rate limit exceeded")
+    const decision = await limiter.allow(ctx)
+    if (!decision.allowed) throw new Error("ad request rate limit exceeded")
     const campaign = campaigns.select(ctx, request)
     const creative = await creatives.get(ctx, campaign.creativeId)
     const charge = campaigns.commit(ctx, request, campaign.id)

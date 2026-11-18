@@ -1,5 +1,5 @@
-import type { Context } from "@go-like/context"
-import type { Server } from "@go-like/core"
+import type { Context } from "@go-like/core/context"
+import type { Server } from "@go-like/core/lifecycle"
 
 export type ClaimsWorkerStatus = "idle" | "running" | "stopped"
 

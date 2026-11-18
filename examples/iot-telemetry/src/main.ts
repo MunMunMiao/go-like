@@ -1,7 +1,7 @@
 import process from "node:process"
 
-import { newNatsJetStreamBroker } from "@go-like/nats/jetstream/broker"
-import { afterStart, name, newApp, server } from "@go-like/core"
+import { newNatsJetStreamBroker } from "@go-like/nats/jetstream"
+import { afterStart, name, newApp, resources, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
 import { jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { connect } from "@nats-io/transport-node"
@@ -9,7 +9,7 @@ import { connect } from "@nats-io/transport-node"
 import {
   consumerName,
   ensureTelemetryTopology,
-  newNatsConnectionServer,
+  newNatsConnectionResource,
   rawStream
 } from "./runtime"
 import { newTelemetryPolicy } from "./telemetry"
@@ -35,8 +35,8 @@ try {
   const app = newApp(
     signal(),
     name("iot-telemetry"),
+    resources(newNatsConnectionResource(connection)),
     server(
-      newNatsConnectionServer(connection),
       newTelemetryServer(broker, newTelemetryPolicy({ retryDelayMs: 250, maximumDeliveries: 5 }))
     ),
     afterStart(function announceReady(): void {

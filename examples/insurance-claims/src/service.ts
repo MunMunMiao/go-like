@@ -1,5 +1,5 @@
-import type { Context } from "@go-like/context"
-import type { Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import type { Handler } from "@go-like/core/web"
 
 import { newInsuranceClaimsHandler } from "./http"
 import { newClaimsReviewWorker, type ClaimsWorker } from "./worker"

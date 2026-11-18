@@ -21,7 +21,7 @@
 
 ## go-like 能力
 
-`@go-like/registry` 的 `newRoundRobinSelector` 实际选择匹配实例并接收完成反馈。测试证明连续事件轮转到不同 endpoint、精确重试不重新选择、无可用实例时 fail closed。
+`@go-like/core/registry` 的 `newRoundRobinSelector` 实际选择匹配实例并接收完成反馈。测试证明连续事件轮转到不同 endpoint、精确重试不重新选择、无可用实例时 fail closed。
 
 ```bash
 bun run --filter @go-like/example-emergency-response-dispatch typecheck

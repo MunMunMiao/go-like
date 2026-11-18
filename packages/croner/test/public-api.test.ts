@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 
-import * as CronerPackage from "../src/index"
+import * as CronerJob from "../src/job/index"
 
-test("cron package exposes only the lower-camel native lifecycle factory", () => {
-  expect(Object.keys(CronerPackage)).toEqual(["newCronerServer"])
-  expect(typeof CronerPackage.newCronerServer).toBe("function")
+test("croner job exposes only the schedule factory", () => {
+  expect(Object.keys(CronerJob).sort()).toEqual(["newCronerSchedule"])
+  expect(typeof CronerJob.newCronerSchedule).toBe("function")
 })

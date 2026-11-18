@@ -3,7 +3,8 @@
 这个可运行示例演示一个 NATS JetStream 遥测校验微服务：
 
 - 原始遥测写入 `TELEMETRY_RAW`；
-- Broker Subscription 作为一个普通 Core Server 接入 App 生命周期；
+- NATS 连接用 `newResourceServer` 放入 `resources(...)`，worker 停止后才 drain；
+- Broker 订阅用 `newBrokerServer` 放入 `server(...)`；
 - 合法消息写入 `TELEMETRY_VALIDATED` 后确认原消息；
 - 永久无效或达到重投阈值的消息写入 `TELEMETRY_DLQ` 后终止重投；
 - 官方 NATS Client 负责连接、重连与 JetStream 协议。
@@ -33,17 +34,17 @@ src/
 ├── telemetry.ts  # v1 数据契约与业务校验策略
 ├── nats.ts       # subject 与 Broker 类型
 ├── processor.ts  # validated、重投、ack 与 DLQ 流程
-├── runtime.ts    # JetStream 拓扑与 NATS Connection Server
-├── worker.ts     # 把 Broker Subscription 适配为 Core Server
-└── main.ts       # 创建 JetStream 资源并组装 App
+├── runtime.ts    # JetStream 拓扑与 NATS 连接资源
+├── worker.ts     # newBrokerServer 订阅
+└── main.ts       # resources(连接) 与 server(worker)
 test/
 └── telemetry.test.ts
 e2e/
 └── docker.ts     # 真实 NATS、持久化、重投、重连与排空
 ```
 
-`main.ts` 负责组合；消息校验与处理不写在入口文件。`newTelemetryServer(...)` 返回标准
-`Server`，因此 App 对 Cron、Broker Worker、Web Server 或用户自定义 Server 使用同一生命周期接口。
+`main.ts` 负责组合；消息校验与处理不写在入口文件。连接经 `newNatsConnectionResource` 放进
+`resources(...)`，`newTelemetryServer(...)` 放进 `server(...)`。停止时先结束订阅，再 drain 连接。
 
 ## 消息流程
 
@@ -79,16 +80,15 @@ Raw v1 示例：
 
 ## go-like 能力
 
-| 能力         | 使用方式                                                          |
-| ------------ | ----------------------------------------------------------------- |
-| 应用生命周期 | `newApp(server(...))`、`app.run()`                                |
-| Broker       | `@go-like/broker` 的 `newBrokerServer(...)` 返回 Core Server      |
-| NATS         | `@go-like/nats/jetstream/broker` 适配官方 JetStream Client        |
-| Context      | 传播取消、处理 deadline 与停止边界                                |
-| 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式 required-field、范围校验 |
+| 能力         | 使用方式                                                              |
+| ------------ | --------------------------------------------------------------------- |
+| 应用生命周期 | `resources(nats)`、`server(worker)`、`app.run()`                      |
+| Broker       | `@go-like/core/broker` 的 `newBrokerServer(...)`                      |
+| NATS         | `@go-like/nats/jetstream` 适配官方 Client；连接用 `newResourceServer` |
+| Context      | 传播取消、处理 deadline 与停止边界                                    |
+| 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式 required-field、范围校验     |
 
-go-like 不重新实现 Cron 或消息系统；它只让这些长期运行组件实现统一 `Server.start/stop` 契约，再交给
-App 管理。
+go-like 不重新实现消息系统。订阅留在 `server(...)`；NATS 连接是 `resources(...)` 中的原生资源，在 worker 停止之后 drain。
 
 ## 验证
 

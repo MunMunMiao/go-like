@@ -18,7 +18,7 @@
 
 ## go-like 能力
 
-使用 `@go-like/context` 贯穿故障处理，使用 `@go-like/web` 暴露可由任意标准 Fetch 运行时承接的信号入口，并使用 `@go-like/health` 对维保状态仓储执行服务 readiness 检查。
+使用 `@go-like/core/context` 贯穿故障处理，使用 `@go-like/core/web` 暴露可由任意标准 Fetch 运行时承接的信号入口，并使用 `@go-like/core/health` 对维保状态仓储执行服务 readiness 检查。
 
 ## 验证矩阵
 

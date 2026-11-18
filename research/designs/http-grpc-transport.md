@@ -1,6 +1,6 @@
 # HTTP 与 Buf gRPC：共享工作流与协议所有权
 
-研究时间：2026-08-28 至 2026-09-23。保留 Buf/Connect 集成过程中的协议选型、连接所有权与失败边界；早期 `withAddress` / `withService` 已由 `withEndpoint` 取代。当前用法与运行时限制见 [grpc-buf README](../../packages/transport/grpc-buf/README.md)和[验证声明](../../doc/reference/claims.md)。
+研究时间：2026-08-28 至 2026-09-23。保留 Buf/Connect 集成过程中的协议选型、连接所有权与失败边界；早期 `withAddress` / `withService` 已由 `withEndpoint` 取代。当前用法与运行时限制见 [connectrpc README](../../packages/connectrpc/README.md)和[验证声明](../../doc/reference/claims.md)。
 
 ## 为什么共享工作流，而不统一 wire 接口
 
@@ -68,3 +68,12 @@ Discovery resolver 由 `@go-like/client/discovery` 共享：一套 watcher cache
 - [Connect-ES 2.1.2 router](https://github.com/connectrpc/connect-es/blob/104238c58152e324ac16a99563f5eeea8ae7136d/packages/connect/src/router.ts#L77-L120)
 - [gRPC-Web 协议](https://github.com/grpc/grpc/blob/58ea2e00fcc2502c06115f5d57c864c828826243/doc/PROTOCOL-WEB.md)
 - [Connect gRPC-Web client 与 text mode 限制](https://github.com/connectrpc/connect-es/blob/104238c58152e324ac16a99563f5eeea8ae7136d/packages/connect-web/src/grpc-web-transport.ts#L117-L240)
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文。总决定见
+[ADR 0009](../adr/0009-single-core-package.md)。出处是
+[插座与插头架构（2026-11）](socket-plug-architecture/README.md)第 11.1 节。
+
+- 发现解析位于 `@go-like/core/registry`（`newDiscoveryResolver`、`selectEndpoint`）。同一包内，原先经 Core 的 Context 等待形成的环已经消失。使用者是 core 客户端和 `@go-like/connectrpc/node`。见第 11.1 节第 21 条、[D20](socket-plug-architecture/decisions.md)。上文把解析器放在 `@go-like/client/discovery` 的句子保留作当时的布局。
+- 标准 gRPC 位于 `@go-like/connectrpc` 与 `./node`。插头按所适配的生态命名，运行时绑定命名为 `/node`。见第 11.1 节第 22 条、[D23](socket-plug-architecture/decisions.md)。上文的 `@go-like/transport-grpc-buf/native` 保留作当时的位置。

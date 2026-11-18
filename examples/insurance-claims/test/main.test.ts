@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 import { newApp, server } from "@go-like/core"
 import { describe, expect, test } from "bun:test"
 import { newInsuranceClaimsHandler } from "../src/http"

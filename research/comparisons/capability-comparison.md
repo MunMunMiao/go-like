@@ -222,3 +222,13 @@ Roadmap 里的设想。横向对比必须承认这些能力存在，但不能把
 - [全部 transport 扩展](https://github.com/go-zlab/go-kratos/tree/ecd00dd24491d09642c76542f94e392c6d639336/transport)
 - [Nacos Config](https://github.com/go-zlab/go-kratos/blob/ecd00dd24491d09642c76542f94e392c6d639336/contrib/config/nacos/config.go) 与 [Nacos Registry](https://github.com/go-zlab/go-kratos/blob/ecd00dd24491d09642c76542f94e392c6d639336/contrib/registry/nacos/registry.go)
 - [Tracing provider](https://github.com/go-zlab/go-kratos/blob/ecd00dd24491d09642c76542f94e392c6d639336/tracing/provider.go) 与 [Keepalive Server](https://github.com/go-zlab/go-kratos/blob/ecd00dd24491d09642c76542f94e392c6d639336/transport/keepalive/server.go)
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文的对照表。总决定见
+[ADR 0009](../adr/0009-single-core-package.md)。出处是
+[插座与插头架构（2026-11）](../designs/socket-plug-architecture/README.md)第 11.1 节。
+
+- 日志与指标（“总体结论”第 1 条，以及“健康、可观测性与工具链”表中的日志、Metrics 与 tracing 行）：core 定义观测插座，发布 Context 优先的 `log.*` 前端，并拥有每个工作单元的埋点。提供者只经 `telemetry(...)` 或 `withTelemetry` 进入。理由是观测是 core 的基座，并覆盖非网络工作。见第 11.1 节第 1 条。
+- Cron 行：Croner 插头提供模式语义 `Schedule.next`。计时、不重叠、触发和回调排空归 `@go-like/core/job`。理由是任务运行要由 core 埋点。见第 11.1 节第 37 条、[D31](../designs/socket-plug-architecture/decisions.md)。
+- 持久任务队列行：`@go-like/bullmq/job` 的 `newBullMqJobQueue` 把应用的 Queue 作为资源接纳，构建 Worker，并通过 `dispatchJob` 持有处理器。重试执行、卡住恢复和持久化由 BullMQ 负责。见第 11.1 节第 38 条、[D31](../designs/socket-plug-architecture/decisions.md)。

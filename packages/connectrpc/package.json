@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/connectrpc",
+  "version": "0.0.1",
+  "description": "Portable Connect and gRPC-Web bridge with a Node gRPC client and server for go-like.",
+  "type": "module",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage",
+    "test:e2e:runtimes": "bun run --cwd ../.. proto:generate && bun test/e2e/portable-runtime.ts && tsx test/e2e/portable-runtime.ts"
+  },
+  "dependencies": {
+    "@connectrpc/connect-node": "2.3.0"
+  },
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.17.0",
+    "@connectrpc/connect": "^2.3.0",
+    "@go-like/core": "0.0.1"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.17.0",
+    "@connectrpc/connect": "2.3.0",
+    "@connectrpc/connect-web": "2.3.0",
+    "@go-like/core": "workspace:*",
+    "@types/node": "26.6.6"
+  },
+  "license": "MIT"
+}

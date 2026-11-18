@@ -14,11 +14,9 @@
   },
   "dependencies": {
     "@go-like/bullmq": "workspace:*",
-    "@go-like/context": "workspace:*",
     "@go-like/core": "workspace:*",
     "@go-like/croner": "workspace:*",
-    "@go-like/store": "workspace:*",
-    "@go-like/store-file": "workspace:*",
+    "@go-like/file": "workspace:*",
     "bullmq": "6.7.5",
     "croner": "11.0.0",
     "ioredis": "6.0.0"

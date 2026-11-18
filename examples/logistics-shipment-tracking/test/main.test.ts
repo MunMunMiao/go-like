@@ -1,4 +1,4 @@
-import { background, withCancel } from "@go-like/context"
+import { background, withCancel } from "@go-like/core/context"
 import { describe, expect, test } from "bun:test"
 import { newCachedShipmentTrackingService } from "../src/cache"
 import { newShipmentTrackingHandler } from "../src/http"

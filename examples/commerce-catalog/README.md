@@ -79,13 +79,13 @@ Pricing 调用显式声明为幂等，并配置最多三次有界重试。默认
 
 | 能力         | 使用方式                                                                                                                     |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| 应用生命周期 | `newApp(..., server(...))`、`app.run()`、`app.stop()`                                                                        |
+| 应用生命周期 | `newApp(..., resources(...), server(...))`、`app.run()`、`app.stop()`                                                        |
 | 服务端       | `newServer(transport(...), address(...))`，再调用 `pricing.registerHandler(server, handler)`                                 |
 | 客户端       | `newClient(withDiscovery(...), withEndpoint(...), withSelector(...), withTransport(...))`，再调用 `newPricingClient(client)` |
 | 注册发现     | Core App 的 `registrar`、Consul Registry                                                                                     |
-| 内部传输     | `@go-like/transport-http` client 与 Node server transport                                                                    |
-| 对外 Web     | Hono Handler 由 `@go-like/web/node` 承载                                                                                     |
-| 缓存         | Redis Cache 作为 App Server 管理连接生命周期                                                                                 |
+| 内部传输     | `@go-like/core/transport/http` client 与 Node server transport                                                               |
+| 对外 Web     | Hono Handler 由 `@go-like/core/web/node` 承载                                                                                |
+| 缓存         | Redis Cache 进入 `resources(...)`，连接可用后 `start` 结束                                                                   |
 | 数据契约     | 应用内 TypeScript 类型、标准 JSON 与显式业务校验                                                                             |
 
 示例只使用 go-like 公开的 App、Server、Client、Registry 与 functional options。

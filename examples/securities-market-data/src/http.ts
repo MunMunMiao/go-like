@@ -1,6 +1,6 @@
-import type { Context } from "@go-like/context"
-import { contextHandler, type Handler } from "@go-like/web"
-import { createHealthHandler } from "@go-like/web/health"
+import type { Context } from "@go-like/core/context"
+import { contextHandler, type Handler } from "@go-like/core/web"
+import { createHealthHandler } from "@go-like/core/web"
 import type { MarketQuoteCommand, PublishMarketQuote, SecuritiesMarketDataService } from "./service"
 
 function commandFrom(value: unknown): MarketQuoteCommand {

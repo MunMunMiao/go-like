@@ -1,7 +1,7 @@
 import process from "node:process"
 
 import { newApp, server } from "../../../src/index"
-import { signal } from "../../../src/node"
+import { signal } from "../../../src/node/index"
 
 const blocked = Promise.withResolvers<void>()
 const app = newApp(

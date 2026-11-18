@@ -1,55 +1,53 @@
 # Claims and evidence
 
-This page is the editorial claim ledger for the English source. It keeps implementation facts, executed results, declared coverage, runtime-source observations, pinned comparison inputs, recommendations, and evidence gaps separate.
+This page separates implementation facts, recorded command results, declared coverage, and gaps. It does not turn a source contract into a release claim.
 
 ## Evidence labels
 
-| Label             | Meaning                                                                           | Safe wording                                                                                |
-| ----------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `source`          | Current source, manifest, export, or package README confirms the contract         | “go-like exposes...” or “The provider implements...”                                        |
-| `unit-pass`       | The repository contract audit reported a command passed on the baseline checkout  | Include command, scope, candidate commit, and counts; do not generalize to E2E              |
-| `runtime-pass`    | A named runtime or physical-package command completed and its result was recorded | Name the runtime versions, command scope, and unsupported extrapolations                    |
-| `declared`        | A test, fixture, workflow, or example exists                                      | “The repository contains...” or “The lane is declared...”                                   |
-| `runtime-source`  | A portable or runtime-specific source boundary is visible                         | Say “portable by source design” or name the explicit subpath; do not claim all-runtime pass |
-| `pinned-external` | A release, commit, or official reference is recorded for a third-party comparison | Name the version/commit and verification boundary                                           |
-| `recommendation`  | Editorial guidance rather than current implementation                             | “Prefer...” or “A service should...”                                                        |
-| `gap`             | Evidence or product decision is missing                                           | Say “not established in this audit”                                                         |
+| Label             | Meaning                                                      | Safe wording                                   |
+| ----------------- | ------------------------------------------------------------ | ---------------------------------------------- |
+| `source`          | Current source, manifest, or export confirms the contract    | "The entry exports..."                         |
+| `unit-pass`       | A recorded command passed on a named checkout                | Include the command, scope, commit, and counts |
+| `runtime-pass`    | A named runtime command completed and was recorded           | Name versions and what was not extrapolated    |
+| `declared`        | A test, fixture, or example exists                           | "The repository contains..."                   |
+| `runtime-source`  | A portable or runtime-specific boundary is visible in source | Name the subpath                               |
+| `pinned-external` | A third-party release or commit was recorded for comparison  | Name the version and the boundary              |
+| `recommendation`  | Editorial guidance                                           | "Prefer..."                                    |
+| `gap`             | Evidence or a product decision is missing                    | "Not established by this audit"                |
 
-## Twenty-seven claim records
+## Claim records
 
-| ID  | Claim                                                                                                                  | Label            | Evidence or qualification                                                                                                                               |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C01 | go-like is a set of small TypeScript building blocks rather than an all-in-one application framework                   | `source`         | Root README and package boundaries; application keeps its router, framework, and native data planes                                                     |
-| C02 | `@go-like/context` exposes explicit cancellation, deadline, cause, and value APIs                                      | `source`         | `packages/context/src/index.ts` and `errors.ts`                                                                                                         |
-| C03 | Core `Server` is `start(ctx)` plus `stop(ctx)`, and Core `App` exposes `run()` plus `stop()`                           | `source`         | `packages/core/src/app.ts` current public types                                                                                                         |
-| C04 | `Server.start()` is not a readiness Promise                                                                            | `source`         | Core source comment and focused lifecycle test name                                                                                                     |
-| C05 | Core invokes sibling Server stops concurrently                                                                         | `source`         | `executeStop` in `packages/core/src/app.ts`; ordered cleanup must be composed explicitly                                                                |
-| C06 | `stopTimeout` bounds a cleanup wait and does not prove native terminal state                                           | `source`         | Core wait boundary and provider adapter terminal contracts                                                                                              |
-| C07 | `@go-like/web` uses the standard one-argument Fetch Handler                                                            | `source`         | `packages/web/src/context.ts`; Handler is `(Request) => Response \| Promise<Response>`                                                                  |
-| C08 | `@go-like/server` dispatches internal POST JSON and SSE, and is not the application's external router                  | `source`         | `packages/server/src/index.ts` Handler type and dispatcher                                                                                              |
-| C09 | `@go-like/struct` is a current public package                                                                          | `source`         | Manifest, root exports, `/codec`, `/runtime`, Client/Server imports, and tests; older package lists are stale                                           |
-| C10 | Memory Transport is process-local and instance-private                                                                 | `source`         | `@go-like/transport-memory` README and provider implementation                                                                                          |
-| C11 | defineService and endpoint bind Struct validation to JSON Fetch bodies                                                 | `source`         | `endpoint`, `server.registerHandler(endpoint, handler)`, `encodeJsonBody`, `decodeJsonBody`                                                             |
-| C12 | A service operation and a transport address are different identities                                                   | `source`         | `Client.CallRequest` fields versus `ServiceInstance.endpoints` and `withEndpoint`                                                                       |
-| C13 | Client calls make one attempt by default                                                                               | `source`         | Client default call options and explicit `withRetry` path                                                                                               |
-| C14 | Retry requires explicit replay authorization, positive total attempts, and a predicate                                 | `source`         | `RetryOptions` and `withRetry` validation                                                                                                               |
-| C15 | Retry authorization does not prove business idempotency                                                                | `recommendation` | Caller declaration is accepted; go-like does not inspect side effects or create deduplication                                                           |
-| C16 | A received response followed by feedback or cleanup failure is not replayed                                            | `source`         | `CompletedCallFailure` cleanup path in Client                                                                                                           |
-| C17 | Discovery watchers return complete replacement snapshots                                                               | `source`         | Registry `Watcher.next()` and snapshot helpers                                                                                                          |
-| C18 | An authoritative empty discovery snapshot fails closed                                                                 | `source`         | Resolver replaces the prior snapshot; filters and selection see no endpoint                                                                             |
-| C19 | P2C/EWMA selector feedback is distinct from operation circuit breaking                                                 | `source`         | Registry selector state versus `circuitBreakerMiddleware` operation key                                                                                 |
-| C20 | Config, Registry, Store, and Cache are separate contracts                                                              | `source`         | Separate package types, option sets, and provider limits                                                                                                |
-| C21 | Broker/Event preserves native delivery and does not publish universal settlement methods                               | `source`         | `BrokerEvent.native`, `eventBroker`, and portable Broker SPI                                                                                            |
-| C22 | BullMQ, Croner, NATS, Pino, Winston, OTel, and Prometheus packages are adapters or wrappers                            | `source`         | Package source and public export surfaces retain native objects/providers                                                                               |
-| C23 | Public Web streaming is not internal bidi; internal server streams are SSE                                             | `source`         | README, Streaming guide, and current unary Client/Transport dispatcher                                                                                  |
-| C24 | Generated RPC uses exact ctx-first glue; portable Fetch covers two cardinalities and managed standard gRPC covers four | `runtime-pass`   | 2026-10-28 physical packages: Node 26.12.1 and Bun 1.4.4; no browser standard-gRPC or future-version claim                                              |
-| C25 | Hono, Elysia, H3, and vanilla Fetch examples pass native Fetch handlers into a host                                    | `declared`       | Current examples and their tests; the exact result depends on a command run                                                                             |
-| C26 | Selected verification lanes require their tools to execute but do not reject an environment by runtime or tool version | `source`         | `e2e/runtime-versions.ts`, `e2e/executor.ts`, and `doc/reference/verification.md`                                                                       |
-| C27 | The baseline audit reported typecheck, unit test, format check, and 66-entry import audit success                      | `unit-pass`      | Reported by the repository contract audit for candidate commit `9385dbf...`; this page does not claim that this documentation phase reran every command |
+| ID  | Claim                                                                                                                         | Label            | Evidence                                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C01 | go-like is a set of sockets and plugs, not an all-in-one application framework                                                | `source`         | 20 packages, 75 entries. The application keeps its router and native data plane                                                                              |
+| C02 | `@go-like/core/context` exposes cancellation, deadline, cause, and values                                                     | `source`         | `packages/core/src/context/index.ts`                                                                                                                         |
+| C03 | `Server` is `start(ctx)` and `stop(ctx)`. `App` exposes `run()` and `stop()`                                                  | `source`         | `packages/core/src/lifecycle/index.ts`, `packages/core/src/app/app.ts`                                                                                       |
+| C04 | Resource `start` is awaited until admission. Server `start` may stay pending and is not a readiness promise                   | `source`         | `packages/core/src/app/tiers.ts` `admitResources`; server launch in `app.ts`                                                                                 |
+| C05 | Server stops run concurrently. Owned resources stop in reverse declaration order                                              | `source`         | `executeStop` and `stopResources`                                                                                                                            |
+| C06 | `stopTimeout` bounds one shared caller wait, including the telemetry drain, and does not prove a native terminal state        | `source`         | `executeStop` uses one `stopContext` for every stop phase                                                                                                    |
+| C07 | `@go-like/core/web` uses the standard one-argument Fetch `Handler`                                                            | `source`         | `packages/core/src/web/context.ts`                                                                                                                           |
+| C08 | `@go-like/core/server` dispatches internal POST JSON and SSE and is not the external router                                   | `source`         | `packages/core/src/server/index.ts`                                                                                                                          |
+| C09 | Struct is the `@go-like/core/struct` entry, including JSON codec helpers                                                      | `source`         | `packages/core/src/struct/index.ts`. There is no separate codec or runtime entry                                                                             |
+| C10 | Memory transport is process-local and instance-private                                                                        | `source`         | `@go-like/core/transport/memory`                                                                                                                             |
+| C11 | `defineService` binds Struct validation to JSON Fetch bodies                                                                  | `source`         | `packages/core/src/transport/service.ts`                                                                                                                     |
+| C12 | An operation and a transport address are different identities                                                                 | `source`         | `service/endpoint` versus `withEndpoint` and `ServiceInstance.endpoints`                                                                                     |
+| C13 | Client calls make one attempt by default                                                                                      | `source`         | Default call options and explicit `withRetry`                                                                                                                |
+| C14 | Retry requires authorization, a positive `maxAttempts`, and `shouldRetry`                                                     | `source`         | `packages/core/src/resilience/retry.ts`                                                                                                                      |
+| C15 | Retry authorization does not prove business idempotency                                                                       | `recommendation` | The caller declaration is accepted. Core does not inspect side effects                                                                                       |
+| C16 | A received response followed by feedback or cleanup failure is not replayed                                                   | `source`         | Client completed-call path                                                                                                                                   |
+| C17 | Discovery watchers return complete replacement snapshots                                                                      | `source`         | `Watcher.next` and snapshot helpers                                                                                                                          |
+| C18 | An authoritative empty snapshot fails closed                                                                                  | `source`         | `GO_LIKE_NO_AVAILABLE_ENDPOINT`                                                                                                                              |
+| C19 | P2C and EWMA feedback are distinct from operation circuit breaking                                                            | `source`         | Selector state versus `circuitBreakerMiddleware`                                                                                                             |
+| C20 | Config, Registry, Store, and Cache are separate sockets                                                                       | `source`         | Separate entries, options, and plug limits                                                                                                                   |
+| C21 | Broker preserves native delivery and does not publish a universal settlement method                                           | `source`         | `event.native`, `eventBroker`                                                                                                                                |
+| C22 | BullMQ, Croner, NATS, Pino, Winston, OpenTelemetry, and Prometheus plugs adapt native objects. Core owns work-unit records    | `source`         | Plug constructors and `telemetry(tel)`                                                                                                                       |
+| C23 | Public Web streaming is not internal bidi. Internal server streams are SSE                                                    | `source`         | [Streaming](/guide/streaming)                                                                                                                                |
+| C24 | Generated RPC is ctx-first. Portable Fetch covers unary and server-streaming. Managed standard gRPC covers four cardinalities | `runtime-pass`   | 2026-10-28 physical packages, Node 26.12.1 and Bun 1.4.4, on the package that is now `@go-like/connectrpc`. No browser standard-gRPC or future-version claim |
+| C25 | Hono, Elysia, H3, and vanilla Fetch examples pass a Fetch handler to a host                                                   | `declared`       | `examples/hono`, `examples/elysia`, `examples/h3`, `examples/vanilla-web`                                                                                    |
+| C26 | Verification lanes require their tools to execute and do not reject an environment by version string                          | `source`         | `e2e/runtime-versions.ts`, `e2e/executor.ts`, and [Verification](/reference/verification)                                                                    |
+| C27 | A historical audit reported typecheck, unit test, format check, and a 66-entry import audit                                   | `unit-pass`      | Commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`. That entry count is not the current 75. This page does not claim the audit was rerun                      |
 
 ## Baseline result record
-
-The research evidence supplied for this documentation phase reports:
 
 ```text
 candidate: 9385dbf5b6a7d913be56a80ade359e1bf9be8675
@@ -60,65 +58,49 @@ reported: bun run fmt:check
 counts:   2,736 unit tests, 1,514 formatted files, 66 source export entries imported
 ```
 
-The same evidence explicitly leaves these items unestablished: `build`, `doc:build`, `audit`, Docker/provider E2E, cross-runtime execution, published-tarball consumers, npm registry state, hosted CI, production adoption, and the 60-minute soak.
+That evidence leaves these items unestablished: `build`, `doc:build`, `audit`, Docker provider E2E, cross-runtime execution, published-tarball consumers, npm registry state, hosted CI, production adoption, and the 60-minute soak.
 
-The later Task 8 RPC report separately establishes a physically staged published-consumer matrix for
-`@go-like/transport-grpc-buf`: portable Fetch unary/server-streaming and managed standard-gRPC four-cardinality calls at
-Node 26.7.0 and Bun 1.4.0. That scoped result does not close the unrelated baseline gaps above.
+A later Task 8 RPC report recorded a physically staged published-consumer matrix for the managed gRPC package: portable Fetch unary and server-streaming, and managed standard gRPC four-cardinality calls, at Node 26.7.0 and Bun 1.4.0. That scoped result does not close the gaps above. The package entry is now `@go-like/connectrpc` and `@go-like/connectrpc/node`.
 
 ## Native gRPC drain status
 
-The expanded native regression runs an admitted unary request alongside a slowly consumed server stream while stopping the server. Earlier runs passed on Node 26.9.0 and Bun 1.4.2.
+The expanded native regression runs an admitted unary request beside a slowly consumed server stream while stopping the server. Earlier runs passed on Node 26.9.0 and Bun 1.4.2.
 
-On 2026-10-28, the full physical published-consumer matrix passed with Node 26.12.1 and Bun 1.4.4. It keeps the slow-consumer drain regression mandatory and also covers native four-cardinality calls, interoperability, mTLS, and browser cases. This establishes the tested managed drain behavior, not every production shutdown or cancellation scenario.
+On 2026-10-28, the full physical published-consumer matrix passed with Node 26.12.1 and Bun 1.4.4. It keeps the slow-consumer drain regression and also covers native four-cardinality calls, interoperability, mTLS, and browser cases. This establishes the tested managed drain behavior, not every production shutdown.
 
 ## Stream cancellation limits
 
-The following upstream/runtime limitations are historical observations whose fixes were not established by the latest matrix. The verified [native gRPC drain behavior](#native-grpc-drain-status) is a separate result and does not close these cancellation gaps.
+The following limitations are historical observations. The [native gRPC drain](#native-grpc-drain-status) does not close them.
 
-- **Connect 2.1.2:** after a client reads one response message, pauses iteration, and externally cancels and returns the iterator, the original deadline timer can remain active until its deadline. This was reproduced using only official Connect and `node:http2` under Node and Bun, without go-like. Handler completion and closing the managed client/server do not establish timer cleanup. The current upstream `setupSignal()` releases the deadline in `abort()` and `done()`, but not when its linked controller is aborted externally. No upstream patch or dependency upgrade is claimed here.
-- **Bun 1.4.2 Fetch:** when a server sends the first chunk and then remains silent, canceling the reader and aborting the request did not produce server response/socket closure during the bounded observation. This also reproduced with plain `node:http` plus global Fetch, without go-like or Connect, against both Node and Bun servers; Node clients closed both. This limits long-lived Fetch stream cancellation claims, including portable Connect/gRPC-Web. It does not establish a managed native gRPC defect.
+- **Connect 2.1.2.** After a client reads one response message, pauses, and cancels the iterator from outside, the original deadline timer can stay active until its deadline. This was reproduced with official Connect and `node:http2` under Node and Bun, without go-like. The upstream `setupSignal()` releases the deadline in `abort()` and `done()`, and not when its linked controller is aborted externally. No upstream patch is claimed here.
+- **Bun 1.4.2 Fetch.** When a server sends the first chunk and then stays silent, canceling the reader and aborting the request did not produce server socket closure during the bounded observation. This also reproduced with plain `node:http` and global Fetch, against both Node and Bun servers. Node clients closed both. This limits long-lived Fetch stream cancellation claims, including portable Connect and gRPC-Web.
 
-These results are scoped to the tested versions and workloads. Normal response consumption, transport interoperability, TLS admission, and full cancellation/resource cleanup are separate checks. No automatic stream replay is provided.
+No automatic stream replay is provided.
 
 ## Comparison evidence
 
-The repository records go-micro, go-kratos, and go-zlab/go-kratos comparison commits in `research/comparisons/capability-comparison.md`. A detailed comparison memo also fixed go-micro `v6.9.0`, go-kratos `v3.0.0`, and specific commits. The go-micro commit differs between those records. The English comparison therefore labels the upstream material `pinned-external` and avoids claims about an unpinned current branch.
+go-micro, go-kratos, and go-zlab/go-kratos commits are recorded in `research/comparisons/capability-comparison.md`. The go-micro commit differs between the default-branch record and the v6.9.0 memo. [Comparison](/guide/comparison) labels that material `pinned-external`.
 
-Third-party TypeScript version observations in the research ledger include NestJS `@nestjs/core@11.1.28`, Fastify `5.11.2`, Hono `4.12.34`, Elysia `1.4.29`, Koa `3.2.1`, and tRPC `@trpc/server@11.18.0`. They are comparison snapshots, not go-like compatibility commitments or benchmarks. No current NestJS or Fastify bridge exists in this repository.
+Third-party snapshots in the research ledger: NestJS `@nestjs/core@11.1.28`, Fastify `5.11.2`, Hono `4.12.34`, Elysia `1.4.29`, Koa `3.2.1`, tRPC `@trpc/server@11.18.0`. They are not compatibility commitments. No NestJS or Fastify bridge is in this repository. The Elysia example's own manifest is the pin for that example.
 
 ## Publication gate
 
-Before publishing a release-oriented statement, verify the claim at the level it uses:
+Match the sentence to a check:
 
-- **API:** inspect the current manifest export and source entrypoint;
-- **type behavior:** run the focused package typecheck or public-type test;
-- **unit behavior:** run the relevant package or root unit command and record exit status;
-- **runtime behavior:** run the target Bun or Node fixture and record the observed environment;
-- **provider behavior:** run the Docker or real-service E2E scope and record cleanup;
-- **published consumer behavior:** pack and install the physical tarball through the published scope;
-- **documentation behavior:** run `bun run doc:build` and check generated routes;
-- **release state:** independently query npm or hosted CI when claiming publication or hosted status;
-- **stability:** run the separate soak duration when claiming long-duration behavior.
+- **API:** the current manifest export and source entry;
+- **types:** the focused package typecheck or public-type test;
+- **unit:** the package or root unit command and its exit status;
+- **runtime:** the Bun or Node fixture and the observed environment;
+- **provider:** the Docker or real-service scope and its cleanup;
+- **published consumer:** a packed tarball through the published scope;
+- **documentation:** `bun run doc:build`;
+- **release state:** an npm or hosted-CI query when claiming publication;
+- **stability:** the separate soak duration when claiming long-duration behavior.
 
-A green unit run is not a green provider E2E run. A successful build is not npm publication. A source-level TLS option is not a production security policy. Keep the evidence label attached to the sentence.
+A green unit run is not a green provider run. A successful build is not npm publication. A TLS option is not an application authentication policy.
 
-## Wording patterns
+## Wording
 
-Prefer:
+Prefer "the current source exports", "the repository contains a declared lane", "the baseline audit reported", and "not established by this audit".
 
-- “The current source exposes...”
-- “The repository contains a declared E2E lane for...”
-- “The baseline audit reported...”
-- “The root HTTP client is Fetch-backed; the `/node` subpath adds...”
-- “This provider retains native acknowledgement semantics...”
-- “Not established by this audit...”
-
-Avoid:
-
-- “production-ready” without a defined release gate and evidence;
-- “runs unchanged in Bun and Node” when only a portable source path exists;
-- “exactly once,” “safe to retry,” or “graceful shutdown complete” without the corresponding business or native terminal proof;
-- “supports streaming” when the only evidence is a Web `ReadableStream`;
-- “published” because a manifest has version `0.0.1`;
-- “all providers are equivalent” when their lease, acknowledgement, TTL, or transaction models differ.
+Avoid "production-ready" without a gate, "runs unchanged in Bun and Node" for a Node-only subpath, "exactly once" or "graceful shutdown complete" without a native terminal, "supports streaming" for a Web `ReadableStream` alone, and "published" because a manifest says `0.0.1`.

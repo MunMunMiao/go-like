@@ -2,205 +2,141 @@
 
 This guide takes the shortest useful route through go-like:
 
-1. Run a standard Fetch handler.
-2. Put that handler behind a host and one Core App.
-3. Add an explicit request Context when the handler performs cancellable work.
-4. Move to the [Clinic Appointment Booking project](/guide/zero-to-one) when the basic lifecycle is clear.
+1. Run a standard Fetch handler on a Node host inside one App.
+2. Register readiness so `/readyz` can pass.
+3. Add an explicit request Context when the handler does cancellable work.
+4. Move to the [Clinic Appointment Booking project](/guide/zero-to-one) when that lifecycle is clear.
 
-go-like is not the router in this example. The handler can come from plain Web code, Hono, Elysia, H3, or another framework that exposes the standard Fetch shape.
+go-like is not the router. The handler can come from plain Web code, Hono, Elysia, H3, or another framework that exposes the standard Fetch shape.
 
 ## Before you install
 
-The repository root is private and currently records package version `0.0.1`. That version does not establish npm availability; verify publication independently before installing outside the workspace. From a checkout, use the workspace lockfile:
+The repository root is private and records package version `0.0.1`. That version does not establish npm availability. From a checkout:
 
 ```sh
 bun install --frozen-lockfile
 ```
 
-The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment. Command behavior and results, not version numbers, determine the outcome.
+The repository does not use runtime or tool versions as execution eligibility. Each selected verification lane checks that its required tools can run and records the observed environment.
 
-When a published release is independently confirmed, the intended dependency shape for a small Node-hosted Web service is:
+When a published release is independently confirmed, a small Node Web service depends on one package:
 
 ```sh
-bun add @go-like/context @go-like/core @go-like/web
+bun add @go-like/core
 ```
 
-Do not use that command as evidence that the current checkout is installable from npm.
+Logging, metrics, traces, and ecosystem backends are separate plugs. Add one only when the application constructs that native client.
 
-## One standard Web handler
+## One Web service
 
-The public `@go-like/web` contract is deliberately small:
-
-```ts
-import type { Handler } from "@go-like/web"
-
-export const handler: Handler = (request) => {
-  const url = new URL(request.url)
-  return Response.json({
-    method: request.method,
-    path: url.pathname
-  })
-}
-```
-
-`Handler` is `(request: Request) => Response | Promise<Response>`. It does not bind a port, install signal listeners, or decide how the application shuts down.
-
-## Add a Node host and Core App
-
-`@go-like/web/node` supplies a Node host around the same Fetch handler. `@go-like/core/node` supplies the process-signal adapter. The following imports and options are current public exports:
+`Handler` lives at `@go-like/core/web`. The Node host lives at `@go-like/core/web/node`. Process signals live at `@go-like/core/node`. The following shape is the current public API. Pass `signal()` yourself: core does not install signal handlers. Pass `readyProbe(probes)` on the same registry the health handler uses, or `/readyz` stays closed.
 
 ```ts
-import process from "node:process"
-
-import { afterStart, name, newApp, server, stopTimeout } from "@go-like/core"
+import { name, newApp, readyProbe, server, version } from "@go-like/core"
+import { newProbeRegistry } from "@go-like/core/health"
 import { signal } from "@go-like/core/node"
-import type { Handler } from "@go-like/web"
-import { newNodeServer, port } from "@go-like/web/node"
+import { contextHandler, createHealthHandler, requestContext } from "@go-like/core/web"
+import { newNodeServer, port } from "@go-like/core/web/node"
 
-const handler: Handler = (request) => {
-  const path = new URL(request.url).pathname
-  return Response.json({ message: "hello from go-like", path })
-}
+const probes = newProbeRegistry()
+probes.register("ready", "warmup", async () => {
+  // Check a process-local dependency here. Return to pass, throw to fail.
+})
 
-const webServer = newNodeServer(handler, port(3000))
-const app = newApp(
-  name("hello"),
-  server(webServer),
-  stopTimeout(30_000),
-  signal(),
-  afterStart(async function announceWebEndpoint(ctx): Promise<void> {
-    await webServer.endpoint(ctx)
-    process.stdout.write("GO_LIKE_EXAMPLE_READY=hello\n")
+const health = createHealthHandler(probes)
+const handler = contextHandler(async (ctx, request) => {
+  const { pathname } = new URL(request.url)
+  if (pathname === "/livez" || pathname === "/readyz") return await health(request)
+  return Response.json({
+    path: pathname,
+    hasContext: requestContext(request) !== null && ctx.err() === null
   })
+})
+
+const web = newNodeServer(handler, port(3000))
+export const app = newApp(
+  signal(),
+  name("hello-web"),
+  version("v1"),
+  readyProbe(probes),
+  server(web)
 )
 
 await app.run()
 ```
 
-`GO_LIKE_EXAMPLE_READY=hello` proves only that this Web endpoint has obtained its address. It does not mean a Store, broker, worker, or business policy is ready. For application admission policy and optional health routes, see [Health and observability](/guide/health-observability).
+`run()` resolves after the App stops. `Ctrl-C` delivers `SIGINT`. `signal()` maps the first `SIGTERM`, `SIGQUIT`, or `SIGINT` to the same idempotent `App.stop()` and sets `process.exitCode` to `128` plus the signal number. A later signal is left to the runtime.
 
-Save this as `src/main.ts` in a workspace application and run it with:
-
-```sh
-bun run src/main.ts
-```
-
-Wait for the `GO_LIKE_EXAMPLE_READY=hello` line before sending traffic. Then, in another terminal:
-
-```sh
-curl -i http://127.0.0.1:3000/hello
-```
-
-Press `Ctrl-C` in the service terminal. `signal()` maps the first `SIGTERM`, `SIGQUIT`, or `SIGINT` to the same idempotent `App.stop()` operation. It does not provide a second-signal force-stop API; after the first signal, the adapter removes its own listeners and the runtime handles a later signal normally.
+Empty liveness passes. Empty readiness fails closed. `readyProbe` passes only after startup has finished and before stop begins. See [Health and observability](/guide/health-observability).
 
 ### First checkpoint
 
-You should now be able to answer four different questions:
-
-- Which function owns the URL route? The application or Web framework handler.
-- Which object owns the listening resource? `webServer`.
-- Which object coordinates the resource? `app`.
-- What does the stop timeout mean? It bounds the Core cleanup wait; it does not prove that every uncooperative native resource is already terminal.
+- The handler owns the URL route.
+- `web` owns the listening socket.
+- `app` admits that server, then stops it.
+- `stopTimeout`, when set, bounds how long `run()` waits. It does not by itself finish a native socket that ignores shutdown.
 
 ## Add a request Context
 
-Use `contextHandler` when the handler needs cancellation, a deadline, or request-scoped values. It bridges `Request.signal` to a private go-like `Context` and leaves the Web ABI unchanged:
+`contextHandler` adapts `(ctx, request)` to a Fetch `Handler`. The host stores the request Context on the `Request`. `requestContext(request)` reads it back. The Context carries AppInfo and, when telemetry is installed, the `http.server` span. It is canceled when the request ends or aborts.
 
 ```ts
-import { contextHandler, type Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import { contextHandler, type Handler } from "@go-like/core/web"
 
-export const handler: Handler = contextHandler(async (ctx, request) => {
-  if (ctx.err() !== null) {
-    return Response.json({ code: "request_canceled" }, { status: 499 })
-  }
-
+export const handler: Handler = contextHandler(async (ctx: Context, request: Request) => {
+  if (ctx.err() !== null) return new Response(null, { status: 499 })
   const url = new URL(request.url)
-  const [deadline, hasDeadline] = ctx.deadline()
-  return Response.json({
-    path: url.pathname,
-    hasDeadline,
-    deadline: hasDeadline ? deadline.toISOString() : null
-  })
+  return Response.json({ path: url.pathname })
 })
 ```
 
-The Context contract is intentionally Go-shaped but JavaScript-native:
-
-```ts
-interface Context {
-  deadline(): readonly [Date, boolean]
-  done(): AbortSignal | null
-  err(): ContextError | null
-  value(key: unknown): unknown
-}
-```
-
-Use `withTimeout`, `withCancel`, and `cause` from `@go-like/context` inside application operations. Pass the Context as the first argument rather than putting it into a mutable options bag:
-
-```ts
-import { background, cause, withTimeout } from "@go-like/context"
-
-const [operationContext, cancel] = withTimeout(background(), 2_000)
-try {
-  await repository.read(operationContext, "appointment-1")
-} catch (error) {
-  const operationCause = cause(operationContext)
-  // Keep the operation error and cancellation cause distinct in real error policy.
-  void error
-  void operationCause
-} finally {
-  cancel()
-}
-```
-
-`withoutCancel(ctx)` keeps Context values while removing the parent's deadline and cancellation. Core uses this distinction for long-lived server ownership and shutdown cleanup. See [Architecture](/guide/architecture) before using it to detach work yourself.
+For work that continues after the handler returns a body, also observe `request.signal`. `contextHandler` ends its Context when the handler returns the `Response`.
 
 ## Use an existing Fetch framework
 
-go-like does not publish a second router. The current examples pass native framework handlers directly:
+Hono, Elysia, and H3 examples pass the framework Fetch function to `newNodeServer` and put that host in `server(...)`. The framework keeps routes and middleware.
 
 ```ts
 import { Hono } from "hono"
-import { newNodeServer, port } from "@go-like/web/node"
+import { name, newApp, server } from "@go-like/core"
+import { signal } from "@go-like/core/node"
+import { newNodeServer, port } from "@go-like/core/web/node"
 
-const framework = new Hono().get("/users/:id", (context) => {
-  return context.json({ id: context.req.param("id") })
-})
+const app = new Hono()
+app.get("/hello", (c) => c.json({ ok: true }))
 
-const webServer = newNodeServer(framework.fetch, port(3000))
+const web = newNodeServer(app.fetch, port(3000))
+await newApp(signal(), name("hono"), server(web)).run()
 ```
 
-The repository contains the same integration shape for Hono, Elysia, and H3 in `examples/hono`, `examples/elysia`, and `examples/h3`. These examples demonstrate a native Fetch handler plus a go-like-managed Node host; they are not go-like router wrappers.
+The runnable copies are `examples/hono`, `examples/elysia`, `examples/h3`, and `examples/vanilla-web`.
 
 ## Learn in order
 
-| Stage | Page or example                                         | New idea                                                                       |
-| ----- | ------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 1     | `examples/vanilla-web`                                  | Handler, host, App, signal, and a real Node bind                               |
-| 2     | [Architecture](/guide/architecture)                     | Context ownership, admission, terminal state, and shutdown order               |
-| 3     | `examples/bank-transfer-gateway`                        | Typed `Endpoint`, `Struct`, Client, Server, and Memory Transport               |
-| 4     | [Clinic project](/guide/zero-to-one)                    | A business invariant, internal policy call, health, tests, and troubleshooting |
-| 5     | [Service calls](/guide/service-call)                    | Discovery, filters, selectors, retry authorization, and cleanup                |
-| 6     | [Configuration and state](/guide/config-registry-store) | Why Config, Registry, Store, and Cache are separate contracts                  |
-| 7     | [Broker and events](/guide/broker-events)               | Native delivery and settlement semantics                                       |
-| 8     | [Health and observability](/guide/health-observability) | Explicit probes, metrics, tracing, logging, and security boundaries            |
+1. This page: one host, one App, one ready probe.
+2. [Clinic Appointment Booking](/guide/zero-to-one): a domain invariant and an internal unary call.
+3. [Architecture](/guide/architecture): resource tier, server tier, and budgets.
+4. [Service calls](/guide/service-call), then [Configuration, registry, store, and cache](/guide/config-registry-store).
+5. [Health and observability](/guide/health-observability) when you add logs, metrics, or traces.
 
-## Checkout commands for the existing examples
+## Checkout commands
 
-The example directories are private workspace applications. Copying one directory does not make an independently installable package. From the repository root:
+From the repository root, after `bun install --frozen-lockfile`:
 
 ```sh
-bun run --cwd examples/vanilla-web start
 bun run --cwd examples/vanilla-web test:unit
-bun run --cwd examples/healthcare-appointments typecheck
 bun run --cwd examples/healthcare-appointments test:unit
 ```
 
-The `start` scripts build the root packages first and then run the prepared application. Provider Docker, cross-runtime, and published-consumer checks use the repository E2E runner; see [Verification](/reference/verification) before running them.
+Those commands typecheck and run the example unit tests. They do not start Docker or prove npm publication.
 
 ## First-run failures
 
-- If the ready line never appears, inspect the service terminal for a build, bind, or `afterStart` error. Do not treat an open process as proof that the listener was admitted.
-- If the command reports `EADDRINUSE`, choose another port and use the same port in the `port(...)` option and the `curl` URL. Do not start a second copy on the occupied port.
-- If a copied app cannot resolve `@go-like/*`, run it from the repository root after `bun install --frozen-lockfile`; the current `0.0.1` workspace packages are not an npm installation.
-- If a runtime rejects the source syntax, record the observed environment and run the corresponding scoped check before treating it as an API failure. A version difference alone is neither a failure explanation nor an exclusion.
+| What you see                                    | What it usually means                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `/readyz` returns 503                           | The registry has no passing readiness probe. Register one, including `readyProbe(probes)` if the App itself should count.      |
+| The process exits on `SIGTERM` without draining | `signal()` was omitted.                                                                                                        |
+| `TypeError: pass telemetry with telemetry(...)` | A `Telemetry` bundle was passed to `server(...)` or `resources(...)`. Use `telemetry(tel)`.                                    |
+| The port is already in use                      | Another process holds it. The host error is the runtime's listen error.                                                        |
+| `Cannot find package`                           | The workspace install has not been run, or the import still uses a pre-migration specifier. See [Migration](/guide/migration). |

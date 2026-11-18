@@ -2,16 +2,16 @@
 
 ## 建议阅读路径
 
-1. `vanilla-web`：用标准 Fetch Handler 跑通最小 Web Server 与 App 生命周期。
-2. `hono`：把现有 Hono 应用接入同一 Web 生命周期，不学习第二套路由 API。
-3. `bank-transfer-gateway`：跑通类型化 endpoint/JSON codec → Client → Memory Transport → unary Server。
-4. `commerce-catalog`：加入 Registry、Redis Cache 与真实 Docker 依赖。
-5. `enterprise-platform-runtime`：查看 Config、Registry、可观测性与服务调用的完整装配。
+1. `vanilla-web`：用标准 Fetch Handler 跑通 `@go-like/core/web` 与 App 生命周期。
+2. `hono`：把现有 Hono 应用的 `app.fetch` 交给同一个 Web 宿主。
+3. `bank-transfer-gateway`：跑通类型化 endpoint、Client、Memory Transport 与 unary Server。
+4. `commerce-catalog`：加入 `@go-like/consul` 与 `@go-like/redis`。
+5. `enterprise-platform-runtime`：配置、注册、HTTP 调用，以及 `@go-like/otel`、`@go-like/pino`、`@go-like/prometheus`。
 
 ## 目录范围
 
 本目录是 go-like 可执行案例入口，覆盖行业微服务、Worker、scheduler、message consumer 以及第三方 Web
-框架接入。案例只随真实业务不变量或接入需求增加，目录中的可运行程序就是维护对象。
+框架接入。案例只随真实业务不变量或接入需求增加，目录中的可运行程序就是维护对象。共 44 个示例。
 
 ## 直接运行
 
@@ -36,10 +36,12 @@ bun run --filter @go-like/example-retail-inventory-reservation start
 案例（例如 `commerce-catalog`、`saas-tenant-api`、`payments-ledger`、`iot-telemetry`、
 `batch-reporting`、`enterprise-platform-runtime`）的默认启动依赖真实 Consul、Redis、PostgreSQL、
 NATS、Vault 或 OpenTelemetry Collector；先按各案例 README 启动其固定版本 Docker 依赖，再执行
-相同的 `start` 命令。`iot-telemetry` 和 `batch-reporting` 分别把消息消费与定时任务适配为 Core
-Server，不伪装成 HTTP 服务。`cybersecurity-alert-triage` 默认使用固定
+相同的 `start` 命令。`iot-telemetry` 用 `@go-like/nats` 消费 JetStream。`batch-reporting` 用
+`@go-like/croner`、`@go-like/bullmq` 与 `@go-like/file`，不监听 HTTP。`cybersecurity-alert-triage` 默认使用固定
 Config、不注册 Registry，并以内存台账保存结果，可直接运行；其可选 etcd Config、Registry 与 Store
 接入由固定 digest Docker E2E 验证。
+
+每个示例都依赖 `@go-like/core`。下表“插头”列只写除此之外的 `@go-like/*` 包。
 
 单元测试与可执行程序 E2E 分开运行；后者会真实启动、探测并停止程序，需要中间件的案例会使用 Docker：
 
@@ -62,56 +64,56 @@ Tier 是案例分类，不是最近一次测试结果或生产可靠性等级。
 
 ## 业务案例
 
-|   # | 案例                                                                         | 行业与业务不变量                           | 当前 go-like 微服务能力 / 调用链                                                     | Tier        | Docker 判定                                           |
-| --: | ---------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------- |
-|   1 | [`commerce-catalog`](./commerce-catalog/README.md)                           | 电商：缓存失效时仍从 Pricing 获取权威价格  | Hono/Web → Cache → Client + Retry → HTTP Pricing；Docker 注入 Redis/Consul           | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
-|   2 | [`saas-tenant-api`](./saas-tenant-api/README.md)                             | SaaS：配置、缓存和限流不得跨租户泄漏       | Hono/Web → Config + Cache → Token Bucket；Consul Store 保存 runtime state            | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
-|   3 | [`payments-ledger`](./payments-ledger/README.md)                             | 支付：分录借贷平衡且幂等键只能生效一次     | Web + Core-owned outbox publisher Server → PostgreSQL ledger/outbox → NATS JetStream | production  | 是：PostgreSQL 18.4、NATS 2.14.4                      |
-|   4 | [`iot-telemetry`](./iot-telemetry/README.md)                                 | IoT：稳定事件标识供下游幂等收敛重复        | NATS JetStream → Broker consumer → validation/dedup → Ack 或 DLQ                     | production  | 是：NATS JetStream 2.14.4                             |
-|   5 | [`batch-reporting`](./batch-reporting/README.md)                             | 报表：重跑保持窗口标识，默认输出到stdout   | Croner/BullMQ → stdout publisher → Store checkpoint；持久幂等输出待接入              | production  | 是：Redis 8.10.0；BullMQ/Croner 在应用进程            |
-|   6 | [`enterprise-platform-runtime`](./enterprise-platform-runtime/README.md)     | 企业平台：App 统一停止配置、服务与遥测组件 | Vault Config/Store + Consul Registry → unary HTTP → OTel/Pino/Prometheus             | production  | 是：Consul 2.0.2、Vault 2.0.3、OTel Collector 0.157.0 |
-|   7 | [`retail-inventory-reservation`](./retail-inventory-reservation/README.md)   | 零售：并发预占不超卖且重试不重复扣减       | Web → inventory use case → immediately usable Memory Cache                           | integration | 否：进程内 Cache 与单元测试                           |
-|   8 | [`marketplace-order-fulfillment`](./marketplace-order-fulfillment/README.md) | 平台电商：履约事件合法迁移且重投幂等       | Web → fulfillment state machine → Core-owned Worker                                  | integration | 否：结构化 Worker 与内存仓储                          |
-|   9 | [`subscription-billing`](./subscription-billing/README.md)                   | 订阅：升降级差额按剩余账期确定性结算       | Object Config → proration policy → Web                                               | integration | 否：Object Source 与内存账单仓储                      |
-|  10 | [`bank-transfer-gateway`](./bank-transfer-gateway/README.md)                 | 银行：转账只能路由到适用清算网络           | Web → typed endpoint/JSON codec → Client → Memory Transport → unary Server           | integration | 否：仅真实 Memory Transport，不连接银行网络           |
-|  11 | [`insurance-claims`](./insurance-claims/README.md)                           | 保险：赔付受承保期、免赔额和累计上限约束   | Web → 同步 claim policy/repository；Core-owned 生命周期 Worker                       | integration | 否：结构化 Worker 与内存仓储                          |
-|  12 | [`fraud-risk-scoring`](./fraud-risk-scoring/README.md)                       | 风控：受控信号评分且依赖失败时熔断         | Web → Memory Cache → Circuit Breaker → scoring dependency                            | integration | 否：进程内 Cache/Breaker                              |
-|  13 | [`securities-market-data`](./securities-market-data/README.md)               | 证券：行情序列不倒退且拒绝冲突重放         | Web ingest → ordered quote repository → Health readiness                             | integration | 否：进程内快照与 Probe                                |
-|  14 | [`healthcare-appointments`](./healthcare-appointments/README.md)             | 医疗：同一医生有效预约时段不得重叠         | Web → Client → Memory Transport → unary policy Server → booking                      | core        | 否：仅真实 Memory Transport，不连接外部医疗系统       |
-|  15 | [`laboratory-results`](./laboratory-results/README.md)                       | 检验：结果只能进入匹配就诊上下文           | Web → local audit sink；Metadata allowlist 与 Health 独立测试                        | integration | 否：进程内 Metadata/Probe                             |
-|  16 | [`pharmacy-prescription`](./pharmacy-prescription/README.md)                 | 医药：库存调用失败不写发药状态             | Web → memory inventory；独立测试 bounded Retry gateway                               | integration | 否：内存 Inventory gateway                            |
-|  17 | [`logistics-shipment-tracking`](./logistics-shipment-tracking/README.md)     | 物流：乱序和重复事件不得使状态倒退         | Web → ordered transition → process-local Memory Cache projection                     | integration | 否：进程内 Memory Cache                               |
-|  18 | [`warehouse-wave-picking`](./warehouse-wave-picking/README.md)               | 仓储：拣货任务只能由一个有效租约执行       | Web + lease repository → structural pick-worker Core Server                          | integration | 否：结构化 Worker 与内存租约                          |
-|  19 | [`last-mile-dispatch`](./last-mile-dispatch/README.md)                       | 配送：订单只能派给满足容量约束的节点       | Web → capacity-aware dispatch；独立 Health readiness probe                           | integration | 否：进程内目录与 Probe                                |
-|  20 | [`airline-irregular-operations`](./airline-irregular-operations/README.md)   | 航空：旅客只保留一个有效航变处置结果       | Web → Registry selector；可选 ZooKeeper App 注册                                     | integration | 否：默认静态集合；真实 ZooKeeper 由环境注入           |
-|  21 | [`hotel-room-reservation`](./hotel-room-reservation/README.md)               | 酒店：跨夜预留不超卖且显式释放恢复库存     | Web → nightly room repository；独立 Health probe                                     | core        | 否：进程内仓储与 Probe                                |
-|  22 | [`public-transit-arrivals`](./public-transit-arrivals/README.md)             | 公交：过期到站预测不得作为当前结果         | Web → freshness filter → Health feed-freshness probe                                 | core        | 否：进程内预测仓储与 Probe                            |
-|  23 | [`manufacturing-maintenance`](./manufacturing-maintenance/README.md)         | 制造：同一故障窗口只创建一个维保工单       | Web → fault-window dedup → Health repository-readiness probe                         | integration | 否：进程内工单仓储与 Probe                            |
-|  24 | [`energy-meter-settlement`](./energy-meter-settlement/README.md)             | 能源：使用配置快照与安全整数金额结算       | Object Config tariff snapshot → integer settlement → Web                             | integration | 否：Object Config 与纯结算规则                        |
-|  25 | [`ev-charging-control`](./ev-charging-control/README.md)                     | 充电：分配不超容量且离线站点不接单         | Web → station capacity/idempotency；独立 Health readiness probe                      | integration | 否：进程内站点目录与 Probe                            |
-|  26 | [`smart-agriculture-irrigation`](./smart-agriculture-irrigation/README.md)   | 农业：数据过期时不得继续灌溉               | Config policy snapshot → stale-reading guard → Web                                   | core        | 否：Object Config 与进程内读数                        |
-|  27 | [`telecom-service-provisioning`](./telecom-service-provisioning/README.md)   | 电信：重试不得重复分配 SIM 或资源          | Web → Client → Memory Transport → unary Server → provisioning                        | integration | 否：仅真实 Memory Transport，不连接 OSS/BSS           |
-|  28 | [`media-transcoding-pipeline`](./media-transcoding-pipeline/README.md)       | 媒体：相同转码任务只产生确定性结果         | Web → idempotent worker → Core-owned Server                                          | integration | 否：结构化 Worker 与内存结果仓储                      |
-|  29 | [`live-game-matchmaking`](./live-game-matchmaking/README.md)                 | 游戏：同区近似水平匹配且玩家不重复入队     | Web → Registry selector；可选 Kubernetes EndpointSlice App 注册                      | core        | 否：默认静态集合；真实 Kubernetes API 由环境注入      |
-|  30 | [`ad-campaign-serving`](./ad-campaign-serving/README.md)                     | 广告：投放不得突破预算和请求限流           | Web → Token Bucket → process-local Memory Cache → Circuit Breaker creative source    | integration | 否：进程内 Cache/Limiter/Breaker                      |
-|  31 | [`learning-enrollment`](./learning-enrollment/README.md)                     | 教育：容量预占不负且同请求预占幂等         | Web → Memory Transport capacity service → Core-owned Server → enrollment             | core        | 否：仅真实 Memory Transport，不连接数据库             |
-|  32 | [`government-permit-workflow`](./government-permit-workflow/README.md)       | 政务：按材料政策审核且重复提交幂等         | Web → permit repository；显式 processNext → Core-owned Worker                        | integration | 否：结构化 Worker 与内存仓储                          |
-|  33 | [`real-estate-search-index`](./real-estate-search-index/README.md)           | 房地产：撤回房源不得继续显示可售           | Web → revision-aware index → process-local Memory Cache                              | core        | 否：进程内 Memory Cache                               |
-|  34 | [`restaurant-kitchen-routing`](./restaurant-kitchen-routing/README.md)       | 餐饮：任务只分配给可用档口且分配幂等       | Web → Health + Registry selector；可选真实 mDNS App 注册                             | core        | 否：默认静态集合；mDNS 模式使用真实 UDP multicast     |
-|  35 | [`cold-chain-monitoring`](./cold-chain-monitoring/README.md)                 | 冷链：配置快照判温且读数序列只增不减       | Object Config limits → sequence ledger → Web                                         | integration | 否：Object Config 与内存台账                          |
-|  36 | [`customer-support-routing`](./customer-support-routing/README.md)           | 客服：语言技能筛选并在候选坐席间轮转       | Web → language/skill filter → Registry selector → agent                              | core        | 否：静态 ServiceInstance 集合                         |
-|  37 | [`notification-delivery`](./notification-delivery/README.md)                 | 通知：有界重试且请求重放不重复投递         | Web/Winston → Retry → typed Event → Memory Broker/Store projection                   | integration | 否：明确的进程内 Broker、Store 与 Provider            |
-|  38 | [`cybersecurity-alert-triage`](./cybersecurity-alert-triage/README.md)       | 安全：规则取最高严重度且重复上报幂等       | Config + Health → ledger；可选 etcd Config/Registry/Store                            | production  | 是：固定 digest etcd 3.7.1 Docker E2E                 |
-|  39 | [`digital-identity-verification`](./digital-identity-verification/README.md) | 身份：请求只进入受信校验路径且不泄漏证件   | Web → timeout/Circuit Breaker → provider；独立 Health Handler                        | integration | 否：内存 Identity Provider                            |
-|  40 | [`emergency-response-dispatch`](./emergency-response-dispatch/README.md)     | 公共安全：按优先级校验调度期限             | Web → zone/service/readiness filter → Registry selector → responder                  | integration | 否：静态 ServiceInstance 集合                         |
+|   # | 案例                                                                         | 行业与业务不变量                           | 当前调用链                                                                    | 插头                                  | Tier        | Docker 判定                                           |
+| --: | ---------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------- | ----------- | ----------------------------------------------------- |
+|   1 | [`commerce-catalog`](./commerce-catalog/README.md)                           | 电商：缓存失效时仍从 Pricing 获取权威价格  | Hono → `@go-like/core/web` → Redis Cache → Client → HTTP Pricing              | consul、redis                         | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
+|   2 | [`saas-tenant-api`](./saas-tenant-api/README.md)                             | SaaS：配置、缓存和限流不得跨租户泄漏       | Hono → Config + Redis Cache → Token Bucket；Consul Store 保存 runtime state   | consul、pino、redis                   | production  | 是：Consul 2.0.2、Redis 8.10.0                        |
+|   3 | [`payments-ledger`](./payments-ledger/README.md)                             | 支付：分录借贷平衡且幂等键只能生效一次     | Web → outbox `newResourceServer` → PostgreSQL → 应用直接持有的 NATS JetStream | 无                                    | production  | 是：PostgreSQL 18.4、NATS 2.14.4                      |
+|   4 | [`iot-telemetry`](./iot-telemetry/README.md)                                 | IoT：稳定事件标识供下游幂等收敛重复        | NATS JetStream Broker → 校验与去重 → Ack 或 DLQ                               | nats                                  | production  | 是：NATS JetStream 2.14.4                             |
+|   5 | [`batch-reporting`](./batch-reporting/README.md)                             | 报表：重跑保持窗口标识，默认输出到 stdout  | Croner Schedule + BullMQ worker → stdout；File Store 保存 checkpoint          | bullmq、croner、file                  | production  | 是：Redis 8.10.0；BullMQ/Croner 在应用进程            |
+|   6 | [`enterprise-platform-runtime`](./enterprise-platform-runtime/README.md)     | 企业平台：App 统一停止配置、服务与遥测组件 | Vault Config/Store + Consul Registry → unary HTTP → OTel/Pino/Prometheus      | consul、otel、pino、prometheus、vault | production  | 是：Consul 2.0.2、Vault 2.0.3、OTel Collector 0.157.0 |
+|   7 | [`retail-inventory-reservation`](./retail-inventory-reservation/README.md)   | 零售：并发预占不超卖且重试不重复扣减       | Web → inventory → Memory Cache                                                | 无                                    | integration | 否：进程内 Cache 与单元测试                           |
+|   8 | [`marketplace-order-fulfillment`](./marketplace-order-fulfillment/README.md) | 平台电商：履约事件合法迁移且重投幂等       | Web → fulfillment → Worker                                                    | 无                                    | integration | 否：结构化 Worker 与内存仓储                          |
+|   9 | [`subscription-billing`](./subscription-billing/README.md)                   | 订阅：升降级差额按剩余账期确定性结算       | Object Config → proration → Web                                               | 无                                    | integration | 否：Object Source 与内存账单仓储                      |
+|  10 | [`bank-transfer-gateway`](./bank-transfer-gateway/README.md)                 | 银行：转账只能路由到适用清算网络           | Web → typed endpoint → Client → Memory Transport → unary Server               | 无                                    | integration | 否：仅 Memory Transport，不连接银行网络               |
+|  11 | [`insurance-claims`](./insurance-claims/README.md)                           | 保险：赔付受承保期、免赔额和累计上限约束   | Web → claim policy；生命周期 Worker                                           | 无                                    | integration | 否：结构化 Worker 与内存仓储                          |
+|  12 | [`fraud-risk-scoring`](./fraud-risk-scoring/README.md)                       | 风控：受控信号评分且依赖失败时熔断         | Web → Memory Cache → Circuit Breaker → scoring                                | 无                                    | integration | 否：进程内 Cache/Breaker                              |
+|  13 | [`securities-market-data`](./securities-market-data/README.md)               | 证券：行情序列不倒退且拒绝冲突重放         | Web ingest → ordered repository → Health readiness                            | 无                                    | integration | 否：进程内快照与 Probe                                |
+|  14 | [`healthcare-appointments`](./healthcare-appointments/README.md)             | 医疗：同一医生有效预约时段不得重叠         | Web → Client → Memory Transport → unary policy Server                         | 无                                    | core        | 否：仅 Memory Transport，不连接外部医疗系统           |
+|  15 | [`laboratory-results`](./laboratory-results/README.md)                       | 检验：结果只能进入匹配就诊上下文           | Web → local audit；Metadata allowlist 与 Health                               | 无                                    | integration | 否：进程内 Metadata/Probe                             |
+|  16 | [`pharmacy-prescription`](./pharmacy-prescription/README.md)                 | 医药：库存调用失败不写发药状态             | Web → memory inventory；bounded Retry                                         | 无                                    | integration | 否：内存 Inventory gateway                            |
+|  17 | [`logistics-shipment-tracking`](./logistics-shipment-tracking/README.md)     | 物流：乱序和重复事件不得使状态倒退         | Web → ordered transition → Memory Cache                                       | 无                                    | integration | 否：进程内 Memory Cache                               |
+|  18 | [`warehouse-wave-picking`](./warehouse-wave-picking/README.md)               | 仓储：拣货任务只能由一个有效租约执行       | Web + lease → pick worker                                                     | 无                                    | integration | 否：结构化 Worker 与内存租约                          |
+|  19 | [`last-mile-dispatch`](./last-mile-dispatch/README.md)                       | 配送：订单只能派给满足容量约束的节点       | Web → capacity-aware dispatch；Health readiness                               | 无                                    | integration | 否：进程内目录与 Probe                                |
+|  20 | [`airline-irregular-operations`](./airline-irregular-operations/README.md)   | 航空：旅客只保留一个有效航变处置结果       | Web → Registry selector；可选 ZooKeeper 注册                                  | zookeeper                             | integration | 否：默认静态集合；真实 ZooKeeper 由环境注入           |
+|  21 | [`hotel-room-reservation`](./hotel-room-reservation/README.md)               | 酒店：跨夜预留不超卖且显式释放恢复库存     | Web → nightly room repository；Health probe                                   | 无                                    | core        | 否：进程内仓储与 Probe                                |
+|  22 | [`public-transit-arrivals`](./public-transit-arrivals/README.md)             | 公交：过期到站预测不得作为当前结果         | Web → freshness filter → Health feed-freshness probe                          | 无                                    | core        | 否：进程内预测仓储与 Probe                            |
+|  23 | [`manufacturing-maintenance`](./manufacturing-maintenance/README.md)         | 制造：同一故障窗口只创建一个维保工单       | Web → fault-window dedup → Health repository-readiness probe                  | 无                                    | integration | 否：进程内工单仓储与 Probe                            |
+|  24 | [`energy-meter-settlement`](./energy-meter-settlement/README.md)             | 能源：使用配置快照与安全整数金额结算       | Object Config tariff snapshot → integer settlement → Web                      | 无                                    | integration | 否：Object Config 与纯结算规则                        |
+|  25 | [`ev-charging-control`](./ev-charging-control/README.md)                     | 充电：分配不超容量且离线站点不接单         | Web → station capacity；Health readiness                                      | 无                                    | integration | 否：进程内站点目录与 Probe                            |
+|  26 | [`smart-agriculture-irrigation`](./smart-agriculture-irrigation/README.md)   | 农业：数据过期时不得继续灌溉               | Config policy snapshot → stale-reading guard → Web                            | 无                                    | core        | 否：Object Config 与进程内读数                        |
+|  27 | [`telecom-service-provisioning`](./telecom-service-provisioning/README.md)   | 电信：重试不得重复分配 SIM 或资源          | Web → Client → Memory Transport → unary Server                                | 无                                    | integration | 否：仅 Memory Transport，不连接 OSS/BSS               |
+|  28 | [`media-transcoding-pipeline`](./media-transcoding-pipeline/README.md)       | 媒体：相同转码任务只产生确定性结果         | Web → idempotent worker                                                       | 无                                    | integration | 否：结构化 Worker 与内存结果仓储                      |
+|  29 | [`live-game-matchmaking`](./live-game-matchmaking/README.md)                 | 游戏：同区近似水平匹配且玩家不重复入队     | Web → Registry selector；可选 Kubernetes EndpointSlice 注册                   | kubernetes                            | core        | 否：默认静态集合；真实 Kubernetes API 由环境注入      |
+|  30 | [`ad-campaign-serving`](./ad-campaign-serving/README.md)                     | 广告：投放不得突破预算和请求限流           | Web → Token Bucket → Memory Cache → Circuit Breaker                           | 无                                    | integration | 否：进程内 Cache/Limiter/Breaker                      |
+|  31 | [`learning-enrollment`](./learning-enrollment/README.md)                     | 教育：容量预占不负且同请求预占幂等         | Web → Memory Transport capacity service → enrollment                          | 无                                    | core        | 否：仅 Memory Transport，不连接数据库                 |
+|  32 | [`government-permit-workflow`](./government-permit-workflow/README.md)       | 政务：按材料政策审核且重复提交幂等         | Web → permit repository；显式 processNext → Worker                            | 无                                    | integration | 否：结构化 Worker 与内存仓储                          |
+|  33 | [`real-estate-search-index`](./real-estate-search-index/README.md)           | 房地产：撤回房源不得继续显示可售           | Web → revision-aware index → Memory Cache                                     | 无                                    | core        | 否：进程内 Memory Cache                               |
+|  34 | [`restaurant-kitchen-routing`](./restaurant-kitchen-routing/README.md)       | 餐饮：任务只分配给可用档口且分配幂等       | Web → Health + Registry selector；可选 mDNS 注册                              | mdns                                  | core        | 否：默认静态集合；mDNS 模式使用真实 UDP multicast     |
+|  35 | [`cold-chain-monitoring`](./cold-chain-monitoring/README.md)                 | 冷链：配置快照判温且读数序列只增不减       | Object Config limits → sequence ledger → Web                                  | 无                                    | integration | 否：Object Config 与内存台账                          |
+|  36 | [`customer-support-routing`](./customer-support-routing/README.md)           | 客服：语言技能筛选并在候选坐席间轮转       | Web → language/skill filter → Registry selector                               | 无                                    | core        | 否：静态 ServiceInstance 集合                         |
+|  37 | [`notification-delivery`](./notification-delivery/README.md)                 | 通知：有界重试且请求重放不重复投递         | Web → Winston 日志 → Retry → Memory Broker/Store                              | winston                               | integration | 否：进程内 Broker、Store 与日志                       |
+|  38 | [`cybersecurity-alert-triage`](./cybersecurity-alert-triage/README.md)       | 安全：规则取最高严重度且重复上报幂等       | Config + Health → ledger；可选 etcd Config/Registry/Store                     | etcd                                  | production  | 是：固定 digest etcd 3.7.1 Docker E2E                 |
+|  39 | [`digital-identity-verification`](./digital-identity-verification/README.md) | 身份：请求只进入受信校验路径且不泄漏证件   | Web → timeout/Circuit Breaker → provider；Health Handler                      | 无                                    | integration | 否：内存 Identity Provider                            |
+|  40 | [`emergency-response-dispatch`](./emergency-response-dispatch/README.md)     | 公共安全：按优先级校验调度期限             | Web → zone/service/readiness filter → Registry selector                       | 无                                    | integration | 否：静态 ServiceInstance 集合                         |
 
 ## 第三方框架接入案例
 
-以下四项专门演示第三方 Web 框架或原生 Fetch Handler 如何接入 go-like，同样属于正式 examples。
+以下四项把第三方 Web 框架或原生 Fetch Handler 交给 `@go-like/core/web` 的 Node 宿主。它们只依赖 `@go-like/core`。
 
-| 案例                                     | 验证入口                                    | Tier        | Docker 判定       |
-| ---------------------------------------- | ------------------------------------------- | ----------- | ----------------- |
-| [`elysia`](./elysia/README.md)           | Elysia `app.fetch` → `@go-like/web` Handler | integration | 否：Node 接入测试 |
-| [`h3`](./h3/README.md)                   | H3 `app.fetch` → `@go-like/web` Handler     | integration | 否：Node 接入测试 |
-| [`hono`](./hono/README.md)               | Hono `app.fetch` → `@go-like/web` Handler   | integration | 否：Node 接入测试 |
-| [`vanilla-web`](./vanilla-web/README.md) | 原生 Fetch Handler → go-like Web 生命周期   | integration | 否：Node 接入测试 |
+| 案例                                     | 验证入口                                           | Tier        | Docker 判定       |
+| ---------------------------------------- | -------------------------------------------------- | ----------- | ----------------- |
+| [`elysia`](./elysia/README.md)           | Elysia `app.fetch` → `@go-like/core/web` `Handler` | integration | 否：Node 接入测试 |
+| [`h3`](./h3/README.md)                   | H3 `app.fetch` → `@go-like/core/web` `Handler`     | integration | 否：Node 接入测试 |
+| [`hono`](./hono/README.md)               | Hono `app.fetch` → `@go-like/core/web` `Handler`   | integration | 否：Node 接入测试 |
+| [`vanilla-web`](./vanilla-web/README.md) | 原生 Fetch Handler → `@go-like/core/web` Node 宿主 | integration | 否：Node 接入测试 |

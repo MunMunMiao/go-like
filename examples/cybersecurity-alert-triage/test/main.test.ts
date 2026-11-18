@@ -1,5 +1,6 @@
-import { newConfig, objectSource, source, type ConfigObject } from "@go-like/config"
-import { background, withCancelCause } from "@go-like/context"
+import { newConfig, objectSource, source, type ConfigObject } from "@go-like/core/config"
+import { newEtcdClient } from "@go-like/etcd"
+import { background, withCancelCause } from "@go-like/core/context"
 import { describe, expect, test } from "bun:test"
 
 import {
@@ -17,6 +18,15 @@ import {
   type SecurityAlert,
   type TriageDecision
 } from "../src/service"
+
+function triageClient() {
+  return newEtcdClient({
+    address: "http://etcd.test",
+    fetch(request) {
+      return fetch(request)
+    }
+  })
+}
 
 const rules = Object.freeze({
   highFailedAttempts: 5,
@@ -561,7 +571,7 @@ describe("cybersecurity alert triage", () => {
         }
         await expect(
           newEtcdAlertTriageLedger({
-            address: "http://etcd.test",
+            client: triageClient(),
             configKey: "unused"
           }).record(background(), triageSecurityAlert(alert, rules))
         ).rejects.toThrow("stored etcd alert decision is invalid")
@@ -587,7 +597,7 @@ describe("cybersecurity alert triage", () => {
     globalThis.fetch = installFetch(fake.fetch)
     try {
       const ledger = newEtcdAlertTriageLedger({
-        address: "http://etcd.test",
+        client: triageClient(),
         configKey: "unused"
       })
       await expect(ledger.record(background(), decision)).resolves.toEqual(decision)
@@ -646,7 +656,7 @@ describe("cybersecurity alert triage", () => {
         })
         globalThis.fetch = installFetch(fake.fetch)
         await expect(
-          newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" }).record(
+          newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" }).record(
             background(),
             { ...decision, alertId: `malformed-stored-${index}` }
           )
@@ -672,7 +682,7 @@ describe("cybersecurity alert triage", () => {
     try {
       const conflictFake = fakeTriageEtcd(storedRow(decision))
       globalThis.fetch = installFetch(conflictFake.fetch)
-      const ledger = newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" })
+      const ledger = newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" })
       await expect(ledger.record(background(), decision)).resolves.toEqual(decision)
       await expect(
         ledger.record(
@@ -695,7 +705,7 @@ describe("cybersecurity alert triage", () => {
       )
       globalThis.fetch = installFetch(metadataFake.fetch)
       await expect(
-        newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" }).record(
+        newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" }).record(
           background(),
           decision
         )
@@ -705,7 +715,7 @@ describe("cybersecurity alert triage", () => {
       missingConflictFake.dropAfterFirstRange = true
       globalThis.fetch = installFetch(missingConflictFake.fetch)
       await expect(
-        newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" }).record(
+        newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" }).record(
           background(),
           decision
         )
@@ -715,7 +725,7 @@ describe("cybersecurity alert triage", () => {
       rewriteFake.rewriteAfterWrite = "different-alert"
       globalThis.fetch = installFetch(rewriteFake.fetch)
       await expect(
-        newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" }).record(
+        newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" }).record(
           background(),
           decision
         )
@@ -725,7 +735,7 @@ describe("cybersecurity alert triage", () => {
       missingReadbackFake.rewriteAfterWrite = "missing"
       globalThis.fetch = installFetch(missingReadbackFake.fetch)
       await expect(
-        newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" }).record(
+        newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" }).record(
           background(),
           decision
         )
@@ -751,7 +761,7 @@ describe("cybersecurity alert triage", () => {
     const [ctx, cancel] = withCancelCause(background())
     const failure = new Error("terminal")
     cancel(failure)
-    const ledger = newEtcdAlertTriageLedger({ address: "http://etcd.test", configKey: "unused" })
+    const ledger = newEtcdAlertTriageLedger({ client: triageClient(), configKey: "unused" })
     const originalFetch = globalThis.fetch
     const fetchTerminal = async function fetchTerminal(): Promise<Response> {
       return Response.json({})
@@ -802,7 +812,7 @@ describe("cybersecurity alert triage", () => {
     try {
       await expect(
         newEtcdAlertTriageLedger({
-          address: "http://etcd.test",
+          client: triageClient(),
           configKey: "unused"
         }).record(
           background(),
@@ -842,7 +852,7 @@ describe("cybersecurity alert triage", () => {
     fetchRules.preconnect = function preconnect(): void {}
     globalThis.fetch = installFetch(fetchRules)
     const config = newEtcdTriageConfig({
-      address: "http://etcd.test",
+      client: triageClient(),
       configKey: "security/config"
     })
     try {

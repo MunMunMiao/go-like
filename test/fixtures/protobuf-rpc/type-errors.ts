@@ -1,4 +1,4 @@
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 
 import type { OrderServiceClient } from "./.artifacts/gen/order/v1/order_like.js"
 

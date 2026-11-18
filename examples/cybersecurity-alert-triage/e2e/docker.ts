@@ -1,7 +1,8 @@
-import { background } from "@go-like/context"
-import type { Config, ConfigObject } from "@go-like/config"
-import type { ServiceInstance } from "@go-like/registry"
-import { newEtcdRegistry, type EtcdRegistry } from "@go-like/registry-etcd"
+import { background } from "@go-like/core/context"
+import type { Config, ConfigObject } from "@go-like/core/config"
+import type { ServiceInstance } from "@go-like/core/registry"
+import { newEtcdClient } from "@go-like/etcd"
+import { newEtcdRegistry, type EtcdRegistry } from "@go-like/etcd/registry"
 
 import {
   closeOwnedDockerContext,
@@ -148,7 +149,13 @@ async function main(): Promise<void> {
     if (reference.stdout !== Image) throw new Error("etcd image reference drifted from its digest")
     await putConfig(address)
 
-    const options = Object.freeze({ address, configKey: ConfigKey })
+    const client = newEtcdClient({
+      address,
+      fetch(request) {
+        return fetch(request)
+      }
+    })
+    const options = Object.freeze({ client, configKey: ConfigKey })
     config = newEtcdTriageConfig(options)
     await config.load(background())
     const readiness = newTriageReadiness(config)
@@ -201,9 +208,7 @@ async function main(): Promise<void> {
       throw new Error("etcd ledger did not atomically reject conflicting alert facts")
     }
 
-    registry = newEtcdRegistry({
-      fetch,
-      address,
+    registry = newEtcdRegistry(client, {
       prefix: `/go-like/examples/security/${RunId}/registry/`,
       ttlMs: 2_000
     })

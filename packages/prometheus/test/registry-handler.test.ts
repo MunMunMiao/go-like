@@ -6,7 +6,7 @@ import { createRequire } from "node:module"
 import { expect, test } from "bun:test"
 import { Counter, Registry, register, type OpenMetricsContentType } from "prom-client"
 
-import { createPrometheusHandler } from "../src/index"
+import { createPrometheusHandler } from "@go-like/prometheus/metric"
 
 test("creates an isolated raw Registry without mutating the prom-client global registry", async () => {
   register.clear()

@@ -2,8 +2,8 @@ import process from "node:process"
 
 import { afterStart, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import type { ServiceInstance } from "@go-like/registry"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import type { ServiceInstance } from "@go-like/core/registry"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import { newEmergencyResponseService } from "./http"
 

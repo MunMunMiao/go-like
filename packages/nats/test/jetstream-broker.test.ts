@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@go-like/context"
+import { background, withCancelCause, type Context } from "@go-like/core/context"
 import type { JetStreamClient, PubAck } from "@nats-io/jetstream"
-import { newNatsJetStreamBroker } from "../src/jetstream-broker"
+import { natsJetStreamCloseTimeout, newNatsJetStreamBroker } from "../src/jetstream"
 import { FakeConsumerMessages, deferred, jetStreamMessage, nextTurn } from "./broker-helpers"
 
 interface SubscribeOptions {
@@ -10,6 +10,22 @@ interface SubscribeOptions {
 }
 
 describe("NATS JetStream Broker", () => {
+  test("accepts a close timeout and rejects invalid boundaries", () => {
+    const client = { publish() {} } as unknown as JetStreamClient
+    const factory = () => {
+      throw new Error("unused")
+    }
+    expect(() => natsJetStreamCloseTimeout(Number.NaN)).toThrow("integer from 0")
+    expect(() => natsJetStreamCloseTimeout(-1)).toThrow("integer from 0")
+    expect(() => natsJetStreamCloseTimeout(1.5)).toThrow("integer from 0")
+    expect(() => natsJetStreamCloseTimeout(2_147_483_648)).toThrow("2147483647")
+    expect(natsJetStreamCloseTimeout(0)).toBeFunction()
+    expect(() => newNatsJetStreamBroker(client, factory, 1 as never)).toThrow("must be callable")
+    expect(newNatsJetStreamBroker(client, factory, natsJetStreamCloseTimeout(0)).string()).toBe(
+      "nats-jetstream"
+    )
+  })
+
   test("preserves PubAck, native settlement, factory options, and lifecycle ownership", async () => {
     const messages = new FakeConsumerMessages()
     const ack = Object.freeze({ stream: "EVENTS", seq: 7, duplicate: false }) satisfies PubAck

@@ -1,23 +1,101 @@
 # go-like
 
-go-like 係一套畀 TypeScript 後端用、帶 Go 風格嘅微服務建構元件。生命週期、Context、服務呼叫、服務探索、訊息、設定、儲存、健康檢查同可觀測性都拆成細小而清楚嘅套件，唔會逼你成個框架或者 runtime 推倒重來。
+go-like 係一組明確嘅 TypeScript 建構元件，畀 Bun 同 Node.js 上嘅後端服務用。`@go-like/core` 係零 runtime 依賴嘅插座面板：Context、應用生命週期、內部呼叫、設定、服務探索、記錄、快取、訊息、作業、健康檢查，同遙測底座。其餘十九個套件係插頭。一隻插頭用應用自己建立嘅生態 client，填一個或多個插座。`@go-like/protoc-gen-like` 係建置時嘅 Protobuf 產生器，唔依賴 core。
 
-可攜部分只會用標準 Web API，包括 `Request`、`Response`、`Headers`、`AbortSignal`、Web Streams 同由應用傳入嘅 `fetch`。Node.js、Bun 專屬能力會另開入口。已經匯出 Fetch 嘅框架唔需要 go-like adapter 套件：Hono、Elysia 同 H3 2.x 嘅 `app.fetch` 可以直接交畀 `@go-like/web`；H3 1.x 使用 `toWebHandler(app)`。Croner、BullMQ、NATS、Pino、Winston 等資源先使用生命週期 adapter。
+應用仍然係組合根。佢建立原生物件，傳入插頭建構函式，再將結果裝上 `newApp`。冇一個全域登記處去放 server、logger 或遙測 provider。
 
-第一次閱讀可以先睇[開始使用](/zh-Hant-HK/guide/getting-started)，再按[診所預約：由 0 到 1](/zh-Hant-HK/guide/zero-to-one)跟住 milestone 行一次引導 project。已有現成服務要接入時，可以看[遷移同接入](/zh-Hant-HK/guide/migration)；想知道 go-like 同其他工具各自負責咩，請睇[go-like 同其他工具點樣分工](/zh-Hant-HK/guide/comparison)。
+> [!IMPORTANT]
+> 呢個 checkout 係私人 `0.0.1` workspace。Manifest 版本唔能夠證明 npm 可用。例子用 workspace 套件，打算喺 checkout 入面行；除非獨立確認過有已發布版本。
 
-想知每個套件同 provider 負責邊一截，可以睇[套件同 provider 參考](/zh-Hant-HK/reference/providers)同[套件參考](/zh-Hant-HK/reference/packages)；想確認邊啲能力真係跑過測試，而唔係「應該得」，就睇[驗證](/zh-Hant-HK/reference/verification)。
+> [!NOTE]
+> 英文 `doc/` 樹係呢條文件軌道嘅 canonical 來源。套件原始碼、manifest 同針對性測試先係 API 權威。Repo 入面存在嘅測試或 E2E script 只係已宣告覆蓋；未真正跑過一條命令並記錄退出狀態之前，唔算通過。
 
 ## 揀一條閱讀路線
 
-- **初學者：** 先睇[開始使用](/zh-Hant-HK/guide/getting-started)，再行[診所預約 project](/zh-Hant-HK/guide/zero-to-one)，先跑通 Handler、ready 訊號同停止。
-- **TypeScript 或 Go 熟手：** 先睇[架構](/zh-Hant-HK/guide/architecture)，再睇[服務呼叫](/zh-Hant-HK/guide/service-call)同[套件同 provider 參考](/zh-Hant-HK/reference/providers)，先搞清 ownership 同終態。
-- **框架使用者：** 先睇[工具比較](/zh-Hant-HK/guide/comparison)，再睇[遷移同接入](/zh-Hant-HK/guide/migration)，保留原本 router，只接入真正需要嘅邊界。
+| 讀者                   | 由呢度開始                                       | 跟住讀                                                                                    | 準備好就係                                                      |
+| ---------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 初學 go-like           | [開始使用](/zh-Hant-HK/guide/getting-started)    | [架構](/zh-Hant-HK/guide/architecture)、[診所預約 project](/zh-Hant-HK/guide/zero-to-one) | 你可以啟動一個 Web 服務、傳入 Context、暴露健康檢查，然後停佢   |
+| 熟手 TypeScript 工程師 | [架構](/zh-Hant-HK/guide/architecture)           | [服務呼叫](/zh-Hant-HK/guide/service-call)、[比較](/zh-Hant-HK/guide/comparison)          | 你可以講出每項資源嘅持有者、層同終態邊界                        |
+| Go 或 Kratos 讀者      | [開始使用](/zh-Hant-HK/guide/getting-started)    | [術語](/reference/terminology)、[服務呼叫](/zh-Hant-HK/guide/service-call)                | 你可以對應 Context 同 Server 概念，而唔假設 gRPC 或 Go ABI 相容 |
+| 框架使用者             | [比較](/zh-Hant-HK/guide/comparison)             | [遷移](/zh-Hant-HK/guide/migration)、[架構](/zh-Hant-HK/guide/architecture)               | 你可以保留原生 router，只加你需要嘅生命週期或呼叫邊界           |
+| 插頭作者               | [Provider 索引](/zh-Hant-HK/reference/providers) | [驗證](/zh-Hant-HK/reference/verification)、[聲明](/reference/claims)                     | 你可以講出一隻插頭嘅插座、runtime、ownership 同證據限制         |
 
-## 呢度所講嘅 Go 風格
+## Canonical 學習路線
 
-阻塞工作將 Context 放喺第一個參數，資源邊個持有要寫清楚，停止之後有穩定終態，小 interface 用結構類型滿足。唔係將 Go 命名、channel 或 goroutine 生搬去 TypeScript；TS export 保持自然，第三方套件獨有語意亦留返喺原生物件。
+`doc/guide/` 下面四頁 canonical 路線係故意逐步加深：
 
-`@go-like/protoc-gen-like` 基於 Protobuf-ES 產生 Context-first Protobuf RPC 程式碼。`@go-like/transport-grpc-buf` 嘅 Fetch 入口支援 Connect/gRPC-Web unary 同 server-streaming；`/native` 提供標準 gRPC 四種呼叫方式，包括 client-streaming 同 bidi。呢條路徑獨立於內部 Fetch/SSE 路徑。
+1. [開始使用](/zh-Hant-HK/guide/getting-started)：行一個標準 Fetch Handler、一個 Node host、一個接納訊號，同一個 App。
+2. [診所預約](/zh-Hant-HK/guide/zero-to-one)：將生命週期變成具體領域、內部 unary 呼叫、快取、健康檢查、測試同停機練習。
+3. [比較](/zh-Hant-HK/guide/comparison)：解釋 go-like 同 NestJS、Fastify、Hono、Elysia、Koa、tRPC、go-micro、go-kratos 刻意唔同嘅地方。
+4. [遷移](/zh-Hant-HK/guide/migration)：將遷移前套件對應到 20 個套件嘅佈局。
 
-Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 已通過[慢消費者 drain 回歸測試](/reference/claims#native-grpc-drain-status)；Connect 2.1.2 同 Bun 1.4.2 Fetch 嘅歷史[取消同停機限制](/reference/claims#stream-cancellation-limits)仍未驗證已修復。
+[套件](/zh-Hant-HK/reference/packages)係 20 個套件、75 個公開入口嘅清單。[Provider](/zh-Hant-HK/reference/providers)指向每隻生態插頭嘅 README。
+
+## 心智模型
+
+三條規則貫穿成個程式庫：
+
+1. **Context 優先。** 每次 I/O 都將 `ctx: Context` 放喺第一個參數。Context 帶取消、deadline、AppInfo、請求 metadata，同而家嘅遙測狀態。
+2. **明確組合。** 應用建立每個實作再傳入。插頭唔會自己做全域註冊。
+3. **每項工作一條路。** 用 `newBrokerServer` 訂閱，用 `newScheduleServer` 排程，用 `JobQueue.worker` 消費隊列，用 `newResourceServer` 接上原生資源，用 `readyProbe` 加 `createHealthHandler` 發布就緒。
+
+```text
+Application main.ts
+  construct plugs from native objects the application created
+  newTelemetry({...})  newConfig(...)  newServer(...)  newClient(...)
+        |
+        v
+@go-like/core  newApp(...)
+  telemetry(tel)     admitted first, drained last
+  resources(...)     started in order, each start awaited, stopped in reverse
+  server(...)        started together, stopped together
+  registrar(r)       after the server tier is admitted
+  readyProbe(...)    ready only between startup completion and stop
+```
+
+五個名詞就夠讀完成個網站：
+
+- **插座**係 core 宣告嘅結構式契約（`Server`、`LogHandler`、`Registry`、`Broker`、`Store`，同其他）。插頭實作插座。佢唔會包住 core 嘅呼叫點。
+- **Context** 係可取消工作嘅明確範圍。
+- **Server** 係 `start(ctx)` 同 `stop(ctx)`。喺 `resources(...)` 入面，start resolve 代表資源可用。喺 `server(...)` 入面，start 可以一直 pending，直到原生物件結束。
+- **App** 接納呢啲層、hook、註冊同停機。佢唔係依賴注入容器。
+- **Handler** 係標準 Web 函式 `(Request) => Response | Promise<Response>`。Handler 本身唔係監聽中嘅 server。
+
+對外 Web 同內部服務呼叫保持分開。產生出嚟嘅 Protobuf RPC 係再遠一步嘅可選路徑：`@go-like/protoc-gen-like` 產生 ctx-first 膠水，`@go-like/connectrpc` 將 Connect 同 gRPC-Web 適配到 Fetch，`@go-like/connectrpc/node` 託管標準 gRPC。見[串流](/zh-Hant-HK/guide/streaming)。
+
+## 應用仍然擁有嘅部分
+
+而家嘅產品邊界將下面呢啲留畀應用或原生程式庫：
+
+- 路由、框架 middleware、Web Streams 同 WebSocket upgrade；
+- 業務政策、憑證同授權；
+- 原生 acknowledgement、lease、重試同協議細節；
+- OpenTelemetry SDK 建構、logger 設定同 exporter 選擇；
+- 持久性、交易，以及記憶體參考實作喺跨程序時嘅任何意義；
+- npm 發布、hosted CI 狀態，或者由 manifest 推斷出嚟嘅 production-ready 聲明。
+
+## 公開清單
+
+Workspace 發布 **20** 個 `@go-like/*` 套件，呢個 checkout 全部係版本 `0.0.1`，同 **75** 個公開入口。`@go-like/core` 佔 41 個。其餘 34 個屬於插頭同產生器。產生出嚟嘅 `dist/package.json` metadata export 唔係額外嘅原始碼 API。
+
+用[套件參考](/zh-Hant-HK/reference/packages)揀入口，用[Provider 索引](/zh-Hant-HK/reference/providers)打開插頭 README。[聲明帳](/reference/claims)記錄公開措辭背後嘅證據級別。
+
+## 驗證邊界
+
+一份歷史 repo 契約審查報告過 commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675` 嘅本機結果：`bun run typecheck`、`bun run test:unit` 同 `bun run fmt:check` 通過。該報告數到 2,736 個單元測試、1,514 個已格式化檔案，以及 66 個原始碼 export 入口嘅成功 import 審查。呢個數目描述遷移前嘅樹。而家嘅清單係 75 個入口。該審查冇確立 `build`、`doc:build`、Docker provider E2E、已發布 tarball consumer、npm 發布、hosted CI，或者 60 分鐘 soak。
+
+將原始碼或 script 聲明變成發布聲明之前，先讀[驗證](/zh-Hant-HK/reference/verification)。
+
+## 下一步
+
+- [開始使用](/zh-Hant-HK/guide/getting-started)：行一個 Web Handler，同第一個生命週期檢查點。
+- [架構](/zh-Hant-HK/guide/architecture)：層、Context 範圍、啟動同停止次序、就緒同埋時限。
+- [診所預約](/zh-Hant-HK/guide/zero-to-one)：一條業務不變量，由 HTTP 去到內部政策呼叫、健康檢查同停機。
+- [服務呼叫](/zh-Hant-HK/guide/service-call)：有型別嘅 Memory Transport，然後服務探索、選擇同重試。
+- [設定、註冊中心、儲存同快取](/zh-Hant-HK/guide/config-registry-store)：四個契約，每個生態一個共用 client。
+- [Broker、事件同作業](/zh-Hant-HK/guide/broker-events)：bytes、codec、排程同隊列。
+- [健康檢查與可觀測性](/zh-Hant-HK/guide/health-observability)：probe、`newTelemetry`，同四隻遙測插頭。
+- [比較](/zh-Hant-HK/guide/comparison)同[遷移](/zh-Hant-HK/guide/migration)：同其他工具嘅 ownership，以及 import codemod。
+- [套件](/zh-Hant-HK/reference/packages)、[Provider](/zh-Hant-HK/reference/providers)、[錯誤處理](/reference/errors)、[術語](/reference/terminology)同[驗證](/zh-Hant-HK/reference/verification)。
+
+Node 26.12.1 同 Bun 1.4.4 嘅託管 gRPC 慢消費者 drain 記錄喺[原生 gRPC drain 矩陣](/reference/claims#native-grpc-drain-status)。較早嘅 Connect 2.1.2 同 Bun 1.4.2 Fetch 取消觀察仍然留喺[聲明帳](/reference/claims#stream-cancellation-limits)。

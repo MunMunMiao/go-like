@@ -161,3 +161,10 @@ Bun 1.4.4 的 `eventLoopUtilization()` 存在但始终返回全 0，`monitorEven
 | go-micro  | [`v6.16.0`](https://github.com/micro/go-micro/releases/tag/v6.16.0)    | [`bc4185b7`](https://github.com/micro/go-micro/commit/bc4185b751a9e4b9e78cfdb7db04b6dc14d70d6c)，2026-11-15         |
 | go-kratos | [`v3.0.0`](https://github.com/go-kratos/kratos/releases/tag/v3.0.0)    | [`dd0fb7df`](https://github.com/go-kratos/kratos/commit/dd0fb7df1e325daf5ffb9c30862be8f1091763eb)，2026-10-26       |
 | go-zero   | [`v1.11.0`](https://github.com/zeromicro/go-zero/releases/tag/v1.11.0) | [`1450dba7`](https://github.com/zeromicro/go-zero/commit/1450dba7ae24174a83f0175a77a1106a88911660)，与 release 相同 |
+
+## 修订说明（2026-11-17）
+
+以下只记录 2026-11 插座与插头迁移相对本文的变更，不改写上文的探索结论。总决定见
+[ADR 0009](../../adr/0009-single-core-package.md)。
+
+- [插座与插头架构（2026-11）](../../designs/socket-plug-architecture/README.md)第 11.1 节第 24 条把“`observeCall` 留在原处公开”记在线 A 合并方案上。迁移删除该导出。内部的 `endAtBodyEnd` 接替它，因为已经没有插头调用它。本文线 A 结论的正文保持原样。

@@ -1,4 +1,4 @@
-import type { Context } from "@go-like/context"
+import type { Context } from "@go-like/core/context"
 
 import {
   sameProvisionCommand,

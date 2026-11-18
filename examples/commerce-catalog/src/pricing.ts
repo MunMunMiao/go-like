@@ -1,7 +1,7 @@
-import { withFilter, withRetry, type CallOption, type Client } from "@go-like/client"
-import type { Context } from "@go-like/context"
-import { filterVersion } from "@go-like/registry"
-import { exponentialBackoff } from "@go-like/resilience"
+import { withFilter, withRetry, type CallOption, type Client } from "@go-like/core/client"
+import type { Context } from "@go-like/core/context"
+import { filterVersion } from "@go-like/core/registry"
+import { exponentialBackoff } from "@go-like/core/resilience"
 
 import {
   findAmountMinor,

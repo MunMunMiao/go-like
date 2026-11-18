@@ -1,11 +1,27 @@
 import { describe, expect, test } from "bun:test"
 
-import { background, withCancelCause, type Context } from "@go-like/context"
+import { background, withCancelCause, type Context } from "@go-like/core/context"
 import { headers, type Msg, type NatsConnection } from "@nats-io/transport-node"
-import { newNatsCoreBroker } from "../src/broker"
+import { natsCoreDrainTimeout, newNatsCoreBroker } from "../src/broker"
 import { FakeSubscription, coreMessage, deferred, nextTurn } from "./broker-helpers"
 
 describe("NATS Core Broker", () => {
+  test("accepts a drain timeout and rejects invalid boundaries", () => {
+    const connection = {
+      publish() {},
+      subscribe() {
+        return new FakeSubscription()
+      }
+    } as unknown as NatsConnection
+    expect(() => natsCoreDrainTimeout(Number.NaN)).toThrow("integer from 0")
+    expect(() => natsCoreDrainTimeout(-1)).toThrow("integer from 0")
+    expect(() => natsCoreDrainTimeout(1.5)).toThrow("integer from 0")
+    expect(() => natsCoreDrainTimeout(2_147_483_648)).toThrow("2147483647")
+    expect(natsCoreDrainTimeout(0)).toBeFunction()
+    expect(() => newNatsCoreBroker(connection, 1 as never)).toThrow("must be callable")
+    expect(newNatsCoreBroker(connection, natsCoreDrainTimeout(0)).string()).toBe("nats-core")
+  })
+
   test("publishes detached bytes and official headers without owning the connection", async () => {
     const calls: unknown[][] = []
     const connection = {

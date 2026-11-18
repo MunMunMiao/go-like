@@ -28,6 +28,7 @@
 - [0006：Store 与 Provider](adr/0006-store-contract-and-providers.md)
 - [0007：Broker、Event 与原生消息语义](adr/0007-broker-event-native-semantics.md)
 - [0008：服务声明、分派与自动注册](adr/0008-service-declaration-and-registration.md)
+- [0009：单一 core 包](adr/0009-single-core-package.md)
 
 ## 验证方法与实验
 

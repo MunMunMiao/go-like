@@ -1,205 +1,127 @@
 # go-like в сравнении с другими инструментами
 
-Честное сравнение начинается с владения и ответственности, а не с таблицы галочек по числу возможностей. NestJS, Fastify, Hono, Elysia, Koa и tRPC решают разные задачи в TypeScript-стеке приложений. go-micro и go-kratos — это ориентиры из мира Go с другими решениями для транспорта и генерации кода. go-like — набор строительных блоков для TypeScript, делающий явными жизненный цикл, внутренние унарные вызовы, контракты провайдеров и композицию между runtime.
+Честное сравнение начинается с владения. NestJS, Fastify, Hono, Elysia, Koa и tRPC решают разные части TypeScript-приложения. go-micro и go-kratos — ориентиры из Go с другими транспортами и генерацией кода. go-like — панель socket: явные ярусы жизненного цикла, внутренние вызовы и plugs для тех backend, которые выбираете вы.
 
-На этой странице разделены уровни доказательности:
+Метки доказательств на этой странице:
 
-- **Исходный код** означает, что текущая рабочая копия go-like предоставляет указанное API или границу.
-- **Зафиксированный внешний источник** означает, что сравнение опирается на release, commit или официальную документацию, записанные в исследовательском журнале. Это не свежий benchmark и не утверждение, что незафиксированная ветка `main` не изменилась.
-- **Заявлено** означает, что в репозитории есть пример или тестовый lane. Это не означает успешный результат.
-- **Пробел** означает, что текущий репозиторий не доказывает обещанную совместимость.
+- **Исходный код** означает, что текущая рабочая копия предоставляет API.
+- **Зафиксированный внешний источник** означает записанный release, commit или официальную страницу. Это не свежий benchmark.
+- **Заявлено** означает, что пример или тест существует. Это не успешный результат.
+- **Пробел** означает, что этот репозиторий не доказывает обязательство совместимости.
 
-Текущая базовая версия исходников go-like для этого трека — commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`. В локальной исследовательской записи есть расхождение по commit go-micro: одна сравнительная запись называет `9d306dcfc1a912a8a9493f31fee0bb983475258d`, а подробная записка по фиксированной версии изучала go-micro `v6.9.0` на `3c39d17fadaa9ec21b671be4afef3e63846406e6`. Считайте эти значения входными данными для повторной проверки, а не гарантией текущего состояния upstream.
+Историческая базовая линия документации — commit `9385dbf5b6a7d913be56a80ade359e1bf9be8675`. В исследовательской записи два commit go-micro: `9d306dcfc1a912a8a9493f31fee0bb983475258d` и, для заметки v6.9.0, `3c39d17fadaa9ec21b671be4afef3e63846406e6`. Считайте оба входными данными для повторной проверки.
 
 ## Место в стеке
 
-| Инструмент | Основная задача                                  | Что обычно находится в его ответственности                                                                                                                                 | Что go-like может дополнить, но не заменить                                                                                |
-| ---------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| NestJS     | Конвенциональный Node-фреймворк приложения       | Modules, providers, controllers, decorators, application context, lifecycle фреймворка, HTTP- или microservice-adapter                                                     | Структурную границу жизненного цикла или контракт внутреннего вызова вокруг нативного приложения, если написать явный мост |
-| Fastify    | Node HTTP-сервер и pipeline запросов             | Таблица маршрутов, hooks, plugins, encapsulation, Node listener, объекты request/reply                                                                                     | Адаптер жизненного цикла или провайдера вокруг ресурса, которым владеет Fastify                                            |
-| Hono       | Маршрутизация и middleware на Web Standards      | Routes, middleware, sub-apps, `app.fetch`, выбор runtime-адаптера                                                                                                          | Core App, явный lifecycle ресурсов, внутренние Client/Transport, discovery                                                 |
-| Elysia     | Типизированный Web-фреймворк с фокусом на Bun    | Дерево маршрутов, композиция схем, decorators, hooks, Bun- или Web Standard-адаптер                                                                                        | Блоки Core для жизненного цикла и внутренних сервисов при сохранении нативного поведения Elysia                            |
-| Koa        | Минимальное Node-ядро middleware                 | Цепочка middleware и Node listener; роутер обычно внешний                                                                                                                  | Жизненный цикл и внутренние сервисные контракты без добавления ещё одного роутера                                          |
-| tRPC       | Типобезопасный слой процедур                     | Пути router/procedure, парсеры input/output, context factory, HTTP/Fetch/WS-адаптеры                                                                                       | Владение провайдерами, политика обнаружения сервисов, явный lifecycle App                                                  |
-| go-micro   | Go-экосистема микросервисов и агентов            | Go Context, абстракции service/client/transport/registry/broker, экосистема провайдеров и дополнительная область agent/flow/MCP/A2A                                        | go-like заимствует часть словаря, но не Go ABI, goroutine и совместимость транспортов                                      |
-| go-kratos  | Go-фреймворк для cloud-native-сервисов           | Жизненный цикл App, Go Context, HTTP/gRPC-транспорты, middleware, registry, config, генерация кода Protobuf                                                                | Код Context-first на основе Protobuf-ES; Стандартный gRPC: четыре вида вызовов через `/native`                             |
-| go-like    | Явные строительные блоки для TypeScript-сервисов | Context, lifecycle App/Server, стандартный Fetch-край, внутренний Fetch JSON и SSE, Client/Server, Registry/Discovery/Selector, Config/Store/Cache/Broker/Health, adapters | Приложение по-прежнему владеет маршрутами фреймворка, нативными плоскостями данных, бизнес-политикой, auth и deployment    |
+| Инструмент | Чем он обычно владеет                                                   | Что go-like добавляет рядом                                                               |
+| ---------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| NestJS     | Модули, контроллеры, декораторы, application context                    | Структурный `Server`, только если этот адаптер напишете вы                                |
+| Fastify    | Маршруты, hooks, плагины, Node-listener                                 | Границу жизненного цикла или вызова вокруг ресурса, которым по-прежнему владеет Fastify   |
+| Hono       | Маршруты, middleware, `app.fetch`                                       | Ярусы App, внутренние вызовы, plugs                                                       |
+| Elysia     | Дерево маршрутов, схему, hooks, собственный адаптер                     | То же, пока `.listen()` остаётся у Elysia                                                 |
+| Koa        | Middleware и внешний роутер                                             | Жизненный цикл и внутренние вызовы, а не ещё один роутер                                  |
+| tRPC       | Процедуры, парсеры, адаптеры                                            | Discovery, selection и жизненный цикл App                                                 |
+| go-micro   | Go Context, service, registry, broker и более широкую поверхность agent | Только словарь. Go ABI нет                                                                |
+| go-kratos  | Жизненный цикл App, HTTP/gRPC, registry, config, Protobuf               | Композицию на TypeScript. Путь gRPC — Connect-ES, а не runtime Google                     |
+| go-like    | Socket, ярусы, вызовы Fetch и SSE, plugs                                | Приложение по-прежнему владеет маршрутами, политикой, auth и деталями нативного протокола |
 
-Проект не пытается выиграть сравнение «самый большой фреймворк». Вопрос в том, нужны ли приложению явные и компонуемые границы.
+## Владение
 
-## Матрица ответственности
-
-| Область                   | NestJS                                           | Fastify                            | Hono / Elysia / Koa                                     | tRPC                                          | go-like                                                                                               |
-| ------------------------- | ------------------------------------------------ | ---------------------------------- | ------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Внешняя таблица маршрутов | Controllers и decorators                         | Fastify instance                   | Экземпляр фреймворка или внешний роутер                 | Procedure router, а не обычные REST-маршруты  | Внешний фреймворк или приложение                                                                      |
-| Web handler ABI           | Абстракция request/reply, принадлежащая адаптеру | Node request/reply                 | Стандартный Fetch в центре Hono и Web Standard adapters | Fetch/Node/Express/Fastify adapters           | Стандартный `(Request) => Response \| Promise<Response>`                                              |
-| Жизненный цикл приложения | Application context и hooks                      | `ready`, `listen`, `close`, hooks  | Зависит от runtime adapter и фреймворка                 | Ответственность host/adapter                  | `newApp`, `App.run`, `App.stop`, hooks, структурные Servers                                           |
-| Жизненный цикл ресурсов   | Hooks контейнера/фреймворка                      | Hooks плагинов и сервера           | Ответственность приложения/runtime                      | Ответственность приложения/adapter            | Явные контракты `Server.start(ctx)` / `stop(ctx)` и владение адаптера                                 |
-| Композиция зависимостей   | Nest container/providers                         | Plugin decoration и encapsulation  | Context/env и композиция; общего DI-контейнера нет      | Явный context factory и композиция router     | Явные конструкторы и functional options; DI-контейнера нет                                            |
-| Внутренний transport      | Microservice transports и framework adapters     | Не абстракция обнаружения сервисов | Не абстракция обнаружения сервисов                      | Procedure adapters и необязательный WebSocket | `Transport`, `Client`, `Listener`, `defineService`, SSE `ServerStream`                                |
-| Discovery и selection     | Зависит от транспорта или внешний                | Внешний                            | Внешние                                                 | Внешние                                       | `Registry`, `Discovery`, `Watcher`, Filters, пять политик Selector                                    |
-| Retry                     | Зависит от фреймворка или провайдера             | Зависит от приложения/плагина      | Зависит от приложения                                   | Зависит от middleware/adapter                 | По умолчанию одна попытка; `withRetry` требует разрешения и общего числа попыток                      |
-| Streaming                 | Зависит от фреймворка/провайдера                 | Node/Web stream choices            | Нативные Web Streams и API фреймворка                   | Зависит от HTTP/WS adapter                    | Web Streams; JSON or SSE server stream; Fetch unary/server-streaming; `/native` client-streaming/bidi |
-| Глобальная инструментация | Интеграция фреймворка/провайдера                 | Plugin ecosystem                   | Middleware ecosystem                                    | Middleware/adapters                           | Явные wrappers; глобальные providers не устанавливаются                                               |
-
-Подписи в первых пяти строках описывают архитектурную позицию, а не рейтинг качества. Владение таблицей маршрутов полезно, когда именно композиция маршрутов является задачей. Это просто другой выбор ответственности по сравнению с go-like, который оставляет маршруты приложению.
+| Область                 | go-like                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Внешние маршруты        | Фреймворк или `Handler` приложения                                                               |
+| Web Handler             | `(Request) => Response \| Promise<Response>`                                                     |
+| Жизненный цикл процесса | `newApp`, три яруса, hooks                                                                       |
+| Зависимости             | Конструкторы и параметры. Контейнера нет                                                         |
+| Внутренние вызовы       | `Transport`, `Client`, `Server`, `defineService`, SSE `ServerStream`                             |
+| Discovery               | `Registry`, `Discovery`, filters, пять selectors                                                 |
+| Retry                   | Одна попытка, пока `withRetry` не разрешит больше                                                |
+| Потоки                  | Web Streams на краю; JSON или SSE внутри; четыре вида вызовов gRPC на `@go-like/connectrpc/node` |
+| Инструментирование      | Core записывает единицы работы. Plugs заполняют socket телеметрии. Глобальной регистрации нет    |
 
 ## Жизненный цикл и Context
 
-Текущий исходный код go-like определяет:
-
 ```ts
-interface Server {
-  start(ctx: Context): Promise<void>
-  stop(ctx: Context): Promise<void>
-}
+import type { Server } from "@go-like/core/lifecycle"
 
 interface App {
   run(): Promise<void>
   stop(): Promise<void>
 }
+
+type Lifecycle = Server
+void null as unknown as Lifecycle
 ```
 
-Контракт `Server` структурный. Нативный worker, listener, scheduler, подписка брокера, место назначения логов или провайдер телеметрии могут присоединиться к Core, если адаптер честно описывает момент допуска и конечное состояние.
+`Server` структурен: `start(ctx)` и `stop(ctx)`. На ярусе ресурсов `start` завершается, когда ресурс пригоден к использованию. На ярусе серверов `start` может оставаться незавершённым, а остановки соседей идут параллельно. Остановки ресурсов идут в обратном порядке объявления. У context Nest, графа плагинов Fastify или hook Elysia свой порядок. Сравнивайте владельцев, а не слово «graceful».
 
-Context go-like также структурен и внутри использует `AbortSignal`. Он предоставляет `deadline()`, `done()`, `err()` и `value(key)`, а также конструкторы `background`, `withCancel`, `withCancelCause`, `withTimeout`, `withDeadline`, `withoutCancel` и `withValue`.
+Context предоставляет `deadline()`, `done()`, `err()` и `value(key)`, а также `background`, `withCancel`, `withTimeout`, `withDeadline`, `withoutCancel` и `withValue`. Внутри он использует `AbortSignal`. Это не Go `context.Context` и не API gRPC.
 
-Это похоже на явный Context-first стиль Go, но не совместимо на уровне ABI с `context.Context`. Сам Context не предоставляет goroutine, channel или API gRPC. Правильный вопрос при миграции — «где через эту границу проходят отмена и владение?», а не «какое имя типа совпадает?».
+## Вызовы, retry и потоки
 
-Core не обещает остановку соседних Servers в обратном порядке. Он параллельно вызывает `stop(ctx)` у соседей, затем дожидается конечных Promise от `start` и объединяет ошибки. У Nest application context, графа плагинов Fastify, lifecycle Elysia или host adapter могут быть другими: порядок и семантика завершения могут отличаться. Сравнивайте фактического владельца, а не одно слово «graceful».
+Внутренний путь — Client, необязательный Discovery, filters, selector, транспорт, `POST /<service>/<endpoint>`, затем Handler сервера. Типизированный endpoint проверяет JSON через Struct. Это не IDL. `withEndpoint("discovery:///name")` выбирает сервис. Прямой список адресов этого не делает.
 
-## Transport и вызовы сервисов
-
-Цепочка внутреннего вызова go-like намеренно разложена на части:
+Вызовы делают одну попытку, пока `withRetry` не задаст `authorization` равным `"idempotent"` или `"caller-approved"`, положительный `maxAttempts` и `shouldRetry`. Это разрешение — объявление. Уже полученный ответ не воспроизводится снова, когда позднейшая обратная связь падает.
 
 ```text
-Client
-  -> Discovery snapshot, optional
-  -> ordered Filter callbacks, optional
-  -> Selector.select
-  -> opaque ServiceEndpoint URL
-  -> Transport.dial or resident logical owner
-  -> fetch(Request)
-  -> @go-like/server route and unary handler
-  -> read Response
-  -> feedback and owner release
+Web Handler
+  Web Streams, framework SSE, or WebSocket
+
+@go-like/core client and server
+  one JSON body, or SSE when stream: true
+
+@go-like/connectrpc
+  Connect and gRPC-Web unary and server-streaming on Fetch
+
+@go-like/connectrpc/node
+  standard gRPC unary, server-streaming, client-streaming, and bidi
 ```
 
-Типизированный `Endpoint` связывает проверку request и response через `Struct` с телом JSON Fetch. Это не IDL и не сгенерированный протокол. `withEndpoint(...)` выбирает прямой снимок при создании; прямые и полученные через Discovery снимки используют один и тот же Selector. Путь с in-process Memory Transport остаётся удобным первым тестом.
+Цикл retry по умолчанию в go-micro и формы HTTP-потоков go-kratos зависят от версии. Перепроверьте зафиксированные commit, прежде чем публиковать сравнение, которое на них опирается.
 
-Транспортные опции NestJS для microservice, procedure adapters tRPC и транспорты Go-фреймворков не являются взаимозаменяемыми с этим DAG. У них могут отличаться identity маршрута, модель сериализации, пул соединений или слой retry. В сравнении нужно фиксировать эти различия, а не считать все варианты «RPC» одинаковыми.
+## Runtime
 
-## Область retry и streaming
+Общие точки входа используют Fetch и `AbortSignal` либо внедрённую возможность. Пользовательский TLS, HTTP/2 и mTLS живут на `@go-like/core/transport/http/node` и `@go-like/connectrpc/node`. Примеры Hono, Elysia, H3 и обычного Fetch передают Fetch Handler host core. Моста NestJS или Fastify в этом репозитории нет. Версия манифеста `0.0.1` не доказывает публикацию в npm.
 
-Самое важное отрицательное различие касается семантики:
+## По инструментам
 
-- Вызовы go-like по умолчанию делают ровно одну попытку.
-- `withRetry(...)` требует `authorization: "idempotent" | "caller-approved"`, положительный `maxAttempts` и `shouldRetry`.
-- Authorization — это заявление вызывающей стороны, а не доказательство идемпотентности.
-- Retry может выбрать новый endpoint, поскольку каждая попытка заново проходит discovery и selection.
-- Ответ, который уже получен, но за которым последовала ошибка feedback или cleanup, не воспроизводится повторно.
+**NestJS.** Модули, провайдеры и контроллеры остаются у Nest. Интеграция — это `Server`, которым владеет приложение, вокруг приложения Nest, с явными допуском и закрытием. Этот репозиторий такого адаптера не содержит.
 
-Сравнительное исследование Go фиксирует другие значения по умолчанию и возможности: `DefaultRetries` в go-micro — не простое утверждение «пять запросов всего», поскольку граница цикла может дать шесть итераций, когда разрешение на retry остаётся истинным; публичная форма stream и реализация `CloseSend` по умолчанию также различаются у провайдеров. go-kratos сочетает генерацию Protobuf/gRPC с формами HTTP streaming, где у SSE и WebSocket различаются направления и поведение закрытия. Это выбор провайдера и архитектуры, а не недостающие флаги go-like.
+**Fastify.** Маршруты, инкапсуляция и listener остаются у Fastify. go-like не превращает `request` / `reply` в Fetch `Handler`.
 
-Для go-like:
+**Hono.** `examples/hono` передаёт `app.fetch` в `newNodeServer` и помещает этот host в `server(...)`. Маршруты остаются в Hono.
 
-```text
-Web framework or Fetch Handler
-  -> Web Streams, SSE, or WebSocket behavior owned by the application/framework
+**Elysia.** Сохраните дерево маршрутов и поведение, специфичное для Bun. Пример использует Fetch Handler с Node-host. `.listen()` — не API go-like.
 
-go-like internal Client/Transport
-  -> one JSON body, or one SSE server stream when `stream: true`
-  -> not a bidirectional multi-frame protocol
+**Koa.** Сохраните middleware и внешний роутер. Добавляйте границу жизненного цикла или вызова только там, где можете назвать владельца.
 
-@go-like/transport-grpc-buf
-  -> Fetch: Connect/gRPC-Web unary and server-streaming
-  -> /native: standard gRPC unary, server-streaming, client-streaming, bidi
-```
+**tRPC.** Процедуры остаются у tRPC. Endpoint go-like — это Struct поверх JSON Fetch, а не роутер процедур.
 
-Web `ReadableStream` — не канал внутреннего RPC. Не сравнивайте потоковое тело HTTP с многофреймовым transport `send`/`recv`, будто это одна и та же возможность.
+**go-micro и go-kratos.** Это ориентиры для вызовов с Context первым, жизненного цикла и словаря discovery. Наблюдатели в go-like выдают полные замещающие снимки. Точка входа управляемого gRPC — `@go-like/connectrpc/node`.
 
-## Сравнение runtime
+## Что выбирать
 
-| Вопрос о runtime                                                   | Доказательство go-like                                                                              | Следствие для сравнения                                                     |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Может ли общий код использовать Fetch и `AbortSignal`?             | Root Web и выбранные Config/Transport providers используют стандартные Web API или внедрённый Fetch | Похожие цели переносимости возможны, но типы не эмулируют поведение runtime |
-| Может ли Fetch везде передать custom PEM TLS, mTLS, ALPN и HTTP/2? | Нативное поведение принадлежит Node transport subpath; root Fetch path не даёт всех этих настроек   | Сравнивайте возможности host и import paths, а не только имена пакетов      |
-| Сохраняет ли приложение роутер фреймворка?                         | Примеры Hono, Elysia и H3 передают нативные Fetch handlers                                          | go-like дополняет владение маршрутизацией фреймворка                        |
-| Доказывает ли версия пакета его публикацию?                        | `workspace:*`, `0.0.1`                                                                              | Нельзя делать вывод о доступности в npm или зрелости экосистемы             |
+Используйте фреймворк, который владеет задачей, которая у вас действительно есть. Добавляйте socket go-like, когда не хватает допуска, отмены, discovery или контракта backend с названным владельцем. Установка каждого plug в готовое приложение на фреймворке убирает пользу небольших контрактов.
 
-В текущем репозитории есть прямые исходные примеры для Hono, Elysia, H3 и vanilla Fetch. В нём нет актуального NestJS- или Fastify-моста и набора тестов совместимости. Это аудитория для миграции, а не поддерживаемая прямая интеграция.
+## Опоры доказательств
 
-## Подробное сравнение по инструментам
+Текущее дерево:
 
-### NestJS
+- `packages/core/src/app/app.ts` и `packages/core/src/app/tiers.ts` — ярусы, бюджеты и порядок остановки;
+- `packages/core/src/lifecycle/index.ts` — `Server` и `Endpointer`;
+- `packages/core/src/web/context.ts` — `Handler` и `contextHandler`;
+- `packages/core/src/client/index.ts` — параметры вызова, discovery и retry;
+- `packages/core/src/server/index.ts` — внутренняя диспетчеризация;
+- `packages/core/src/transport/service.ts` — `defineService`;
+- `packages/core/src/registry/selector.ts` — filters, selectors и обратная связь;
+- `packages/connectrpc/src/node.ts` — управляемый gRPC.
 
-NestJS — конвенциональный фреймворк приложения. Его modules, providers, controllers, decorators, interceptors, pipes и application hooks образуют цельный контейнер и модель запросов. go-like не предоставляет совместимый с Nest контейнер модулей или мост для controllers.
+Зафиксированные внешние источники, которые эта правка документации не перепроверяла:
 
-Разумная граница интеграции — принадлежащий приложению адаптер, который реализует структурный `Server` go-like вокруг приложения Nest или его host. Такой адаптер должен определить, когда Nest допустил listener к работе, как `stop(ctx)` отображается на закрытие Nest и что происходит после timeout. Текущий репозиторий не доказывает наличие такого моста, поэтому документация не должна показывать прямой вызов вроде `newNodeServer(nestApp, ...)`.
+- [commit сравнения go-micro](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d);
+- [commit go-micro v6.9.0](https://github.com/micro/go-micro/commit/3c39d17fadaa9ec21b671be4afef3e63846406e6);
+- [commit go-kratos v3](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e);
+- [commit go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336);
+- [жизненный цикл NestJS](https://docs.nestjs.com/fundamentals/lifecycle-events), [сервер Fastify](https://fastify.dev/docs/latest/Reference/Server/), [Hono](https://hono.dev/docs/api/hono), [жизненный цикл Elysia](https://elysiajs.com/essential/life-cycle), [Koa](https://koajs.com/), [роутеры tRPC](https://trpc.io/docs/server/routers).
 
-### Fastify
-
-Fastify владеет таблицей маршрутов, encapsulation плагинов, hooks и Node listener. Его граф плагинов полезен для сравнения областей видимости зависимостей, но `decorate` не является общим контейнером providers уровня Nest. go-like автоматически не преобразует ABI Fastify `request`/`reply` в Fetch Handler, и в репозитории нет протестированного актуального Fastify-моста.
-
-Оставьте маршруты и плагины Fastify нативными. Если вы внедряете go-like, напишите явный структурный Server вокруг владельца Fastify или отдельно реализуйте Fetch-границу. Не называйте собственные request injection или native shutdown Fastify контрактом go-like Transport или Client.
-
-### Hono
-
-Hono — наиболее ясно показанный пример дополнения. Текущий пример создаёт маршруты в Hono, передаёт `app.fetch` в `newNodeServer` и помещает этот host в Core App. Маршруты и middleware остаются во владении Hono; go-like владеет границей жизненного цикла host, если приложение выбирает такую композицию.
-
-### Elysia
-
-Elysia предоставляет ориентированную на Bun модель композиции маршрутов и схем, а также Web Standard handler в соответствующем adapter path. Сохраните дерево маршрутов Elysia, decorators, derives, hooks, streams и поведение, специфичное для Bun. go-like может владеть App и явной границей ресурса, но не превращает `.listen()` в межruntime API go-like.
-
-### Koa
-
-Koa — небольшое Node-ядро middleware без встроенного роутера. Это хороший пример фреймворка, который намеренно оставляет больше композиции приложения за пределами core. go-like не должен заполнять этот пробел добавлением роутера. Оставьте middleware Koa и внешний роутер нативными, а границу жизненного цикла или внутреннего вызова добавляйте только там, где она нужна.
-
-### tRPC
-
-tRPC владеет типобезопасным procedure router и middleware процедур. Он может использовать Fetch, Node, Express, Fastify или WebSocket adapters, но не является Registry, Selector, connection pool или менеджером жизненного цикла приложения. Типизированный `Endpoint` go-like — это меньшая runtime-привязка `Struct` к телам JSON Fetch, а не конкурирующий procedure DSL или сгенерированный IDL.
-
-### go-micro и go-kratos
-
-Эти проекты Go полезны как архитектурные ориентиры для Context-first вызовов, жизненного цикла сервисов, Registry, Discovery, Selector и транспортной терминологии. Они не являются целями совместимости:
-
-- Go `context.Context` и go-like `Context` разделяют намерение явной отмены, но их runtime-представления различаются.
-- Модель Registry watcher в go-micro и полные снимки-замены go-like не следует описывать как одинаковые потоки событий.
-- `@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
-- Значения по умолчанию провайдеров go-micro и go-kratos, retry loops, half-close streams и default selectors зависят от версии. Используйте таблицу зафиксированных upstream commit в исследовательской записи и проверяйте её заново перед публикацией новой сравнительной версии.
-
-## Что выбрать
-
-| Если основная задача —...                      | Начните с...           | Добавляйте go-like, когда...                                                                         |
-| ---------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| Controllers, modules, decorators и DI          | NestJS                 | нужна явная граница вокруг существующего ресурса или внутреннего вызова и вы готовы написать адаптер |
-| Node HTTP routes, hooks и plugin encapsulation | Fastify                | нужна композиция lifecycle за пределами host или внутренние сервисные контракты                      |
-| Web Standards routes между runtime             | Hono                   | нужны lifecycle App/Server, внутренние вызовы или владение провайдерами                              |
-| Bun-first schema и route composition           | Elysia                 | нужны явные границы lifecycle и transport при сохранении Elysia                                      |
-| Минимальное Node middleware                    | Koa плюс роутер        | нужен недостающий контракт жизненного цикла или внутреннего вызова, а не ещё один роутер             |
-| Типобезопасные процедуры                       | tRPC                   | также нужны явные service discovery, владение провайдерами или Core lifecycle                        |
-| Go-стек микросервисов                          | go-micro или go-kratos | вы строите отдельную TypeScript-композицию, а не source-совместимый порт                             |
-| Межruntime TypeScript building blocks сервисов | go-like                | используйте только те пакеты и провайдеры, которые решают нужную границу                             |
-
-Правильным ответом может быть использование обеих систем. go-like особенно полезен, когда его явная модель владения устраняет реальную неоднозначность; добавление всех пакетов в уже полноценное приложение-фреймворк противоречит цели небольших строительных блоков.
-
-## Опорные точки доказательств
-
-Утверждения о go-like на этой странице можно проследить по текущему дереву и entrypoint пакетов:
-
-- `README.md` — область продукта и явные исключения;
-- `packages/core/src/app.ts` — `App`, `Server`, запуск, остановка и поведение timeout;
-- `packages/web/src/context.ts` — стандартный Handler и мост Context;
-- `packages/client/src/index.ts` — опции Client, pooling, retry и pipeline попытки;
-- `packages/server/src/index.ts` — внутренние унарные handlers и dispatch маршрутов;
-- `packages/transport/src/types.ts` и `packages/transport/src/endpoint.ts` — границы Fetch Request/Response и defineService;
-- `packages/registry/src/types.ts` и `packages/registry/src/selector.ts` — snapshots, filters, selectors и feedback.
-
-В исследовательской записи также сохранены следующие зафиксированные внешние входные данные для сравнения:
-
-- [зафиксированный в репозитории commit сравнения go-micro](https://github.com/micro/go-micro/commit/9d306dcfc1a912a8a9493f31fee0bb983475258d);
-- [commit сравнения go-kratos v3](https://github.com/go-kratos/kratos/commit/668db92c2c001e9552594ba5a8aede8456af6d7e);
-- [commit сравнения go-zlab/go-kratos](https://github.com/go-zlab/go-kratos/commit/ecd00dd24491d09642c76542f94e392c6d639336);
-- [документация NestJS о lifecycle](https://docs.nestjs.com/fundamentals/lifecycle-events), [справочник Fastify Server](https://fastify.dev/docs/latest/Reference/Server/), [API Hono](https://hono.dev/docs/api/hono), [lifecycle Elysia](https://elysiajs.com/essential/life-cycle), [Koa](https://koajs.com/) и [routers tRPC](https://trpc.io/docs/server/routers).
-
-URL выше — сравнительные источники, а не утверждение, что в рамках этой фазы документации каждая upstream-страница была загружена или повторно проверена. Перед изменением формулировки, зависящей от версии, заново проверьте release tags или commits.
+Версии стороннего TypeScript, записанные для сравнения, а не как обещания совместимости: NestJS `@nestjs/core@11.1.28`, Fastify `5.11.2`, Hono `4.12.34`, Elysia `1.4.29`, Koa `3.2.1`, tRPC `@trpc/server@11.18.0`. Манифест примера Elysia — фиксация для этого примера; эта таблица — снимок исследования.

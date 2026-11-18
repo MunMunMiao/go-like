@@ -1,4 +1,5 @@
-import type { ConfigObject, ConfigSchema, ConfigValue } from "@go-like/config"
+import type { ConfigObject, ConfigSchema, ConfigValue } from "@go-like/core/config"
+import { struct } from "@go-like/core/struct"
 
 /** Safe tokens accepted in tenant configuration and public projections. */
 const TenantToken = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
@@ -60,62 +61,78 @@ export function parseFeatures(value: unknown): Readonly<Record<string, boolean>>
   return Object.freeze(features)
 }
 
-/** Parses one exact tenant policy from the configuration domain. */
-function parseTenantPolicy(value: ConfigValue | undefined): TenantPolicy | null {
-  if (!configObject(value)) return null
-  const enabled = value.enabled
-  const plan = value.plan
-  const rateLimit = value.rateLimit
-  const features = parseFeatures(value.features)
-  if (
-    typeof enabled !== "boolean" ||
-    typeof plan !== "string" ||
-    !isTenantToken(plan) ||
-    !configObject(rateLimit) ||
-    !positiveInteger(rateLimit.capacity) ||
-    !positiveInteger(rateLimit.refillTokens) ||
-    !positiveInteger(rateLimit.refillIntervalMs) ||
-    features === null
-  ) {
-    return null
-  }
-  return Object.freeze({
-    enabled,
-    plan,
-    features,
-    rateLimit: Object.freeze({
-      capacity: rateLimit.capacity,
-      refillTokens: rateLimit.refillTokens,
-      refillIntervalMs: rateLimit.refillIntervalMs
+const tenantDocumentStruct = struct.object({
+  schemaVersion: struct.literal(1),
+  generation: struct.string(),
+  cacheTtlMs: struct.number(),
+  tenants: struct.record(
+    struct.object({
+      enabled: struct.boolean(),
+      plan: struct.string(),
+      features: struct.record(struct.boolean()),
+      rateLimit: struct.object({
+        capacity: struct.number(),
+        refillTokens: struct.number(),
+        refillIntervalMs: struct.number()
+      })
     })
-  })
+  )
+})
+
+interface ParsedTenantDocument {
+  readonly schemaVersion: 1
+  readonly generation: string
+  readonly cacheTtlMs: number
+  readonly tenants: {
+    readonly [key: string]: {
+      readonly enabled: boolean
+      readonly plan: string
+      readonly features: { readonly [key: string]: boolean }
+      readonly rateLimit: {
+        readonly capacity: number
+        readonly refillTokens: number
+        readonly refillIntervalMs: number
+      }
+    }
+  }
 }
 
-/** Validates and detaches the complete tenant configuration document. */
-function validateTenantDocument(input: ConfigObject): TenantDocument | null {
-  const schemaVersion = input.schemaVersion
-  const generation = input.generation
-  const cacheTtlMs = input.cacheTtlMs
-  const tenantsValue = input.tenants
-  if (
-    schemaVersion !== 1 ||
-    typeof generation !== "string" ||
-    !isTenantToken(generation) ||
-    !positiveInteger(cacheTtlMs) ||
-    !configObject(tenantsValue)
-  ) {
-    return null
-  }
+/** Rejects one issue list with the stable tenant-document message. */
+function invalidTenantDocument(): { readonly issues: readonly [{ readonly message: string }] } {
+  return { issues: [{ message: "invalid tenant configuration document" }] }
+}
+
+/** Keeps token and positive-integer rules struct.object cannot express, and detaches the value. */
+function acceptTenantDocument(value: ParsedTenantDocument): TenantDocument | null {
+  if (!isTenantToken(value.generation) || !positiveInteger(value.cacheTtlMs)) return null
   const tenants: Record<string, TenantPolicy> = {}
-  for (const [tenantId, value] of Object.entries(tenantsValue)) {
-    const policy = parseTenantPolicy(value)
-    if (!isTenantToken(tenantId) || policy === null) return null
-    tenants[tenantId] = policy
+  for (const [tenantId, policy] of Object.entries(value.tenants)) {
+    const limit = policy.rateLimit
+    if (
+      !isTenantToken(tenantId) ||
+      !isTenantToken(policy.plan) ||
+      !Object.keys(policy.features).every((name) => isTenantToken(name)) ||
+      !positiveInteger(limit.capacity) ||
+      !positiveInteger(limit.refillTokens) ||
+      !positiveInteger(limit.refillIntervalMs)
+    ) {
+      return null
+    }
+    tenants[tenantId] = Object.freeze({
+      enabled: policy.enabled,
+      plan: policy.plan,
+      features: Object.freeze({ ...policy.features }),
+      rateLimit: Object.freeze({
+        capacity: limit.capacity,
+        refillTokens: limit.refillTokens,
+        refillIntervalMs: limit.refillIntervalMs
+      })
+    })
   }
   return Object.freeze({
     schemaVersion: 1,
-    generation,
-    cacheTtlMs,
+    generation: value.generation,
+    cacheTtlMs: value.cacheTtlMs,
     tenants: Object.freeze(tenants)
   })
 }
@@ -124,12 +141,14 @@ function validateTenantDocument(input: ConfigObject): TenantDocument | null {
 export const tenantDocumentSchema: ConfigSchema<TenantDocument> = Object.freeze({
   "~standard": Object.freeze({
     version: 1,
-    vendor: "@go-like/example-saas-tenant-api",
+    vendor: "go-like",
     validate(value: unknown) {
-      const parsed = configObject(value) ? validateTenantDocument(value) : null
-      return parsed === null
-        ? { issues: [{ message: "invalid tenant configuration document" }] }
-        : { value: parsed }
+      const parsed = tenantDocumentStruct["~standard"].validate(value) as
+        | { readonly value: ParsedTenantDocument }
+        | { readonly issues: readonly { readonly message: string }[] }
+      if (!("value" in parsed)) return invalidTenantDocument()
+      const accepted = acceptTenantDocument(parsed.value)
+      return accepted === null ? invalidTenantDocument() : { value: accepted }
     }
   })
 })

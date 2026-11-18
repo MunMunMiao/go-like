@@ -19,7 +19,7 @@ SaaS 订阅在账期中途升降级时，只能对剩余服务时间收取或退
 
 ## go-like 能力
 
-主要演示 `@go-like/config` 如何从真实 `objectSource` 执行 `load`、发布不可变配置值，再把计费调整上限组合进业务 Handler；应用通过 Core 的 `beforeStart / afterStop` hook 调用 `load / close`，同时使用 `@go-like/context` 维持 Context-first 用例边界，并用 `@go-like/web` 暴露不拥有 listener 的标准 Web API。
+主要演示 `@go-like/core/config` 如何从真实 `objectSource` 执行 `load`、发布不可变配置值，再把计费调整上限组合进业务 Handler；应用通过 Core 的 `beforeStart / afterStop` hook 调用 `load / close`，同时使用 `@go-like/core/context` 维持 Context-first 用例边界，并用 `@go-like/core/web` 暴露不拥有 listener 的标准 Web API。
 
 ## 验证矩阵
 

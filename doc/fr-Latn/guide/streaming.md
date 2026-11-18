@@ -1,15 +1,84 @@
 # Streaming
 
-go-like utilise le modèle de flux déjà présent sur la plateforme Web. La requête est un `Request` standard et la réponse un `Response` dont le body peut être un `ReadableStream<Uint8Array>`. Pas de classe Stream maison, de DSL de frames ni de faux canal bidirectionnel posé sur un body à usage unique.
+go-like a trois frontières de streaming.
 
-Le streaming HTTP public appartient à `@go-like/web` et au Handler natif du framework. Un appel unaire porte un corps JSON. Un server stream `stream: true` est du SSE sur `POST /<service>/<endpoint>` (`accept: text/event-stream`), pas un protocole bidirectionnel multi-trames. Le handler est un `async *`. Le client `await` un `ServerStream`, puis `for await`. Fermez avec `close()` ou `await using`. `streamKeepAlive` vaut 15000 ms ; `0` ne garde que le commentaire initial. `maxSendMessageBytes` vaut 4 Mio et compte l'événement SSE UTF-8 entier ; le dépassement est `resource_exhausted` / HTTP 429. Memory n'a au plus un message d'avance ; le préchargement HTTP est borné et n'est pas 1:1 avec `for await`. N'effectuez pas dans le générateur un effet qui suppose la livraison. Avec une deadline, le client écrit `Go-Like-Timeout-Ms`. Le Context de la requête vit jusqu'à la fin du body. Client-streaming et bidi restent dans `@go-like/transport-grpc-buf/native`.
+1. **Le streaming Web public** utilise le corps `Request` et `Response` de Fetch et l'API Web Streams.
+2. **Les appels de service internes** utilisent une requête Fetch et une réponse Fetch. Un appel unaire porte un corps JSON. Un flux serveur positionne `stream: true` et renvoie `text/event-stream`. Il n'y a pas de SPI client-stream ni bidirectionnel sur ce chemin.
+3. **Le RPC Protobuf généré** utilise `@go-like/connectrpc` pour Connect et gRPC-Web sur Fetch, et `@go-like/connectrpc/node` pour le gRPC standard géré. Fetch portable couvre l'unaire et le server-streaming. L'entrée Node couvre l'unaire, le server-streaming, le client-streaming et le bidi. `@go-like/protoc-gen-like` génère le code de liaison du client et du handler, avec le Context en premier argument.
 
-Un body Web ne se consomme qu’une fois. Un middleware ne devrait le lire que s’il compte le remplacer explicitement. L’annulation passe par le premier `Context` et par le signal du request. Le transport vérifie aussi que chaque chunk est un `Uint8Array` : une valeur invalide devient une erreur de protocole, pas un contenu vide difficile à diagnostiquer.
+Un `ReadableStream`, une réponse SSE de framework ou un upgrade WebSocket est du streaming Web. Un flux serveur interne est du SSE sur `POST /<service>/<endpoint>` avec `accept: text/event-stream`.
 
-Pour le HTTP public, utilisez `@go-like/web` avec Hono, Elysia, H3 ou votre propre handler. SSE, réponses en flux et upgrade WebSocket propres au runtime restent gérés par le framework d’origine ; go-like préserve les objets et erreurs natifs.
+Le drain gRPC géré avec consommateur lent sur Node 26.12.1 et Bun 1.4.4 est consigné dans la [matrice de drain gRPC natif](/reference/claims#native-grpc-drain-status). Les observations antérieures d'annulation Fetch de Connect 2.1.2 et de Bun 1.4.2 restent dans le [registre des affirmations](/reference/claims#stream-cancellation-limits). Le RPC généré n'ajoute pas de rejeu de flux.
 
-`contextHandler` nettoie son Context privé lorsque le Handler renvoie la Response, pas à la fin du body. Un producteur de longue durée doit observer `request.signal` ou posséder son propre périmètre d’annulation.
+## Streaming Web public
 
-`@go-like/protoc-gen-like` génère le code Protobuf RPC avec `Context` en premier argument, sur Protobuf-ES. `@go-like/transport-grpc-buf` fournit unary et server-streaming Connect/gRPC-Web via Fetch ; `/native` ajoute gRPC standard avec les quatre cardinalités, dont client-streaming et bidi. Ce chemin est indépendant du chemin interne Fetch/SSE.
+```ts
+import { contextHandler, type Handler } from "@go-like/core/web"
 
-gRPC géré sous Node 26.12.1 et Bun 1.4.4 a passé le [test de régression du drain avec consommateur lent](/reference/claims#native-grpc-drain-status). Les observations antérieures montrent que Connect 2.1.2 conserve un temporisateur deadline après annulation d’une réponse suspendue et que l’annulation Fetch de Bun 1.4.2 n’atteint pas un serveur silencieux après le premier chunk. Consultez les [preuves et limites](/reference/claims#stream-cancellation-limits) ; cette exécution ne vérifie pas la correction de ces deux limites historiques.
+export const streamHandler: Handler = contextHandler(async () => {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode("first\n"))
+      controller.enqueue(encoder.encode("second\n"))
+      controller.close()
+    }
+  })
+  return new Response(body, {
+    headers: { "content-type": "text/plain; charset=utf-8" }
+  })
+})
+```
+
+L'application ou le framework possède le format du flux, le flush, les conventions SSE, l'upgrade WebSocket et la policy de déconnexion. `contextHandler` termine son Context lorsque le handler renvoie la `Response`. Un corps de longue durée doit aussi observer `request.signal`. Un Context de RPC interne vit jusqu'à la fin du corps de réponse.
+
+Hono, Elysia et H3 conservent leurs propres API de flux et de WebSocket. Passez `app.fetch` à `@go-like/core/web/node` ou `@go-like/core/web/bun` lorsque vous voulez le cycle de vie de l'App.
+
+## Flux serveur internes
+
+Déclarez `stream: true`. Le handler est un générateur asynchrone. Le client lit un `ServerStream` avec `for await`. `close()`, `await using`, `break` et l'annulation de l'appelant abandonnent la requête.
+
+```ts
+import { newClient, withEndpoint, withTransport } from "@go-like/core/client"
+import { background } from "@go-like/core/context"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { struct } from "@go-like/core/struct"
+import { defineService } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
+
+const orders = defineService("orders", {
+  watch: {
+    request: struct.object({ after: struct.string() }),
+    response: struct.object({ id: struct.string() }),
+    stream: true
+  }
+})
+
+const transport = newMemoryTransport()
+const rpc = newServer(serverTransport(transport), address("memory://orders"))
+orders.registerHandler(rpc, {
+  async *watch(_ctx, request) {
+    yield { id: request.after }
+  }
+})
+
+const api = orders.newClient(newClient(withTransport(transport), withEndpoint("memory://orders")))
+const stream = await api.watch(background(), { after: "0" })
+for await (const event of stream) {
+  console.log(event.id)
+  break
+}
+await stream.close()
+```
+
+`streamKeepAlive` et `maxSendMessageBytes` sur `@go-like/core/server` bornent l'intervalle des commentaires SSE et la taille de trame. Ils ne changent pas la cardinalité. Il y a toujours un corps de requête et une séquence d'événements de réponse.
+
+## RPC généré
+
+`@go-like/connectrpc` exporte `newHandler`, `callOptions` et `fromHandlerContext`. Le handler est un `Handler` Fetch pour Connect et gRPC-Web. Montez-le sur un host Web de core de la même façon que n'importe quel autre handler.
+
+`@go-like/connectrpc/node` exporte `newServer`, `newClient`, ainsi que les options d'adresse, d'annonce et de TLS. Ce serveur est un `Server` de cycle de vie et un `Endpointer` pour le palier serveurs. Le client Node consomme `Discovery` et `Selector` lorsque vous les passez. Le gRPC standard sur cette entrée est le chemin qui couvre le client-streaming et le bidi.
+
+`@go-like/protoc-gen-like` est le plugin Buf. Le code généré importe `@go-like/core/context` et `@go-like/connectrpc`. Le générateur n'a pas de socket d'exécution.
+
+Le gRPC standard dans le navigateur, les health et reflection gRPC officiels, et une garantie sur un runtime futur sont en dehors de cette matrice. Le drain géré testé est le [relevé des affirmations](/reference/claims#native-grpc-drain-status).

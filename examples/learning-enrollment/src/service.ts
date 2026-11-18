@@ -1,4 +1,4 @@
-import type { Context } from "@go-like/context"
+import type { Context } from "@go-like/core/context"
 import type { CapacityClient, EnrollmentRepository } from "./transport"
 
 export interface EnrollCommand {

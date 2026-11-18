@@ -1,6 +1,6 @@
 import { SQL } from "bun"
 
-import { background } from "@go-like/context"
+import { background } from "@go-like/core/context"
 import { RetentionPolicy, StorageType, jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { connect, type NatsConnection, type Status } from "@nats-io/transport-node"
 

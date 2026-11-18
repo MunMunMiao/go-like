@@ -6,10 +6,10 @@
     "proto:generate": "buf generate"
   },
   "dependencies": {
+    "@go-like/core": "0.0.1",
+    "@go-like/connectrpc": "0.0.1",
     "@bufbuild/protobuf": "2.17.0",
-    "@connectrpc/connect": "2.3.0",
-    "@go-like/context": "0.0.1",
-    "@go-like/transport-grpc-buf": "0.0.1"
+    "@connectrpc/connect": "2.3.0"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.75.0",

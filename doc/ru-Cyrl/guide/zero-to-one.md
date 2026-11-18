@@ -1,189 +1,53 @@
 # Запись на приём в клинике: от 0 до 1
 
-Это guided-путь от 0 до 1 для небольшого проекта, где go-like изучается через конкретный бизнес-инвариант, а не через очередной обобщённый Todo. Здесь описаны целевая форма и исполняемые checkpoints; это не утверждение, что целевое дерево уже собрано в готовое приложение для копирования. Проект — сервис записи в клинику с внутрипроцессным сервисом политики, авторитетным repository записей, временным кешем доступности, health-эндпоинтами и одним явным жизненным циклом приложения.
-
-В репозитории уже есть `examples/healthcare-appointments`, от которого начинается этот материал. Сервис политики использует `defineService("appointment-policy.v1")` с endpoint `check`, `withEndpoint("memory://appointment-policy.v1")` и `serviceError(..., 409)`. Фрагменты ниже совпадают с этим примером.
+Этот путь проводит один бизнес-инвариант через внутренний вызов политики, Fetch Handler, health и один App. Запускаемое дерево — `examples/healthcare-appointments`. Фрагменты ниже используют имена этого примера. Одноразовый кеш доступности — дополнительная веха, которую вы добавляете в том же корне композиции. Это не второй источник истины.
 
 ## Инвариант
 
-Сервис должен соблюдать пять правил:
-
 1. У врача не может быть пересекающихся активных записей.
-2. Отмена освобождает временной слот.
-3. Повтор той же заявки с тем же appointment ID идемпотентен.
-4. Повторное использование appointment ID с другим содержимым отклоняется.
-5. Доступность кешируется только для ускорения; repository остаётся источником истины.
+2. Отмена освобождает слот.
+3. Повтор того же идентификатора записи с тем же содержимым идемпотентен.
+4. Повторное использование идентификатора записи с другим содержимым отклоняется.
+5. Кешированная проекция доступности, если вы её добавите, сама по себе никогда не разрешает запись.
 
-Текущий пример в репозитории реализует первые четыре правила с репозиторием в памяти и проверяет максимальную длительность приёма через внутренний сервис политики. Он не заявляет базу данных, распределённую блокировку, долговечный cache, аутентификацию или production-ready процесс записи.
+Пример реализует первые четыре правила репозиторием в памяти и проверяет максимальную длительность через `appointment-policy.v1/check`. Он не заявляет базу данных, распределённую блокировку, аутентификацию или производственный процесс клиники.
 
-## Что вы построите
-
-```text
-clinic-appointments/
-|-- package.json
-|-- tsconfig.json
-|-- README.md
-|-- src/
-|   |-- contract.ts       # typed policy Endpoint and Structs
-|   |-- service.ts        # domain invariant and canonical repository
-|   |-- transport.ts      # policy Server and Client over Memory Transport
-|   |-- cache.ts          # availability cache and invalidation policy
-|   |-- http.ts           # Fetch routes and health delegation
-|   `-- main.ts           # one composition root and one Core App
-`-- test/
-    |-- main.test.ts      # domain, typed call, HTTP, cache, health, cancellation
-    `-- node-e2e.ts       # real bind, request, stop, and port release
-```
-
-Текущий пример в workspace имеет более компактное дерево:
+## Раскладка
 
 ```text
 examples/healthcare-appointments/
-|-- package.json
-|-- tsconfig.json
-|-- README.md
-|-- src/
-|   |-- service.ts
-|   |-- transport.ts      # defineService appointment-policy.v1
-|   |-- http.ts
-|   `-- main.ts
-`-- test/main.test.ts
+  src/contract.ts    defineService and Structs
+  src/service.ts     repository and booking rules
+  src/transport.ts   memory Server and Client
+  src/http.ts        Fetch handler
+  src/main.ts        Node host and App
+  test/main.test.ts
 ```
-
-Второе дерево — источник истины для того, что уже находится в checkout. Первое — целевая форма для этапов учебного проекта.
-
-## Предварительные условия и команды
 
 Из корня репозитория:
 
 ```sh
 bun install --frozen-lockfile
-```
-
-Этот checkout использует пакеты `workspace:*` версии `0.0.1`. Версия manifest не доказывает доступность в npm; перед установкой вне workspace проверьте публикацию отдельно.
-
-Запустите существующий исходный пример:
-
-```sh
-HOST=127.0.0.1 PORT=3000 bun run --cwd examples/healthcare-appointments start
-```
-
-Скрипт `start` собирает корневые пакеты, создаёт подготовленный Node bundle и запускает его. Перед отправкой трафика дождитесь строки `GO_LIKE_EXAMPLE_READY`. В другом терминале:
-
-```sh
-NOW=$(($(date +%s) * 1000))
-curl -i -sS http://127.0.0.1:3000/v1/appointments \
-  -H 'content-type: application/json' \
-  -d "{\"appointmentId\":\"appointment-1\",\"doctorId\":\"doctor-1\",\"patientId\":\"patient-1\",\"startsAt\":$((NOW + 3600000)),\"endsAt\":$((NOW + 5400000))}"
-
-curl -i -sS -X DELETE \
-  http://127.0.0.1:3000/v1/appointments/appointment-1
-```
-
-Остановите процесс переднего плана через `Ctrl-C`. Не запускайте вторую скрытую App для сервиса политики: текущий пример помещает policy Server и Web Server в один Core App.
-
-Целевые проверки текущего примера:
-
-```sh
-bun run --cwd examples/healthcare-appointments typecheck
 bun run --cwd examples/healthcare-appointments test:unit
 ```
 
-В примере также объявлен E2E wrapper:
+Версия пакета `0.0.1` не доказывает доступность в npm. Внутри этой рабочей копии единственная зависимость go-like, которая нужна примеру, — `@go-like/core`.
 
-```sh
-bun run --cwd examples/healthcare-appointments test:e2e
-```
+## M0: правила предметной области
 
-Эта команда собирает и запускает E2E-задачу примера. Это команда для выполнения, а не утверждение, что текущий checkout уже прошёл её.
+`src/service.ts` владеет `BookAppointmentCommand`, репозиторием и проверкой пересечения. Context — первый аргумент, даже когда репозиторий в памяти не блокируется. Позднейшие store или кеш могут использовать ту же сигнатуру.
 
-## M0: сначала правила предметной области
+Пример отклоняет плохой идентификатор, неположительное окно, пересечение и идентификатор, повторно использованный с другим содержимым. Тесты этих случаев живут рядом с репозиторием, без App и без HTTP.
 
-Модуль предметной области использует Context-first стиль, хотя критическая секция репозитория в памяти синхронна. Так на границе остаются видимыми отмена и возможная будущая замена провайдера:
+## M1: сервис политики
 
-```ts
-import type { Context } from "@go-like/context"
-
-export interface BookAppointmentCommand {
-  readonly appointmentId: string
-  readonly doctorId: string
-  readonly patientId: string
-  readonly startsAt: number
-  readonly endsAt: number
-}
-
-export type AppointmentStatus = "booked" | "cancelled"
-
-export interface Appointment extends BookAppointmentCommand {
-  readonly status: AppointmentStatus
-}
-
-export interface AppointmentRepository {
-  book(ctx: Context, command: BookAppointmentCommand): Appointment
-  cancel(ctx: Context, appointmentId: string): Appointment
-  get(ctx: Context, appointmentId: string): Appointment | undefined
-}
-```
-
-Перед изменением состояния repository должен проверять `ctx.err()`. Текущий пример делает это в `newMemoryAppointmentRepository()` и хранит вместе с каждой записью отпечаток. Предикат пересечения имеет вид:
+`src/contract.ts` связывает операцию:
 
 ```ts
-function overlaps(
-  leftStartsAt: number,
-  leftEndsAt: number,
-  rightStartsAt: number,
-  rightEndsAt: number
-): boolean {
-  return leftStartsAt < rightEndsAt && rightStartsAt < leftEndsAt
-}
-```
+import { struct } from "@go-like/core/struct"
+import { defineService } from "@go-like/core/transport"
 
-Этот predicate разрешает соседние записи, но отклоняет пересекающиеся активные записи одного врача. При отмене сохранённая запись получает статус `cancelled`; повторная отмена возвращает ту же отменённую запись.
-
-### Тесты M0
-
-Напишите эти тесты до добавления HTTP или транспорта:
-
-```ts
-import { background } from "@go-like/context"
-import { expect, test } from "bun:test"
-import { newBookAppointment, newMemoryAppointmentRepository } from "../src/service"
-test("rejects an overlapping active slot", () => {
-  const repository = newMemoryAppointmentRepository()
-  const book = newBookAppointment(repository, () => 1_000)
-  book(background(), {
-    appointmentId: "a-1",
-    doctorId: "doctor-1",
-    patientId: "patient-1",
-    startsAt: 2_000,
-    endsAt: 3_000
-  })
-
-  expect(() =>
-    book(background(), {
-      appointmentId: "a-2",
-      doctorId: "doctor-1",
-      patientId: "patient-2",
-      startsAt: 2_500,
-      endsAt: 3_500
-    })
-  ).toThrow("doctor time conflict")
-})
-```
-
-В текущем `test/main.test.ts` есть этот сценарий, а также повторное использование после отмены, идемпотентная отмена и проверка HTTP handler. Пока команда выше не запущена в вашем окружении, это проверенное содержимое репозитория, но не результат текущего запуска.
-
-## M1: типизированный внутренний сервис политики
-
-Типизированный внутренний контракт использует `@go-like/struct` и `defineService` из `@go-like/transport`. Это runtime-валидация Struct на JSON-теле Fetch, а не IDL и не сгенерированный Protobuf service.
-
-### `src/contract.ts`
-
-```ts
-import { struct } from "@go-like/struct"
-import { defineService } from "@go-like/transport"
-
-const appointmentPolicyCommand = struct.object({
+const command = struct.object({
   appointmentId: struct.string(),
   doctorId: struct.string(),
   patientId: struct.string(),
@@ -191,357 +55,119 @@ const appointmentPolicyCommand = struct.object({
   endsAt: struct.number()
 })
 
-const appointmentPolicyDecision = struct.object({
-  allowed: struct.literal(true)
-})
-
 export const appointmentPolicy = defineService("appointment-policy.v1", {
   check: {
-    request: appointmentPolicyCommand,
-    response: appointmentPolicyDecision
+    request: command,
+    response: struct.object({ allowed: struct.literal(true) })
   }
 })
 ```
 
-Route token соответствуют `^[A-Za-z0-9._~-]+$` (URL unreserved) и не могут быть ровно `.` или `..`. `defineService` задаёт имя контрактного сервиса и каждый ключ endpoint. Эти token образуют путь URL `/<service>/<endpoint>`. Это не сетевой адрес. Узел задаёт `withEndpoint`.
-
-### `src/transport.ts`
+`src/transport.ts` ставит оба конца на один транспорт в памяти. Адрес `memory://appointment-policy.v1` — это не имя операции.
 
 ```ts
-import { newClient, withEndpoint, withTransport } from "@go-like/client"
-import type { Context } from "@go-like/context"
-import { address, newServer, transport as serverTransport, type Server } from "@go-like/server"
-import { serviceError } from "@go-like/transport"
-import { newMemoryTransport } from "@go-like/transport-memory"
-
+import { newClient, withEndpoint, withTransport } from "@go-like/core/client"
+import { address, newServer, transport as serverTransport } from "@go-like/core/server"
+import { serviceError } from "@go-like/core/transport"
+import { newMemoryTransport } from "@go-like/core/transport/memory"
 import { appointmentPolicy } from "./contract"
 
-const policyAddress = "memory://appointment-policy.v1"
-
-export interface AppointmentPolicy {
-  readonly server: Server
-  validate(
-    ctx: Context,
-    command: {
-      readonly appointmentId: string
-      readonly doctorId: string
-      readonly patientId: string
-      readonly startsAt: number
-      readonly endsAt: number
+const transport = newMemoryTransport()
+const server = newServer(serverTransport(transport), address("memory://appointment-policy.v1"))
+appointmentPolicy.registerHandler(server, {
+  check(_ctx, command) {
+    if (command.endsAt - command.startsAt > 7_200_000) {
+      throw serviceError("appointment_policy_rejected", "appointment duration exceeds policy", 409)
     }
-  ): Promise<void>
-  close(ctx: Context): Promise<void>
-}
-
-export function newAppointmentPolicy(maximumDurationMs = 7_200_000): AppointmentPolicy {
-  const transport = newMemoryTransport()
-  const server = newServer(serverTransport(transport), address(policyAddress))
-  appointmentPolicy.registerHandler(server, {
-    check(_ctx, command) {
-      if (command.endsAt - command.startsAt > maximumDurationMs) {
-        throw serviceError(
-          "appointment_policy_rejected",
-          "appointment duration exceeds policy",
-          409
-        )
-      }
-      return { allowed: true }
-    }
-  })
-  const client = newClient(withTransport(transport), withEndpoint(policyAddress))
-  const caller = appointmentPolicy.newClient(client)
-  const policy: AppointmentPolicy = {
-    server,
-    async validate(ctx, command) {
-      await caller.check(ctx, command)
-    },
-    close(ctx) {
-      return client.close(ctx)
-    }
+    return { allowed: true as const }
   }
-  return Object.freeze(policy)
-}
+})
+const caller = appointmentPolicy.newClient(
+  newClient(withTransport(transport), withEndpoint("memory://appointment-policy.v1"))
+)
 ```
 
-Закреплённый пример регистрирует `check` через `appointmentPolicy.registerHandler` и отклоняет слишком длинную запись с `serviceError(..., 409)`. Владение прежнее: один экземпляр Memory Transport, один внутренний Server, один Client и явный close этого Client.
+`src/http.ts` — это `contextHandler`. Он передаёт Context запроса в запись и отмену. HTTP 400 — это повреждённое тело. HTTP 409 — отклонённая запись. Эти статусы выбирает Web Handler. Сбой политики — это `ServiceError` со статусом 409 на внутреннем вызове.
 
-### Передавайте тот же Context
+## M2: кеш доступности
 
-Сценарий записи должен передавать тот же request Context policy Client и repository:
+Кеш в памяти необязателен и действует в пределах процесса. Ключи и значения — байты. Репозиторий остаётся авторитетным: попадание пропускает чтение, промах или истечение читает снова, а запись или отмена удаляет ключ. Ошибка кеша не должна превращаться в успешную запись.
 
 ```ts
-import type { Context } from "@go-like/context"
+import { expiresIn } from "@go-like/core/cache"
+import { newMemoryCache } from "@go-like/core/cache/memory"
 
-interface BookCommand {
-  readonly appointmentId: string
-  readonly doctorId: string
-  readonly patientId: string
-  readonly startsAt: number
-  readonly endsAt: number
-}
-
-interface Appointment {
-  readonly id: string
-}
-
-declare const policy: {
-  validate(ctx: Context, command: BookCommand): Promise<void>
-}
-declare const repository: {
-  book(ctx: Context, command: BookCommand): Promise<Appointment>
-}
-
-async function validatedBook(ctx: Context, command: BookCommand): Promise<Appointment> {
-  await policy.validate(ctx, command)
-  return repository.book(ctx, command)
-}
+const cache = newMemoryCache()
+await cache.put(ctx, key, bytes, expiresIn(5_000))
+const hit = await cache.get(ctx, key)
 ```
 
-Замена `ctx` на `background()` отбросит deadline, cancellation и Context ancestry запроса. Это регрессия корректности, а не безобидное упрощение.
-
-### Тесты M1
-
-Проверьте всё перечисленное:
-
-| Тест                     | Ожидаемый результат                                |
-| ------------------------ | -------------------------------------------------- |
-| корректный typed request | `allowed: true` и созданная запись                 |
-| слишком длинная запись   | policy failure до изменения repository             |
-| неверный тип поля        | typed request decode failure                       |
-| неверная форма response  | typed response encode failure на границе Server    |
-| отменённый Context       | policy и repository наблюдают одну и ту же отмену  |
-| client close             | очистка resident Transport Client выполняется явно |
-
-Тест policy в текущем example уже проверяет отказ до изменения repository и успешный путь `Client -> Memory Transport -> Server`. Типизированный тест — предлагаемое расширение.
-
-## M2: Cache доступности
-
-Cache полезен для проекции чтения, но не для источника истины при записи. Пакет Cache предоставляет Context-first `get`, `put` и `delete`; `@go-like/cache-memory` даёт `newMemoryCache()`, а `@go-like/cache` — `expiresIn(...)`:
-
-```ts
-import type { Context } from "@go-like/context"
-import { expiresIn } from "@go-like/cache"
-import { newMemoryCache } from "@go-like/cache-memory"
-import type { AppointmentRepository } from "./service"
-
-interface Availability {
-  readonly doctorId: string
-  readonly slots: readonly { readonly startsAt: number; readonly endsAt: number }[]
-}
-
-interface AvailabilityRepository extends AppointmentRepository {
-  readAvailability(ctx: Context, doctorId: string): Availability
-}
-
-const availabilityCache = newMemoryCache()
-declare const repository: AvailabilityRepository
-
-async function readAvailability(ctx: Context, doctorId: string) {
-  const key = `availability/${doctorId}`
-  const cached = await availabilityCache.get(ctx, key)
-  if (cached !== null) {
-    return JSON.parse(new TextDecoder().decode(cached)) as Availability
-  }
-
-  const authoritative = repository.readAvailability(ctx, doctorId)
-  await availabilityCache.put(
-    ctx,
-    key,
-    new TextEncoder().encode(JSON.stringify(authoritative)),
-    expiresIn(30_000)
-  )
-  return authoritative
-}
-
-async function invalidateAvailability(ctx: Context, doctorId: string): Promise<void> {
-  await availabilityCache.delete(ctx, `availability/${doctorId}`)
-}
-```
-
-`repository.readAvailability(...)` — метод приложения из этого tutorial, а не export go-like. После авторитетной мутации booking и cancellation должны инвалидировать ключ. Если invalidation не удалась, сообщите об этом и выберите явную consistency policy; не считайте cache источником истины для записи.
-
-### Тесты M2
-
-- miss читает repository и заполняет cache;
-- hit не читает repository повторно;
-- booking или cancellation удаляет projection;
-- истёкшее значение приводит к чтению из repository;
-- ошибка cache не превращает корректное чтение из источника истины в ложный результат booking;
-- после перезапуска процесса состояние Memory Cache исчезает по замыслу.
+`newMemoryCache` — это не `Server`. `@go-like/redis/cache` — это `Server`; его помещают в `resources(...)`.
 
 ## M3: liveness и readiness
 
-Создайте Registry в composition root и направьте два пути в `createHealthHandler(...)`:
+Создайте один registry, направьте на него App и сами разведите `/livez` и `/readyz`. Без `readyProbe` путь `/readyz` остаётся 503.
 
 ```ts
-import type { Context } from "@go-like/context"
-import { newProbeRegistry } from "@go-like/health"
-import { createHealthHandler } from "@go-like/web/health"
-import type { Handler } from "@go-like/web"
+import { newApp, readyProbe, server } from "@go-like/core"
+import { newProbeRegistry } from "@go-like/core/health"
+import { createHealthHandler, type Handler } from "@go-like/core/web"
 
-import type { Appointment, BookAppointmentCommand } from "./service"
-import { newBookAppointment, newCancelAppointment, newMemoryAppointmentRepository } from "./service"
-import { newAppointmentPolicy } from "./transport"
-import { newAppointmentHandler } from "./http"
-
-const repository = newMemoryAppointmentRepository()
-const policy = newAppointmentPolicy()
-const book = async (ctx: Context, command: BookAppointmentCommand): Promise<Appointment> => {
-  const decision = await policy.validate(ctx, command)
-  if (!decision.allowed) throw new Error("appointment policy rejected request")
-  return newBookAppointment(repository)(ctx, command)
-}
-const cancel = newCancelAppointment(repository)
 const probes = newProbeRegistry()
 probes.register("ready", "policy", async (ctx) => {
-  await policy.server.endpoint(ctx)
+  await policyServer.endpoint(ctx)
 })
+const health = createHealthHandler(probes)
 
-const healthHandler = createHealthHandler(probes)
-const appointmentHandler: Handler = newAppointmentHandler(book, cancel)
-
-const webHandler: Handler = (request) => {
-  const path = new URL(request.url).pathname
-  if (path === "/livez" || path === "/readyz") return healthHandler(request)
+const handler: Handler = async (request) => {
+  const { pathname } = new URL(request.url)
+  if (pathname === "/livez" || pathname === "/readyz") return await health(request)
   return appointmentHandler(request)
 }
+
+const app = newApp(readyProbe(probes), server(policyServer, web))
+void handler
+void app
 ```
-
-Маршруты по умолчанию — `/livez` и `/readyz`. Пустой liveness считается исправным; пустой readiness закрывается с отказом. Приведённая выше проверка `policy` делает readiness зависимым от допуска внутреннего listener, но не притворяется, будто внешняя база данных определяет liveness процесса.
-
-Сервис для production должен добавлять только те readiness dependencies, которые действительно обязательны для трафика. Имена probes — публичные идентификаторы, а health payloads намеренно очищены.
 
 ## M4: один владелец жизненного цикла
 
-Composition root должен создать ресурсы один раз и поместить их под одну App:
+`src/main.ts` в примере — корень композиции: репозиторий, сервис политики, Handler, `newNodeServer`, `signal()` и `afterStart`, который ждёт `endpoint(ctx)`, прежде чем записать `GO_LIKE_EXAMPLE_READY`. Добавьте `readyProbe`, когда открываете `/readyz`. Закройте клиент политики в `afterStop`, если он переживает сервер в памяти.
 
 ```ts
-import process from "node:process"
-import { afterStart, afterStop, name, newApp, server } from "@go-like/core"
+import { afterStart, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
-const httpServer = newNodeServer(webHandler, hostname("127.0.0.1"), port(3000))
+const httpServer = newNodeServer(handler, hostname(host), port(portNumber))
 const app = newApp(
   signal(),
   name("healthcare-appointments"),
   server(policy.server, httpServer),
   afterStart(async (ctx) => {
     await httpServer.endpoint(ctx)
-    process.stdout.write("GO_LIKE_EXAMPLE_READY=healthcare-appointments\n")
-  }),
-  afterStop((ctx) => policy.close(ctx))
+  })
 )
-
 await app.run()
 ```
 
-Hook `afterStop` — одна явная граница порядка для policy Client. Core сам останавливает соседние Servers конкурентно. Если нужен более сложный порядок зависимостей, объедините зависимые ресурсы в один Server или явный hook, а не полагайтесь на порядок объявления.
+`server(...)` запускает обоих участников вместе. Сервер политики находится внутри процесса, поэтому ярус ресурсов ему не нужен. Кешу Redis или файловому хранилищу — нужен.
 
-`signal()` — адаптер процесса Node/Bun. Домен, типизированный контракт, Memory Transport и health-модули могут оставаться переносимыми; импорт `@go-like/core/node` — сознательный выбор runtime.
+## M5: что устанавливают тесты
 
-M4 использует `policy` и `webHandler`, созданные в M3; не создавайте второй экземпляр сервиса.
+`test/main.test.ts` проверяет правила в памяти и внутренний вызов. Прошедший модульный тест не устанавливает Docker, опубликованный tarball или производственную систему записи. Запишите команду, если заявляете результат. См. [Проверку](/ru-Cyrl/reference/verification).
 
-## M5: план тестов и доказательства
+## Диагностика
 
-| Слой       | Тест                                                            | Цель доказательства                               |
-| ---------- | --------------------------------------------------------------- | ------------------------------------------------- |
-| Domain     | overlap, cancellation reuse, idempotency, conflicting ID        | поведение `src/service.ts` и результат unit-теста |
-| Context    | отменённая booking не меняет repository и не вызывает policy    | целевой Context test                              |
-| Typed call | Struct decode/encode, policy rejection, response validation     | граница `@go-like/client` и `@go-like/server`     |
-| Cache      | miss, hit, TTL, invalidation, failure fallback                  | тесты `newMemoryCache()`                          |
-| Health     | empty liveness, empty readiness, failing probe, 405/404         | `newProbeRegistry()` и `createHealthHandler()`    |
-| HTTP       | `POST`, `DELETE`, invalid JSON, conflict status                 | тест стандартного Fetch Handler                   |
-| Lifecycle  | policy и Web Server допущены одной App; Client закрывается явно | поведение Core App и Server terminal              |
-| Node E2E   | real bind, request, signal, stop, port release                  | example E2E wrapper и остаточные проверки         |
-
-Для текущего example в репозитории целевые команды такие:
-
-```sh
-bun run --cwd examples/healthcare-appointments typecheck
-bun run --cwd examples/healthcare-appointments test:unit
-bun run --cwd examples/healthcare-appointments test:e2e
-```
-
-Для всей lane с примерами:
-
-```sh
-bun run test:e2e:examples
-```
-
-Полный E2E lane собирает пакеты и использует runner репозитория. Docker providers и cross-runtime consumers относятся к отдельным областям. Записывайте candidate commit, версии runtime, exit status, сводку и оставшиеся процессы или контейнеры; наличие скрипта не является результатом pass.
-
-## Этапы
-
-| Этап | Результат                                    | Переходите дальше, когда                                                  |
-| ---- | -------------------------------------------- | ------------------------------------------------------------------------- |
-| M0   | Domain repository и тесты инвариантов        | поведение overlap и cancellation детерминировано                          |
-| M1   | Typed policy Endpoint через Memory Transport | вызов действительно проходит Client/Server/Transport, а не прямую функцию |
-| M2   | Cache projection с invalidation              | ошибка cache не может заменить источник истины                            |
-| M3   | `/livez` и `/readyz`                         | понятны пустой readiness и failing probes                                 |
-| M4   | Одна App, signal, явная очистка Client       | у каждого допущенного ресурса есть один владелец                          |
-| M5   | Unit- и Node E2E-доказательства              | результаты записаны с командой и exit status                              |
-
-Не добавляйте Registry, Redis, Vault, настоящий broker, authentication или retries, пока эти этапы не стали понятны. Каждый из них добавляет новую модель владения или отказа, которую стоит вводить сознательно.
-
-## Устранение неполадок
-
-### `Cannot find package "@go-like/..."`
-
-Скорее всего, команда выполняется не из workspace или использует ещё не опубликованный пакет. Запустите `bun install --frozen-lockfile` из корня репозитория и выполните workspace script, например `bun run --cwd examples/healthcare-appointments start`.
-
-### Запрос возвращает `404`
-
-Текущий пример предоставляет только `POST /v1/appointments` и `DELETE /v1/appointments/{appointmentId}`. Проверьте method, path и строку `GO_LIKE_EXAMPLE_READY`. Health routes относятся к расширению tutorial M3, а не к текущему закреплённому примеру.
-
-### Запрос возвращает `400`
-
-Пример требует строковые ID и числовые `startsAt`/`endsAt`. `startsAt` должен быть в будущем относительно внедрённых clock, а `endsAt` — больше `startsAt`. Проверьте, что shell arithmetic создала числа, а не строки в кавычках.
-
-### Запрос возвращает `409`
-
-Слот врача пересекается с активной записью, appointment ID повторно использован с другим содержимым или policy service отклонил длительность. Policy вызывается до мутации repository, поэтому отказ policy не должен создавать запись.
-
-### Typed call сообщает о неверном request или response body
-
-Проверьте, что client и server используют один и тот же `Endpoint` Structs и что request Content-Type в точности равен `application/json`. `server.registerHandler(contract, fn)` выполняет JSON- и Struct-валидацию на границе Server.
-
-### Memory Client не может достучаться до Server
-
-`newMemoryTransport()` создаёт private address map для каждого экземпляра. Client и Server должны использовать один экземпляр Transport и один в один совпадающий bound `memory:` address. Одинаковый URL в двух отдельно созданных Memory Transport не устанавливает соединение.
-
-### Кажется, что `app.run()` завис
-
-Ни `Server.start(ctx)`, ни сам `afterStart` не доказывают readiness. Внутри hook дождитесь `endpoint(ctx)` или сигнала допуска ресурса, прежде чем объявлять готовность. Core останавливает соседние Servers параллельно; если важен порядок, объедините ресурсы под одним владельцем.
-
-### Остановка возвращает timeout или aggregate error
-
-Timeout ограничивает время ожидания очистки вызывающей стороной. Он не доказывает, что нативный ресурс остановился, а соседние Servers останавливаются конкурентно. Перед тем как считать shutdown чистым, проверьте основную ошибку, terminal barrier адаптера и остаточные данные о процессе или socket.
-
-### Данные кеша исчезли
-
-`@go-like/cache-memory` локален процессу и предназначен для временных данных. Для авторитетных записей используйте явный Store provider и описывайте его реальную долговечность и владение, а не превращайте Cache в базу данных.
-
-## Граница проекта
-
-Этот проект показывает реальный путь через go-like, оставаясь небольшим:
-
-```text
-Request
-  -> standard Fetch Handler
-  -> Context-first appointment use case
-  -> typed Client call
-  -> Memory Transport
-  -> unary Server policy handler
-  -> canonical appointment repository
-  -> disposable availability Cache
-  -> Response
-
-App.stop()
-  -> deregistration if configured
-  -> concurrent Server stop
-  -> explicit Client / provider cleanup
-  -> terminal result
-```
-
-Он не обучает gRPC, Protobuf, генерации IDL, внутренним full-duplex streams, распределённым блокировкам, долговечной доставке сообщений или аутентификации production-уровня. Это отдельные проектные решения за пределами небольшого проекта.
+| Симптом                                    | Что проверить                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| `Cannot find package`                      | Выполните `bun install --frozen-lockfile`. Импорты — `@go-like/core/...`.    |
+| HTTP 404                                   | Handler не знает этот путь. Маршруты health за вас не монтируются.           |
+| HTTP 400                                   | JSON-тело не прошло собственную проверку Handler.                            |
+| HTTP 409                                   | Репозиторий или политика отклонили команду.                                  |
+| Типизированный вызов не проходит валидацию | Запрос или ответ не совпадает со Struct.                                     |
+| Клиент не достигает сервера                | Клиент и сервер должны делить один экземпляр `newMemoryTransport()`.         |
+| `app.run()` не возвращается                | Он ждёт остановки. Его завершают `signal()` или `app.stop()`.                |
+| `EADDRINUSE`                               | Порт занят.                                                                  |
+| Значение кеша исчезло                      | Кеш в памяти действует в пределах процесса. TTL и `delete` тоже его удаляют. |
+| `/readyz` равен 503                        | Зарегистрируйте ready-пробу, включая `readyProbe(probes)`.                   |

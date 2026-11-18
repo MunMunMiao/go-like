@@ -1,15 +1,96 @@
 # Пакеты
 
-Исходники могут быть сгруппированы по возможностям, но публичные пакеты go-like остаются плоскими. Ядро: `@go-like/context`, `@go-like/core`, `@go-like/client`, `@go-like/server`, `@go-like/transport`, `@go-like/metadata`, `@go-like/struct`, `@go-like/web`, `@go-like/config`, `@go-like/registry`, `@go-like/cache`, `@go-like/store`, `@go-like/broker`, `@go-like/event`, `@go-like/health` и `@go-like/resilience`.
+В workspace **20** публичных пакетов `@go-like/*`. В этой рабочей копии каждый имеет версию `0.0.1`. Корневой workspace приватный. Версия не доказывает доступность в npm. 44 каталога `examples/*` — приватные приложения.
 
-Для внутрипроцессных вызовов и тестов можно использовать `@go-like/transport-memory`. Внутренний HTTP реализует `@go-like/transport-http`; подпуть `@go-like/transport-http/node` предоставляет реализации Node для `dial` и `listen`, включая серверные PEM TLS/mTLS и HTTP/2 с согласованием ALPN. Web-фреймворки передают свои нативные Fetch-обработчики напрямую в `@go-like/web`; go-like не публикует отдельные пакеты-мосты для фреймворков. Адаптеры жизненного цикла включают `@go-like/croner`, `@go-like/bullmq`, `@go-like/nats`, `@go-like/pino`, `@go-like/winston`, а наблюдаемость — `@go-like/prometheus` и `@go-like/otel`.
+Публичных точек входа **75**: 41 у `@go-like/core` и 34 у plugs и генератора. Сгенерированный экспорт `./package.json` в `dist/package.json` — метаданные, а не ещё одна точка входа.
 
-Реестры mDNS, Consul, etcd, Kubernetes и ZooKeeper выходят отдельными пакетами `@go-like/registry-*`. Store-провайдеры: `@go-like/store-memory`, `@go-like/store-file`, `@go-like/store-consul`, `@go-like/store-etcd` и `@go-like/store-vault`. Для Config есть отдельные Consul, etcd и Vault пакеты, включая `@go-like/config-vault`, а environment, file и YAML доступны как subpaths. Для кеша используются контракт `@go-like/cache` и провайдеры `@go-like/cache-memory` и `@go-like/cache-redis`.
+У `@go-like/core` нет сторонней runtime-зависимости. Каждый другой пакет, кроме `@go-like/protoc-gen-like`, объявляет peer-зависимость на ту же версию core. Генератор от core не зависит. Поведение и пределы plug — в README каждого plug. Эта страница — инвентарь.
 
-Точные имена Registry-провайдеров: `@go-like/registry-mdns`, `@go-like/registry-consul`, `@go-like/registry-etcd`, `@go-like/registry-kubernetes` и `@go-like/registry-zookeeper`. Дополнительные Config-провайдеры — `@go-like/config-consul`, `@go-like/config-etcd` и `@go-like/config-kubernetes`; Broker-провайдеры — `@go-like/broker-memory` и `@go-like/broker-rabbitmq`.
+## 20 пакетов
 
-Импортируйте из самого маленького пакета, которому принадлежит контракт. Runtime hosts вроде Node имеют отдельные точки входа. Публичной свалки `adapters` нет, а собственные HTTP headers всегда имеют префикс `Go-Like-`.
+| Пакет                      | Точки входа                              | Чем заполняет                                                       |
+| -------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| `@go-like/core`            | 41                                       | Socket, механизмы, эталонные реализации в памяти и привязки runtime |
+| `@go-like/otel`            | `.`                                      | Tracer, meter, обработчик логов, propagator                         |
+| `@go-like/pino`            | `./log`                                  | `LogHandler`                                                        |
+| `@go-like/winston`         | `./log`                                  | `LogHandler`                                                        |
+| `@go-like/prometheus`      | `./metric`                               | `MeterProvider` и scrape-`Handler`                                  |
+| `@go-like/consul`          | `.`, `./registry`, `./config`, `./store` | Общий клиент, registry, config, store                               |
+| `@go-like/etcd`            | `.`, `./registry`, `./config`, `./store` | Общий клиент, registry, config, store                               |
+| `@go-like/vault`           | `.`, `./config`, `./store`               | Общий клиент, config, store                                         |
+| `@go-like/kubernetes`      | `.`, `./registry`, `./config`            | Общий клиент, registry, config                                      |
+| `@go-like/zookeeper`       | `./registry`, `./registry/node`          | Registry поверх фабрики клиента; фабрика Node                       |
+| `@go-like/mdns`            | `./registry`, `./registry/node`          | Registry поверх `MDNSHost`; host Node                               |
+| `@go-like/yaml`            | `./config`                               | `ConfigDecoder`                                                     |
+| `@go-like/nats`            | `./broker`, `./jetstream`                | Брокеры Core и JetStream                                            |
+| `@go-like/rabbitmq`        | `./broker`                               | Broker                                                              |
+| `@go-like/redis`           | `./cache`                                | Cache и `Server` яруса ресурсов                                     |
+| `@go-like/bullmq`          | `./job`                                  | `JobQueue` и `Server` яруса ресурсов                                |
+| `@go-like/croner`          | `./job`                                  | `Schedule`                                                          |
+| `@go-like/file`            | `./store`, `./store/node`                | Store и `Server` яруса ресурсов; host Node                          |
+| `@go-like/connectrpc`      | `.`, `./node`                            | Fetch Handler; сервер и клиент gRPC для Node                        |
+| `@go-like/protoc-gen-like` | `.`                                      | Плагин Buf и `bin`. Socket нет                                      |
 
-`@go-like/protoc-gen-like` генерирует Protobuf RPC с первым аргументом `Context` на основе Protobuf-ES. `@go-like/transport-grpc-buf` предоставляет unary и server-streaming Connect/gRPC-Web через Fetch; `/native` добавляет стандартный gRPC со всеми четырьмя видами вызовов, включая client-streaming и bidi. Этот путь независим от внутреннего пути Fetch/SSE.
+Счёт: 41 + 4 + 8 + 6 + 10 + 6 = 75. Точки входа plugs и генератора — это 34 после 41 у core.
 
-Управляемый gRPC в Node 26.12.1 и Bun 1.4.4 прошёл [регрессионный тест drain с медленным потребителем](/reference/claims#native-grpc-drain-status). Исправление [ранее выявленных ограничений отмены и завершения](/reference/claims#stream-cancellation-limits) в Connect 2.1.2 и Bun 1.4.2 Fetch не подтверждено.
+## Точки входа core
+
+| Точка входа                         | Роль          | Первые экспорты                                                                         |
+| ----------------------------------- | ------------- | --------------------------------------------------------------------------------------- |
+| `@go-like/core`                     | App           | `newApp`, `telemetry`, `resources`, `server`, `registrar`, `readyProbe`, hooks, бюджеты |
+| `@go-like/core/node`                | Привязка Node | `signal`                                                                                |
+| `@go-like/core/lifecycle`           | Socket        | `Server`, `Endpointer`, `newResourceServer`                                             |
+| `@go-like/core/context`             | Socket        | `background`, `withCancel`, `withTimeout`, `waitForContext`                             |
+| `@go-like/core/metadata`            | Механизм      | `newMetadata`, помощники Context клиента и сервера                                      |
+| `@go-like/core/struct`              | Механизм      | `struct`, `StructError`, `encodeJson`, `decodeJson`, `jsonCodec`                        |
+| `@go-like/core/health`              | Socket        | `newProbeRegistry`                                                                      |
+| `@go-like/core/resilience`          | Socket        | `retry`, `newCircuitBreaker`, `newTokenBucketLimiter`                                   |
+| `@go-like/core/telemetry`           | Socket        | `newTelemetry`, `withTelemetry`, константы семантических соглашений                     |
+| `@go-like/core/telemetry/provider`  | SDK для plug  | `beginUnit`, `logCorrelation`, `resourceFromContext`                                    |
+| `@go-like/core/log`                 | Socket        | `log`, `info`, `error`, `LogHandler`                                                    |
+| `@go-like/core/trace`               | Socket        | `inSpan`, `newTraceContextPropagator`                                                   |
+| `@go-like/core/metric`              | Socket        | `newCounter`, `newHistogram`, `newGauge`, `newUpDownCounter`                            |
+| `@go-like/core/testing`             | Тесты         | `newTelemetryRecorder`, `<concept>Conformance`                                          |
+| `@go-like/core/transport`           | Socket        | `defineService`, `serviceError`, `isServiceError`, `ServerStream`                       |
+| `@go-like/core/transport/provider`  | SDK для plug  | Фабрики ошибок транспорта, `newServerContext`                                           |
+| `@go-like/core/transport/memory`    | Эталон        | `newMemoryTransport`                                                                    |
+| `@go-like/core/transport/http`      | Эталон        | `newHTTPTransport`                                                                      |
+| `@go-like/core/transport/http/node` | Привязка Node | `newNodeHTTPTransport`                                                                  |
+| `@go-like/core/server`              | Механизм      | `newServer`, `address`, `advertise`, `rateLimitMiddleware`                              |
+| `@go-like/core/client`              | Механизм      | `newClient`, `withEndpoint`, `withDiscovery`, `withRetry`, `circuitBreakerMiddleware`   |
+| `@go-like/core/web`                 | Socket        | `Handler`, `contextHandler`, `requestContext`, `createHealthHandler`                    |
+| `@go-like/core/web/node`            | Привязка Node | `newNodeServer`, `hostname`, `port`, `nodeShutdownTimeout`                              |
+| `@go-like/core/web/bun`             | Привязка Bun  | `newBunServer`, `hostname`, `port`, `bunShutdownTimeout`                                |
+| `@go-like/core/registry`            | Socket        | selectors, filters, `newDiscoveryResolver`, `selectEndpoint`                            |
+| `@go-like/core/registry/provider`   | SDK для plug  | `newSnapshotWatcher`, `startHeartbeat`                                                  |
+| `@go-like/core/registry/memory`     | Эталон        | `newMemoryRegistry`                                                                     |
+| `@go-like/core/config`              | Socket        | `newConfig`, `objectSource`, `envSource`, `fileSource`, `jsonDecoder`                   |
+| `@go-like/core/config/provider`     | SDK для plug  | `newSourceWatcher`, `admitConfigObject`                                                 |
+| `@go-like/core/config/node`         | Привязка Node | `newNodeFileCapability`                                                                 |
+| `@go-like/core/fetch`               | Socket        | `Fetch`, `newFetchClient`                                                               |
+| `@go-like/core/cache`               | Socket        | `Cache`, `expiresIn`                                                                    |
+| `@go-like/core/cache/memory`        | Эталон        | `newMemoryCache`                                                                        |
+| `@go-like/core/store`               | Socket        | `Store`, `ifAbsent`, `ifRevision`, `StoreConflictError`                                 |
+| `@go-like/core/store/provider`      | SDK для plug  | Парсеры параметров, фабрика конфликта                                                   |
+| `@go-like/core/store/memory`        | Эталон        | `newMemoryStore`                                                                        |
+| `@go-like/core/broker`              | Socket        | `Broker`, `newBrokerServer`, `eventBroker`                                              |
+| `@go-like/core/broker/provider`     | SDK для plug  | `deliver`, `publish`                                                                    |
+| `@go-like/core/broker/memory`       | Эталон        | `newMemoryBroker`                                                                       |
+| `@go-like/core/job`                 | Socket        | `newScheduleServer`, `newIntervalSchedule`, `JobQueue`                                  |
+| `@go-like/core/job/provider`        | SDK для plug  | `runJob`, `enqueue`, `dispatchJob`                                                      |
+
+И `@go-like/core/server`, и `@go-like/core/client` экспортируют `middleware` и `use`. Импортируйте один как пространство имён, когда файлу нужны оба. Параметры `context`, `endpoint`, `server` и `metadata` корневой точки входа — параметры App. Импортируйте корень как пространство имён, когда эти имена сталкиваются с OpenTelemetry или с `defineService`.
+
+Код приложения не импортирует `/provider` и `/testing`, кроме тестов и реализаций plug.
+
+## Subpath runtime
+
+Импортируйте тот subpath, который имеете в виду. Экспорты не зависят от условия `bun` или `node`.
+
+- Node: `@go-like/core/node`, `@go-like/core/transport/http/node`, `@go-like/core/web/node`, `@go-like/core/config/node`, `@go-like/mdns/registry/node`, `@go-like/zookeeper/registry/node`, `@go-like/file/store/node`, `@go-like/connectrpc/node`.
+- Host Bun: `@go-like/core/web/bun`.
+- NATS, RabbitMQ, Redis и BullMQ следуют своим нативным клиентам на Node и Bun.
+
+## Что этот каталог оставляет в стороне
+
+Эталонные реализации в памяти действуют в пределах процесса. README plug — предел для lease, подтверждений, TTL и транзакций. [Провайдеры](/ru-Cyrl/reference/providers) ссылаются на эти README. [Ошибки](/reference/errors) перечисляют публичные коды. [Миграция](/ru-Cyrl/guide/migration) сопоставляет исторические спецификаторы с этой таблицей.

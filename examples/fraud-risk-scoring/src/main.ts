@@ -2,7 +2,7 @@ import process from "node:process"
 
 import { afterStart, name, newApp, server } from "@go-like/core"
 import { signal } from "@go-like/core/node"
-import { hostname, newNodeServer, port } from "@go-like/web/node"
+import { hostname, newNodeServer, port } from "@go-like/core/web/node"
 
 import { newFraudRiskMicroservice } from "./cache"
 import { newFraudRiskHandler } from "./http"

@@ -1,14 +1,10 @@
 import { expect, test } from "bun:test"
 
-import * as Metrics from "../src/index"
+import * as Metrics from "@go-like/prometheus/metric"
 
-test("exports the Web scrape handler and explicit request instrumentation", () => {
+test("exports the meter provider and scrape handler", () => {
   expect(Object.keys(Metrics).sort()).toEqual([
     "createPrometheusHandler",
-    "measureBroker",
-    "measureClient",
-    "measureUnaryMiddleware",
-    "measureWebHandler",
-    "newRequestMetrics"
+    "newPrometheusMeterProvider"
   ])
 })

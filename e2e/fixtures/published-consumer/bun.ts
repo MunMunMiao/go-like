@@ -1,18 +1,16 @@
-import * as brokerRabbitmq from "@go-like/broker-rabbitmq"
-import * as bullmq from "@go-like/bullmq"
-import * as cacheRedis from "@go-like/cache-redis"
+import * as brokerRabbitmq from "@go-like/rabbitmq/broker"
+import * as bullmq from "@go-like/bullmq/job"
+import * as cacheRedis from "@go-like/redis/cache"
 import * as coreNode from "@go-like/core/node"
-import * as nats from "@go-like/nats"
 import * as natsBroker from "@go-like/nats/broker"
 import * as natsJetstream from "@go-like/nats/jetstream"
-import * as natsJetstreamBroker from "@go-like/nats/jetstream/broker"
 import * as otel from "@go-like/otel"
-import * as pino from "@go-like/pino"
-import * as prometheus from "@go-like/prometheus"
+import * as pino from "@go-like/pino/log"
+import * as prometheus from "@go-like/prometheus/metric"
 import "@go-like/protoc-gen-like"
-import * as registryZookeeper from "@go-like/registry-zookeeper"
-import * as webBun from "@go-like/web/bun"
-import * as winston from "@go-like/winston"
+import * as registryZookeeper from "@go-like/zookeeper/registry"
+import * as webBun from "@go-like/core/web/bun"
+import * as winston from "@go-like/winston/log"
 
 import { runPortable } from "./portable.ts"
 
@@ -23,10 +21,8 @@ if (
     bullmq,
     cacheRedis,
     coreNode,
-    nats,
     natsBroker,
     natsJetstream,
-    natsJetstreamBroker,
     otel,
     pino,
     prometheus,

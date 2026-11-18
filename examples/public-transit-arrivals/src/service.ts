@@ -1,6 +1,6 @@
-import type { Context } from "@go-like/context"
-import { newProbeRegistry } from "@go-like/health"
-import type { Handler } from "@go-like/web"
+import type { Context } from "@go-like/core/context"
+import { newProbeRegistry } from "@go-like/core/health"
+import type { Handler } from "@go-like/core/web"
 
 import { newArrivalHandler } from "./http"
 

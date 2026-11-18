@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test"
 
-import * as publicApi from "../src/index"
+import * as BullmqJob from "../src/job/index"
 
-test("exports only the frozen BullMQ worker runtime API", () => {
-  expect(Object.keys(publicApi).sort()).toEqual([
-    "bullMqWorkerShutdownTimeout",
-    "newBullMqWorkerServer"
-  ])
+test("bullmq job exposes only the queue factory", () => {
+  expect(Object.keys(BullmqJob).sort()).toEqual(["newBullMqJobQueue"])
+  expect(typeof BullmqJob.newBullMqJobQueue).toBe("function")
 })

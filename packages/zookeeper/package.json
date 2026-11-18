@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@go-like/zookeeper",
+  "version": "0.0.1",
+  "description": "Portable ZooKeeper registry plug and Node client factory for go-like.",
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "directory": "dist",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./registry": "./src/registry/index.ts",
+    "./registry/node": "./src/registry/node/index.ts"
+  },
+  "scripts": {
+    "build": "bun x --bun tsdown --config-loader native",
+    "typecheck": "tsc -p tsconfig.test.json --pretty false",
+    "test:unit": "bun test --isolate --no-orphans test/*.test.ts",
+    "test:unit:coverage": "bun test --isolate --no-orphans test/*.test.ts --coverage --coverage-dir .artifacts/coverage",
+    "test:e2e": "bun test/e2e/zookeeper-docker.ts",
+    "test:e2e:registry": "bun test/e2e/zookeeper-docker.ts",
+    "test:e2e:runtimes": "bun test/e2e/runtime.ts && tsx test/e2e/runtime.ts"
+  },
+  "dependencies": {
+    "node-zookeeper-client": "1.2.1"
+  },
+  "peerDependencies": {
+    "@go-like/core": "0.0.1"
+  },
+  "devDependencies": {
+    "@go-like/core": "workspace:*",
+    "@types/node-zookeeper-client": "1.1.0"
+  },
+  "license": "MIT"
+}
