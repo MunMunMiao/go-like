@@ -88,6 +88,7 @@ test("generated glue registers handlers and preserves RPC behavior", async () =>
   const response = protocGenLike.run(request)
   expect(response.error).toBe("")
 
+  await mkdir(resolve(import.meta.dir, "../.artifacts"), { recursive: true })
   const directory = await mkdtemp(resolve(import.meta.dir, "../.artifacts/generator-runtime-"))
   try {
     const protobuf = spawnSync(
